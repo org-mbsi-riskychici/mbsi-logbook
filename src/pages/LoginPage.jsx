@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { loginWithNim } from '../lib/auth.js'
 import { inputCls, labelCls, btnPrimary } from '../components/ui.jsx'
+import { EyeToggle } from '../components/icons.jsx'
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -9,6 +10,7 @@ export default function LoginPage() {
   const [kode, setKode] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [lihatKode, setLihatKode] = useState(false)
 
   async function submit(e) {
     e.preventDefault()
@@ -40,7 +42,24 @@ export default function LoginPage() {
           </div>
           <div>
             <label className={labelCls}>Kode akses <span className="text-red-500">*</span></label>
-            <input type="password" className={inputCls} value={kode} onChange={function (e) { setKode(e.target.value) }} placeholder="Masukkan kode akses" required />
+            <div className="relative mt-1.5">
+              <input
+                type={lihatKode ? 'text' : 'password'}
+                className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 pr-12 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+                value={kode}
+                onChange={function (e) { setKode(e.target.value) }}
+                placeholder="Masukkan kode akses"
+                required
+              />
+              <button
+                type="button"
+                onClick={function () { setLihatKode(function (v) { return !v }) }}
+                title={lihatKode ? 'Sembunyikan kode akses' : 'Lihat kode akses'}
+                className="absolute right-2 top-0 bottom-0 my-auto grid h-9 w-9 place-items-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              >
+                <EyeToggle open={lihatKode} size={18} />
+              </button>
+            </div>
           </div>
           <button type="submit" disabled={busy} className={btnPrimary}>{busy ? 'Memproses...' : 'Masuk ke dashboard'}</button>
         </form>

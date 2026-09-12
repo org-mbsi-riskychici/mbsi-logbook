@@ -26,7 +26,7 @@ function ActionButtons(props) {
   return (
     <div className="flex flex-wrap gap-2">
       <button onClick={props.onDetail} className={btnSmall + ' bg-bsi-100 text-bsi-900 hover:bg-bsi-200'}>Detail</button>
-      {props.isOwner ? (
+      {props.isOwner && props.onEdit ? (
         <>
           <button onClick={props.onEdit} className={btnSmall + ' bg-slate-900 text-white hover:bg-slate-700'}>Edit</button>
           <button onClick={props.onDelete} className={btnSmall + ' bg-red-50 text-red-700 hover:bg-red-100'}>Hapus</button>

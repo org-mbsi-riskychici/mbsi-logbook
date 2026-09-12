@@ -125,3 +125,27 @@ textarea {
 .dark ::-webkit-scrollbar-thumb:hover {
   background-color: #27c06d;
 }
+
+/* ===== Animasi icon mata ===== */
+.eye-icon .eye-slash {
+  stroke-dasharray: 29;
+  stroke-dashoffset: 0;
+  opacity: 1;
+  transition: stroke-dashoffset .35s ease, opacity .3s ease;
+}
+.eye-icon.terbuka .eye-slash {
+  stroke-dashoffset: 29;
+  opacity: 0;
+}
+.eye-icon .eye-pupil {
+  transform-origin: 12px 12px;
+  transition: transform .35s ease, opacity .35s ease;
+}
+.eye-icon.terbuka .eye-pupil {
+  transform: scale(1);
+  opacity: 1;
+}
+.eye-icon:not(.terbuka) .eye-pupil {
+  transform: scale(.7);
+  opacity: .6;
+}
