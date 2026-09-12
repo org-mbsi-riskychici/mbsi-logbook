@@ -91,3 +91,34 @@ export function AutoTextArea(props) {
     />
   )
 }
+
+export function ConfirmModal(props) {
+  if (!props.open) return null
+  return (
+    <div className="anim-overlay fixed inset-0 z-[70] overflow-y-auto bg-slate-900/60 p-4" onClick={props.onCancel}>
+      <div className="min-h-full flex items-center justify-center py-8">
+        <div className="anim-modal w-full max-w-md rounded-[2rem] bg-white shadow-2xl" onClick={function (e) { e.stopPropagation() }}>
+          <div className="p-6 space-y-4">
+            <div className="mx-auto h-14 w-14 rounded-2xl bg-red-100 text-red-600 grid place-items-center">
+              <SizedIcon name="trash" size={24} />
+            </div>
+            <div className="text-center">
+              <h3 className="text-xl font-black text-slate-900">{props.title || 'Hapus data ini?'}</h3>
+              <p className="mt-2 text-sm text-slate-500">{props.message}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <button type="button" onClick={props.onCancel}
+                className="rounded-2xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100">
+                Batal
+              </button>
+              <button type="button" onClick={props.onConfirm}
+                className="rounded-2xl bg-red-500 px-4 py-3 text-sm font-bold text-white hover:bg-red-600">
+                {props.confirmLabel || 'Ya, Hapus'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

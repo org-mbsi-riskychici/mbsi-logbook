@@ -5,7 +5,7 @@ import { uploadMedia, deleteMedia } from '../lib/upload.js'
 import { syncGaleriFromLogbook } from '../lib/logbook.js'
 import { todayInput, detectMediaType } from '../lib/format.js'
 import { KATEGORI, UNIT, GALERI_KEGIATAN } from '../lib/constants.js'
-import { StatCard, EmptyState, Modal, inputCls, labelCls, btnPrimary, btnSmall, AutoTextArea } from '../components/ui.jsx'
+import { StatCard, EmptyState, Modal, ConfirmModal, inputCls, labelCls, btnPrimary, btnSmall, AutoTextArea } from '../components/ui.jsx'
 import { LogbookCard, LogbookDetail, GalleryCard, GalleryDetail, AttendanceCard, AttendanceDetail } from '../components/cards.jsx'
 import { CustomSelect, CustomDateInput, FileInput } from '../components/controls.jsx'
 import { SizedIcon } from '../components/icons.jsx'
@@ -33,6 +33,7 @@ export default function DashboardPage() {
   const [editHadirId, setEditHadirId] = useState(null)
 
   const [busy, setBusy] = useState(false)
+  const [pendingDelete, setPendingDelete] = useState(null)
 
   async function refresh() {
     if (!peserta) return
@@ -139,10 +140,8 @@ export default function DashboardPage() {
     setTab('logbook')
   }
 
-  async function deleteLog(log) {
-    if (!confirm('Hapus logbook ini? Media galeri turunan ikut terhapus.')) return
-    await supabase.from('logbooks').delete().eq('id', log.id)
-    await refresh()
+  function deleteLog(log) {
+    setPendingDelete({ type: 'log', data: log })
   }
 
   async function submitGaleri(e) {
@@ -183,10 +182,8 @@ export default function DashboardPage() {
     setBusy(false)
   }
 
-  async function deleteGaleri(item) {
-    if (!confirm('Hapus media ini dari galeri?')) return
-    await supabase.from('galeri').delete().eq('id', item.id)
-    await refresh()
+  function deleteGaleri(item) {
+    setPendingDelete({ type: 'gal', data: item })
   }
 
   async function submitHadir(e) {
@@ -205,9 +202,44 @@ export default function DashboardPage() {
     setBusy(false)
   }
 
-  async function deleteHadir(row) {
-    if (!confirm('Hapus catatan kehadiran ini?')) return
-    await supabase.from('daftar_hadir').delete().eq('id', row.id)
+  function deleteHadir(row) {
+    setPendingDelete({ type: 'hadir', data: row })
+  }
+
+  function confirmInfo() {
+    if (!pendingDelete) return null
+    if (pendingDelete.type === 'log') {
+      return {
+        title: 'Hapus logbook?',
+        message: 'Logbook "' + pendingDelete.data.judul + '" beserta seluruh rincian kegiatannya akan dihapus permanen. Media galeri yang terhubung dari logbook ini juga ikut terhapus.'
+      }
+    }
+    if (pendingDelete.type === 'gal') {
+      const extra = pendingDelete.data.logbook_item_id
+        ? ' Media ini berasal dari logbook, jadi logbook asalnya tidak ikut terhapus.'
+        : ''
+      return {
+        title: 'Hapus media galeri?',
+        message: 'Media "' + pendingDelete.data.judul + '" akan dihapus permanen dari galeri kamu.' + extra
+      }
+    }
+    return {
+      title: 'Hapus catatan hadir?',
+      message: 'Catatan kehadiran tanggal ' + pendingDelete.data.tanggal + ' dengan status ' + pendingDelete.data.status + ' akan dihapus permanen.'
+    }
+  }
+
+  async function executeDelete() {
+    if (!pendingDelete) return
+    const target = pendingDelete
+    setPendingDelete(null)
+    if (target.type === 'log') {
+      await supabase.from('logbooks').delete().eq('id', target.data.id)
+    } else if (target.type === 'gal') {
+      await supabase.from('galeri').delete().eq('id', target.data.id)
+    } else if (target.type === 'hadir') {
+      await supabase.from('daftar_hadir').delete().eq('id', target.data.id)
+    }
     await refresh()
   }
 
@@ -445,6 +477,16 @@ export default function DashboardPage() {
         {detail && detail.type === 'gal' ? <GalleryDetail item={detail.data} /> : null}
         {detail && detail.type === 'hadir' ? <AttendanceDetail row={detail.data} /> : null}
       </Modal>
+
+      {pendingDelete ? (
+        <ConfirmModal
+          open={true}
+          title={confirmInfo().title}
+          message={confirmInfo().message}
+          onCancel={function () { setPendingDelete(null) }}
+          onConfirm={executeDelete}
+        />
+      ) : null}
     </div>
   )
 }
