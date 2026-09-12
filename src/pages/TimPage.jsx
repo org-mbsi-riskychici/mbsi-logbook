@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
+import { SkeletonPersonCard } from '../components/Skeleton.jsx'
 
 export default function TimPage() {
   const [people, setPeople] = useState([])
   const [logs, setLogs] = useState([])
   const [galeri, setGaleri] = useState([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(function () {
     async function load() {
@@ -14,6 +16,7 @@ export default function TimPage() {
       setPeople(p.data || [])
       setLogs(l.data || [])
       setGaleri(g.data || [])
+      setLoading(false)
     }
     load()
   }, [])
@@ -25,27 +28,29 @@ export default function TimPage() {
         <h1 className="mt-2 text-3xl lg:text-4xl font-black text-slate-900">Tim magang Bank BSI</h1>
       </section>
       <section className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-        {people.map(function (p) {
-          const totalLog = logs.filter(function (l) { return l.peserta_id === p.id }).length
-          const totalGal = galeri.filter(function (g) { return g.peserta_id === p.id }).length
-          const initials = p.nama.split(' ').slice(0, 2).map(function (w) { return w.charAt(0) || '' }).join('').toUpperCase()
-          return (
-            <div key={p.id} className="card-hover bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
-              <div className="flex items-center gap-4">
-                <div className="h-14 w-14 rounded-3xl bg-bsi-800 text-white grid place-items-center text-xl font-black">{initials}</div>
-                <div>
-                  <p className="text-lg font-bold text-slate-900">{p.nama}</p>
-                  <p className="text-sm text-slate-500">NIM {p.nim}</p>
-                  {p.prodi ? <span className="mt-1 inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-bsi-100 text-bsi-900">{p.prodi}</span> : null}
+        {loading
+          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <SkeletonPersonCard key={i} /> })
+          : people.map(function (p) {
+              const totalLog = logs.filter(function (l) { return l.peserta_id === p.id }).length
+              const totalGal = galeri.filter(function (g) { return g.peserta_id === p.id }).length
+              const initials = p.nama.split(' ').slice(0, 2).map(function (w) { return w.charAt(0) || '' }).join('').toUpperCase()
+              return (
+                <div key={p.id} className="card-hover bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
+                  <div className="flex items-center gap-4">
+                    <div className="h-14 w-14 rounded-3xl bg-bsi-800 text-white grid place-items-center text-xl font-black">{initials}</div>
+                    <div>
+                      <p className="text-lg font-bold text-slate-900">{p.nama}</p>
+                      <p className="text-sm text-slate-500">NIM {p.nim}</p>
+                      {p.prodi ? <span className="mt-1 inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-bsi-100 text-bsi-900">{p.prodi}</span> : null}
+                    </div>
+                  </div>
+                  <div className="mt-5 grid grid-cols-2 gap-3">
+                    <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Logbook publik</p><p className="mt-1 text-2xl font-black text-bsi-900">{totalLog}</p></div>
+                    <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Media galeri</p><p className="mt-1 text-2xl font-black text-bsi-900">{totalGal}</p></div>
+                  </div>
                 </div>
-              </div>
-              <div className="mt-5 grid grid-cols-2 gap-3">
-                <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Logbook publik</p><p className="mt-1 text-2xl font-black text-bsi-900">{totalLog}</p></div>
-                <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Media galeri</p><p className="mt-1 text-2xl font-black text-bsi-900">{totalGal}</p></div>
-              </div>
-            </div>
-          )
-        })}
+              )
+            })}
       </section>
     </div>
   )

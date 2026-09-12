@@ -7,6 +7,7 @@ import { FilterBar, FilterSelect, TimeFilter, countActiveFilters } from '../comp
 import { ICONS } from '../components/icons.jsx'
 import { matchesDateFilters } from '../lib/format.js'
 import { KATEGORI } from '../lib/constants.js'
+import { SkeletonLogbookCard } from '../components/Skeleton.jsx'
 
 const INITIAL = { peserta: '', kategori: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
 
@@ -17,6 +18,7 @@ export default function LogbookPage() {
   const [filter, setFilter] = useState(INITIAL)
   const [open, setOpen] = useState(false)
   const [detail, setDetail] = useState(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(function () {
     async function load() {
@@ -29,6 +31,7 @@ export default function LogbookPage() {
       const p = await supabase.from('peserta').select('id, nama').order('nama')
       setAll(l.data || [])
       setPeople(p.data || [])
+      setLoading(false)
     }
     load()
   }, [])
@@ -60,11 +63,13 @@ export default function LogbookPage() {
       </section>
 
       <section className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-        {logs.map(function (l) {
-          return <LogbookCard key={l.id} log={l} isOwner={peserta && peserta.id === l.peserta_id}
-            onDetail={function () { setDetail(l) }} />
-        })}
-        {!logs.length ? <EmptyState title="Logbook tidak ditemukan" desc="Coba reset filter atau pilih filter lain." /> : null}
+        {loading
+          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <SkeletonLogbookCard key={i} /> })
+          : logs.map(function (l) {
+              return <LogbookCard key={l.id} log={l} isOwner={peserta && peserta.id === l.peserta_id}
+                onDetail={function () { setDetail(l) }} />
+            })}
+        {!loading && !logs.length ? <EmptyState title="Logbook tidak ditemukan" desc="Coba reset filter atau pilih filter lain." /> : null}
       </section>
 
       <Modal open={!!detail} onClose={function () { setDetail(null) }}>

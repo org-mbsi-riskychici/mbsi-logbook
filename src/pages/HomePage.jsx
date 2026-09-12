@@ -2,15 +2,16 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../lib/auth.js'
-import { StatCard, EmptyState } from '../components/ui.jsx'
+import { StatCard, EmptyState, Modal } from '../components/ui.jsx'
 import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
-import { Modal } from '../components/ui.jsx'
+import { SkeletonLogbookCard, SkeletonStatCard } from '../components/Skeleton.jsx'
 
 export default function HomePage() {
   const { peserta } = useAuth()
   const [logs, setLogs] = useState([])
   const [stats, setStats] = useState({ logbook: 0, galeri: 0, peserta: 0 })
   const [detail, setDetail] = useState(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(function () {
     async function load() {
@@ -24,6 +25,7 @@ export default function HomePage() {
       const p = await supabase.from('peserta').select('id')
       setLogs(l.data || [])
       setStats({ logbook: (l.data || []).length, galeri: (g.data || []).length, peserta: (p.data || []).length })
+      setLoading(false)
     }
     load()
   }, [])
@@ -33,6 +35,7 @@ export default function HomePage() {
       <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr] items-stretch">
         <div className="card-hover relative overflow-hidden rounded-[2rem] bg-bsi-900 text-white p-8 lg:p-12">
           <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-gold-500/20 blur-2xl" />
+          <div className="absolute -left-10 bottom-0 h-40 w-40 rounded-full bg-emerald-300/10 blur-2xl" />
           <div className="relative z-10">
             <span className="inline-flex px-4 py-2 rounded-full bg-white/10 text-xs font-semibold uppercase tracking-wide">Magang Bank BSI</span>
             <h1 className="mt-6 text-3xl lg:text-5xl font-black leading-tight max-w-2xl">Logbook, Galeri, dan Daftar Hadir Magang dalam Satu Portal</h1>
@@ -48,9 +51,13 @@ export default function HomePage() {
           </div>
         </div>
         <div className="grid gap-4">
-          <StatCard label="Total peserta magang" value={stats.peserta} sub="Peserta terdaftar dalam tim" />
-          <StatCard label="Total logbook publik" value={stats.logbook} sub="Catatan kegiatan harian" />
-          <StatCard label="Total media galeri" value={stats.galeri} sub="Foto dan video dokumentasi" />
+          {loading
+            ? [0, 1, 2].map(function (i) { return <SkeletonStatCard key={i} /> })
+            : [
+                <StatCard key="peserta" label="Total peserta magang" value={stats.peserta} sub="Peserta terdaftar dalam tim" />,
+                <StatCard key="logbook" label="Total logbook publik" value={stats.logbook} sub="Catatan kegiatan harian" />,
+                <StatCard key="galeri" label="Total media galeri" value={stats.galeri} sub="Foto dan video dokumentasi" />
+              ]}
         </div>
       </section>
 
@@ -63,10 +70,12 @@ export default function HomePage() {
           <Link to="/logbook" className="text-sm font-semibold text-bsi-800 hover:text-bsi-950">Lihat semua logbook</Link>
         </div>
         <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {logs.slice(0, 3).map(function (l) {
-            return <LogbookCard key={l.id} log={l} onDetail={function () { setDetail(l) }} />
-          })}
-          {!logs.length ? <EmptyState title="Belum ada logbook publik" desc="Logbook yang sudah diatur sebagai siap dilihat akan tampil di sini." /> : null}
+          {loading
+            ? [0, 1, 2].map(function (i) { return <SkeletonLogbookCard key={i} /> })
+            : logs.slice(0, 3).map(function (l) {
+                return <LogbookCard key={l.id} log={l} onDetail={function () { setDetail(l) }} />
+              })}
+          {!loading && !logs.length ? <EmptyState title="Belum ada logbook publik" desc="Logbook yang sudah diatur sebagai siap dilihat akan tampil di sini." /> : null}
         </div>
       </section>
 
