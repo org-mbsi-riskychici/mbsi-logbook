@@ -1,0 +1,67 @@
+import { useEffect, useState } from 'react'
+import { supabase } from '../lib/supabase.js'
+import { useAuth } from '../lib/auth.js'
+import { EmptyState, Modal } from '../components/ui.jsx'
+import { GalleryCard, GalleryDetail } from '../components/cards.jsx'
+import { FilterBar, FilterSelect, TimeFilter, countActiveFilters } from '../components/FilterBar.jsx'
+import { ICONS } from '../components/icons.jsx'
+import { matchesDateFilters } from '../lib/format.js'
+import { GALERI_KEGIATAN } from '../lib/constants.js'
+
+const INITIAL = { kegiatan: '', tipe: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
+
+export default function GalleryPage() {
+  const { peserta } = useAuth()
+  const [all, setAll] = useState([])
+  const [filter, setFilter] = useState(INITIAL)
+  const [open, setOpen] = useState(false)
+  const [detail, setDetail] = useState(null)
+
+  useEffect(function () {
+    async function load() {
+      const g = await supabase.from('galeri').select('*, peserta(nim, nama)').order('tanggal', { ascending: false })
+      setAll(g.data || [])
+    }
+    load()
+  }, [])
+
+  const items = all.filter(function (i) {
+    if (filter.kegiatan && (i.kegiatan || 'Lainnya') !== filter.kegiatan) return false
+    if (filter.tipe && i.media_type !== filter.tipe) return false
+    return matchesDateFilters(i.tanggal, filter)
+  })
+  const active = countActiveFilters(filter)
+
+  return (
+    <div>
+      <section className="rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Galeri dokumentasi</p>
+        <h1 className="mt-2 text-3xl lg:text-4xl font-black text-slate-900">Foto dan video kegiatan magang</h1>
+        <p className="mt-3 text-slate-600 max-w-2xl">Setiap kartu mewakili satu kegiatan. Klik media untuk melihat detail.</p>
+      </section>
+
+      <section className="mt-6">
+        <FilterBar open={open} onToggle={function () { setOpen(function (o) { return !o }) }} activeCount={active}
+          onReset={function () { setFilter(INITIAL) }}>
+          <FilterSelect icon={ICONS.tag} value={filter.kegiatan} onChange={function (v) { setFilter(Object.assign({}, filter, { kegiatan: v })) }}
+            options={[{ value: '', label: 'Semua kegiatan' }].concat(GALERI_KEGIATAN.map(function (k) { return { value: k, label: k } }))} />
+          <FilterSelect icon={ICONS.image} value={filter.tipe} onChange={function (v) { setFilter(Object.assign({}, filter, { tipe: v })) }}
+            options={[{ value: '', label: 'Semua media' }, { value: 'foto', label: 'Foto saja' }, { value: 'video', label: 'Video saja' }]} />
+          <TimeFilter filter={filter} set={setFilter} />
+        </FilterBar>
+      </section>
+
+      <section className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        {items.map(function (i) {
+          return <GalleryCard key={i.id} item={i} isOwner={peserta && peserta.id === i.peserta_id}
+            onDetail={function () { setDetail(i) }} />
+        })}
+        {!items.length ? <EmptyState title="Belum ada media galeri" desc="Media galeri yang diunggah peserta akan tampil di sini." /> : null}
+      </section>
+
+      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
+        {detail ? <GalleryDetail item={detail} /> : null}
+      </Modal>
+    </div>
+  )
+}
