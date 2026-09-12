@@ -140,6 +140,7 @@ export function ConfirmModal(props) {
 
 export function Lightbox(props) {
   useBodyScrollLock(true)
+  const [busyUnduh, setBusyUnduh] = useState(false)
   useEffect(function () {
     function onKey(e) {
       if (e.key === 'Escape') props.onClose()
@@ -147,6 +148,40 @@ export function Lightbox(props) {
     document.addEventListener('keydown', onKey)
     return function () { document.removeEventListener('keydown', onKey) }
   }, [])
+  async function unduh() {
+    if (busyUnduh) return
+    setBusyUnduh(true)
+    let nama = 'media'
+      try {
+        const urlAsli = new URL(props.src)
+        const ekstensi = urlAsli.pathname.split('.').pop().split('?')[0] || 'jpg'
+        if (props.title && props.title.trim()) {
+          const judulAman = props.title.trim().replace(/[\/\\:*?"<>|]/g, '').replace(/\s+/g, '-').substring(0, 60)
+          nama = judulAman + '.' + ekstensi
+        } else {
+          nama = urlAsli.pathname.split('/').pop() || ('media.' + ekstensi)
+        }
+      } catch (e) {
+        nama = (props.title || 'media') + '.jpg'
+      }
+    try {
+      const urlUnduh = props.src + (props.src.includes('?') ? '&' : '?') + 'unduh=1'
+      const res = await fetch(urlUnduh, { cache: 'no-store' })
+      if (!res.ok) throw new Error('status ' + res.status)
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = nama
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(function () { URL.revokeObjectURL(url) }, 2000)
+    } catch (err) {
+      window.open(props.src, '_blank')
+    }
+    setBusyUnduh(false)
+  }
   return (
     <div className="anim-overlay fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/95 p-4" onClick={props.onClose}>
       <div className="relative w-full max-w-5xl" onClick={function (e) { e.stopPropagation() }}>
@@ -162,14 +197,25 @@ export function Lightbox(props) {
         )}
         {props.title ? <p className="mt-3 truncate text-center text-sm text-slate-300">{props.title}</p> : null}
       </div>
-      <button
-        type="button"
-        title="Tutup (Esc)"
-        onClick={props.onClose}
-        className="absolute right-4 top-4 grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
-      >
-        <SizedIcon name="close" size={18} />
-      </button>
+      <div className="absolute right-4 top-4 flex gap-2">
+        <button
+          type="button"
+          title={busyUnduh ? 'Menyiapkan unduhan...' : 'Unduh media'}
+          onClick={unduh}
+          disabled={busyUnduh}
+          className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20 disabled:opacity-50"
+        >
+          <SizedIcon name="download" size={18} />
+        </button>
+        <button
+          type="button"
+          title="Tutup (Esc)"
+          onClick={props.onClose}
+          className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
+        >
+          <SizedIcon name="close" size={18} />
+        </button>
+      </div>
       <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-slate-400">Klik media atau tekan Esc untuk menutup</p>
     </div>
   )
