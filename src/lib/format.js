@@ -28,6 +28,7 @@ export function matchesDateFilters(dateString, f) {
   if (!dateString) return false
   if (f.timeMode === 'bulan') {
     if (f.bulan) {
+      if (f.bulan.length === 7) return dateString.slice(0, 7) === f.bulan
       const p = dateString.split('-')
       if (p.length < 2 || p[1] !== f.bulan) return false
     }

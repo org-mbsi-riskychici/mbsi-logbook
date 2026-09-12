@@ -1,27 +1,28 @@
 import { ICONS } from './icons.jsx'
+import { CustomSelect, CustomDateInput } from './controls.jsx'
 
 export function FilterSelect(props) {
   return (
-    <div className="filter-input-wrap">
-      <span className="text-slate-400">{props.icon}</span>
-      <select value={props.value} onChange={function (e) { props.onChange(e.target.value) }}
-        className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500 min-w-[160px]">
-        {props.options.map(function (o) {
-          return <option key={o.value} value={o.value}>{o.label}</option>
-        })}
-      </select>
-    </div>
+    <CustomSelect
+      icon={props.icon}
+      value={props.value}
+      onChange={props.onChange}
+      options={props.options}
+      className="min-w-[190px]"
+      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+    />
   )
 }
 
 export function FilterDate(props) {
   return (
-    <div className="filter-input-wrap">
-      <span className="text-slate-400">{ICONS.calendar}</span>
-      <input type={props.mode === 'month' ? 'month' : 'date'} value={props.value}
-        onChange={function (e) { props.onChange(e.target.value) }}
-        className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500 min-w-[150px]" />
-    </div>
+    <CustomDateInput
+      mode={props.mode || 'date'}
+      value={props.value}
+      onChange={props.onChange}
+      className="min-w-[170px]"
+      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+    />
   )
 }
 

@@ -5,8 +5,9 @@ import { uploadMedia, deleteMedia } from '../lib/upload.js'
 import { syncGaleriFromLogbook } from '../lib/logbook.js'
 import { todayInput } from '../lib/format.js'
 import { KATEGORI, UNIT, GALERI_KEGIATAN } from '../lib/constants.js'
-import { StatCard, EmptyState, Modal, inputCls, labelCls, btnPrimary, btnSmall } from '../components/ui.jsx'
+import { StatCard, EmptyState, Modal, inputCls, labelCls, btnPrimary, btnSmall, AutoTextArea } from '../components/ui.jsx'
 import { LogbookCard, LogbookDetail, GalleryCard, GalleryDetail, AttendanceCard, AttendanceDetail } from '../components/cards.jsx'
+import { CustomSelect, CustomDateInput, FileInput } from '../components/controls.jsx'
 
 function newItem() {
   return { key: Math.random().toString(36).slice(2), judul: '', deskripsi: '', hasil: '', file: null, preview: '', show: false }
@@ -44,12 +45,10 @@ export default function DashboardPage() {
     setHadir(h.data || [])
   }
 
-  // PENTING: Semua Hooks (seperti useEffect) HARUS diletakkan SEBELUM conditional return
-  useEffect(function () { 
-    if (peserta) refresh() 
+  useEffect(function () {
+    if (peserta) refresh()
   }, [peserta])
 
-  // PENGECEKAN: Jika masih loading atau peserta belum ada, tampilkan loading state
   if (loading || !peserta) {
     return <div className="p-10 text-center text-slate-500">Memuat sesi...</div>
   }
@@ -80,9 +79,9 @@ export default function DashboardPage() {
           mediaPath = up.publicUrl
           mediaType = it.file.type.indexOf('video') === 0 ? 'video' : 'foto'
         }
-        clean.push({ judul: it.judul.trim(), deskripsi: it.deskripsi.trim(), hasil: it.hasil.trim(), media_path: mediaPath, media_type: mediaType, show_in_gallery: it.show && !!mediaPath, _file: it.file, _oldPath: it.oldPath || '' })
+        clean.push({ judul: it.judul.trim(), deskripsi: it.deskripsi.trim(), hasil: it.hasil.trim(), media_path: mediaPath, media_type: mediaType, show_in_gallery: it.show && !!mediaPath })
       }
-      if (!clean.length) { alert('Tambahkan minimal satu kegiatan dengan judul.') ; setBusy(false); return }
+      if (!clean.length) { alert('Tambahkan minimal satu kegiatan dengan judul.'); setBusy(false); return }
 
       let logId = editLogId
       if (editLogId) {
@@ -224,33 +223,47 @@ export default function DashboardPage() {
             <h2 className="text-2xl font-black text-slate-900">{editLogId ? 'Ubah logbook harian' : 'Tambah logbook harian'}</h2>
             <form onSubmit={submitLogbook} className="mt-6 space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
-                <div><label className={labelCls}>Tanggal</label><input type="date" required className={inputCls} value={form.tanggal} onChange={function (e) { setForm(Object.assign({}, form, { tanggal: e.target.value })) }} /></div>
-                <div><label className={labelCls}>Unit utama</label>
-                  <select className={inputCls} value={form.unit} onChange={function (e) { setForm(Object.assign({}, form, { unit: e.target.value })) }}>
-                    <option value="">Pilih unit</option>
-                    {UNIT.map(function (u) { return <option key={u} value={u}>{u}</option> })}
-                  </select>
+                <div>
+                  <label className={labelCls}>Tanggal <span className="text-red-500">*</span></label>
+                  <div className="mt-1.5">
+                    <CustomDateInput value={form.tanggal} onChange={function (v) { setForm(Object.assign({}, form, { tanggal: v })) }} />
+                  </div>
+                </div>
+                <div>
+                  <label className={labelCls}>Unit utama</label>
+                  <div className="mt-1.5">
+                    <CustomSelect placeholder="Pilih unit" value={form.unit}
+                      onChange={function (v) { setForm(Object.assign({}, form, { unit: v })) }}
+                      options={UNIT.map(function (u) { return { value: u, label: u } })} />
+                  </div>
                 </div>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
-                <div><label className={labelCls}>Kategori utama</label>
-                  <select required className={inputCls} value={form.kategori} onChange={function (e) { setForm(Object.assign({}, form, { kategori: e.target.value })) }}>
-                    <option value="">Pilih kategori</option>
-                    {KATEGORI.map(function (k) { return <option key={k} value={k}>{k}</option> })}
-                  </select>
+                <div>
+                  <label className={labelCls}>Kategori utama <span className="text-red-500">*</span></label>
+                  <div className="mt-1.5">
+                    <CustomSelect placeholder="Pilih kategori" value={form.kategori}
+                      onChange={function (v) { setForm(Object.assign({}, form, { kategori: v })) }}
+                      options={KATEGORI.map(function (k) { return { value: k, label: k } })} />
+                  </div>
                 </div>
-                <div><label className={labelCls}>Status tampil</label>
-                  <select className={inputCls} value={form.status} onChange={function (e) { setForm(Object.assign({}, form, { status: e.target.value })) }}>
-                    <option value="draft">Draft</option>
-                    <option value="publik">Siap dilihat</option>
-                  </select>
+                <div>
+                  <label className={labelCls}>Status tampil</label>
+                  <div className="mt-1.5">
+                    <CustomSelect value={form.status}
+                      onChange={function (v) { setForm(Object.assign({}, form, { status: v })) }}
+                      options={[{ value: 'draft', label: 'Draft' }, { value: 'publik', label: 'Siap dilihat' }]} />
+                  </div>
                 </div>
               </div>
-              <div><label className={labelCls}>Ringkasan hari ini</label><input required className={inputCls} value={form.judul} onChange={function (e) { setForm(Object.assign({}, form, { judul: e.target.value })) }} placeholder="Contoh: Kegiatan harian di divisi Back Office" /></div>
+              <div>
+                <label className={labelCls}>Ringkasan hari ini <span className="text-red-500">*</span></label>
+                <input required className={inputCls} value={form.judul} onChange={function (e) { setForm(Object.assign({}, form, { judul: e.target.value })) }} placeholder="Contoh: Kegiatan harian di divisi Back Office" />
+              </div>
 
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-slate-700">Rincian kegiatan hari ini</p>
+                  <p className="text-sm font-semibold text-slate-700">Rincian kegiatan hari ini <span className="text-red-500">*</span></p>
                   <button type="button" onClick={function () { setItems(function (p) { return p.concat([newItem()]) }) }} className={btnSmall + ' bg-bsi-100 text-bsi-900 hover:bg-bsi-200'}>+ Tambah kegiatan</button>
                 </div>
                 {items.map(function (it, i) {
@@ -261,7 +274,7 @@ export default function DashboardPage() {
                         {items.length > 1 ? <button type="button" onClick={function () { setItems(function (p) { return p.filter(function (x, idx) { return idx !== i }) }) }} className="text-xs text-red-600 hover:underline">Hapus</button> : null}
                       </div>
                       <input className={inputCls} value={it.judul} onChange={function (e) { patchItem(i, { judul: e.target.value }) }} placeholder="Judul kegiatan" />
-                      <textarea rows="2" className={inputCls} value={it.deskripsi} onChange={function (e) { patchItem(i, { deskripsi: e.target.value }) }} placeholder="Deskripsi singkat kegiatan" />
+                      <AutoTextArea className={inputCls} value={it.deskripsi} onChange={function (e) { patchItem(i, { deskripsi: e.target.value }) }} placeholder="Deskripsi singkat kegiatan" />
                       <input className={inputCls} value={it.hasil} onChange={function (e) { patchItem(i, { hasil: e.target.value }) }} placeholder="Hasil (opsional)" />
                       {it.preview ? (
                         <div className="rounded-2xl overflow-hidden aspect-video bg-slate-900">
@@ -270,27 +283,21 @@ export default function DashboardPage() {
                             : <img src={it.preview} alt="Pratinjau" className="h-full w-full object-contain" />}
                         </div>
                       ) : null}
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div><label className="text-xs font-semibold text-slate-600">Upload media kegiatan</label>
-                          <input type="file" accept="image/*,video/*" className="mt-1.5 w-full rounded-2xl border border-slate-300 px-3 py-2 bg-white text-xs"
-                            onChange={function (e) { onItemFile(i, e.target.files[0]) }} />
-                        </div>
-                        <div className="flex items-end">
-                          <label className={'flex items-start gap-3 rounded-2xl border p-3 cursor-pointer w-full ' + (it.preview ? (it.show ? 'border-gold-500 bg-gold-500/5' : 'border-slate-200') : 'border-slate-200 bg-slate-50 opacity-50 cursor-not-allowed')}>
-                            <input type="checkbox" disabled={!it.preview} checked={it.show} onChange={function (e) { patchItem(i, { show: e.target.checked }) }} className="mt-0.5 h-4 w-4 rounded accent-bsi-800" />
-                            <span className="text-sm font-semibold text-slate-800">Tampilkan kegiatan ini di galeri</span>
-                          </label>
-                        </div>
-                      </div>
+                      <FileInput accept="image/*,video/*" fileName={it.file ? it.file.name : ''}
+                        onChange={function (e) { onItemFile(i, e.target.files[0]) }} />
+                      <label className={'flex items-start gap-3 rounded-2xl border p-3 cursor-pointer w-full ' + (it.preview ? (it.show ? 'border-gold-500 bg-gold-500/5' : 'border-slate-200') : 'border-slate-200 bg-slate-50 opacity-50 cursor-not-allowed')}>
+                        <input type="checkbox" disabled={!it.preview} checked={it.show} onChange={function (e) { patchItem(i, { show: e.target.checked }) }} className="mt-0.5 h-4 w-4 rounded accent-bsi-800" />
+                        <span className="text-sm font-semibold text-slate-800">Tampilkan kegiatan ini di galeri</span>
+                      </label>
                     </div>
                   )
                 })}
               </div>
 
               <div className="grid gap-4 md:grid-cols-3">
-                <div><label className={labelCls}>Kendala</label><textarea rows="3" className={inputCls} value={form.kendala} onChange={function (e) { setForm(Object.assign({}, form, { kendala: e.target.value })) }} placeholder="Opsional" /></div>
-                <div><label className={labelCls}>Solusi</label><textarea rows="3" className={inputCls} value={form.solusi} onChange={function (e) { setForm(Object.assign({}, form, { solusi: e.target.value })) }} placeholder="Opsional" /></div>
-                <div><label className={labelCls}>Pembelajaran</label><textarea rows="3" className={inputCls} value={form.pembelajaran} onChange={function (e) { setForm(Object.assign({}, form, { pembelajaran: e.target.value })) }} placeholder="Opsional" /></div>
+                <div><label className={labelCls}>Kendala</label><AutoTextArea className={inputCls} value={form.kendala} onChange={function (e) { setForm(Object.assign({}, form, { kendala: e.target.value })) }} placeholder="Opsional" /></div>
+                <div><label className={labelCls}>Solusi</label><AutoTextArea className={inputCls} value={form.solusi} onChange={function (e) { setForm(Object.assign({}, form, { solusi: e.target.value })) }} placeholder="Opsional" /></div>
+                <div><label className={labelCls}>Pembelajaran</label><AutoTextArea className={inputCls} value={form.pembelajaran} onChange={function (e) { setForm(Object.assign({}, form, { pembelajaran: e.target.value })) }} placeholder="Opsional" /></div>
               </div>
 
               <button type="submit" disabled={busy} className={btnPrimary}>{busy ? 'Menyimpan...' : (editLogId ? 'Simpan perubahan' : 'Simpan logbook')}</button>
@@ -315,9 +322,16 @@ export default function DashboardPage() {
           <div className="card-hover bg-white rounded-[2rem] border border-slate-200 shadow-sm p-8">
             <h2 className="text-2xl font-black text-slate-900">{editGalId ? 'Ubah media galeri' : 'Tambah media galeri'}</h2>
             <form onSubmit={submitGaleri} className="mt-6 space-y-4">
-              <div><label className={labelCls}>Pilih foto atau video</label>
-                <input type="file" accept="image/*,video/*" className="mt-1.5 w-full rounded-2xl border border-slate-300 px-4 py-3 bg-white text-sm"
-                  onChange={function (e) { const f = e.target.files[0]; setGalForm(Object.assign({}, galForm, { file: f, preview: f ? URL.createObjectURL(f) : '' })) }} />
+              <div>
+                <label className={labelCls}>Pilih foto atau video {editGalId ? null : <span className="text-red-500">*</span>}</label>
+                <div className="mt-1.5">
+                  <FileInput accept="image/*,video/*" fileName={galForm.file ? galForm.file.name : ''}
+                    onChange={function (e) {
+                      const f = e.target.files[0]
+                      if (!f) return
+                      setGalForm(Object.assign({}, galForm, { file: f, preview: URL.createObjectURL(f) }))
+                    }} />
+                </div>
               </div>
               {galForm.preview ? (
                 <div className="rounded-2xl overflow-hidden aspect-video bg-slate-900">
@@ -328,15 +342,22 @@ export default function DashboardPage() {
               ) : null}
               <div className="grid gap-4 sm:grid-cols-2">
                 <div><label className={labelCls}>Judul (opsional)</label><input className={inputCls} value={galForm.judul} onChange={function (e) { setGalForm(Object.assign({}, galForm, { judul: e.target.value })) }} placeholder="Kosongkan untuk judul otomatis" /></div>
-                <div><label className={labelCls}>Tanggal (opsional)</label><input type="date" className={inputCls} value={galForm.tanggal} onChange={function (e) { setGalForm(Object.assign({}, galForm, { tanggal: e.target.value })) }} /></div>
+                <div>
+                  <label className={labelCls}>Tanggal (opsional)</label>
+                  <div className="mt-1.5">
+                    <CustomDateInput value={galForm.tanggal} onChange={function (v) { setGalForm(Object.assign({}, galForm, { tanggal: v })) }} />
+                  </div>
+                </div>
               </div>
-              <div><label className={labelCls}>Kegiatan (opsional)</label>
-                <select className={inputCls} value={galForm.kegiatan} onChange={function (e) { setGalForm(Object.assign({}, galForm, { kegiatan: e.target.value })) }}>
-                  <option value="">Pilih kegiatan</option>
-                  {GALERI_KEGIATAN.map(function (k) { return <option key={k} value={k}>{k}</option> })}
-                </select>
+              <div>
+                <label className={labelCls}>Kegiatan (opsional)</label>
+                <div className="mt-1.5">
+                  <CustomSelect placeholder="Pilih kegiatan" value={galForm.kegiatan}
+                    onChange={function (v) { setGalForm(Object.assign({}, galForm, { kegiatan: v })) }}
+                    options={GALERI_KEGIATAN.map(function (k) { return { value: k, label: k } })} />
+                </div>
               </div>
-              <div><label className={labelCls}>Deskripsi (opsional)</label><textarea rows="4" className={inputCls} value={galForm.deskripsi} onChange={function (e) { setGalForm(Object.assign({}, galForm, { deskripsi: e.target.value })) }} placeholder="Tambahkan keterangan media." /></div>
+              <div><label className={labelCls}>Deskripsi (opsional)</label><AutoTextArea className={inputCls} value={galForm.deskripsi} onChange={function (e) { setGalForm(Object.assign({}, galForm, { deskripsi: e.target.value })) }} placeholder="Tambahkan keterangan media." /></div>
               <button type="submit" disabled={busy} className={btnPrimary}>{busy ? 'Menyimpan...' : (editGalId ? 'Simpan perubahan media' : 'Unggah media')}</button>
             </form>
           </div>
@@ -350,7 +371,7 @@ export default function DashboardPage() {
                   onEdit={function () { setEditGalId(g.id); setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_path }) }}
                   onDelete={function () { deleteGaleri(g) }} />
               })}
-              {!galeri.length ? <EmptyState title="Belum ada media galeri" desc="Unggah foto atau video pertama kamu." /> : null}
+              {!galeri.length ? <EmptyState icon="camera" title="Belum ada media galeri" desc="Unggah foto atau video pertama kamu." /> : null}
             </div>
           </div>
         </section>
@@ -362,16 +383,22 @@ export default function DashboardPage() {
             <h2 className="text-2xl font-black text-slate-900">{editHadirId ? 'Ubah daftar hadir' : 'Isi daftar hadir'}</h2>
             <form onSubmit={submitHadir} className="mt-6 space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
-                <div><label className={labelCls}>Tanggal</label><input type="date" required className={inputCls} value={hadirForm.tanggal} onChange={function (e) { setHadirForm(Object.assign({}, hadirForm, { tanggal: e.target.value })) }} /></div>
-                <div><label className={labelCls}>Status kehadiran</label>
-                  <select required className={inputCls} value={hadirForm.status} onChange={function (e) { setHadirForm(Object.assign({}, hadirForm, { status: e.target.value })) }}>
-                    <option value="Masuk">Masuk</option>
-                    <option value="Izin">Izin</option>
-                    <option value="Bolos">Bolos</option>
-                  </select>
+                <div>
+                  <label className={labelCls}>Tanggal <span className="text-red-500">*</span></label>
+                  <div className="mt-1.5">
+                    <CustomDateInput value={hadirForm.tanggal} onChange={function (v) { setHadirForm(Object.assign({}, hadirForm, { tanggal: v })) }} />
+                  </div>
+                </div>
+                <div>
+                  <label className={labelCls}>Status kehadiran <span className="text-red-500">*</span></label>
+                  <div className="mt-1.5">
+                    <CustomSelect value={hadirForm.status}
+                      onChange={function (v) { setHadirForm(Object.assign({}, hadirForm, { status: v })) }}
+                      options={[{ value: 'Masuk', label: 'Masuk' }, { value: 'Izin', label: 'Izin' }, { value: 'Bolos', label: 'Bolos' }]} />
+                  </div>
                 </div>
               </div>
-              <div><label className={labelCls}>Alasan atau keterangan</label><textarea rows="4" className={inputCls} value={hadirForm.alasan} onChange={function (e) { setHadirForm(Object.assign({}, hadirForm, { alasan: e.target.value })) }} placeholder="Contoh: Keperluan keluarga, sakit." /></div>
+              <div><label className={labelCls}>Alasan atau keterangan</label><AutoTextArea className={inputCls} value={hadirForm.alasan} onChange={function (e) { setHadirForm(Object.assign({}, hadirForm, { alasan: e.target.value })) }} placeholder="Contoh: Keperluan keluarga, sakit." /></div>
               <button type="submit" disabled={busy} className={btnPrimary}>{busy ? 'Menyimpan...' : (editHadirId ? 'Simpan perubahan' : 'Simpan daftar hadir')}</button>
             </form>
           </div>
@@ -384,7 +411,7 @@ export default function DashboardPage() {
                 onEdit={function () { setEditHadirId(h.id); setHadirForm({ tanggal: h.tanggal, status: h.status, alasan: h.alasan || '' }) }}
                 onDelete={function () { deleteHadir(h) }} />
             })}
-            {!hadir.length ? <EmptyState title="Belum ada data kehadiran" desc="Isi daftar hadir pertama kamu." /> : null}
+            {!hadir.length ? <EmptyState icon="clipboard" title="Belum ada data kehadiran" desc="Isi daftar hadir pertama kamu." /> : null}
           </div>
         </section>
       ) : null}

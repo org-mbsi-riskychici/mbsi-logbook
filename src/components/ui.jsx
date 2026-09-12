@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { SizedIcon } from './icons.jsx'
 
 export const inputCls = 'mt-1.5 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-bsi-500'
@@ -66,5 +67,27 @@ export function Modal(props) {
         </div>
       </div>
     </div>
+  )
+}
+
+export function AutoTextArea(props) {
+  const ref = useRef(null)
+
+  useEffect(function () {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = el.scrollHeight + 'px'
+  }, [props.value])
+
+  return (
+    <textarea
+      ref={ref}
+      className={props.className}
+      rows={props.rows || 2}
+      value={props.value}
+      placeholder={props.placeholder}
+      onChange={props.onChange}
+    />
   )
 }

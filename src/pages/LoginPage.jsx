@@ -37,11 +37,11 @@ export default function LoginPage() {
         {error ? <p className="mt-3 rounded-2xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</p> : null}
         <form onSubmit={submit} className="mt-6 space-y-5">
           <div>
-            <label className={labelCls}>NIM</label>
+            <label className={labelCls}>NIM <span className="text-red-500">*</span></label>
             <input className={inputCls} value={nim} onChange={function (e) { setNim(e.target.value) }} placeholder="Contoh: 20260001" required />
           </div>
           <div>
-            <label className={labelCls}>Kode akses</label>
+            <label className={labelCls}>Kode akses <span className="text-red-500">*</span></label>
             <input type="password" className={inputCls} value={kode} onChange={function (e) { setKode(e.target.value) }} placeholder="Masukkan kode akses" required />
           </div>
           <button type="submit" disabled={busy} className={btnPrimary}>{busy ? 'Memproses...' : 'Masuk ke dashboard'}</button>

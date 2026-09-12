@@ -90,3 +90,38 @@ button:active, a:active, .clickable:active { transform: scale(.97); }
 .dark .skeleton::after { background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent); }
 .skeleton-on-dark { background-color: rgba(255,255,255,0.15); }
 .skeleton-on-dark::after { background: linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent); }
+
+/* ===== Textarea tanpa resize manual ===== */
+textarea {
+  resize: none;
+  overflow-y: hidden;
+}
+
+/* ===== Scrollbar custom tipis bertema ===== */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+.dark * {
+  scrollbar-color: #334155 transparent;
+}
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: #16623c;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background-color: #334155;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background-color: #27c06d;
+}
