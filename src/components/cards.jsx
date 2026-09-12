@@ -60,7 +60,7 @@ export function LogbookCard(props) {
       <div>
         <p className="text-sm text-slate-500">{formatTanggal(log.tanggal)}</p>
         <h3 className="mt-2 text-xl font-bold text-slate-900">{log.judul}</h3>
-        <p className="mt-3 flex items-center gap-2 text-xs font-semibold text-bsi-800">{items.length} kegiatan hari ini</p>
+        <p className="mt-3 flex items-center gap-2 text-xs font-semibold text-bsi-800">Terdapat {items.length} kegiatan</p>
         <div className="mt-2 space-y-1">
           {preview.map(function (it, i) {
             return <p key={it.id} className="text-xs text-slate-500 truncate">{i + 1}. {it.judul}</p>
@@ -91,7 +91,7 @@ export function LogbookDetail(props) {
         <h2 className="mt-1 text-2xl font-black text-slate-900">{log.judul}</h2>
       </div>
       <div>
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Rincian kegiatan hari ini</p>
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Rincian kegiatan</p>
         <div className="mt-4">
           {items.map(function (it, i) {
             return (

@@ -87,7 +87,7 @@ export default function Layout() {
 
       <footer className="mt-auto border-t border-slate-200 bg-white">
         <div className="max-w-7xl mx-auto px-4 py-4 text-center text-xs text-slate-500">
-          © {new Date().getFullYear()} Tim Magang BSI. Dokumentasi kegiatan magang untuk keperluan akademik.
+          &copy; {new Date().getFullYear()} Tim Magang BSI
         </div>
       </footer>
     </div>

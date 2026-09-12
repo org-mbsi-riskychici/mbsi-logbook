@@ -482,7 +482,7 @@ export default function DashboardPage() {
               <FilterSelect icon={ICONS.tag} value={galFilter.kegiatan} onChange={function (v) { setGalFilter(Object.assign({}, galFilter, { kegiatan: v })) }}
                 options={[{ value: '', label: 'Semua kegiatan' }].concat(GALERI_KEGIATAN.map(function (k) { return { value: k, label: k } }))} />
               <FilterSelect icon={ICONS.image} value={galFilter.tipe} onChange={function (v) { setGalFilter(Object.assign({}, galFilter, { tipe: v })) }}
-                options={[{ value: '', label: 'Semua media' }, { value: 'foto', label: 'Foto saja' }, { value: 'video', label: 'Video saja' }]} />
+                options={[{ value: '', label: 'Semua media' }, { value: 'foto', label: 'Foto' }, { value: 'video', label: 'Video' }]} />
               <TimeFilter filter={galFilter} set={setGalFilter} />
             </FilterBar>
             <p className="text-sm text-slate-500">Menampilkan {filteredGaleri.length} dari {galeri.length} media</p>

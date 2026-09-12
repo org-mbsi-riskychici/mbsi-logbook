@@ -49,7 +49,7 @@ export default function GalleryPage() {
           <FilterSelect icon={ICONS.tag} value={filter.kegiatan} onChange={function (v) { setFilter(Object.assign({}, filter, { kegiatan: v })) }}
             options={[{ value: '', label: 'Semua kegiatan' }].concat(GALERI_KEGIATAN.map(function (k) { return { value: k, label: k } }))} />
           <FilterSelect icon={ICONS.image} value={filter.tipe} onChange={function (v) { setFilter(Object.assign({}, filter, { tipe: v })) }}
-            options={[{ value: '', label: 'Semua media' }, { value: 'foto', label: 'Foto saja' }, { value: 'video', label: 'Video saja' }]} />
+            options={[{ value: '', label: 'Semua media' }, { value: 'foto', label: 'Foto' }, { value: 'video', label: 'Video' }]} />
           <TimeFilter filter={filter} set={setFilter} />
         </FilterBar>
       </section>

@@ -24,8 +24,8 @@ export default function TimPage() {
   return (
     <div>
       <section className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Profil tim</p>
-        <h1 className="mt-2 text-3xl lg:text-4xl font-black text-slate-900">Tim magang Bank BSI</h1>
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Profil Mahasiswa</p>
+        <h1 className="mt-2 text-3xl lg:text-4xl font-black text-slate-900">Mahasiswa magang Bank BSI</h1>
       </section>
       <section className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
         {loading
