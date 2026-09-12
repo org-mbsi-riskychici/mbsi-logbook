@@ -1,6 +1,6 @@
 import { Outlet, Link, NavLink } from 'react-router-dom'
 import { useTheme } from '../lib/theme.jsx'
-import { useAuth, logoutPeserta } from '../lib/auth.js'
+import { useAuth, logoutMahasiswa } from '../lib/auth.js'
 import { SizedIcon } from './icons.jsx'
 import { useState } from 'react'
 
@@ -15,7 +15,7 @@ const LINKS = [
 
 export default function Layout() {
   const theme = useTheme()
-  const { peserta } = useAuth()
+  const { mahasiswa } = useAuth()
   const [open, setOpen] = useState(false)
 
   const linkCls = function (active) {
@@ -49,10 +49,10 @@ export default function Layout() {
             </nav>
             <div className="hidden xl:flex items-center gap-3">
               {themeBtn()}
-              {peserta ? (
+              {mahasiswa ? (
                 <>
                   <Link to="/dashboard" className="px-4 py-2 rounded-xl bg-bsi-800 text-white text-sm font-semibold hover:bg-bsi-900">Dashboard</Link>
-                  <Link to="/" onClick={function () { logoutPeserta() }} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-100">Keluar</Link>
+                  <Link to="/" onClick={function () { logoutMahasiswa() }} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-100">Keluar</Link>
                 </>
               ) : (
                 <Link to="/login" className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-700">Masuk Intern</Link>
@@ -69,10 +69,10 @@ export default function Layout() {
             {LINKS.map(function (l) {
               return <Link key={l.to} to={l.to} onClick={function () { setOpen(false) }} className="block px-4 py-3 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100">{l.label}</Link>
             })}
-            {peserta ? (
+            {mahasiswa ? (
               <>
                 <Link to="/dashboard" onClick={function () { setOpen(false) }} className="block px-4 py-3 rounded-xl bg-bsi-800 text-white text-sm font-semibold">Dashboard</Link>
-                <Link to="/" onClick={function () { setOpen(false); logoutPeserta() }} className="block px-4 py-3 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700">Keluar</Link>
+                <Link to="/" onClick={function () { setOpen(false); logoutMahasiswa() }} className="block px-4 py-3 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700">Keluar</Link>
               </>
             ) : (
               <Link to="/login" onClick={function () { setOpen(false) }} className="block px-4 py-3 rounded-xl bg-slate-900 text-white text-sm font-semibold">Masuk Intern</Link>

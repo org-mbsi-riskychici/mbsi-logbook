@@ -12,12 +12,12 @@ export async function loginWithNim(nim, kode) {
   return data
 }
 
-export async function logoutPeserta() {
+export async function logoutMahasiswa() {
   await supabase.auth.signOut()
 }
 
 export function useAuth() {
-  const [peserta, setPeserta] = useState(null)
+  const [mahasiswa, setMahasiswa] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -29,15 +29,15 @@ export function useAuth() {
         if (active) setLoading(false)
         return
       }
-      const res = await supabase.from('peserta').select('*').eq('auth_uid', uid).single()
+      const res = await supabase.from('mahasiswa').select('*').eq('auth_uid', uid).single()
       if (active) {
-        setPeserta(res.data)
+        setMahasiswa(res.data)
         setLoading(false)
       }
     }
     load()
     const sub = supabase.auth.onAuthStateChange(function (event, session) {
-      if (!session) setPeserta(null)
+      if (!session) setMahasiswa(null)
     })
     return function () {
       active = false
@@ -45,5 +45,5 @@ export function useAuth() {
     }
   }, [])
 
-  return { peserta: peserta, loading: loading }
+  return { mahasiswa: mahasiswa, loading: loading }
 }

@@ -7,9 +7,9 @@ import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
 import { SkeletonLogbookCard, SkeletonStatCard } from '../components/Skeleton.jsx'
 
 export default function HomePage() {
-  const { peserta } = useAuth()
+  const { mahasiswa } = useAuth()
   const [logs, setLogs] = useState([])
-  const [stats, setStats] = useState({ logbook: 0, galeri: 0, peserta: 0 })
+  const [stats, setStats] = useState({ logbook: 0, galeri: 0, mahasiswa: 0 })
   const [detail, setDetail] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -17,14 +17,14 @@ export default function HomePage() {
     async function load() {
       const l = await supabase
         .from('logbooks')
-        .select('*, peserta(nim, nama, prodi), logbook_items(*)')
+        .select('*, mahasiswa(nim, nama, prodi), logbook_items(*)')
         .eq('status', 'publik')
         .order('tanggal', { ascending: false })
         .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
       const g = await supabase.from('galeri').select('id')
-      const p = await supabase.from('peserta').select('id')
+      const p = await supabase.from('mahasiswa').select('id')
       setLogs(l.data || [])
-      setStats({ logbook: (l.data || []).length, galeri: (g.data || []).length, peserta: (p.data || []).length })
+      setStats({ logbook: (l.data || []).length, galeri: (g.data || []).length, mahasiswa: (p.data || []).length })
       setLoading(false)
     }
     load()
@@ -44,7 +44,7 @@ export default function HomePage() {
               <Link to="/logbook" className="px-6 py-3 rounded-2xl bg-gold-500 text-slate-900 font-bold hover:bg-gold-400">Lihat Logbook</Link>
               <Link to="/galeri" className="px-6 py-3 rounded-2xl bg-white/10 text-white font-bold hover:bg-white/20">Lihat Galeri</Link>
               <Link to="/absen" className="px-6 py-3 rounded-2xl bg-white/10 text-white font-bold hover:bg-white/20">Daftar Hadir</Link>
-              {peserta
+              {mahasiswa
                 ? <Link to="/dashboard" className="px-6 py-3 rounded-2xl bg-white text-bsi-900 font-bold hover:bg-slate-100">Buka Dashboard</Link>
                 : <Link to="/login" className="px-6 py-3 rounded-2xl bg-white text-bsi-900 font-bold hover:bg-slate-100">Masuk Intern</Link>}
             </div>
@@ -54,7 +54,7 @@ export default function HomePage() {
           {loading
             ? [0, 1, 2].map(function (i) { return <SkeletonStatCard key={i} /> })
             : [
-                <StatCard key="peserta" label="Total peserta magang" value={stats.peserta} sub="Peserta terdaftar dalam tim" />,
+                <StatCard key="mahasiswa" label="Total mahasiswa magang" value={stats.mahasiswa} sub="Mahasiswa terdaftar dalam tim" />,
                 <StatCard key="logbook" label="Total logbook publik" value={stats.logbook} sub="Catatan kegiatan harian" />,
                 <StatCard key="galeri" label="Total media galeri" value={stats.galeri} sub="Foto dan video dokumentasi" />
               ]}

@@ -12,9 +12,9 @@ import LoginPage from './pages/LoginPage.jsx'
 import DashboardPage from './pages/DashboardPage.jsx'
 
 function RequireAuth(props) {
-  const { peserta, loading } = useAuth()
+  const { mahasiswa, loading } = useAuth()
   if (loading) return <div className="p-10 text-center text-slate-500">Memuat sesi...</div>
-  if (!peserta) return <Navigate to="/login" replace />
+  if (!mahasiswa) return <Navigate to="/login" replace />
   return props.children
 }
 

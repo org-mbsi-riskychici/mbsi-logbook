@@ -12,7 +12,7 @@ import { SkeletonGalleryCard } from '../components/Skeleton.jsx'
 const INITIAL = { kegiatan: '', tipe: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
 
 export default function GalleryPage() {
-  const { peserta } = useAuth()
+  const { mahasiswa } = useAuth()
   const [all, setAll] = useState([])
   const [filter, setFilter] = useState(INITIAL)
   const [open, setOpen] = useState(false)
@@ -21,7 +21,7 @@ export default function GalleryPage() {
 
   useEffect(function () {
     async function load() {
-      const g = await supabase.from('galeri').select('*, peserta(nim, nama, prodi)').order('tanggal', { ascending: false })
+      const g = await supabase.from('galeri').select('*, mahasiswa(nim, nama, prodi)').order('tanggal', { ascending: false })
       setAll(g.data || [])
       setLoading(false)
     }
@@ -58,10 +58,10 @@ export default function GalleryPage() {
         {loading
           ? [0, 1, 2, 3, 4, 5].map(function (i) { return <SkeletonGalleryCard key={i} /> })
           : items.map(function (i) {
-              return <GalleryCard key={i.id} item={i} isOwner={peserta && peserta.id === i.peserta_id}
+              return <GalleryCard key={i.id} item={i} isOwner={mahasiswa && mahasiswa.id === i.mahasiswa_id}
                 onDetail={function () { setDetail(i) }} />
             })}
-        {!loading && !items.length ? <EmptyState icon="camera" title="Belum ada media galeri" desc="Media galeri yang diunggah peserta akan tampil di sini." /> : null}
+        {!loading && !items.length ? <EmptyState icon="camera" title="Belum ada media galeri" desc="Media galeri yang diunggah mahasiswa akan tampil di sini." /> : null}
       </section>
 
       <Modal open={!!detail} onClose={function () { setDetail(null) }}>

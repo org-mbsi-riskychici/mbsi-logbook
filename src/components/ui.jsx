@@ -88,6 +88,7 @@ export function AutoTextArea(props) {
       value={props.value}
       placeholder={props.placeholder}
       onChange={props.onChange}
+      disabled={props.disabled || false}
     />
   )
 }

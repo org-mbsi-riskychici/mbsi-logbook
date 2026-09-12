@@ -17,11 +17,11 @@ export default function DospemPage() {
     async function load() {
       const l = await supabase
         .from('logbooks')
-        .select('*, peserta(nim, nama, prodi), logbook_items(*)')
+        .select('*, mahasiswa(nim, nama, prodi), logbook_items(*)')
         .eq('status', 'publik')
         .order('tanggal', { ascending: false })
         .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
-      const p = await supabase.from('peserta').select('id, nama, nim, prodi').order('nama')
+      const p = await supabase.from('mahasiswa').select('id, nama, nim, prodi').order('nama')
       const g = await supabase.from('galeri').select('id')
       const h = await supabase.from('daftar_hadir').select('id')
       setLogs(l.data || [])
@@ -50,7 +50,7 @@ export default function DospemPage() {
                 )
               })
             : [
-                <div key="peserta" className="card-hover rounded-[1.5rem] bg-white/10 p-5"><p className="text-sm text-white/70">Total peserta</p><p className="mt-1 text-3xl font-black">{people.length}</p></div>,
+                <div key="mahasiswa" className="card-hover rounded-[1.5rem] bg-white/10 p-5"><p className="text-sm text-white/70">Total mahasiswa</p><p className="mt-1 text-3xl font-black">{people.length}</p></div>,
                 <div key="logbook" className="card-hover rounded-[1.5rem] bg-white/10 p-5"><p className="text-sm text-white/70">Logbook publik</p><p className="mt-1 text-3xl font-black">{logs.length}</p></div>,
                 <div key="galeri" className="card-hover rounded-[1.5rem] bg-white/10 p-5"><p className="text-sm text-white/70">Media galeri</p><p className="mt-1 text-3xl font-black">{galCount}</p></div>,
                 <div key="hadir" className="card-hover rounded-[1.5rem] bg-white/10 p-5"><p className="text-sm text-white/70">Catatan hadir</p><p className="mt-1 text-3xl font-black">{hadirCount}</p></div>
@@ -69,7 +69,7 @@ export default function DospemPage() {
           {loading
             ? [0, 1, 2].map(function (i) { return <SkeletonPersonCard key={i} /> })
             : people.map(function (p) {
-                const total = logs.filter(function (l) { return l.peserta_id === p.id }).length
+                const total = logs.filter(function (l) { return l.mahasiswa_id === p.id }).length
                 return (
                   <div key={p.id} className="card-hover bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
                     <p className="font-bold text-slate-900">{p.nama}</p>
@@ -93,7 +93,7 @@ export default function DospemPage() {
             : logs.map(function (l) {
                 return <LogbookCard key={l.id} log={l} onDetail={function () { setDetail(l) }} />
               })}
-          {!loading && !logs.length ? <EmptyState title="Belum ada logbook publik" desc="Logbook akan tampil setelah peserta mengatur status siap dilihat." /> : null}
+          {!loading && !logs.length ? <EmptyState title="Belum ada logbook publik" desc="Logbook akan tampil setelah mahasiswa mengatur status siap dilihat." /> : null}
         </div>
       </section>
 

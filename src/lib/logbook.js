@@ -2,7 +2,7 @@ import { supabase } from './supabase.js'
 
 const EMPTY = '00000000-0000-0000-0000-000000000000'
 
-export async function syncGaleriFromLogbook(pesertaId, items, meta) {
+export async function syncGaleriFromLogbook(mahasiswaId, items, meta) {
   const itemIds = items.map(function (i) { return i.id }).filter(Boolean)
   const all = await supabase
     .from('galeri')
@@ -14,7 +14,7 @@ export async function syncGaleriFromLogbook(pesertaId, items, meta) {
     if (!item.id) continue
     if (item.show_in_gallery && item.media_path) {
       const payload = {
-        peserta_id: pesertaId,
+        mahasiswa_id: mahasiswaId,
         logbook_item_id: item.id,
         judul: item.judul,
         deskripsi: item.deskripsi || 'Dokumentasi kegiatan dari logbook harian.',

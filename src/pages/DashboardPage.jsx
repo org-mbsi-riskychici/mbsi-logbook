@@ -1,21 +1,26 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../lib/auth.js'
-import { uploadMedia, deleteMedia } from '../lib/upload.js'
+import { uploadMedia } from '../lib/upload.js'
 import { syncGaleriFromLogbook } from '../lib/logbook.js'
-import { todayInput, detectMediaType } from '../lib/format.js'
+import { todayInput, detectMediaType, matchesDateFilters } from '../lib/format.js'
 import { KATEGORI, UNIT, GALERI_KEGIATAN } from '../lib/constants.js'
-import { StatCard, EmptyState, Modal, ConfirmModal, inputCls, labelCls, btnPrimary, btnSmall, AutoTextArea } from '../components/ui.jsx'
+import { EmptyState, Modal, ConfirmModal, inputCls, labelCls, btnPrimary, btnSmall, AutoTextArea } from '../components/ui.jsx'
 import { LogbookCard, LogbookDetail, GalleryCard, GalleryDetail, AttendanceCard, AttendanceDetail } from '../components/cards.jsx'
 import { CustomSelect, CustomDateInput, FileInput } from '../components/controls.jsx'
-import { SizedIcon } from '../components/icons.jsx'
+import { SizedIcon, ICONS } from '../components/icons.jsx'
+import { FilterBar, FilterSelect, TimeFilter, countActiveFilters } from '../components/FilterBar.jsx'
 
 function newItem() {
   return { key: Math.random().toString(36).slice(2), judul: '', deskripsi: '', hasil: '', file: null, preview: '', oldPath: '', show: false }
 }
 
+const LOG_INITIAL = { kategori: '', status: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
+const GAL_INITIAL = { kegiatan: '', tipe: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
+const HADIR_INITIAL = { status: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
+
 export default function DashboardPage() {
-  const { peserta, loading } = useAuth()
+  const { mahasiswa, loading } = useAuth()
   const [tab, setTab] = useState('logbook')
   const [logs, setLogs] = useState([])
   const [galeri, setGaleri] = useState([])
@@ -35,23 +40,30 @@ export default function DashboardPage() {
   const [busy, setBusy] = useState(false)
   const [pendingDelete, setPendingDelete] = useState(null)
 
+  const [logFilter, setLogFilter] = useState(LOG_INITIAL)
+  const [logFilterOpen, setLogFilterOpen] = useState(false)
+  const [galFilter, setGalFilter] = useState(GAL_INITIAL)
+  const [galFilterOpen, setGalFilterOpen] = useState(false)
+  const [hadirFilter, setHadirFilter] = useState(HADIR_INITIAL)
+  const [hadirFilterOpen, setHadirFilterOpen] = useState(false)
+
   async function refresh() {
-    if (!peserta) return
-    const l = await supabase.from('logbooks').select('*, peserta(nim, nama, prodi), logbook_items(*)')
-      .eq('peserta_id', peserta.id).order('tanggal', { ascending: false })
+    if (!mahasiswa) return
+    const l = await supabase.from('logbooks').select('*, mahasiswa(nim, nama, prodi), logbook_items(*)')
+      .eq('mahasiswa_id', mahasiswa.id).order('tanggal', { ascending: false })
       .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
-    const g = await supabase.from('galeri').select('*, peserta(nim, nama, prodi)').eq('peserta_id', peserta.id).order('tanggal', { ascending: false })
-    const h = await supabase.from('daftar_hadir').select('*, peserta(nim, nama, prodi)').eq('peserta_id', peserta.id).order('tanggal', { ascending: false })
+    const g = await supabase.from('galeri').select('*, mahasiswa(nim, nama, prodi)').eq('mahasiswa_id', mahasiswa.id).order('tanggal', { ascending: false })
+    const h = await supabase.from('daftar_hadir').select('*, mahasiswa(nim, nama, prodi)').eq('mahasiswa_id', mahasiswa.id).order('tanggal', { ascending: false })
     setLogs(l.data || [])
     setGaleri(g.data || [])
     setHadir(h.data || [])
   }
 
   useEffect(function () {
-    if (peserta) refresh()
-  }, [peserta])
+    if (mahasiswa) refresh()
+  }, [mahasiswa])
 
-  if (loading || !peserta) {
+  if (loading || !mahasiswa) {
     return <div className="p-10 text-center text-slate-500">Memuat sesi...</div>
   }
 
@@ -68,10 +80,6 @@ export default function DashboardPage() {
 
   function removeItemFile(i) {
     patchItem(i, { file: null, preview: '', oldPath: '', show: false })
-  }
-
-  function removeGalFile() {
-    setGalForm(function (g) { return Object.assign({}, g, { file: null, preview: '', oldPath: '' }) })
   }
 
   async function submitLogbook(e) {
@@ -105,7 +113,7 @@ export default function DashboardPage() {
         await supabase.from('logbook_items').delete().eq('logbook_id', editLogId)
       } else {
         const ins = await supabase.from('logbooks').insert({
-          peserta_id: peserta.id, tanggal: form.tanggal, unit: form.unit, kategori: form.kategori, judul: form.judul,
+          mahasiswa_id: mahasiswa.id, tanggal: form.tanggal, unit: form.unit, kategori: form.kategori, judul: form.judul,
           kendala: form.kendala, solusi: form.solusi, pembelajaran: form.pembelajaran, status: form.status
         }).select().single()
         logId = ins.data.id
@@ -115,7 +123,7 @@ export default function DashboardPage() {
         return { logbook_id: logId, urutan: idx + 1, judul: c.judul, deskripsi: c.deskripsi, hasil: c.hasil, media_path: c.media_path, media_type: c.media_type, show_in_gallery: c.show_in_gallery }
       })
       const insItems = await supabase.from('logbook_items').insert(rows).select()
-      await syncGaleriFromLogbook(peserta.id, insItems.data || [], { tanggal: form.tanggal, kategori: form.kategori })
+      await syncGaleriFromLogbook(mahasiswa.id, insItems.data || [], { tanggal: form.tanggal, kategori: form.kategori })
 
       setEditLogId(null)
       setForm({ tanggal: todayInput(), unit: '', kategori: '', judul: '', kendala: '', solusi: '', pembelajaran: '', status: 'draft' })
@@ -160,7 +168,7 @@ export default function DashboardPage() {
       }
       if (!mediaPath) { alert('Galeri wajib memiliki media. Pilih file foto atau video terlebih dahulu.'); setBusy(false); return }
       const payload = {
-        peserta_id: peserta.id,
+        mahasiswa_id: mahasiswa.id,
         judul: galForm.judul || ('Dokumentasi ' + galForm.tanggal),
         deskripsi: galForm.deskripsi,
         tanggal: galForm.tanggal,
@@ -189,7 +197,7 @@ export default function DashboardPage() {
   async function submitHadir(e) {
     e.preventDefault()
     setBusy(true)
-    const payload = { peserta_id: peserta.id, tanggal: hadirForm.tanggal, status: hadirForm.status, alasan: hadirForm.status === 'Masuk' ? '' : hadirForm.alasan }
+    const payload = { mahasiswa_id: mahasiswa.id, tanggal: hadirForm.tanggal, status: hadirForm.status, alasan: hadirForm.status === 'Masuk' ? '' : hadirForm.alasan }
     if (editHadirId) {
       await supabase.from('daftar_hadir').update(payload).eq('id', editHadirId)
     } else {
@@ -208,6 +216,18 @@ export default function DashboardPage() {
 
   function confirmInfo() {
     if (!pendingDelete) return null
+    if (pendingDelete.type === 'media-item') {
+      return {
+        title: 'Hapus gambar?',
+        message: 'Lampiran gambar pada kegiatan ini akan dibatalkan. Kamu bisa memilih file lain setelahnya.'
+      }
+    }
+    if (pendingDelete.type === 'media-gal') {
+      return {
+        title: 'Hapus gambar?',
+        message: 'Lampiran gambar pada form galeri akan dibatalkan. Kamu bisa memilih file lain setelahnya.'
+      }
+    }
     if (pendingDelete.type === 'log') {
       return {
         title: 'Hapus logbook?',
@@ -233,6 +253,14 @@ export default function DashboardPage() {
     if (!pendingDelete) return
     const target = pendingDelete
     setPendingDelete(null)
+    if (target.type === 'media-item') {
+      removeItemFile(target.data)
+      return
+    }
+    if (target.type === 'media-gal') {
+      setGalForm(function (g) { return Object.assign({}, g, { file: null, preview: '', oldPath: '' }) })
+      return
+    }
     if (target.type === 'log') {
       await supabase.from('logbooks').delete().eq('id', target.data.id)
     } else if (target.type === 'gal') {
@@ -243,6 +271,26 @@ export default function DashboardPage() {
     await refresh()
   }
 
+  const filteredLogs = logs.filter(function (l) {
+    if (logFilter.kategori && l.kategori !== logFilter.kategori) return false
+    if (logFilter.status && l.status !== logFilter.status) return false
+    return matchesDateFilters(l.tanggal, logFilter)
+  })
+  const logFilterActive = countActiveFilters(logFilter)
+
+  const filteredGaleri = galeri.filter(function (g) {
+    if (galFilter.kegiatan && (g.kegiatan || 'Lainnya') !== galFilter.kegiatan) return false
+    if (galFilter.tipe && g.media_type !== galFilter.tipe) return false
+    return matchesDateFilters(g.tanggal, galFilter)
+  })
+  const galFilterActive = countActiveFilters(galFilter)
+
+  const filteredHadir = hadir.filter(function (h) {
+    if (hadirFilter.status && h.status !== hadirFilter.status) return false
+    return matchesDateFilters(h.tanggal, hadirFilter)
+  })
+  const hadirFilterActive = countActiveFilters(hadirFilter)
+
   const tabCls = function (t) {
     return 'px-5 py-3 rounded-2xl text-sm font-bold ' + (tab === t ? 'bg-bsi-800 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200')
   }
@@ -252,10 +300,10 @@ export default function DashboardPage() {
       <section className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-6">
           <div>
-            <p className="text-sm text-slate-500">Dashboard peserta</p>
-            <h1 className="text-2xl lg:text-3xl font-black text-slate-900">{peserta.nama}</h1>
-            <p className="text-sm text-slate-500">NIM {peserta.nim}</p>
-            {peserta.prodi ? <p className="text-sm text-slate-500">{peserta.prodi}</p> : null}
+            <p className="text-sm text-slate-500">Dashboard mahasiswa</p>
+            <h1 className="text-2xl lg:text-3xl font-black text-slate-900">{mahasiswa.nama}</h1>
+            <p className="text-sm text-slate-500">NIM {mahasiswa.nim}</p>
+            {mahasiswa.prodi ? <p className="text-sm text-slate-500">{mahasiswa.prodi}</p> : null}
           </div>
         </div>
         <div className="mt-8 flex flex-wrap gap-2">
@@ -329,7 +377,7 @@ export default function DashboardPage() {
                           {it.file && it.file.type.indexOf('video') === 0
                             ? <video src={it.preview} className="absolute inset-0 h-full w-full object-contain" muted />
                             : <img src={it.preview} alt="Pratinjau" className="absolute inset-0 h-full w-full object-contain" />}
-                          <button type="button" onClick={function () { removeItemFile(i) }} title="Hapus gambar"
+                          <button type="button" onClick={function () { setPendingDelete({ type: 'media-item', data: i }) }} title="Hapus gambar"
                             className="absolute top-2 right-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-red-500 text-white hover:bg-red-600">
                             <SizedIcon name="close" size={14} />
                           </button>
@@ -358,13 +406,22 @@ export default function DashboardPage() {
 
           <div className="space-y-5 min-w-0">
             <h2 className="text-2xl font-black text-slate-900">Logbook kamu</h2>
-            {logs.map(function (l) {
+            <FilterBar open={logFilterOpen} onToggle={function () { setLogFilterOpen(function (o) { return !o }) }} activeCount={logFilterActive}
+              onReset={function () { setLogFilter(LOG_INITIAL) }}>
+              <FilterSelect icon={ICONS.tag} value={logFilter.kategori} onChange={function (v) { setLogFilter(Object.assign({}, logFilter, { kategori: v })) }}
+                options={[{ value: '', label: 'Semua kategori' }].concat(KATEGORI.map(function (k) { return { value: k, label: k } }))} />
+              <FilterSelect icon={ICONS.check} value={logFilter.status} onChange={function (v) { setLogFilter(Object.assign({}, logFilter, { status: v })) }}
+                options={[{ value: '', label: 'Semua status' }, { value: 'draft', label: 'Draft' }, { value: 'publik', label: 'Siap dilihat' }]} />
+              <TimeFilter filter={logFilter} set={setLogFilter} />
+            </FilterBar>
+            <p className="text-sm text-slate-500">Menampilkan {filteredLogs.length} dari {logs.length} logbook</p>
+            {filteredLogs.map(function (l) {
               return <LogbookCard key={l.id} log={l} isOwner
                 onDetail={function () { setDetail({ type: 'log', data: l }) }}
                 onEdit={function () { startEditLog(l) }}
                 onDelete={function () { deleteLog(l) }} />
             })}
-            {!logs.length ? <EmptyState title="Belum ada logbook" desc="Tambahkan logbook harian pertama kamu." /> : null}
+            {!filteredLogs.length ? <EmptyState title={logs.length ? 'Logbook tidak ditemukan' : 'Belum ada logbook'} desc={logs.length ? 'Coba reset filter atau pilih filter lain.' : 'Tambahkan logbook harian pertama kamu.'} /> : null}
           </div>
         </section>
       ) : null}
@@ -390,7 +447,7 @@ export default function DashboardPage() {
                   {galForm.file && galForm.file.type.indexOf('video') === 0
                     ? <video src={galForm.preview} className="absolute inset-0 h-full w-full object-contain" muted />
                     : <img src={galForm.preview} alt="Pratinjau" className="absolute inset-0 h-full w-full object-contain" />}
-                  <button type="button" onClick={removeGalFile} title="Hapus gambar"
+                  <button type="button" onClick={function () { setPendingDelete({ type: 'media-gal' }) }} title="Hapus gambar"
                     className="absolute top-2 right-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-red-500 text-white hover:bg-red-600">
                     <SizedIcon name="close" size={14} />
                   </button>
@@ -420,14 +477,23 @@ export default function DashboardPage() {
 
           <div className="space-y-5 min-w-0">
             <h2 className="text-2xl font-black text-slate-900">Galeri kamu</h2>
+            <FilterBar open={galFilterOpen} onToggle={function () { setGalFilterOpen(function (o) { return !o }) }} activeCount={galFilterActive}
+              onReset={function () { setGalFilter(GAL_INITIAL) }}>
+              <FilterSelect icon={ICONS.tag} value={galFilter.kegiatan} onChange={function (v) { setGalFilter(Object.assign({}, galFilter, { kegiatan: v })) }}
+                options={[{ value: '', label: 'Semua kegiatan' }].concat(GALERI_KEGIATAN.map(function (k) { return { value: k, label: k } }))} />
+              <FilterSelect icon={ICONS.image} value={galFilter.tipe} onChange={function (v) { setGalFilter(Object.assign({}, galFilter, { tipe: v })) }}
+                options={[{ value: '', label: 'Semua media' }, { value: 'foto', label: 'Foto saja' }, { value: 'video', label: 'Video saja' }]} />
+              <TimeFilter filter={galFilter} set={setGalFilter} />
+            </FilterBar>
+            <p className="text-sm text-slate-500">Menampilkan {filteredGaleri.length} dari {galeri.length} media</p>
             <div className="grid gap-5 md:grid-cols-2">
-              {galeri.map(function (g) {
+              {filteredGaleri.map(function (g) {
                 return <GalleryCard key={g.id} item={g} isOwner
                   onDetail={function () { setDetail({ type: 'gal', data: g }) }}
                   onEdit={function () { setEditGalId(g.id); setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_path, oldPath: g.media_path }) }}
                   onDelete={function () { deleteGaleri(g) }} />
               })}
-              {!galeri.length ? <EmptyState icon="camera" title="Belum ada media galeri" desc="Unggah foto atau video pertama kamu." /> : null}
+              {!filteredGaleri.length ? <EmptyState icon="camera" title={galeri.length ? 'Media tidak ditemukan' : 'Belum ada media galeri'} desc={galeri.length ? 'Coba reset filter atau pilih filter lain.' : 'Unggah foto atau video pertama kamu.'} /> : null}
             </div>
           </div>
         </section>
@@ -449,25 +515,42 @@ export default function DashboardPage() {
                   <label className={labelCls}>Status kehadiran <span className="text-red-500">*</span></label>
                   <div className="mt-1.5">
                     <CustomSelect value={hadirForm.status}
-                      onChange={function (v) { setHadirForm(Object.assign({}, hadirForm, { status: v })) }}
+                      onChange={function (v) { setHadirForm(Object.assign({}, hadirForm, { status: v, alasan: v === 'Masuk' ? '' : hadirForm.alasan })) }}
                       options={[{ value: 'Masuk', label: 'Masuk' }, { value: 'Izin', label: 'Izin' }, { value: 'Bolos', label: 'Bolos' }]} />
                   </div>
                 </div>
               </div>
-              <div><label className={labelCls}>Alasan atau keterangan</label><AutoTextArea className={inputCls} value={hadirForm.alasan} onChange={function (e) { setHadirForm(Object.assign({}, hadirForm, { alasan: e.target.value })) }} placeholder="Contoh: Keperluan keluarga, sakit." /></div>
+              <div>
+                <label className={labelCls}>Alasan atau keterangan</label>
+                <AutoTextArea
+                  className={inputCls + (hadirForm.status === 'Masuk' ? ' opacity-60 cursor-not-allowed' : '')}
+                  value={hadirForm.alasan}
+                  onChange={function (e) { setHadirForm(Object.assign({}, hadirForm, { alasan: e.target.value })) }}
+                  placeholder={hadirForm.status === 'Masuk' ? 'Status Masuk tidak memerlukan alasan' : 'Contoh: Keperluan keluarga, sakit.'}
+                  disabled={hadirForm.status === 'Masuk'}
+                />
+                {hadirForm.status === 'Masuk' ? <p className="mt-1 text-xs text-slate-400">Field ini hanya terisi untuk status Izin atau Bolos.</p> : null}
+              </div>
               <button type="submit" disabled={busy} className={btnPrimary}>{busy ? 'Menyimpan...' : (editHadirId ? 'Simpan perubahan' : 'Simpan daftar hadir')}</button>
             </form>
           </div>
 
           <div className="space-y-5 min-w-0">
             <h2 className="text-2xl font-black text-slate-900">Daftar hadir kamu</h2>
-            {hadir.map(function (h) {
+            <FilterBar open={hadirFilterOpen} onToggle={function () { setHadirFilterOpen(function (o) { return !o }) }} activeCount={hadirFilterActive}
+              onReset={function () { setHadirFilter(HADIR_INITIAL) }}>
+              <FilterSelect icon={ICONS.check} value={hadirFilter.status} onChange={function (v) { setHadirFilter(Object.assign({}, hadirFilter, { status: v })) }}
+                options={[{ value: '', label: 'Semua status' }, { value: 'Masuk', label: 'Masuk' }, { value: 'Izin', label: 'Izin' }, { value: 'Bolos', label: 'Bolos' }]} />
+              <TimeFilter filter={hadirFilter} set={setHadirFilter} />
+            </FilterBar>
+            <p className="text-sm text-slate-500">Menampilkan {filteredHadir.length} dari {hadir.length} catatan</p>
+            {filteredHadir.map(function (h) {
               return <AttendanceCard key={h.id} row={h} isOwner
                 onDetail={function () { setDetail({ type: 'hadir', data: h }) }}
                 onEdit={function () { setEditHadirId(h.id); setHadirForm({ tanggal: h.tanggal, status: h.status, alasan: h.alasan || '' }) }}
                 onDelete={function () { deleteHadir(h) }} />
             })}
-            {!hadir.length ? <EmptyState icon="clipboard" title="Belum ada data kehadiran" desc="Isi daftar hadir pertama kamu." /> : null}
+            {!filteredHadir.length ? <EmptyState icon="clipboard" title={hadir.length ? 'Catatan tidak ditemukan' : 'Belum ada data kehadiran'} desc={hadir.length ? 'Coba reset filter atau pilih filter lain.' : 'Isi daftar hadir pertama kamu.'} /> : null}
           </div>
         </section>
       ) : null}

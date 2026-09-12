@@ -9,10 +9,10 @@ import { matchesDateFilters } from '../lib/format.js'
 import { KATEGORI } from '../lib/constants.js'
 import { SkeletonLogbookCard } from '../components/Skeleton.jsx'
 
-const INITIAL = { peserta: '', kategori: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
+const INITIAL = { mahasiswa: '', kategori: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
 
 export default function LogbookPage() {
-  const { peserta } = useAuth()
+  const { mahasiswa } = useAuth()
   const [all, setAll] = useState([])
   const [people, setPeople] = useState([])
   const [filter, setFilter] = useState(INITIAL)
@@ -24,11 +24,11 @@ export default function LogbookPage() {
     async function load() {
       const l = await supabase
         .from('logbooks')
-        .select('*, peserta(nim, nama, prodi), logbook_items(*)')
+        .select('*, mahasiswa(nim, nama, prodi), logbook_items(*)')
         .eq('status', 'publik')
         .order('tanggal', { ascending: false })
         .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
-      const p = await supabase.from('peserta').select('id, nama').order('nama')
+      const p = await supabase.from('mahasiswa').select('id, nama').order('nama')
       setAll(l.data || [])
       setPeople(p.data || [])
       setLoading(false)
@@ -37,7 +37,7 @@ export default function LogbookPage() {
   }, [])
 
   const logs = all.filter(function (l) {
-    if (filter.peserta && l.peserta_id !== filter.peserta) return false
+    if (filter.mahasiswa && l.mahasiswa_id !== filter.mahasiswa) return false
     if (filter.kategori && l.kategori !== filter.kategori) return false
     return matchesDateFilters(l.tanggal, filter)
   })
@@ -54,8 +54,8 @@ export default function LogbookPage() {
       <section className="mt-6">
         <FilterBar open={open} onToggle={function () { setOpen(function (o) { return !o }) }} activeCount={active}
           onReset={function () { setFilter(INITIAL) }}>
-          <FilterSelect icon={ICONS.user} value={filter.peserta} onChange={function (v) { setFilter(Object.assign({}, filter, { peserta: v })) }}
-            options={[{ value: '', label: 'Semua peserta' }].concat(people.map(function (p) { return { value: p.id, label: p.nama } }))} />
+          <FilterSelect icon={ICONS.user} value={filter.mahasiswa} onChange={function (v) { setFilter(Object.assign({}, filter, { mahasiswa: v })) }}
+            options={[{ value: '', label: 'Semua mahasiswa' }].concat(people.map(function (p) { return { value: p.id, label: p.nama } }))} />
           <FilterSelect icon={ICONS.tag} value={filter.kategori} onChange={function (v) { setFilter(Object.assign({}, filter, { kategori: v })) }}
             options={[{ value: '', label: 'Semua kategori' }].concat(KATEGORI.map(function (k) { return { value: k, label: k } }))} />
           <TimeFilter filter={filter} set={setFilter} />
@@ -66,7 +66,7 @@ export default function LogbookPage() {
         {loading
           ? [0, 1, 2, 3, 4, 5].map(function (i) { return <SkeletonLogbookCard key={i} /> })
           : logs.map(function (l) {
-              return <LogbookCard key={l.id} log={l} isOwner={peserta && peserta.id === l.peserta_id}
+              return <LogbookCard key={l.id} log={l} isOwner={mahasiswa && mahasiswa.id === l.mahasiswa_id}
                 onDetail={function () { setDetail(l) }} />
             })}
         {!loading && !logs.length ? <EmptyState title="Logbook tidak ditemukan" desc="Coba reset filter atau pilih filter lain." /> : null}

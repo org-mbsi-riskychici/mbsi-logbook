@@ -3,8 +3,8 @@ import { StatusBadge, CategoryBadge, AttendanceBadge, btnSmall } from './ui.jsx'
 import { formatTanggal, formatTanggalShort } from '../lib/format.js'
 
 function PersonChip(props) {
-  const p = props.peserta
-  const nama = p ? p.nama : 'Peserta'
+  const p = props.mahasiswa
+  const nama = p ? p.nama : 'Mahasiswa'
   const nim = p ? p.nim : '-'
   const prodi = p && p.prodi ? p.prodi : ''
   const initials = nama.split(' ').slice(0, 2).map(function (w) { return w.charAt(0) || '' }).join('').toUpperCase()
@@ -69,7 +69,7 @@ export function LogbookCard(props) {
         </div>
       </div>
       <div className="mt-auto border-t border-slate-100 pt-4 flex flex-wrap items-center justify-between gap-4">
-        <PersonChip peserta={log.peserta} />
+        <PersonChip mahasiswa={log.mahasiswa} />
         <ActionButtons isOwner={props.isOwner} onDetail={props.onDetail} onEdit={props.onEdit} onDelete={props.onDelete} />
       </div>
     </article>
@@ -129,7 +129,7 @@ export function LogbookDetail(props) {
           </div>
         </div>
       ) : null}
-      <div className="border-t border-slate-100 pt-4"><PersonChip peserta={log.peserta} /></div>
+      <div className="border-t border-slate-100 pt-4"><PersonChip mahasiswa={log.mahasiswa} /></div>
     </div>
   )
 }
@@ -137,7 +137,7 @@ export function LogbookDetail(props) {
 export function GalleryCard(props) {
   const item = props.item
   return (
-    <article onClick={props.onDetail} className="card-hover clickable cursor-pointer bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden hover:shadow-lg">
+    <article onClick={props.onDetail} className="clickable cursor-pointer bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
       <div className="relative aspect-video w-full overflow-hidden bg-slate-900">
         {item.media_type === 'video'
           ? <video src={item.media_path} muted preload="metadata" className="absolute inset-0 h-full w-full object-contain" />
@@ -154,7 +154,7 @@ export function GalleryCard(props) {
         <h3 className="text-lg font-bold text-slate-900">{item.judul}</h3>
         <p className="text-sm text-slate-600 line-clamp-2">{item.deskripsi || 'Tidak ada deskripsi.'}</p>
         <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-100">
-          <PersonChip size="sm" peserta={item.peserta} />
+          <PersonChip size="sm" mahasiswa={item.mahasiswa} />
           {props.isOwner ? (
             <div className="flex gap-2" onClick={function (e) { e.stopPropagation() }}>
               <button onClick={props.onEdit} className={btnSmall + ' bg-slate-900 text-white hover:bg-slate-700'}>Edit</button>
@@ -187,7 +187,7 @@ export function GalleryDetail(props) {
         <h2 className="text-2xl font-black text-slate-900">{item.judul}</h2>
         <p className="mt-3 text-slate-600 leading-relaxed">{item.deskripsi || 'Tidak ada deskripsi.'}</p>
       </div>
-      <div className="border-t border-slate-100 pt-4"><PersonChip peserta={item.peserta} /></div>
+      <div className="border-t border-slate-100 pt-4"><PersonChip mahasiswa={item.mahasiswa} /></div>
     </div>
   )
 }
@@ -199,8 +199,8 @@ export function AttendanceCard(props) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm text-slate-500">{formatTanggal(row.tanggal)}</p>
-          <p className="mt-1 font-bold text-slate-900">{row.peserta ? row.peserta.nama : 'Peserta'}</p>
-          <p className="text-xs text-slate-500">NIM {row.peserta ? row.peserta.nim : '-'}</p>
+          <p className="mt-1 font-bold text-slate-900">{row.mahasiswa ? row.mahasiswa.nama : 'Mahasiswa'}</p>
+          <p className="text-xs text-slate-500">NIM {row.mahasiswa ? row.mahasiswa.nim : '-'}</p>
         </div>
         <AttendanceBadge status={row.status} />
       </div>
@@ -230,7 +230,7 @@ export function AttendanceDetail(props) {
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Alasan atau keterangan</p>
         <p className="mt-1 text-sm text-slate-700">{row.alasan || 'Tidak ada alasan.'}</p>
       </div>
-      <div className="border-t border-slate-100 pt-4"><PersonChip peserta={row.peserta} /></div>
+      <div className="border-t border-slate-100 pt-4"><PersonChip mahasiswa={row.mahasiswa} /></div>
     </div>
   )
 }

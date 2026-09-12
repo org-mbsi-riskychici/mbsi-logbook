@@ -30,10 +30,10 @@ export default function LoginPage() {
       <div className="card-hover rounded-[2rem] bg-bsi-900 text-white p-8 lg:p-10">
         <span className="inline-flex px-4 py-2 rounded-full bg-white/10 text-xs font-semibold uppercase tracking-wide">Area Intern</span>
         <h1 className="mt-6 text-3xl lg:text-4xl font-black leading-tight">Masuk untuk mengisi logbook, galeri, dan daftar hadir</h1>
-        <p className="mt-4 text-white/80 leading-relaxed">Halaman ini hanya digunakan oleh peserta magang. Dosen pembimbing dan kaprodi tidak perlu login untuk melihat halaman publik.</p>
+        <p className="mt-4 text-white/80 leading-relaxed">Halaman ini hanya digunakan oleh mahasiswa magang. Dosen pembimbing dan kaprodi tidak perlu login untuk melihat halaman publik.</p>
       </div>
       <div className="card-hover bg-white rounded-[2rem] border border-slate-200 shadow-sm p-8 lg:p-10">
-        <h2 className="text-2xl font-black text-slate-900">Login peserta magang</h2>
+        <h2 className="text-2xl font-black text-slate-900">Login mahasiswa magang</h2>
         {error ? <p className="mt-3 rounded-2xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</p> : null}
         <form onSubmit={submit} className="mt-6 space-y-5">
           <div>

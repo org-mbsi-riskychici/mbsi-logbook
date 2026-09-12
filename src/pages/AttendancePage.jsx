@@ -8,10 +8,10 @@ import { ICONS } from '../components/icons.jsx'
 import { matchesDateFilters } from '../lib/format.js'
 import { SkeletonStatCard, SkeletonChartRow, SkeletonAttendanceCard } from '../components/Skeleton.jsx'
 
-const INITIAL = { peserta: '', status: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
+const INITIAL = { mahasiswa: '', status: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
 
 export default function AttendancePage() {
-  const { peserta } = useAuth()
+  const { mahasiswa } = useAuth()
   const [all, setAll] = useState([])
   const [people, setPeople] = useState([])
   const [filter, setFilter] = useState(INITIAL)
@@ -21,8 +21,8 @@ export default function AttendancePage() {
 
   useEffect(function () {
     async function load() {
-      const a = await supabase.from('daftar_hadir').select('*, peserta(nim, nama, prodi)').order('tanggal', { ascending: false })
-      const p = await supabase.from('peserta').select('id, nama').order('nama')
+      const a = await supabase.from('daftar_hadir').select('*, mahasiswa(nim, nama, prodi)').order('tanggal', { ascending: false })
+      const p = await supabase.from('mahasiswa').select('id, nama').order('nama')
       setAll(a.data || [])
       setPeople(p.data || [])
       setLoading(false)
@@ -31,7 +31,7 @@ export default function AttendancePage() {
   }, [])
 
   const rows = all.filter(function (r) {
-    if (filter.peserta && r.peserta_id !== filter.peserta) return false
+    if (filter.mahasiswa && r.mahasiswa_id !== filter.mahasiswa) return false
     if (filter.status && r.status !== filter.status) return false
     return matchesDateFilters(r.tanggal, filter)
   })
@@ -43,7 +43,7 @@ export default function AttendancePage() {
   }, {})
 
   const perPerson = people.map(function (p) {
-    const mine = rows.filter(function (r) { return r.peserta_id === p.id })
+    const mine = rows.filter(function (r) { return r.mahasiswa_id === p.id })
     const c = mine.reduce(function (acc, r) { acc[r.status] = (acc[r.status] || 0) + 1; return acc }, {})
     return { nama: p.nama, nim: p.nim, Masuk: c.Masuk || 0, Izin: c.Izin || 0, Bolos: c.Bolos || 0, total: mine.length }
   })
@@ -59,7 +59,7 @@ export default function AttendancePage() {
             ? [0, 1, 2, 3].map(function (i) { return <SkeletonStatCard key={i} /> })
             : [
                 <StatCard key="total" label="Total catatan hadir" value={rows.length} sub="Sesuai filter aktif" />,
-                <StatCard key="masuk" label="Masuk" value={counts.Masuk || 0} sub="Peserta hadir" />,
+                <StatCard key="masuk" label="Masuk" value={counts.Masuk || 0} sub="Mahasiswa hadir" />,
                 <StatCard key="izin" label="Izin" value={counts.Izin || 0} sub="Dengan keterangan" />,
                 <StatCard key="bolos" label="Bolos" value={counts.Bolos || 0} sub="Tanpa keterangan" />
               ]}
@@ -69,8 +69,8 @@ export default function AttendancePage() {
       <section className="mt-6">
         <FilterBar open={open} onToggle={function () { setOpen(function (o) { return !o }) }} activeCount={active}
           onReset={function () { setFilter(INITIAL) }}>
-          <FilterSelect icon={ICONS.user} value={filter.peserta} onChange={function (v) { setFilter(Object.assign({}, filter, { peserta: v })) }}
-            options={[{ value: '', label: 'Semua peserta' }].concat(people.map(function (p) { return { value: p.id, label: p.nama } }))} />
+          <FilterSelect icon={ICONS.user} value={filter.mahasiswa} onChange={function (v) { setFilter(Object.assign({}, filter, { mahasiswa: v })) }}
+            options={[{ value: '', label: 'Semua mahasiswa' }].concat(people.map(function (p) { return { value: p.id, label: p.nama } }))} />
           <FilterSelect icon={ICONS.check} value={filter.status} onChange={function (v) { setFilter(Object.assign({}, filter, { status: v })) }}
             options={[{ value: '', label: 'Semua status' }, { value: 'Masuk', label: 'Masuk' }, { value: 'Izin', label: 'Izin' }, { value: 'Bolos', label: 'Bolos' }]} />
           <TimeFilter filter={filter} set={setFilter} />
@@ -79,7 +79,7 @@ export default function AttendancePage() {
 
       <section className="mt-8 card-hover rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <h2 className="text-2xl font-black text-slate-900">Grafik kehadiran per peserta</h2>
+          <h2 className="text-2xl font-black text-slate-900">Grafik kehadiran per mahasiswa</h2>
           <div className="flex flex-wrap gap-3 text-xs font-semibold">
             <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-emerald-500" />Masuk</span>
             <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-amber-500" />Izin</span>
@@ -116,10 +116,10 @@ export default function AttendancePage() {
           {loading
             ? [0, 1, 2].map(function (i) { return <SkeletonAttendanceCard key={i} /> })
             : rows.map(function (r) {
-                return <AttendanceCard key={r.id} row={r} isOwner={peserta && peserta.id === r.peserta_id}
+                return <AttendanceCard key={r.id} row={r} isOwner={mahasiswa && mahasiswa.id === r.mahasiswa_id}
                   onDetail={function () { setDetail(r) }} />
               })}
-          {!loading && !rows.length ? <EmptyState icon="clipboard" title="Belum ada data kehadiran" desc="Data kehadiran akan tampil setelah peserta mengisi daftar hadir." /> : null}
+          {!loading && !rows.length ? <EmptyState icon="clipboard" title="Belum ada data kehadiran" desc="Data kehadiran akan tampil setelah mahasiswa mengisi daftar hadir." /> : null}
         </div>
       </section>
 

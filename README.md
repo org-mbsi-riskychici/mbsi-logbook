@@ -9,7 +9,7 @@ Portal logbook, galeri, dan daftar hadir magang Bank Syariah Indonesia.
 
 ## Database
 Jalankan isi file supabase/schema.sql di Supabase SQL Editor.
-Buat user Auth dengan pola email NIM@magang.local dan isi tabel peserta beserta auth_uid.
+Buat user Auth dengan pola email NIM@magang.local dan isi tabel mahasiswa beserta auth_uid.
 
 ## Deploy
 Push ke GitHub, import di Vercel, salin isi .env.local ke Environment Variables Vercel.

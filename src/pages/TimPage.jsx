@@ -10,9 +10,9 @@ export default function TimPage() {
 
   useEffect(function () {
     async function load() {
-      const p = await supabase.from('peserta').select('id, nama, nim, prodi').order('nama')
-      const l = await supabase.from('logbooks').select('id, peserta_id').eq('status', 'publik')
-      const g = await supabase.from('galeri').select('id, peserta_id')
+      const p = await supabase.from('mahasiswa').select('id, nama, nim, prodi').order('nama')
+      const l = await supabase.from('logbooks').select('id, mahasiswa_id').eq('status', 'publik')
+      const g = await supabase.from('galeri').select('id, mahasiswa_id')
       setPeople(p.data || [])
       setLogs(l.data || [])
       setGaleri(g.data || [])
@@ -31,8 +31,8 @@ export default function TimPage() {
         {loading
           ? [0, 1, 2, 3, 4, 5].map(function (i) { return <SkeletonPersonCard key={i} /> })
           : people.map(function (p) {
-              const totalLog = logs.filter(function (l) { return l.peserta_id === p.id }).length
-              const totalGal = galeri.filter(function (g) { return g.peserta_id === p.id }).length
+              const totalLog = logs.filter(function (l) { return l.mahasiswa_id === p.id }).length
+              const totalGal = galeri.filter(function (g) { return g.mahasiswa_id === p.id }).length
               const initials = p.nama.split(' ').slice(0, 2).map(function (w) { return w.charAt(0) || '' }).join('').toUpperCase()
               return (
                 <div key={p.id} className="card-hover bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
