@@ -16,10 +16,8 @@ export default function LoginPage() {
     setError('')
     try {
   await loginWithNim(nim, kode)
-  console.log('Login berhasil, pindah ke dashboard')
   navigate('/dashboard')
 } catch (err) {
-  console.error('Error lengkap:', err)
   setError(err.message)
 }
     setBusy(false)

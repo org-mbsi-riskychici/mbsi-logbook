@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../lib/auth.js'
-import { uploadMedia } from '../lib/upload.js'
+import { uploadMedia, deleteMedia } from '../lib/upload.js'
 import { syncGaleriFromLogbook } from '../lib/logbook.js'
 import { todayInput, detectMediaType, matchesDateFilters } from '../lib/format.js'
 import { KATEGORI, UNIT, GALERI_KEGIATAN } from '../lib/constants.js'
@@ -18,6 +18,24 @@ function newItem() {
 const LOG_INITIAL = { kategori: '', status: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
 const GAL_INITIAL = { kegiatan: '', tipe: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
 const HADIR_INITIAL = { status: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
+
+function ModeIndicator(props) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className={'inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold ' + (props.edit ? 'bg-gold-500/15 text-gold-600' : 'bg-bsi-100 text-bsi-900')}>
+        <span className={'h-2 w-2 rounded-full ' + (props.edit ? 'bg-gold-500' : 'bg-bsi-500')}></span>
+        {props.edit ? 'Mode Edit' : 'Mode Tambah'}
+      </span>
+      {props.edit ? (
+        <button type="button" onClick={props.onCancel}
+          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-red-50 text-red-700 hover:bg-red-100">
+          <SizedIcon name="close" size={12} />
+          Batal Edit
+        </button>
+      ) : null}
+    </div>
+  )
+}
 
 export default function DashboardPage() {
   const { mahasiswa, loading } = useAuth()
@@ -82,6 +100,28 @@ export default function DashboardPage() {
     patchItem(i, { file: null, preview: '', oldPath: '', show: false })
   }
 
+  function keyDariUrl(url) {
+    try {
+      return new URL(url).pathname.slice(1)
+    } catch (e) {
+      return ''
+    }
+  }
+
+  async function hapusMediaR2(url) {
+    const key = keyDariUrl(url)
+    if (!key) {
+      console.warn('URL media tidak valid, dilewati:', url)
+      return
+    }
+    try {
+      await deleteMedia(key)
+      console.log('Media R2 terhapus:', key)
+    } catch (err) {
+      console.error('Gagal hapus media R2:', key, err.message)
+    }
+  }
+
   async function submitLogbook(e) {
     e.preventDefault()
     setBusy(true)
@@ -105,7 +145,10 @@ export default function DashboardPage() {
       if (!clean.length) { alert('Tambahkan minimal satu kegiatan dengan judul.'); setBusy(false); return }
 
       let logId = editLogId
+      let oldUrls = []
       if (editLogId) {
+        const oldItems = await supabase.from('logbook_items').select('media_path').eq('logbook_id', editLogId)
+        oldUrls = (oldItems.data || []).map(function (it) { return it.media_path }).filter(Boolean)
         await supabase.from('logbooks').update({
           tanggal: form.tanggal, unit: form.unit, kategori: form.kategori, judul: form.judul,
           kendala: form.kendala, solusi: form.solusi, pembelajaran: form.pembelajaran, status: form.status
@@ -124,6 +167,10 @@ export default function DashboardPage() {
       })
       const insItems = await supabase.from('logbook_items').insert(rows).select()
       await syncGaleriFromLogbook(mahasiswa.id, insItems.data || [], { tanggal: form.tanggal, kategori: form.kategori })
+      const newUrls = clean.map(function (c) { return c.media_path }).filter(Boolean)
+      for (const u of oldUrls) {
+        if (newUrls.indexOf(u) === -1) await hapusMediaR2(u)
+      }
 
       setEditLogId(null)
       setForm({ tanggal: todayInput(), unit: '', kategori: '', judul: '', kendala: '', solusi: '', pembelajaran: '', status: 'draft' })
@@ -141,11 +188,40 @@ export default function DashboardPage() {
       tanggal: log.tanggal, unit: log.unit || '', kategori: log.kategori, judul: log.judul,
       kendala: log.kendala || '', solusi: log.solusi || '', pembelajaran: log.pembelajaran || '', status: log.status
     })
-    setItems((log.logbook_items || []).map(function (it) {
+    const mapped = (log.logbook_items || []).map(function (it) {
       return { key: it.id, judul: it.judul, deskripsi: it.deskripsi || '', hasil: it.hasil || '', file: null, preview: it.media_path || '', oldPath: it.media_path || '', show: it.show_in_gallery }
-    }))
-    if (!items.length) setItems([newItem()])
+    })
+    setItems(mapped.length ? mapped : [newItem()])
     setTab('logbook')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function cancelEditLog() {
+    setEditLogId(null)
+    setForm({ tanggal: todayInput(), unit: '', kategori: '', judul: '', kendala: '', solusi: '', pembelajaran: '', status: 'draft' })
+    setItems([newItem()])
+  }
+
+  function startEditGal(g) {
+    setEditGalId(g.id)
+    setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_path, oldPath: g.media_path })
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function cancelEditGal() {
+    setEditGalId(null)
+    setGalForm({ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '', oldPath: '' })
+  }
+
+  function startEditHadir(h) {
+    setEditHadirId(h.id)
+    setHadirForm({ tanggal: h.tanggal, status: h.status, alasan: h.alasan || '' })
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function cancelEditHadir() {
+    setEditHadirId(null)
+    setHadirForm({ tanggal: todayInput(), status: 'Masuk', alasan: '' })
   }
 
   function deleteLog(log) {
@@ -176,11 +252,15 @@ export default function DashboardPage() {
         media_path: mediaPath,
         media_type: mediaType
       }
+      let oldGalUrl = ''
       if (editGalId) {
+        const existing = galeri.find(function (g) { return g.id === editGalId })
+        oldGalUrl = existing && !existing.logbook_item_id && existing.media_path !== payload.media_path ? existing.media_path : ''
         await supabase.from('galeri').update(payload).eq('id', editGalId)
       } else {
         await supabase.from('galeri').insert(payload)
       }
+      if (oldGalUrl) await hapusMediaR2(oldGalUrl)
       setEditGalId(null)
       setGalForm({ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '', oldPath: '' })
       await refresh()
@@ -236,7 +316,7 @@ export default function DashboardPage() {
     }
     if (pendingDelete.type === 'gal') {
       const extra = pendingDelete.data.logbook_item_id
-        ? ' Media ini berasal dari logbook, jadi logbook asalnya tidak ikut terhapus.'
+        ? ' Media ini berasal dari logbook, jadi logbook asalnya tidak ikut terhapus. Centang tampilan galeri pada kegiatan logbook akan dimatikan dan bisa dinyalakan lagi kapan saja.'
         : ''
       return {
         title: 'Hapus media galeri?',
@@ -262,9 +342,16 @@ export default function DashboardPage() {
       return
     }
     if (target.type === 'log') {
+      const urls = (target.data.logbook_items || []).map(function (it) { return it.media_path }).filter(Boolean)
       await supabase.from('logbooks').delete().eq('id', target.data.id)
+      for (const u of urls) await hapusMediaR2(u)
     } else if (target.type === 'gal') {
+      const url = target.data.logbook_item_id ? '' : target.data.media_path
       await supabase.from('galeri').delete().eq('id', target.data.id)
+      if (target.data.logbook_item_id) {
+        await supabase.from('logbook_items').update({ show_in_gallery: false }).eq('id', target.data.logbook_item_id)
+      }
+      if (url) await hapusMediaR2(url)
     } else if (target.type === 'hadir') {
       await supabase.from('daftar_hadir').delete().eq('id', target.data.id)
     }
@@ -315,8 +402,9 @@ export default function DashboardPage() {
 
       {tab === 'logbook' ? (
         <section className="mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
-          <div className="card-hover bg-white rounded-[2rem] border border-slate-200 shadow-sm p-8 min-w-0">
-            <h2 className="text-2xl font-black text-slate-900">{editLogId ? 'Ubah logbook harian' : 'Tambah logbook harian'}</h2>
+          <div className={'card-hover bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editLogId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
+            <ModeIndicator edit={!!editLogId} onCancel={cancelEditLog} />
+            <h2 className="mt-3 text-2xl font-black text-slate-900">{editLogId ? 'Ubah logbook harian' : 'Tambah logbook harian'}</h2>
             <form onSubmit={submitLogbook} className="mt-6 space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
@@ -428,8 +516,9 @@ export default function DashboardPage() {
 
       {tab === 'galeri' ? (
         <section className="mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
-          <div className="card-hover bg-white rounded-[2rem] border border-slate-200 shadow-sm p-8 min-w-0">
-            <h2 className="text-2xl font-black text-slate-900">{editGalId ? 'Ubah media galeri' : 'Tambah media galeri'}</h2>
+          <div className={'card-hover bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editGalId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
+            <ModeIndicator edit={!!editGalId} onCancel={cancelEditGal} />
+            <h2 className="mt-3 text-2xl font-black text-slate-900">{editGalId ? 'Ubah media galeri' : 'Tambah media galeri'}</h2>
             <form onSubmit={submitGaleri} className="mt-6 space-y-4">
               <div>
                 <label className={labelCls}>Pilih foto atau video {editGalId ? null : <span className="text-red-500">*</span>}</label>
@@ -490,7 +579,7 @@ export default function DashboardPage() {
               {filteredGaleri.map(function (g) {
                 return <GalleryCard key={g.id} item={g} isOwner
                   onDetail={function () { setDetail({ type: 'gal', data: g }) }}
-                  onEdit={function () { setEditGalId(g.id); setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_path, oldPath: g.media_path }) }}
+                  onEdit={function () { startEditGal(g) }}
                   onDelete={function () { deleteGaleri(g) }} />
               })}
               {!filteredGaleri.length ? <EmptyState icon="camera" title={galeri.length ? 'Media tidak ditemukan' : 'Belum ada media galeri'} desc={galeri.length ? 'Coba reset filter atau pilih filter lain.' : 'Unggah foto atau video pertama kamu.'} /> : null}
@@ -501,8 +590,9 @@ export default function DashboardPage() {
 
       {tab === 'absen' ? (
         <section className="mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
-          <div className="card-hover bg-white rounded-[2rem] border border-slate-200 shadow-sm p-8 min-w-0">
-            <h2 className="text-2xl font-black text-slate-900">{editHadirId ? 'Ubah daftar hadir' : 'Isi daftar hadir'}</h2>
+          <div className={'card-hover bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editHadirId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
+            <ModeIndicator edit={!!editHadirId} onCancel={cancelEditHadir} />
+            <h2 className="mt-3 text-2xl font-black text-slate-900">{editHadirId ? 'Ubah daftar hadir' : 'Isi daftar hadir'}</h2>
             <form onSubmit={submitHadir} className="mt-6 space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
@@ -547,7 +637,7 @@ export default function DashboardPage() {
             {filteredHadir.map(function (h) {
               return <AttendanceCard key={h.id} row={h} isOwner
                 onDetail={function () { setDetail({ type: 'hadir', data: h }) }}
-                onEdit={function () { setEditHadirId(h.id); setHadirForm({ tanggal: h.tanggal, status: h.status, alasan: h.alasan || '' }) }}
+                onEdit={function () { startEditHadir(h) }}
                 onDelete={function () { deleteHadir(h) }} />
             })}
             {!filteredHadir.length ? <EmptyState icon="clipboard" title={hadir.length ? 'Catatan tidak ditemukan' : 'Belum ada data kehadiran'} desc={hadir.length ? 'Coba reset filter atau pilih filter lain.' : 'Isi daftar hadir pertama kamu.'} /> : null}
