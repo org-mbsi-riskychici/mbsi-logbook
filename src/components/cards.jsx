@@ -1,5 +1,5 @@
 import Carousel from './Carousel.jsx'
-import { StatusBadge, CategoryBadge, AttendanceBadge, btnSmall } from './ui.jsx'
+import { StatusBadge, CategoryBadge, AttendanceBadge, btnSmall, ZoomableMedia } from './ui.jsx'
 import { formatTanggal, formatTanggalShort } from '../lib/format.js'
 
 function PersonChip(props) {
@@ -100,11 +100,7 @@ export function LogbookDetail(props) {
                 {i < items.length - 1 ? <span className="absolute left-4 top-9 bottom-0 w-px bg-slate-200 dark:bg-slate-700" /> : null}
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   {it.media_path ? (
-                    <div className="relative rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3">
-                      {it.media_type === 'video'
-                        ? <video src={it.media_path} controls className="absolute inset-0 h-full w-full object-contain" />
-                        : <img src={it.media_path} alt={it.judul} className="absolute inset-0 h-full w-full object-contain" />}
-                    </div>
+                    <ZoomableMedia src={it.media_path} type={it.media_type} title={it.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3" />
                   ) : null}
                   <p className="font-bold text-slate-900">
                     {it.judul}
@@ -173,11 +169,7 @@ export function GalleryDetail(props) {
   const item = props.item
   return (
     <div className="space-y-4">
-      <div className="relative rounded-2xl overflow-hidden aspect-video bg-slate-900">
-        {item.media_type === 'video'
-          ? <video src={item.media_path} controls className="absolute inset-0 h-full w-full object-contain" />
-          : <img src={item.media_path} alt={item.judul} className="absolute inset-0 h-full w-full object-contain" />}
-      </div>
+      <ZoomableMedia src={item.media_path} type={item.media_type} title={item.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900" />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2">
           <CategoryBadge value={item.kegiatan} />

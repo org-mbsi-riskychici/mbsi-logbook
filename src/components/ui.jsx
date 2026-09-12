@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { SizedIcon } from './icons.jsx'
 function useBodyScrollLock(active) {
   useEffect(function () {
@@ -133,6 +133,72 @@ export function ConfirmModal(props) {
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+
+export function Lightbox(props) {
+  useBodyScrollLock(true)
+  useEffect(function () {
+    function onKey(e) {
+      if (e.key === 'Escape') props.onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    return function () { document.removeEventListener('keydown', onKey) }
+  }, [])
+  return (
+    <div className="anim-overlay fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/95 p-4" onClick={props.onClose}>
+      <div className="relative w-full max-w-5xl" onClick={function (e) { e.stopPropagation() }}>
+        {props.type === 'video' ? (
+          <video src={props.src} controls autoPlay className="mx-auto max-h-[85vh] w-full rounded-2xl bg-slate-900 object-contain" />
+        ) : (
+          <img
+            src={props.src}
+            alt={props.title || 'Media'}
+            onClick={props.onClose}
+            className="mx-auto max-h-[85vh] w-auto max-w-full cursor-zoom-out rounded-2xl object-contain"
+          />
+        )}
+        {props.title ? <p className="mt-3 truncate text-center text-sm text-slate-300">{props.title}</p> : null}
+      </div>
+      <button
+        type="button"
+        title="Tutup (Esc)"
+        onClick={props.onClose}
+        className="absolute right-4 top-4 grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
+      >
+        <SizedIcon name="close" size={18} />
+      </button>
+      <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-slate-400">Klik media atau tekan Esc untuk menutup</p>
+    </div>
+  )
+}
+
+export function ZoomableMedia(props) {
+  const [open, setOpen] = useState(false)
+  const isVideo = props.type === 'video'
+  return (
+    <div className={'relative group ' + (props.className || '')}>
+      {isVideo ? (
+        <video src={props.src} controls className="absolute inset-0 h-full w-full object-contain" />
+      ) : (
+        <img
+          src={props.src}
+          alt={props.title || 'Media'}
+          onClick={function (e) { e.stopPropagation(); setOpen(true) }}
+          className="absolute inset-0 h-full w-full cursor-zoom-in object-contain"
+        />
+      )}
+      <button
+        type="button"
+        title="Perbesar media"
+        onClick={function (e) { e.stopPropagation(); setOpen(true) }}
+        className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100"
+      >
+        <SizedIcon name="expand" size={15} />
+      </button>
+      {open ? <Lightbox src={props.src} type={props.type} title={props.title} onClose={function () { setOpen(false) }} /> : null}
     </div>
   )
 }

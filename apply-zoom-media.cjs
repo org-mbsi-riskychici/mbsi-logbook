@@ -1,0 +1,322 @@
+const fs = require('fs')
+const path = require('path')
+
+const root = process.cwd()
+
+function baca(rel) {
+  return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n')
+}
+
+function simpan(rel, isi) {
+  fs.writeFileSync(path.join(root, rel), isi, 'utf8')
+}
+
+function ganti(rel, cari, gantiDengan, label) {
+  if (!fs.existsSync(path.join(root, rel))) {
+    console.log('[LEWATI] File tidak ditemukan: ' + rel)
+    return
+  }
+  let isi = baca(rel)
+  if (isi.includes(gantiDengan)) {
+    console.log('[SUDAH ADA] ' + label)
+    return
+  }
+  if (!isi.includes(cari)) {
+    console.log('[TIDAK KETEMU] ' + label + ' di ' + rel)
+    return
+  }
+  isi = isi.replace(cari, gantiDengan)
+  simpan(rel, isi)
+  console.log('[BERHASIL] ' + label)
+}
+
+console.log('Mulai menerapkan fitur perbesar dan perkecil media...')
+console.log('')
+
+/* ===== 1. Icon expand di icons.jsx ===== */
+ganti(
+  'src/components/icons.jsx',
+  `  )
+}
+
+export const ICONS = {`,
+  `  ),
+  expand: (
+    <>
+      <path d="M15 3h6v6" />
+      <path d="M9 21H3v-6" />
+      <path d="M21 3l-7 7" />
+      <path d="M3 21l7-7" />
+    </>
+  )
+}
+
+export const ICONS = {`,
+  'Icon expand ditambahkan'
+)
+
+/* ===== 2. ui.jsx: import useState ===== */
+ganti(
+  'src/components/ui.jsx',
+  `import { useEffect, useRef } from 'react'`,
+  `import { useEffect, useRef, useState } from 'react'`,
+  'Import useState di ui.jsx'
+)
+
+/* ===== 3. ui.jsx: komponen Lightbox dan ZoomableMedia ===== */
+const komponenBaru = `
+export function Lightbox(props) {
+  useBodyScrollLock(true)
+  useEffect(function () {
+    function onKey(e) {
+      if (e.key === 'Escape') props.onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    return function () { document.removeEventListener('keydown', onKey) }
+  }, [])
+  return (
+    <div className="anim-overlay fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/95 p-4" onClick={props.onClose}>
+      <div className="relative w-full max-w-5xl" onClick={function (e) { e.stopPropagation() }}>
+        {props.type === 'video' ? (
+          <video src={props.src} controls autoPlay className="mx-auto max-h-[85vh] w-full rounded-2xl bg-slate-900 object-contain" />
+        ) : (
+          <img
+            src={props.src}
+            alt={props.title || 'Media'}
+            onClick={props.onClose}
+            className="mx-auto max-h-[85vh] w-auto max-w-full cursor-zoom-out rounded-2xl object-contain"
+          />
+        )}
+        {props.title ? <p className="mt-3 truncate text-center text-sm text-slate-300">{props.title}</p> : null}
+      </div>
+      <button
+        type="button"
+        title="Tutup (Esc)"
+        onClick={props.onClose}
+        className="absolute right-4 top-4 grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
+      >
+        <SizedIcon name="close" size={18} />
+      </button>
+      <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-slate-400">Klik media atau tekan Esc untuk menutup</p>
+    </div>
+  )
+}
+
+export function ZoomableMedia(props) {
+  const [open, setOpen] = useState(false)
+  const isVideo = props.type === 'video'
+  return (
+    <div className={'relative group ' + (props.className || '')}>
+      {isVideo ? (
+        <video src={props.src} controls className="absolute inset-0 h-full w-full object-contain" />
+      ) : (
+        <img
+          src={props.src}
+          alt={props.title || 'Media'}
+          onClick={function (e) { e.stopPropagation(); setOpen(true) }}
+          className="absolute inset-0 h-full w-full cursor-zoom-in object-contain"
+        />
+      )}
+      <button
+        type="button"
+        title="Perbesar media"
+        onClick={function (e) { e.stopPropagation(); setOpen(true) }}
+        className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100"
+      >
+        <SizedIcon name="expand" size={15} />
+      </button>
+      {open ? <Lightbox src={props.src} type={props.type} title={props.title} onClose={function () { setOpen(false) }} /> : null}
+    </div>
+  )
+}
+`
+if (!fs.existsSync(path.join(root, 'src/components/ui.jsx'))) {
+  console.log('[LEWATI] src/components/ui.jsx tidak ditemukan')
+} else {
+  let ui = baca('src/components/ui.jsx')
+  if (ui.includes('export function Lightbox')) {
+    console.log('[SUDAH ADA] Komponen Lightbox dan ZoomableMedia')
+  } else {
+    ui = ui + '\n' + komponenBaru
+    simpan('src/components/ui.jsx', ui)
+    console.log('[BERHASIL] Komponen Lightbox dan ZoomableMedia ditambahkan')
+  }
+}
+
+/* ===== 4. cards.jsx: import ZoomableMedia ===== */
+ganti(
+  'src/components/cards.jsx',
+  `import { StatusBadge, CategoryBadge, AttendanceBadge, btnSmall } from './ui.jsx'`,
+  `import { StatusBadge, CategoryBadge, AttendanceBadge, btnSmall, ZoomableMedia } from './ui.jsx'`,
+  'Import ZoomableMedia di cards.jsx'
+)
+
+/* ===== 5. cards.jsx: media rincian logbook jadi bisa diperbesar ===== */
+ganti(
+  'src/components/cards.jsx',
+  `                  {it.media_path ? (
+                    <div className="relative rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3">
+                      {it.media_type === 'video'
+                        ? <video src={it.media_path} controls className="absolute inset-0 h-full w-full object-contain" />
+                        : <img src={it.media_path} alt={it.judul} className="absolute inset-0 h-full w-full object-contain" />}
+                    </div>
+                  ) : null}`,
+  `                  {it.media_path ? (
+                    <ZoomableMedia src={it.media_path} type={it.media_type} title={it.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3" />
+                  ) : null}`,
+  'Media rincian logbook memakai ZoomableMedia'
+)
+
+/* ===== 6. cards.jsx: media detail galeri jadi bisa diperbesar ===== */
+ganti(
+  'src/components/cards.jsx',
+  `      <div className="relative rounded-2xl overflow-hidden aspect-video bg-slate-900">
+        {item.media_type === 'video'
+          ? <video src={item.media_path} controls className="absolute inset-0 h-full w-full object-contain" />
+          : <img src={item.media_path} alt={item.judul} className="absolute inset-0 h-full w-full object-contain" />}
+      </div>`,
+  `      <ZoomableMedia src={item.media_path} type={item.media_type} title={item.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900" />`,
+  'Media detail galeri memakai ZoomableMedia'
+)
+
+/* ===== 7. Carousel.jsx ditulis ulang dengan dukungan zoom ===== */
+const carouselBaru = `import { useEffect, useRef, useState } from 'react'
+import { SizedIcon } from './icons.jsx'
+import { Lightbox } from './ui.jsx'
+
+export default function Carousel(props) {
+  const slides = props.slides || []
+  const autoMs = props.autoMs || 4000
+  const [idx, setIdx] = useState(0)
+  const [paused, setPaused] = useState(false)
+  const [zoom, setZoom] = useState(null)
+  const trackRef = useRef(null)
+  const touchX = useRef(0)
+  const moved = useRef(false)
+
+  useEffect(function () {
+    if (slides.length < 2 || paused) return undefined
+    const t = setInterval(function () {
+      setIdx(function (i) { return (i + 1) % slides.length })
+    }, autoMs)
+    return function () { clearInterval(t) }
+  }, [slides.length, paused, autoMs])
+
+  useEffect(function () {
+    if (trackRef.current) trackRef.current.style.transform = 'translateX(-' + (idx * 100) + '%)'
+  }, [idx])
+
+  if (!slides.length) return null
+
+  if (slides.length === 1) {
+    const s = slides[0]
+    return (
+      <>
+        <div className="relative group rounded-2xl overflow-hidden aspect-video bg-slate-900">
+          {s.type === 'video'
+            ? <video src={s.src} className="h-full w-full object-contain" muted preload="metadata" />
+            : <img src={s.src} alt={s.title || 'Media'} className="h-full w-full cursor-zoom-in object-contain" onClick={function () { setZoom(s) }} />}
+          <button type="button" title="Perbesar media" onClick={function () { setZoom(s) }}
+            className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
+            <SizedIcon name="expand" size={15} />
+          </button>
+        </div>
+        {zoom ? <Lightbox src={zoom.src} type={zoom.type} title={zoom.title} onClose={function () { setZoom(null) }} /> : null}
+      </>
+    )
+  }
+
+  return (
+    <>
+      <div
+        className="media-carousel group"
+        onMouseEnter={function () { setPaused(true) }}
+        onMouseLeave={function () { setPaused(false) }}
+        onTouchStart={function (e) { touchX.current = e.touches[0].clientX; moved.current = false }}
+        onTouchEnd={function (e) {
+          const dx = e.changedTouches[0].clientX - touchX.current
+          if (Math.abs(dx) > 40) {
+            moved.current = true
+            setIdx(function (i) { return (i + (dx < 0 ? 1 : -1) + slides.length) % slides.length })
+          }
+        }}
+      >
+        <div ref={trackRef} className="carousel-track">
+          {slides.map(function (s, i) {
+            return (
+              <div key={i} className="carousel-slide">
+                {s.type === 'video'
+                  ? <video src={s.src} muted preload="metadata" />
+                  : <img
+                      src={s.src}
+                      alt={s.title || 'Media'}
+                      className="cursor-zoom-in"
+                      onClick={function () {
+                        if (moved.current) { moved.current = false; return }
+                        setZoom(s)
+                      }}
+                    />}
+                <button type="button" title="Perbesar media" onClick={function (e) { e.stopPropagation(); setZoom(s) }}
+                  className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
+                  <SizedIcon name="expand" size={15} />
+                </button>
+                {s.title ? (
+                  <span className="absolute bottom-2 left-2 z-10 px-2 py-1 rounded-lg bg-black/60 text-white text-xs max-w-[85%] truncate">
+                    {s.title}
+                  </span>
+                ) : null}
+              </div>
+            )
+          })}
+        </div>
+        <button
+          onClick={function () { setIdx(function (i) { return (i - 1 + slides.length) % slides.length }) }}
+          className="absolute left-2 top-1/2 -translate-y-1/2 z-10 h-8 w-8 rounded-full bg-black/40 text-white grid place-items-center opacity-100 xl:opacity-0 xl:group-hover:opacity-100 hover:bg-black/60"
+        >
+          &#8249;
+        </button>
+        <button
+          onClick={function () { setIdx(function (i) { return (i + 1) % slides.length }) }}
+          className="absolute right-2 top-1/2 -translate-y-1/2 z-10 h-8 w-8 rounded-full bg-black/40 text-white grid place-items-center opacity-100 xl:opacity-0 xl:group-hover:opacity-100 hover:bg-black/60"
+        >
+          &#8250;
+        </button>
+        <div className="absolute bottom-2 right-2 z-10 flex gap-1.5">
+          {slides.map(function (s, i) {
+            return (
+              <button
+                key={i}
+                onClick={function () { setIdx(i) }}
+                className={'carousel-dot h-2 w-2 rounded-full transition-all ' + (i === idx ? 'bg-white' : 'bg-white/40')}
+              />
+            )
+          })}
+        </div>
+      </div>
+      {zoom ? <Lightbox src={zoom.src} type={zoom.type} title={zoom.title} onClose={function () { setZoom(null) }} /> : null}
+    </>
+  )
+}
+`
+if (!fs.existsSync(path.join(root, 'src/components/Carousel.jsx'))) {
+  console.log('[LEWATI] src/components/Carousel.jsx tidak ditemukan')
+} else {
+  const car = baca('src/components/Carousel.jsx')
+  if (car.includes("import { Lightbox } from './ui.jsx'")) {
+    console.log('[SUDAH ADA] Carousel dengan dukungan zoom')
+  } else {
+    simpan('src/components/Carousel.jsx', carouselBaru)
+    console.log('[BERHASIL] Carousel ditulis ulang dengan dukungan zoom')
+  }
+}
+
+console.log('')
+console.log('Selesai. Vite akan memuat ulang otomatis.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka kartu logbook berfoto di halaman publik atau dashboard, arahkan kursor ke foto.')
+console.log('2. Klik icon perbesar di pojok kanan atas, atau klik langsung fotonya.')
+console.log('3. Media terbuka penuh di layar gelap dengan judul di bawahnya.')
+console.log('4. Tutup dengan klik gambar, klik area gelap, tombol silang, atau tombol Esc.')
+console.log('5. Uji juga media di modal detail logbook dan detail galeri, serta video lewat tombol perbesar.')
+console.log('6. Di HP, ketuk foto untuk memperbesar dan ketuk lagi untuk menutup.')
