@@ -3,14 +3,15 @@ import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../lib/auth.js'
 import { uploadMedia, deleteMedia } from '../lib/upload.js'
 import { syncGaleriFromLogbook } from '../lib/logbook.js'
-import { todayInput } from '../lib/format.js'
+import { todayInput, detectMediaType } from '../lib/format.js'
 import { KATEGORI, UNIT, GALERI_KEGIATAN } from '../lib/constants.js'
 import { StatCard, EmptyState, Modal, inputCls, labelCls, btnPrimary, btnSmall, AutoTextArea } from '../components/ui.jsx'
 import { LogbookCard, LogbookDetail, GalleryCard, GalleryDetail, AttendanceCard, AttendanceDetail } from '../components/cards.jsx'
 import { CustomSelect, CustomDateInput, FileInput } from '../components/controls.jsx'
+import { SizedIcon } from '../components/icons.jsx'
 
 function newItem() {
-  return { key: Math.random().toString(36).slice(2), judul: '', deskripsi: '', hasil: '', file: null, preview: '', show: false }
+  return { key: Math.random().toString(36).slice(2), judul: '', deskripsi: '', hasil: '', file: null, preview: '', oldPath: '', show: false }
 }
 
 export default function DashboardPage() {
@@ -25,7 +26,7 @@ export default function DashboardPage() {
   const [items, setItems] = useState([newItem()])
   const [editLogId, setEditLogId] = useState(null)
 
-  const [galForm, setGalForm] = useState({ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '' })
+  const [galForm, setGalForm] = useState({ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '', oldPath: '' })
   const [editGalId, setEditGalId] = useState(null)
 
   const [hadirForm, setHadirForm] = useState({ tanggal: todayInput(), status: 'Masuk', alasan: '' })
@@ -64,6 +65,14 @@ export default function DashboardPage() {
     patchItem(i, { file: file, preview: URL.createObjectURL(file) })
   }
 
+  function removeItemFile(i) {
+    patchItem(i, { file: null, preview: '', oldPath: '', show: false })
+  }
+
+  function removeGalFile() {
+    setGalForm(function (g) { return Object.assign({}, g, { file: null, preview: '', oldPath: '' }) })
+  }
+
   async function submitLogbook(e) {
     e.preventDefault()
     setBusy(true)
@@ -78,6 +87,9 @@ export default function DashboardPage() {
           const up = await uploadMedia(it.file, 'logbook')
           mediaPath = up.publicUrl
           mediaType = it.file.type.indexOf('video') === 0 ? 'video' : 'foto'
+        } else if (it.oldPath) {
+          mediaPath = it.oldPath
+          mediaType = detectMediaType(it.oldPath)
         }
         clean.push({ judul: it.judul.trim(), deskripsi: it.deskripsi.trim(), hasil: it.hasil.trim(), media_path: mediaPath, media_type: mediaType, show_in_gallery: it.show && !!mediaPath })
       }
@@ -121,7 +133,7 @@ export default function DashboardPage() {
       kendala: log.kendala || '', solusi: log.solusi || '', pembelajaran: log.pembelajaran || '', status: log.status
     })
     setItems((log.logbook_items || []).map(function (it) {
-      return { key: it.id, judul: it.judul, deskripsi: it.deskripsi || '', hasil: it.hasil || '', file: null, preview: it.media_path || '', show: it.show_in_gallery, oldPath: it.media_path || '' }
+      return { key: it.id, judul: it.judul, deskripsi: it.deskripsi || '', hasil: it.hasil || '', file: null, preview: it.media_path || '', oldPath: it.media_path || '', show: it.show_in_gallery }
     }))
     if (!items.length) setItems([newItem()])
     setTab('logbook')
@@ -143,23 +155,27 @@ export default function DashboardPage() {
         const up = await uploadMedia(galForm.file, 'galeri')
         mediaPath = up.publicUrl
         mediaType = galForm.file.type.indexOf('video') === 0 ? 'video' : 'foto'
+      } else if (galForm.oldPath) {
+        mediaPath = galForm.oldPath
+        mediaType = detectMediaType(galForm.oldPath)
       }
-      if (!mediaPath && !editGalId) { alert('Pilih file foto atau video.'); setBusy(false); return }
+      if (!mediaPath) { alert('Galeri wajib memiliki media. Pilih file foto atau video terlebih dahulu.'); setBusy(false); return }
       const payload = {
         peserta_id: peserta.id,
         judul: galForm.judul || ('Dokumentasi ' + galForm.tanggal),
         deskripsi: galForm.deskripsi,
         tanggal: galForm.tanggal,
-        kegiatan: galForm.kegiatan || 'Lainnya'
+        kegiatan: galForm.kegiatan || 'Lainnya',
+        media_path: mediaPath,
+        media_type: mediaType
       }
-      if (mediaPath) { payload.media_path = mediaPath; payload.media_type = mediaType }
       if (editGalId) {
         await supabase.from('galeri').update(payload).eq('id', editGalId)
       } else {
         await supabase.from('galeri').insert(payload)
       }
       setEditGalId(null)
-      setGalForm({ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '' })
+      setGalForm({ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '', oldPath: '' })
       await refresh()
     } catch (err) {
       alert('Gagal menyimpan galeri: ' + err.message)
@@ -219,7 +235,7 @@ export default function DashboardPage() {
 
       {tab === 'logbook' ? (
         <section className="mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
-          <div className="card-hover bg-white rounded-[2rem] border border-slate-200 shadow-sm p-8">
+          <div className="card-hover bg-white rounded-[2rem] border border-slate-200 shadow-sm p-8 min-w-0">
             <h2 className="text-2xl font-black text-slate-900">{editLogId ? 'Ubah logbook harian' : 'Tambah logbook harian'}</h2>
             <form onSubmit={submitLogbook} className="mt-6 space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
@@ -268,7 +284,7 @@ export default function DashboardPage() {
                 </div>
                 {items.map(function (it, i) {
                   return (
-                    <div key={it.key} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+                    <div key={it.key} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3 min-w-0">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-bsi-800">Kegiatan {i + 1}</span>
                         {items.length > 1 ? <button type="button" onClick={function () { setItems(function (p) { return p.filter(function (x, idx) { return idx !== i }) }) }} className="text-xs text-red-600 hover:underline">Hapus</button> : null}
@@ -277,10 +293,14 @@ export default function DashboardPage() {
                       <AutoTextArea className={inputCls} value={it.deskripsi} onChange={function (e) { patchItem(i, { deskripsi: e.target.value }) }} placeholder="Deskripsi singkat kegiatan" />
                       <input className={inputCls} value={it.hasil} onChange={function (e) { patchItem(i, { hasil: e.target.value }) }} placeholder="Hasil (opsional)" />
                       {it.preview ? (
-                        <div className="rounded-2xl overflow-hidden aspect-video bg-slate-900">
+                        <div className="relative rounded-2xl overflow-hidden aspect-video bg-slate-900">
                           {it.file && it.file.type.indexOf('video') === 0
-                            ? <video src={it.preview} className="h-full w-full object-contain" muted />
-                            : <img src={it.preview} alt="Pratinjau" className="h-full w-full object-contain" />}
+                            ? <video src={it.preview} className="absolute inset-0 h-full w-full object-contain" muted />
+                            : <img src={it.preview} alt="Pratinjau" className="absolute inset-0 h-full w-full object-contain" />}
+                          <button type="button" onClick={function () { removeItemFile(i) }} title="Hapus gambar"
+                            className="absolute top-2 right-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-red-500 text-white hover:bg-red-600">
+                            <SizedIcon name="close" size={14} />
+                          </button>
                         </div>
                       ) : null}
                       <FileInput accept="image/*,video/*" fileName={it.file ? it.file.name : ''}
@@ -304,7 +324,7 @@ export default function DashboardPage() {
             </form>
           </div>
 
-          <div className="space-y-5">
+          <div className="space-y-5 min-w-0">
             <h2 className="text-2xl font-black text-slate-900">Logbook kamu</h2>
             {logs.map(function (l) {
               return <LogbookCard key={l.id} log={l} isOwner
@@ -319,7 +339,7 @@ export default function DashboardPage() {
 
       {tab === 'galeri' ? (
         <section className="mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
-          <div className="card-hover bg-white rounded-[2rem] border border-slate-200 shadow-sm p-8">
+          <div className="card-hover bg-white rounded-[2rem] border border-slate-200 shadow-sm p-8 min-w-0">
             <h2 className="text-2xl font-black text-slate-900">{editGalId ? 'Ubah media galeri' : 'Tambah media galeri'}</h2>
             <form onSubmit={submitGaleri} className="mt-6 space-y-4">
               <div>
@@ -329,15 +349,19 @@ export default function DashboardPage() {
                     onChange={function (e) {
                       const f = e.target.files[0]
                       if (!f) return
-                      setGalForm(Object.assign({}, galForm, { file: f, preview: URL.createObjectURL(f) }))
+                      setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: URL.createObjectURL(f) }) })
                     }} />
                 </div>
               </div>
               {galForm.preview ? (
-                <div className="rounded-2xl overflow-hidden aspect-video bg-slate-900">
+                <div className="relative rounded-2xl overflow-hidden aspect-video bg-slate-900">
                   {galForm.file && galForm.file.type.indexOf('video') === 0
-                    ? <video src={galForm.preview} className="h-full w-full object-contain" muted />
-                    : <img src={galForm.preview} alt="Pratinjau" className="h-full w-full object-contain" />}
+                    ? <video src={galForm.preview} className="absolute inset-0 h-full w-full object-contain" muted />
+                    : <img src={galForm.preview} alt="Pratinjau" className="absolute inset-0 h-full w-full object-contain" />}
+                  <button type="button" onClick={removeGalFile} title="Hapus gambar"
+                    className="absolute top-2 right-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-red-500 text-white hover:bg-red-600">
+                    <SizedIcon name="close" size={14} />
+                  </button>
                 </div>
               ) : null}
               <div className="grid gap-4 sm:grid-cols-2">
@@ -362,13 +386,13 @@ export default function DashboardPage() {
             </form>
           </div>
 
-          <div className="space-y-5">
+          <div className="space-y-5 min-w-0">
             <h2 className="text-2xl font-black text-slate-900">Galeri kamu</h2>
             <div className="grid gap-5 md:grid-cols-2">
               {galeri.map(function (g) {
                 return <GalleryCard key={g.id} item={g} isOwner
                   onDetail={function () { setDetail({ type: 'gal', data: g }) }}
-                  onEdit={function () { setEditGalId(g.id); setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_path }) }}
+                  onEdit={function () { setEditGalId(g.id); setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_path, oldPath: g.media_path }) }}
                   onDelete={function () { deleteGaleri(g) }} />
               })}
               {!galeri.length ? <EmptyState icon="camera" title="Belum ada media galeri" desc="Unggah foto atau video pertama kamu." /> : null}
@@ -379,7 +403,7 @@ export default function DashboardPage() {
 
       {tab === 'absen' ? (
         <section className="mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
-          <div className="card-hover bg-white rounded-[2rem] border border-slate-200 shadow-sm p-8">
+          <div className="card-hover bg-white rounded-[2rem] border border-slate-200 shadow-sm p-8 min-w-0">
             <h2 className="text-2xl font-black text-slate-900">{editHadirId ? 'Ubah daftar hadir' : 'Isi daftar hadir'}</h2>
             <form onSubmit={submitHadir} className="mt-6 space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
@@ -403,7 +427,7 @@ export default function DashboardPage() {
             </form>
           </div>
 
-          <div className="space-y-5">
+          <div className="space-y-5 min-w-0">
             <h2 className="text-2xl font-black text-slate-900">Daftar hadir kamu</h2>
             {hadir.map(function (h) {
               return <AttendanceCard key={h.id} row={h} isOwner

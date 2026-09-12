@@ -100,10 +100,10 @@ export function LogbookDetail(props) {
                 {i < items.length - 1 ? <span className="absolute left-4 top-9 bottom-0 w-px bg-slate-200 dark:bg-slate-700" /> : null}
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   {it.media_path ? (
-                    <div className="rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3">
+                    <div className="relative rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3">
                       {it.media_type === 'video'
-                        ? <video src={it.media_path} controls className="h-full w-full object-contain" />
-                        : <img src={it.media_path} alt={it.judul} className="h-full w-full object-contain" />}
+                        ? <video src={it.media_path} controls className="absolute inset-0 h-full w-full object-contain" />
+                        : <img src={it.media_path} alt={it.judul} className="absolute inset-0 h-full w-full object-contain" />}
                     </div>
                   ) : null}
                   <p className="font-bold text-slate-900">
@@ -138,10 +138,10 @@ export function GalleryCard(props) {
   const item = props.item
   return (
     <article onClick={props.onDetail} className="card-hover clickable cursor-pointer bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden hover:shadow-lg">
-      <div className="aspect-video bg-slate-900">
+      <div className="relative aspect-video w-full overflow-hidden bg-slate-900">
         {item.media_type === 'video'
-          ? <video src={item.media_path} muted preload="metadata" className="h-full w-full object-contain" />
-          : <img src={item.media_path} alt={item.judul} className="h-full w-full object-contain" />}
+          ? <video src={item.media_path} muted preload="metadata" className="absolute inset-0 h-full w-full object-contain" />
+          : <img src={item.media_path} alt={item.judul} className="absolute inset-0 h-full w-full object-contain" />}
       </div>
       <div className="p-5 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -171,10 +171,10 @@ export function GalleryDetail(props) {
   const item = props.item
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl overflow-hidden aspect-video bg-slate-900">
+      <div className="relative rounded-2xl overflow-hidden aspect-video bg-slate-900">
         {item.media_type === 'video'
-          ? <video src={item.media_path} controls className="h-full w-full object-contain" />
-          : <img src={item.media_path} alt={item.judul} className="h-full w-full object-contain" />}
+          ? <video src={item.media_path} controls className="absolute inset-0 h-full w-full object-contain" />
+          : <img src={item.media_path} alt={item.judul} className="absolute inset-0 h-full w-full object-contain" />}
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2">
