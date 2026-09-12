@@ -1,23 +1,23 @@
 export const KATEGORI = [
-  'Administrasi Kantor',
-  'Pengarsipan Dokumen',
-  'Bantuan Layanan Nasabah',
-  'Bantuan Operasional Back Office',
+  'Administrasi',
+  'Pengarsipan',
+  'Layanan Nasabah',
+  'Back Office',
   'Edukasi Produk',
-  'Pendataan Internal',
-  'Rapat atau Briefing',
-  'Pelatihan dan Sosialisasi',
-  'Dokumentasi Kegiatan',
-  'Pendukung Lainnya'
+  'Pendataan',
+  'Rapat',
+  'Pelatihan',
+  'Dokumentasi',
+  'Pendukung Lain'
 ]
 
-export const UNIT = ['Layanan Nasabah', 'Back Office', 'Marketing', 'Operasional', 'Umum']
+export const UNIT = ['Frontliner', 'Back Office', 'Marketing', 'Operasional', 'Umum']
 
 export const GALERI_KEGIATAN = [
-  'Dokumentasi Kegiatan',
-  'Administrasi Kantor',
+  'Dokumentasi',
+  'Administrasi',
   'Layanan Nasabah',
-  'Sosialisasi dan Edukasi',
+  'Edukasi',
   'Pelatihan',
   'Operasional',
   'Lainnya'

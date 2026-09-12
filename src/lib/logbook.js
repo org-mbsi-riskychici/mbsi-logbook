@@ -13,20 +13,22 @@ export async function syncGaleriFromLogbook(mahasiswaId, items, meta) {
   for (const item of items) {
     if (!item.id) continue
     if (item.show_in_gallery && item.media_path) {
-      const payload = {
-        mahasiswa_id: mahasiswaId,
-        logbook_item_id: item.id,
-        judul: item.judul,
-        deskripsi: item.deskripsi || 'Dokumentasi kegiatan dari logbook harian.',
-        tanggal: meta.tanggal,
-        kegiatan: meta.kategori,
-        media_path: item.media_path,
-        media_type: item.media_type || 'foto'
-      }
       if (existing.has(item.id)) {
-        await supabase.from('galeri').update(payload).eq('id', existing.get(item.id))
+        await supabase.from('galeri').update({
+          media_path: item.media_path,
+          media_type: item.media_type || 'foto'
+        }).eq('id', existing.get(item.id))
       } else {
-        await supabase.from('galeri').insert(payload)
+        await supabase.from('galeri').insert({
+          mahasiswa_id: mahasiswaId,
+          logbook_item_id: item.id,
+          judul: item.judul,
+          deskripsi: item.deskripsi || 'Dokumentasi kegiatan dari logbook harian.',
+          tanggal: meta.tanggal,
+          kegiatan: meta.kategori,
+          media_path: item.media_path,
+          media_type: item.media_type || 'foto'
+        })
       }
     } else if (existing.has(item.id)) {
       await supabase.from('galeri').delete().eq('id', existing.get(item.id))

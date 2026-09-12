@@ -130,8 +130,8 @@ export default function DashboardPage() {
       for (let i = 0; i < items.length; i++) {
         const it = items[i]
         if (!it.judul.trim()) continue
-        let mediaPath = ''
-        let mediaType = ''
+        let mediaPath = null
+        let mediaType = null
         if (it.file) {
           const up = await uploadMedia(it.file, 'logbook')
           mediaPath = up.publicUrl
@@ -167,6 +167,7 @@ export default function DashboardPage() {
       })
       const insItems = await supabase.from('logbook_items').insert(rows).select()
       await syncGaleriFromLogbook(mahasiswa.id, insItems.data || [], { tanggal: form.tanggal, kategori: form.kategori })
+
       const newUrls = clean.map(function (c) { return c.media_path }).filter(Boolean)
       for (const u of oldUrls) {
         if (newUrls.indexOf(u) === -1) await hapusMediaR2(u)
@@ -378,6 +379,8 @@ export default function DashboardPage() {
   })
   const hadirFilterActive = countActiveFilters(hadirFilter)
 
+  const editGalDerived = editGalId ? ((galeri.find(function (g) { return g.id === editGalId }) || {}).logbook_item_id || null) : null
+
   const tabCls = function (t) {
     return 'px-5 py-3 rounded-2xl text-sm font-bold ' + (tab === t ? 'bg-bsi-800 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200')
   }
@@ -503,12 +506,14 @@ export default function DashboardPage() {
               <TimeFilter filter={logFilter} set={setLogFilter} />
             </FilterBar>
             <p className="text-sm text-slate-500">Menampilkan {filteredLogs.length} dari {logs.length} logbook</p>
-            {filteredLogs.map(function (l) {
-              return <LogbookCard key={l.id} log={l} isOwner
-                onDetail={function () { setDetail({ type: 'log', data: l }) }}
-                onEdit={function () { startEditLog(l) }}
-                onDelete={function () { deleteLog(l) }} />
-            })}
+            <div className="grid gap-5 md:grid-cols-2">
+              {filteredLogs.map(function (l) {
+                return <LogbookCard key={l.id} log={l} isOwner
+                  onDetail={function () { setDetail({ type: 'log', data: l }) }}
+                  onEdit={function () { startEditLog(l) }}
+                  onDelete={function () { deleteLog(l) }} />
+              })}
+            </div>
             {!filteredLogs.length ? <EmptyState title={logs.length ? 'Logbook tidak ditemukan' : 'Belum ada logbook'} desc={logs.length ? 'Coba reset filter atau pilih filter lain.' : 'Tambahkan logbook harian pertama kamu.'} /> : null}
           </div>
         </section>
@@ -558,6 +563,7 @@ export default function DashboardPage() {
                     onChange={function (v) { setGalForm(Object.assign({}, galForm, { kegiatan: v })) }}
                     options={GALERI_KEGIATAN.map(function (k) { return { value: k, label: k } })} />
                 </div>
+                {editGalDerived ? <p className="mt-1 text-xs text-slate-400">Media ini berasal dari logbook. Perubahan judul, deskripsi, kegiatan, dan tanggal hanya memengaruhi galeri dan tidak akan ditimpa saat logbook disimpan.</p> : null}
               </div>
               <div><label className={labelCls}>Deskripsi (opsional)</label><AutoTextArea className={inputCls} value={galForm.deskripsi} onChange={function (e) { setGalForm(Object.assign({}, galForm, { deskripsi: e.target.value })) }} placeholder="Tambahkan keterangan media." /></div>
               <button type="submit" disabled={busy} className={btnPrimary}>{busy ? 'Menyimpan...' : (editGalId ? 'Simpan perubahan media' : 'Unggah media')}</button>
@@ -634,12 +640,14 @@ export default function DashboardPage() {
               <TimeFilter filter={hadirFilter} set={setHadirFilter} />
             </FilterBar>
             <p className="text-sm text-slate-500">Menampilkan {filteredHadir.length} dari {hadir.length} catatan</p>
+            <div className="grid gap-5 md:grid-cols-2">
             {filteredHadir.map(function (h) {
               return <AttendanceCard key={h.id} row={h} isOwner
                 onDetail={function () { setDetail({ type: 'hadir', data: h }) }}
                 onEdit={function () { startEditHadir(h) }}
                 onDelete={function () { deleteHadir(h) }} />
             })}
+            </div>
             {!filteredHadir.length ? <EmptyState icon="clipboard" title={hadir.length ? 'Catatan tidak ditemukan' : 'Belum ada data kehadiran'} desc={hadir.length ? 'Coba reset filter atau pilih filter lain.' : 'Isi daftar hadir pertama kamu.'} /> : null}
           </div>
         </section>

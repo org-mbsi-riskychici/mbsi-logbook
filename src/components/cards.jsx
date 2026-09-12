@@ -137,13 +137,13 @@ export function LogbookDetail(props) {
 export function GalleryCard(props) {
   const item = props.item
   return (
-    <article onClick={props.onDetail} className="clickable cursor-pointer bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+    <article onClick={props.onDetail} className="clickable cursor-pointer bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full">
       <div className="relative aspect-video w-full overflow-hidden bg-slate-900">
         {item.media_type === 'video'
           ? <video src={item.media_path} muted preload="metadata" className="absolute inset-0 h-full w-full object-contain" />
           : <img src={item.media_path} alt={item.judul} className="absolute inset-0 h-full w-full object-contain" />}
       </div>
-      <div className="p-5 space-y-3">
+      <div className="p-5 space-y-3 flex-1 flex flex-col">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap gap-1.5">
             <CategoryBadge value={item.kegiatan} />
@@ -153,14 +153,16 @@ export function GalleryCard(props) {
         </div>
         <h3 className="text-lg font-bold text-slate-900">{item.judul}</h3>
         <p className="text-sm text-slate-600 line-clamp-2">{item.deskripsi || 'Tidak ada deskripsi.'}</p>
-        <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-100">
+        <div className="mt-auto pt-3 border-t border-slate-100 space-y-3">
           <PersonChip size="sm" mahasiswa={item.mahasiswa} />
-          {props.isOwner ? (
-            <div className="flex gap-2" onClick={function (e) { e.stopPropagation() }}>
+          {props.onEdit ? (
+            <div className="flex flex-wrap gap-2" onClick={function (e) { e.stopPropagation() }}>
               <button onClick={props.onEdit} className={btnSmall + ' bg-slate-900 text-white hover:bg-slate-700'}>Edit</button>
               <button onClick={props.onDelete} className={btnSmall + ' bg-red-50 text-red-700 hover:bg-red-100'}>Hapus</button>
             </div>
-          ) : <span className="text-xs font-semibold text-bsi-800">Detail</span>}
+          ) : props.isOwner ? null : (
+            <span className="text-xs font-semibold text-bsi-800">Klik kartu untuk melihat detail</span>
+          )}
         </div>
       </div>
     </article>
@@ -195,7 +197,7 @@ export function GalleryDetail(props) {
 export function AttendanceCard(props) {
   const row = props.row
   return (
-    <div className="card-hover bg-white rounded-3xl border border-slate-200 shadow-sm p-5">
+    <div className="card-hover bg-white rounded-3xl border border-slate-200 shadow-sm p-5 flex flex-col h-full">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm text-slate-500">{formatTanggal(row.tanggal)}</p>
@@ -204,7 +206,7 @@ export function AttendanceCard(props) {
         </div>
         <AttendanceBadge status={row.status} />
       </div>
-      <div className="mt-4 rounded-2xl bg-slate-50 p-4">
+      <div className="mt-4 rounded-2xl bg-slate-50 p-4 flex-1">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Alasan atau keterangan</p>
         <p className="mt-1 text-sm text-slate-700">{row.alasan || 'Tidak ada alasan.'}</p>
       </div>
