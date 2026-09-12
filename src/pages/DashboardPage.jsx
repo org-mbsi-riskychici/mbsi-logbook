@@ -34,11 +34,11 @@ export default function DashboardPage() {
 
   async function refresh() {
     if (!peserta) return
-    const l = await supabase.from('logbooks').select('*, peserta(nim, nama), logbook_items(*)')
+    const l = await supabase.from('logbooks').select('*, peserta(nim, nama, prodi), logbook_items(*)')
       .eq('peserta_id', peserta.id).order('tanggal', { ascending: false })
       .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
-    const g = await supabase.from('galeri').select('*, peserta(nim, nama)').eq('peserta_id', peserta.id).order('tanggal', { ascending: false })
-    const h = await supabase.from('daftar_hadir').select('*, peserta(nim, nama)').eq('peserta_id', peserta.id).order('tanggal', { ascending: false })
+    const g = await supabase.from('galeri').select('*, peserta(nim, nama, prodi)').eq('peserta_id', peserta.id).order('tanggal', { ascending: false })
+    const h = await supabase.from('daftar_hadir').select('*, peserta(nim, nama, prodi)').eq('peserta_id', peserta.id).order('tanggal', { ascending: false })
     setLogs(l.data || [])
     setGaleri(g.data || [])
     setHadir(h.data || [])
@@ -208,6 +208,7 @@ export default function DashboardPage() {
             <p className="text-sm text-slate-500">Dashboard peserta</p>
             <h1 className="text-2xl lg:text-3xl font-black text-slate-900">{peserta.nama}</h1>
             <p className="text-sm text-slate-500">NIM {peserta.nim}</p>
+            {peserta.prodi ? <p className="text-sm text-slate-500">{peserta.prodi}</p> : null}
           </div>
         </div>
         <div className="mt-8 flex flex-wrap gap-2">

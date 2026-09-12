@@ -19,7 +19,7 @@ export default function AttendancePage() {
 
   useEffect(function () {
     async function load() {
-      const a = await supabase.from('daftar_hadir').select('*, peserta(nim, nama)').order('tanggal', { ascending: false })
+      const a = await supabase.from('daftar_hadir').select('*, peserta(nim, nama, prodi)').order('tanggal', { ascending: false })
       const p = await supabase.from('peserta').select('id, nama').order('nama')
       setAll(a.data || [])
       setPeople(p.data || [])

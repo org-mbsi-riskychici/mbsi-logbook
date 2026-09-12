@@ -6,6 +6,7 @@ function PersonChip(props) {
   const p = props.peserta
   const nama = p ? p.nama : 'Peserta'
   const nim = p ? p.nim : '-'
+  const prodi = p && p.prodi ? p.prodi : ''
   const initials = nama.split(' ').slice(0, 2).map(function (w) { return w.charAt(0) || '' }).join('').toUpperCase()
   return (
     <div className="flex items-center gap-3">
@@ -15,6 +16,7 @@ function PersonChip(props) {
       <div>
         <p className={'font-semibold text-slate-900 ' + (props.size === 'sm' ? 'text-sm' : '')}>{nama}</p>
         <p className="text-xs text-slate-500">NIM {nim}</p>
+        {prodi ? <p className="text-xs text-slate-400">{prodi}</p> : null}
       </div>
     </div>
   )

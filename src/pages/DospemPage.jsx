@@ -15,11 +15,11 @@ export default function DospemPage() {
     async function load() {
       const l = await supabase
         .from('logbooks')
-        .select('*, peserta(nim, nama), logbook_items(*)')
+        .select('*, peserta(nim, nama, prodi), logbook_items(*)')
         .eq('status', 'publik')
         .order('tanggal', { ascending: false })
         .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
-      const p = await supabase.from('peserta').select('id, nama, nim').order('nama')
+      const p = await supabase.from('peserta').select('id, nama, nim, prodi').order('nama')
       const g = await supabase.from('galeri').select('id')
       const h = await supabase.from('daftar_hadir').select('id')
       setLogs(l.data || [])
@@ -58,6 +58,7 @@ export default function DospemPage() {
               <div key={p.id} className="card-hover bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
                 <p className="font-bold text-slate-900">{p.nama}</p>
                 <p className="text-xs text-slate-500">NIM {p.nim}</p>
+                {p.prodi ? <p className="text-xs text-slate-400">{p.prodi}</p> : null}
                 <div className="mt-5 rounded-2xl bg-slate-50 p-4">
                   <p className="text-xs text-slate-500">Logbook publik</p>
                   <p className="mt-1 text-2xl font-black text-bsi-900">{total}</p>

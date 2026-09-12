@@ -8,7 +8,7 @@ export default function TimPage() {
 
   useEffect(function () {
     async function load() {
-      const p = await supabase.from('peserta').select('id, nama, nim').order('nama')
+      const p = await supabase.from('peserta').select('id, nama, nim, prodi').order('nama')
       const l = await supabase.from('logbooks').select('id, peserta_id').eq('status', 'publik')
       const g = await supabase.from('galeri').select('id, peserta_id')
       setPeople(p.data || [])
@@ -36,6 +36,7 @@ export default function TimPage() {
                 <div>
                   <p className="text-lg font-bold text-slate-900">{p.nama}</p>
                   <p className="text-sm text-slate-500">NIM {p.nim}</p>
+                  {p.prodi ? <span className="mt-1 inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-bsi-100 text-bsi-900">{p.prodi}</span> : null}
                 </div>
               </div>
               <div className="mt-5 grid grid-cols-2 gap-3">

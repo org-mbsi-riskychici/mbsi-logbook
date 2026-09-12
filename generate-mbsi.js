@@ -1259,7 +1259,7 @@ export default function HomePage() {
     async function load() {
       const l = await supabase
         .from('logbooks')
-        .select('*, peserta(nim, nama), logbook_items(*)')
+        .select('*, peserta(nim, nama, prodi), logbook_items(*)')
         .eq('status', 'publik')
         .order('tanggal', { ascending: false })
         .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
@@ -1345,7 +1345,7 @@ export default function LogbookPage() {
     async function load() {
       const l = await supabase
         .from('logbooks')
-        .select('*, peserta(nim, nama), logbook_items(*)')
+        .select('*, peserta(nim, nama, prodi), logbook_items(*)')
         .eq('status', 'publik')
         .order('tanggal', { ascending: false })
         .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
@@ -1419,7 +1419,7 @@ export default function GalleryPage() {
 
   useEffect(function () {
     async function load() {
-      const g = await supabase.from('galeri').select('*, peserta(nim, nama)').order('tanggal', { ascending: false })
+      const g = await supabase.from('galeri').select('*, peserta(nim, nama, prodi)').order('tanggal', { ascending: false })
       setAll(g.data || [])
     }
     load()
@@ -1488,7 +1488,7 @@ export default function AttendancePage() {
 
   useEffect(function () {
     async function load() {
-      const a = await supabase.from('daftar_hadir').select('*, peserta(nim, nama)').order('tanggal', { ascending: false })
+      const a = await supabase.from('daftar_hadir').select('*, peserta(nim, nama, prodi)').order('tanggal', { ascending: false })
       const p = await supabase.from('peserta').select('id, nama').order('nama')
       setAll(a.data || [])
       setPeople(p.data || [])
@@ -1606,11 +1606,11 @@ export default function DospemPage() {
     async function load() {
       const l = await supabase
         .from('logbooks')
-        .select('*, peserta(nim, nama), logbook_items(*)')
+        .select('*, peserta(nim, nama, prodi), logbook_items(*)')
         .eq('status', 'publik')
         .order('tanggal', { ascending: false })
         .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
-      const p = await supabase.from('peserta').select('id, nama, nim').order('nama')
+      const p = await supabase.from('peserta').select('id, nama, nim, prodi').order('nama')
       const g = await supabase.from('galeri').select('id')
       const h = await supabase.from('daftar_hadir').select('id')
       setLogs(l.data || [])
@@ -1687,7 +1687,7 @@ export default function TimPage() {
 
   useEffect(function () {
     async function load() {
-      const p = await supabase.from('peserta').select('id, nama, nim').order('nama')
+      const p = await supabase.from('peserta').select('id, nama, nim, prodi').order('nama')
       const l = await supabase.from('logbooks').select('id, peserta_id').eq('status', 'publik')
       const g = await supabase.from('galeri').select('id, peserta_id')
       setPeople(p.data || [])
@@ -1843,11 +1843,11 @@ export default function DashboardPage() {
   const [busy, setBusy] = useState(false)
 
   async function refresh() {
-    const l = await supabase.from('logbooks').select('*, peserta(nim, nama), logbook_items(*)')
+    const l = await supabase.from('logbooks').select('*, peserta(nim, nama, prodi), logbook_items(*)')
       .eq('peserta_id', peserta.id).order('tanggal', { ascending: false })
       .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
-    const g = await supabase.from('galeri').select('*, peserta(nim, nama)').eq('peserta_id', peserta.id).order('tanggal', { ascending: false })
-    const h = await supabase.from('daftar_hadir').select('*, peserta(nim, nama)').eq('peserta_id', peserta.id).order('tanggal', { ascending: false })
+    const g = await supabase.from('galeri').select('*, peserta(nim, nama, prodi)').eq('peserta_id', peserta.id).order('tanggal', { ascending: false })
+    const h = await supabase.from('daftar_hadir').select('*, peserta(nim, nama, prodi)').eq('peserta_id', peserta.id).order('tanggal', { ascending: false })
     setLogs(l.data || [])
     setGaleri(g.data || [])
     setHadir(h.data || [])

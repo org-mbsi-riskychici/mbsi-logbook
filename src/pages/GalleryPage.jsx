@@ -19,7 +19,7 @@ export default function GalleryPage() {
 
   useEffect(function () {
     async function load() {
-      const g = await supabase.from('galeri').select('*, peserta(nim, nama)').order('tanggal', { ascending: false })
+      const g = await supabase.from('galeri').select('*, peserta(nim, nama, prodi)').order('tanggal', { ascending: false })
       setAll(g.data || [])
     }
     load()
