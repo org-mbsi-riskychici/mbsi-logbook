@@ -61,7 +61,7 @@ export default function GalleryPage() {
               return <GalleryCard key={i.id} item={i} isOwner={peserta && peserta.id === i.peserta_id}
                 onDetail={function () { setDetail(i) }} />
             })}
-        {!loading && !items.length ? <EmptyState title="Belum ada media galeri" desc="Media galeri yang diunggah peserta akan tampil di sini." /> : null}
+        {!loading && !items.length ? <EmptyState icon="camera" title="Belum ada media galeri" desc="Media galeri yang diunggah peserta akan tampil di sini." /> : null}
       </section>
 
       <Modal open={!!detail} onClose={function () { setDetail(null) }}>

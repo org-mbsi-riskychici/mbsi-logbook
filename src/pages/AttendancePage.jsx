@@ -119,7 +119,7 @@ export default function AttendancePage() {
                 return <AttendanceCard key={r.id} row={r} isOwner={peserta && peserta.id === r.peserta_id}
                   onDetail={function () { setDetail(r) }} />
               })}
-          {!loading && !rows.length ? <EmptyState title="Belum ada data kehadiran" desc="Data kehadiran akan tampil setelah peserta mengisi daftar hadir." /> : null}
+          {!loading && !rows.length ? <EmptyState icon="clipboard" title="Belum ada data kehadiran" desc="Data kehadiran akan tampil setelah peserta mengisi daftar hadir." /> : null}
         </div>
       </section>
 

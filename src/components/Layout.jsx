@@ -1,6 +1,7 @@
 import { Outlet, Link, NavLink } from 'react-router-dom'
 import { useTheme } from '../lib/theme.jsx'
 import { useAuth, logoutPeserta } from '../lib/auth.js'
+import { SizedIcon } from './icons.jsx'
 import { useState } from 'react'
 
 const LINKS = [
@@ -21,6 +22,14 @@ export default function Layout() {
     return 'px-3 py-2 rounded-xl text-sm font-semibold ' + (active ? 'bg-bsi-900 text-white' : 'text-slate-600 hover:bg-slate-100')
   }
 
+  const themeBtn = function (extra) {
+    return (
+      <button onClick={theme.toggle} className={'rounded-xl border border-slate-300 grid place-items-center hover:bg-slate-100 text-slate-700 ' + (extra || 'h-10 w-10')} title="Ganti tema">
+        <SizedIcon name={theme.dark ? 'sun' : 'moon'} size={18} />
+      </button>
+    )
+  }
+
   return (
     <div className="flex flex-col min-h-screen">
       <header className="sticky top-0 z-50 bg-white/90 backdrop-blur border-b border-slate-200">
@@ -39,9 +48,7 @@ export default function Layout() {
               })}
             </nav>
             <div className="hidden xl:flex items-center gap-3">
-              <button onClick={theme.toggle} className="h-10 w-10 rounded-xl border border-slate-300 grid place-items-center hover:bg-slate-100">
-                {theme.dark ? '☀️' : '🌙'}
-              </button>
+              {themeBtn()}
               {peserta ? (
                 <>
                   <Link to="/dashboard" className="px-4 py-2 rounded-xl bg-bsi-800 text-white text-sm font-semibold hover:bg-bsi-900">Dashboard</Link>
@@ -52,9 +59,7 @@ export default function Layout() {
               )}
             </div>
             <div className="flex xl:hidden items-center gap-2">
-              <button onClick={theme.toggle} className="h-10 w-10 rounded-xl border border-slate-300 grid place-items-center">
-                {theme.dark ? '☀️' : '🌙'}
-              </button>
+              {themeBtn()}
               <button onClick={function () { setOpen(function (o) { return !o }) }} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700">Menu</button>
             </div>
           </div>
