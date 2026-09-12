@@ -1,5 +1,16 @@
 import { useEffect, useRef } from 'react'
 import { SizedIcon } from './icons.jsx'
+function useBodyScrollLock(active) {
+  useEffect(function () {
+    if (!active) return undefined
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return function () {
+      document.body.style.overflow = previous
+    }
+  }, [active])
+}
+
 
 export const inputCls = 'mt-1.5 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-bsi-500'
 export const labelCls = 'text-sm font-semibold text-slate-700'
@@ -52,9 +63,10 @@ export function AttendanceBadge(props) {
 }
 
 export function Modal(props) {
+  useBodyScrollLock(props.open)
   if (!props.open) return null
   return (
-    <div className="anim-overlay fixed inset-0 z-[60] overflow-y-auto bg-slate-900/60 p-4" onClick={props.onClose}>
+    <div className="anim-overlay fixed inset-0 z-[60] overflow-y-auto overscroll-contain bg-slate-900/60 p-4" onClick={props.onClose}>
       <div className="min-h-full flex items-center justify-center py-8">
         <div className="anim-modal w-full max-w-3xl rounded-[2rem] bg-white shadow-2xl" onClick={function (e) { e.stopPropagation() }}>
           <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
@@ -94,9 +106,10 @@ export function AutoTextArea(props) {
 }
 
 export function ConfirmModal(props) {
+  useBodyScrollLock(props.open)
   if (!props.open) return null
   return (
-    <div className="anim-overlay fixed inset-0 z-[70] overflow-y-auto bg-slate-900/60 p-4" onClick={props.onCancel}>
+    <div className="anim-overlay fixed inset-0 z-[70] overflow-y-auto overscroll-contain bg-slate-900/60 p-4" onClick={props.onCancel}>
       <div className="min-h-full flex items-center justify-center py-8">
         <div className="anim-modal w-full max-w-md rounded-[2rem] bg-white shadow-2xl" onClick={function (e) { e.stopPropagation() }}>
           <div className="p-6 space-y-4">
