@@ -67,7 +67,7 @@ export function FilterBar(props) {
             : <span className="inline-flex items-center gap-2"><span className="text-slate-400">{ICONS.funnel}</span><span>Belum ada filter aktif</span></span>}
         </div>
       </div>
-      <div className={props.open ? 'anim-filter mt-4' : 'hidden xl:block xl:mt-4'}>
+      <div className={props.open ? 'anim-page mt-4' : 'hidden xl:block xl:mt-4'}>
         <div className="flex flex-wrap items-center gap-3">
           {props.children}
           {props.activeCount > 0 ? (
