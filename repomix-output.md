@@ -73,33 +73,194 @@ supabase/
   schema.sql
 .env.example
 .gitignore
-apply-fix-progres-hint.cjs
-apply-foto-webp-progres.cjs
-apply-heic-webp.cjs
-apply-hint-fileinput.cjs
-apply-perbaiki-konversi.cjs
-apply-preview-heic-galeri.cjs
-apply-preview-heic.cjs
-apply-preview-loading.cjs
-apply-smart-fit-carousel.cjs
-apply-smart-fit.cjs
-apply-smartfit-fallback.cjs
-apply-thumb-cleanup.cjs
-apply-thumb-display-fix.cjs
-apply-thumb-display.cjs
-apply-thumb-folder.cjs
-apply-thumbnail.cjs
 index.html
 package.json
 postcss.config.js
 README.md
-rename-peserta.cjs
 tailwind.config.js
 vercel.json
 vite.config.js
 ```
 
 # Files
+
+## File: api/r2/delete.js
+```javascript
+import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3'
+import { createClient } from '@supabase/supabase-js'
+
+const s3 = new S3Client({
+  region: 'auto',
+  endpoint: 'https://' + process.env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
+  }
+})
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const authHeader = req.headers.authorization || ''
+  const token = authHeader.replace('Bearer ', '')
+  if (!token) return res.status(401).json({ error: 'Belum login' })
+
+  const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: authHeader } }
+  })
+  const check = await supabase.auth.getUser(token)
+  if (check.error || !check.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
+
+  const { key } = req.body || {}
+  if (!key) return res.status(400).json({ error: 'Key tidak ada' })
+  await s3.send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key }))
+  return res.status(200).json({ ok: true })
+}
+```
+
+## File: api/r2/presign.js
+```javascript
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { createClient } from '@supabase/supabase-js'
+
+const s3 = new S3Client({
+  region: 'auto',
+  endpoint: 'https://' + process.env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
+  }
+})
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const authHeader = req.headers.authorization || ''
+  const token = authHeader.replace('Bearer ', '')
+  if (!token) return res.status(401).json({ error: 'Belum login' })
+
+  const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: authHeader } }
+  })
+  const check = await supabase.auth.getUser(token)
+  if (check.error || !check.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
+
+  const { filename, contentType, kind } = req.body || {}
+  if (!filename || !contentType || !kind) return res.status(400).json({ error: 'Payload tidak lengkap' })
+
+  const ext = (filename.split('.').pop() || 'bin').toLowerCase()
+  const key = kind + '/' + new Date().getFullYear() + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + ext
+
+  const uploadUrl = await getSignedUrl(
+    s3,
+    new PutObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key, ContentType: contentType }),
+    { expiresIn: 300 }
+  )
+  const publicUrl = process.env.R2_PUBLIC_BASE_URL + '/' + key
+  return res.status(200).json({ uploadUrl, publicUrl, key })
+}
+```
+
+## File: src/components/Skeleton.jsx
+```javascript
+export function SkeletonStatCard() {
+  return (
+    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
+      <div className="skeleton h-4 w-28"></div>
+      <div className="skeleton h-9 w-16 mt-3"></div>
+      <div className="skeleton h-3 w-36 mt-2"></div>
+    </div>
+  )
+}
+
+export function SkeletonLogbookCard() {
+  return (
+    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 flex flex-col gap-4">
+      <div className="skeleton h-40 w-full rounded-2xl"></div>
+      <div className="flex gap-2">
+        <div className="skeleton h-6 w-24 rounded-full"></div>
+        <div className="skeleton h-6 w-20 rounded-full"></div>
+      </div>
+      <div className="skeleton h-4 w-32"></div>
+      <div className="skeleton h-6 w-3/4"></div>
+      <div className="skeleton h-4 w-full"></div>
+      <div className="skeleton h-4 w-2/3"></div>
+      <div className="flex items-center gap-3 pt-2">
+        <div className="skeleton h-11 w-11 rounded-2xl"></div>
+        <div className="flex-1 space-y-2">
+          <div className="skeleton h-4 w-32"></div>
+          <div className="skeleton h-3 w-24"></div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonGalleryCard() {
+  return (
+    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="skeleton aspect-video w-full rounded-none"></div>
+      <div className="p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="skeleton h-6 w-24 rounded-full"></div>
+          <div className="skeleton h-4 w-16"></div>
+        </div>
+        <div className="skeleton h-5 w-3/4"></div>
+        <div className="skeleton h-4 w-full"></div>
+        <div className="skeleton h-4 w-1/2"></div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonAttendanceCard() {
+  return (
+    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <div className="skeleton h-4 w-40"></div>
+          <div className="skeleton h-5 w-32"></div>
+        </div>
+        <div className="skeleton h-6 w-16 rounded-full"></div>
+      </div>
+      <div className="skeleton h-16 w-full rounded-2xl"></div>
+    </div>
+  )
+}
+
+export function SkeletonPersonCard() {
+  return (
+    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
+      <div className="flex items-center gap-4">
+        <div className="skeleton h-14 w-14 rounded-3xl"></div>
+        <div className="flex-1 space-y-2">
+          <div className="skeleton h-5 w-32"></div>
+          <div className="skeleton h-4 w-24"></div>
+          <div className="skeleton h-4 w-28 rounded-full"></div>
+        </div>
+      </div>
+      <div className="mt-5 grid grid-cols-2 gap-3">
+        <div className="skeleton h-20 rounded-2xl"></div>
+        <div className="skeleton h-20 rounded-2xl"></div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonChartRow() {
+  return (
+    <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5">
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <div className="skeleton h-4 w-32"></div>
+          <div className="skeleton h-3 w-24"></div>
+        </div>
+        <div className="skeleton h-4 w-40"></div>
+      </div>
+      <div className="skeleton h-4 w-full rounded-full mt-4"></div>
+    </div>
+  )
+}
+```
 
 ## File: src/lib/konversi.js
 ```javascript
@@ -199,1834 +360,132 @@ export async function pratinjauHeic(file) {
 }
 ```
 
-## File: apply-fix-progres-hint.cjs
+## File: src/lib/supabase.js
 ```javascript
-const fs = require('fs')
-const path = require('path')
-
-const root = process.cwd()
-
-function baca(rel) {
-  return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n')
-}
-
-function simpan(rel, isi) {
-  fs.writeFileSync(path.join(root, rel), isi, 'utf8')
-}
-
-console.log('Mulai melengkapi progres dan petunjuk...')
-console.log('')
-
-/* ===== 1. Perbaiki petunjuk FileInput dengan pola fleksibel ===== */
-const FILE_CTRL = 'src/components/controls.jsx'
-if (fs.existsSync(path.join(root, FILE_CTRL))) {
-  let ctrl = baca(FILE_CTRL)
-  const target = "{props.hint || 'Foto JPG, PNG, atau HEIC otomatis dikonversi. Video maks 50 MB.'}"
-  if (ctrl.includes(target)) {
-    console.log('[SUDAH ADA] Petunjuk FileInput')
-  } else {
-    const regex = /\{props\.hint\s*\|\|\s*'[^']*'\}/
-    if (regex.test(ctrl)) {
-      ctrl = ctrl.replace(regex, target)
-      simpan(FILE_CTRL, ctrl)
-      console.log('[BERHASIL] Petunjuk FileInput diperbarui')
-    } else {
-      console.log('[TIDAK KETEMU] Pola hint di controls.jsx')
-    }
-  }
-} else {
-  console.log('[LEWATI] controls.jsx tidak ditemukan')
-}
-
-/* ===== 2. State infoProses di DashboardPage ===== */
-const FILE_D = 'src/pages/DashboardPage.jsx'
-let d = baca(FILE_D)
-let berubah = false
-
-if (d.includes("const [infoProses,")) {
-  console.log('[SUDAH ADA] State infoProses')
-} else if (d.includes("const [busy, setBusy] = useState(false)")) {
-  d = d.replace(
-    "const [busy, setBusy] = useState(false)",
-    "const [busy, setBusy] = useState(false)\n  const [infoProses, setInfoProses] = useState('')"
-  )
-  berubah = true
-  console.log('[BERHASIL] State infoProses ditambahkan')
-} else {
-  console.log('[TIDAK KETEMU] State busy di DashboardPage')
-}
-
-/* ===== 3. Upload logbook dengan callback onInfo ===== */
-const uploadLogLama = "const up = await uploadMedia(it.file, 'logbook')"
-const uploadLogBaru = "const up = await uploadMedia(it.file, 'logbook', function (pesan) { setInfoProses(pesan) })"
-if (d.includes(uploadLogBaru)) {
-  console.log('[SUDAH ADA] Callback onInfo upload logbook')
-} else if (d.includes(uploadLogLama)) {
-  d = d.replace(uploadLogLama, uploadLogBaru)
-  berubah = true
-  console.log('[BERHASIL] Callback onInfo upload logbook')
-} else {
-  console.log('[TIDAK KETEMU] Baris uploadMedia logbook di DashboardPage')
-}
-
-/* ===== 4. Upload galeri dengan callback onInfo ===== */
-const uploadGalLama = "const up = await uploadMedia(galForm.file, 'galeri')"
-const uploadGalBaru = "const up = await uploadMedia(galForm.file, 'galeri', function (pesan) { setInfoProses(pesan) })"
-if (d.includes(uploadGalBaru)) {
-  console.log('[SUDAH ADA] Callback onInfo upload galeri')
-} else if (d.includes(uploadGalLama)) {
-  d = d.replace(uploadGalLama, uploadGalBaru)
-  berubah = true
-  console.log('[BERHASIL] Callback onInfo upload galeri')
-} else {
-  console.log('[TIDAK KETEMU] Baris uploadMedia galeri di DashboardPage')
-}
-
-/* ===== 5. Tombol simpan logbook menampilkan progres ===== */
-const btnLogLama = "{busy ? 'Menyimpan...' : (editLogId ? 'Simpan perubahan' : 'Simpan logbook')}"
-const btnLogBaru = "{busy ? (infoProses || 'Menyimpan...') : (editLogId ? 'Simpan perubahan' : 'Simpan logbook')}"
-if (d.includes(btnLogBaru)) {
-  console.log('[SUDAH ADA] Progres tombol simpan logbook')
-} else if (d.includes(btnLogLama)) {
-  d = d.replace(btnLogLama, btnLogBaru)
-  berubah = true
-  console.log('[BERHASIL] Progres tombol simpan logbook')
-} else {
-  console.log('[TIDAK KETEMU] Teks tombol simpan logbook di DashboardPage')
-}
-
-/* ===== 6. Tombol simpan galeri menampilkan progres ===== */
-const btnGalLama = "{busy ? 'Menyimpan...' : (editGalId ? 'Simpan perubahan media' : 'Unggah media')}"
-const btnGalBaru = "{busy ? (infoProses || 'Menyimpan...') : (editGalId ? 'Simpan perubahan media' : 'Unggah media')}"
-if (d.includes(btnGalBaru)) {
-  console.log('[SUDAH ADA] Progres tombol simpan galeri')
-} else if (d.includes(btnGalLama)) {
-  d = d.replace(btnGalLama, btnGalBaru)
-  berubah = true
-  console.log('[BERHASIL] Progres tombol simpan galeri')
-} else {
-  console.log('[TIDAK KETEMU] Teks tombol simpan galeri di DashboardPage')
-}
-
-/* ===== 7. Reset infoProses setelah selesai ===== */
-if (d.includes("setInfoProses('')") && d.includes("setBusy(false)")) {
-  console.log('[SUDAH ADA] Reset infoProses')
-} else {
-  const pola = /setBusy\(false\)\n  \}/g
-  let count = 0
-  d = d.replace(pola, function (match) {
-    count++
-    return "setInfoProses('')\n    setBusy(false)\n  }"
-  })
-  if (count > 0) {
-    berubah = true
-    console.log('[BERHASIL] Reset infoProses di ' + count + ' titik')
-  }
-}
-
-if (berubah) simpan(FILE_D, d)
-
-console.log('')
-console.log('Selesai. Vite akan memuat ulang otomatis.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('2. Unggah file HEIC lewat form logbook atau galeri.')
-console.log('3. Tombol simpan menampilkan urutan: Mengonversi HEIC ke JPG, Mengonversi ke WebP, lalu Mengunggah... XX%.')
-console.log('4. Gambar tampil normal di kartu, dan di R2 tersimpan sebagai .webp jauh lebih kecil dari 5 MB.')
-console.log('5. Unggah foto JPG biasa: tombol menampilkan Mengonversi ke WebP lalu Mengunggah... XX%.')
-console.log('6. Unggah foto yang sudah .webp: langsung Mengunggah... XX% tanpa konversi.')
-console.log('7. Petunjuk di bawah tombol pilih file kini bertuliskan info format dan batas ukuran.')
-```
-
-## File: apply-foto-webp-progres.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-
-const root = process.cwd()
-
-function baca(rel) {
-  return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n')
-}
-
-function simpan(rel, isi) {
-  fs.writeFileSync(path.join(root, rel), isi, 'utf8')
-}
-
-function ganti(rel, cari, gantiDengan, label) {
-  if (!fs.existsSync(path.join(root, rel))) {
-    console.log('[LEWATI] File tidak ditemukan: ' + rel)
-    return
-  }
-  let isi = baca(rel)
-  if (isi.includes(gantiDengan)) {
-    console.log('[SUDAH ADA] ' + label)
-    return
-  }
-  if (!isi.includes(cari)) {
-    console.log('[TIDAK KETEMU] ' + label + ' di ' + rel)
-    return
-  }
-  isi = isi.replace(cari, gantiDengan)
-  simpan(rel, isi)
-  console.log('[BERHASIL] ' + label)
-}
-
-console.log('Mulai memasang konversi foto WebP plus progres upload tanpa konversi video...')
-console.log('')
-
-/* ===== 1. konversi.js hanya untuk foto ===== */
-const isiKonversi = `const MAKS_SISI_FOTO = 2560
-const KUALITAS_WEBP = 0.9
-
-export function perluKonversiFoto(file) {
-  const t = file.type || ''
-  if (t === 'image/gif' || t === 'image/svg+xml' || t === 'image/webp') return false
-  return t.startsWith('image/')
-}
-
-export async function konversiFoto(file) {
-  let bitmap = null
-  try {
-    bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
-  } catch (e) {
-    bitmap = await createImageBitmap(file)
-  }
-  const skala = Math.min(1, MAKS_SISI_FOTO / Math.max(bitmap.width, bitmap.height))
-  const w = Math.max(1, Math.round(bitmap.width * skala))
-  const h = Math.max(1, Math.round(bitmap.height * skala))
-  const canvas = document.createElement('canvas')
-  canvas.width = w
-  canvas.height = h
-  const ctx = canvas.getContext('2d')
-  ctx.imageSmoothingEnabled = true
-  ctx.imageSmoothingQuality = 'high'
-  ctx.drawImage(bitmap, 0, 0, w, h)
-  bitmap.close()
-  const blob = await new Promise(function (resolve) {
-    canvas.toBlob(resolve, 'image/webp', KUALITAS_WEBP)
-  })
-  canvas.width = 0
-  canvas.height = 0
-  if (!blob || blob.type !== 'image/webp') return null
-  if (blob.size >= file.size) return null
-  return blob
-}
-`
-fs.mkdirSync(path.join(root, 'src', 'lib'), { recursive: true })
-simpan('src/lib/konversi.js', isiKonversi)
-console.log('[BERHASIL] src/lib/konversi.js versi foto saja')
-
-/* ===== 2. upload.js: tanpa konversi video, dengan progres dan penjaga ukuran ===== */
-const isiUpload = `import { supabase } from './supabase.js'
-import { perluKonversiFoto, konversiFoto } from './konversi.js'
-
-const MAKS_VIDEO = 50 * 1024 * 1024
-const MAKS_FOTO = 15 * 1024 * 1024
-
-async function getToken() {
-  const { data } = await supabase.auth.getSession()
-  return data.session ? data.session.access_token : ''
-}
-
-function namaDasar(nama) {
-  return String(nama || 'media').replace(/\\.[^.]+$/, '')
-}
-
-function kirimDenganProgres(uploadUrl, blob, contentType, onProgres) {
-  return new Promise(function (resolve, reject) {
-    const xhr = new XMLHttpRequest()
-    xhr.open('PUT', uploadUrl)
-    xhr.setRequestHeader('Content-Type', contentType)
-    if (onProgres) {
-      xhr.upload.onprogress = function (e) {
-        if (e.lengthComputable) onProgres(e.loaded / e.total)
-      }
-    }
-    xhr.onload = function () {
-      if (xhr.status >= 200 && xhr.status < 300) resolve()
-      else reject(new Error('Gagal upload file ke R2 (status ' + xhr.status + ')'))
-    }
-    xhr.onerror = function () { reject(new Error('Gagal jaringan saat upload')) }
-    xhr.send(blob)
-  })
-}
-
-export async function uploadMedia(file, kind, onInfo) {
-  const video = file.type.indexOf('video') === 0
-  if (video && file.size > MAKS_VIDEO) {
-    throw new Error('Video melebihi 50 MB. Potong dulu durasinya supaya upload cepat dan kuota aman.')
-  }
-  if (!video && file.size > MAKS_FOTO) {
-    throw new Error('Foto melebihi 15 MB. Pilih file dengan ukuran lebih kecil.')
-  }
-  let berkas = file
-  try {
-    if (perluKonversiFoto(file)) {
-      if (onInfo) onInfo('Mengonversi foto ke WebP...')
-      const blob = await konversiFoto(file)
-      if (blob) berkas = new File([blob], namaDasar(file.name) + '.webp', { type: 'image/webp' })
-    }
-  } catch (e) {
-    berkas = file
-  }
-  if (onInfo) onInfo('')
-  const token = await getToken()
-  const res = await fetch('/api/r2/presign', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify({ filename: berkas.name, contentType: berkas.type, kind: kind })
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error('Gagal membuat izin upload (status ' + res.status + '): ' + text)
-  }
-  const info = await res.json()
-  await kirimDenganProgres(info.uploadUrl, berkas, berkas.type, function (p) {
-    if (onInfo) onInfo('Mengunggah... ' + Math.round(p * 100) + '%')
-  })
-  return { path: info.key, publicUrl: info.publicUrl }
-}
-
-export async function deleteMedia(key) {
-  const token = await getToken()
-  const res = await fetch('/api/r2/delete', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify({ key: key })
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error('Gagal hapus media di R2 (status ' + res.status + '): ' + text)
-  }
-  return res.json()
-}
-`
-simpan('src/lib/upload.js', isiUpload)
-console.log('[BERHASIL] src/lib/upload.js versi progres tanpa konversi video')
-
-/* ===== 3. DashboardPage: state infoProses ===== */
-ganti(
-  'src/pages/DashboardPage.jsx',
-  `  const [busy, setBusy] = useState(false)`,
-  `  const [busy, setBusy] = useState(false)
-  const [infoProses, setInfoProses] = useState('')`,
-  'State infoProses ditambahkan'
-)
-
-/* ===== 4. Upload logbook melaporkan progres ===== */
-ganti(
-  'src/pages/DashboardPage.jsx',
-  `const up = await uploadMedia(it.file, 'logbook')`,
-  `const up = await uploadMedia(it.file, 'logbook', function (pesan) { setInfoProses(pesan) })`,
-  'Upload logbook melaporkan progres'
-)
-
-/* ===== 5. Upload galeri melaporkan progres ===== */
-ganti(
-  'src/pages/DashboardPage.jsx',
-  `const up = await uploadMedia(galForm.file, 'galeri')`,
-  `const up = await uploadMedia(galForm.file, 'galeri', function (pesan) { setInfoProses(pesan) })`,
-  'Upload galeri melaporkan progres'
-)
-
-/* ===== 6. Tombol simpan logbook menampilkan progres ===== */
-ganti(
-  'src/pages/DashboardPage.jsx',
-  `{busy ? 'Menyimpan...' : (editLogId ? 'Simpan perubahan' : 'Simpan logbook')}`,
-  `{busy ? (infoProses || 'Menyimpan...') : (editLogId ? 'Simpan perubahan' : 'Simpan logbook')}`,
-  'Tombol simpan logbook menampilkan progres'
-)
-
-/* ===== 7. Tombol simpan galeri menampilkan progres ===== */
-ganti(
-  'src/pages/DashboardPage.jsx',
-  `{busy ? 'Menyimpan...' : (editGalId ? 'Simpan perubahan media' : 'Unggah media')}`,
-  `{busy ? (infoProses || 'Menyimpan...') : (editGalId ? 'Simpan perubahan media' : 'Unggah media')}`,
-  'Tombol simpan galeri menampilkan progres'
-)
-
-/* ===== 8. Petunjuk FileInput diperbarui ===== */
-ganti(
-  'src/components/controls.jsx',
-  `{props.hint || 'Maksimal 2 MB'}`,
-  `{props.hint || 'Foto otomatis WebP, video maksimal 50 MB'}`,
-  'Petunjuk FileInput diperbarui'
-)
-
-console.log('')
-console.log('Selesai. Vite akan memuat ulang otomatis.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Unggah foto JPG besar: konversi WebP berjalan cepat lalu persen upload terlihat di tombol.')
-console.log('2. Unggah video mp4 berapa pun durasinya: tidak ada proses rekaman, langsung persen upload.')
-console.log('3. Coba video di atas 50 MB: muncul pesan ramah yang meminta memotong dulu.')
-console.log('4. Perhatikan tombol kembali normal setelah penyimpanan selesai.')
-```
-
-## File: apply-heic-webp.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-
-const root = process.cwd()
-
-function simpan(rel, isi) {
-  const full = path.join(root, rel)
-  fs.mkdirSync(path.dirname(full), { recursive: true })
-  fs.writeFileSync(full, isi, 'utf8')
-  console.log('[BERHASIL] ' + rel + ' ditulis')
-}
-
-if (!fs.existsSync(path.join(root, 'node_modules', 'heic2any'))) {
-  console.log('[GAGAL] Dependensi heic2any belum terpasang.')
-  console.log('Jalankan dulu perintah: npm install heic2any')
-  console.log('Setelah itu jalankan ulang script ini.')
-  process.exit(1)
-}
-
-console.log('Mulai memasang pipa konversi HEIC ke JPG lalu WebP...')
-console.log('')
-
-/* ===== 1. Modul konversi foto ===== */
-simpan('src/lib/konversi.js', `const MAKS_SISI = 2560
-const KUALITAS_WEBP = 0.9
-const EXT_VIDEO = ['mp4', 'mov', 'm4v', 'webm', 'ogg', 'mkv', 'avi']
-
-function namaDasar(nama) {
-  return String(nama || 'media').replace(/\\.[^.]+$/, '')
-}
-
-export function ekstensiFile(file) {
-  return String(file.name || '').split('.').pop().toLowerCase()
-}
-
-export function iniVideo(file) {
-  if (file.type && file.type.indexOf('video') === 0) return true
-  return EXT_VIDEO.indexOf(ekstensiFile(file)) !== -1
-}
-
-export function formatHeic(file) {
-  const e = ekstensiFile(file)
-  return e === 'heic' || e === 'heif'
-}
-
-async function heicKeJpeg(file) {
-  const mod = await import('heic2any')
-  const heic = mod.default || mod
-  const hasil = await heic({ blob: file, toType: 'image/jpeg', quality: 0.92 })
-  return Array.isArray(hasil) ? hasil[0] : hasil
-}
-
-async function cobaWebP(berkas) {
-  try {
-    const bitmap = await createImageBitmap(berkas, { imageOrientation: 'from-image' })
-    const skala = Math.min(1, MAKS_SISI / Math.max(bitmap.width, bitmap.height))
-    const w = Math.max(1, Math.round(bitmap.width * skala))
-    const h = Math.max(1, Math.round(bitmap.height * skala))
-    const canvas = document.createElement('canvas')
-    canvas.width = w
-    canvas.height = h
-    const ctx = canvas.getContext('2d')
-    ctx.imageSmoothingEnabled = true
-    ctx.imageSmoothingQuality = 'high'
-    ctx.drawImage(bitmap, 0, 0, w, h)
-    bitmap.close()
-    const out = await new Promise(function (resolve) {
-      canvas.toBlob(resolve, 'image/webp', KUALITAS_WEBP)
-    })
-    canvas.width = 0
-    canvas.height = 0
-    if (out && out.type === 'image/webp' && out.size < berkas.size) return out
-    return null
-  } catch (e) {
-    return null
-  }
-}
-
-export async function siapkanFoto(file, onInfo) {
-  let berkas = file
-  if (formatHeic(file)) {
-    if (onInfo) onInfo('Mengonversi HEIC ke JPG...')
-    const jpeg = await heicKeJpeg(file)
-    if (!jpeg) throw new Error('File HEIC tidak bisa dibaca')
-    berkas = new File([jpeg], namaDasar(file.name) + '.jpg', { type: 'image/jpeg' })
-  } else {
-    const bmp = await createImageBitmap(file)
-    bmp.close()
-  }
-  const webp = await cobaWebP(berkas)
-  if (webp) {
-    if (onInfo) onInfo('Mengonversi ke WebP...')
-    berkas = new File([webp], namaDasar(berkas.name) + '.webp', { type: 'image/webp' })
-  }
-  return berkas
-}
-`)
-
-/* ===== 2. Modul upload dengan validasi, konversi, dan progres ===== */
-simpan('src/lib/upload.js', `import { supabase } from './supabase.js'
-import { iniVideo, ekstensiFile, siapkanFoto } from './konversi.js'
-
-const MAKS_FOTO = 15 * 1024 * 1024
-const MAKS_VIDEO = 50 * 1024 * 1024
-
-async function getToken() {
-  const { data } = await supabase.auth.getSession()
-  return data.session ? data.session.access_token : ''
-}
-
-function kirimDenganProgres(uploadUrl, blob, contentType, onProgres) {
-  return new Promise(function (resolve, reject) {
-    const xhr = new XMLHttpRequest()
-    xhr.open('PUT', uploadUrl)
-    xhr.setRequestHeader('Content-Type', contentType)
-    if (onProgres) {
-      xhr.upload.onprogress = function (e) {
-        if (e.lengthComputable) onProgres(e.loaded / e.total)
-      }
-    }
-    xhr.onload = function () {
-      if (xhr.status >= 200 && xhr.status < 300) resolve()
-      else reject(new Error('Gagal upload file ke R2 (status ' + xhr.status + ')'))
-    }
-    xhr.onerror = function () { reject(new Error('Gagal jaringan saat upload ke R2')) }
-    xhr.send(blob)
-  })
-}
-
-export async function uploadMedia(file, kind, onInfo) {
-  const video = iniVideo(file)
-  if (video && file.size > MAKS_VIDEO) {
-    throw new Error('Video melebihi 50 MB. Potong dulu durasinya supaya upload cepat dan kuota aman.')
-  }
-  if (!video && file.size > MAKS_FOTO) {
-    throw new Error('Foto melebihi 15 MB. Pilih file dengan ukuran lebih kecil.')
-  }
-  let berkas = file
-  if (!video) {
-    try {
-      berkas = await siapkanFoto(file, onInfo)
-    } catch (e) {
-      throw new Error('Foto format .' + ekstensiFile(file) + ' tidak bisa diproses browser. Ubah dulu ke JPG atau PNG. Di iPhone: Settings, Camera, Formats, pilih Most Compatible.')
-    }
-  }
-  if (onInfo) onInfo('')
-  const token = await getToken()
-  const res = await fetch('/api/r2/presign', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify({ filename: berkas.name, contentType: berkas.type, kind: kind })
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error('Gagal membuat izin upload (status ' + res.status + '): ' + text)
-  }
-  const info = await res.json()
-  await kirimDenganProgres(info.uploadUrl, berkas, berkas.type, function (p) {
-    if (onInfo) onInfo('Mengunggah... ' + Math.round(p * 100) + '%')
-  })
-  console.log('[UPLOAD] Tersimpan di R2: ' + info.key + ' (' + berkas.type + ', ' + berkas.size + ' byte)')
-  return { path: info.key, publicUrl: info.publicUrl }
-}
-
-export async function deleteMedia(key) {
-  const token = await getToken()
-  const res = await fetch('/api/r2/delete', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify({ key: key })
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error('Gagal hapus media di R2 (status ' + res.status + '): ' + text)
-  }
-  return res.json()
-}
-`)
-
-/* ===== 3. Perbarui petunjuk FileInput ===== */
-const FILE_CTRL = 'src/components/controls.jsx'
-if (!fs.existsSync(path.join(root, FILE_CTRL))) {
-  console.log('[LEWATI] src/components/controls.jsx tidak ditemukan')
-} else {
-  let ctrl = fs.readFileSync(path.join(root, FILE_CTRL), 'utf8').replace(/\r\n/g, '\n')
-  const hintLama = "{props.hint || 'Maksimal 2 MB'}"
-  const hintBaru = "{props.hint || 'Foto JPG, PNG, atau HEIC otomatis dikonversi. Video maksimal 50 MB.'}"
-  if (ctrl.includes(hintBaru)) {
-    console.log('[SUDAH ADA] Petunjuk FileInput')
-  } else if (ctrl.includes(hintLama)) {
-    ctrl = ctrl.split(hintLama).join(hintBaru)
-    fs.writeFileSync(path.join(root, FILE_CTRL), ctrl, 'utf8')
-    console.log('[BERHASIL] Petunjuk FileInput diperbarui')
-  } else {
-    console.log('[TIDAK KETEMU] Petunjuk FileInput di controls.jsx')
-  }
-}
-
-console.log('')
-console.log('Selesai. Vite akan memuat ulang otomatis.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('2. Unggah file HEIC atau HEIF yang kemarin lewat form logbook atau galeri.')
-console.log('3. Tombol simpan akan menampilkan tahap berurutan: Mengonversi HEIC ke JPG, lalu Mengonversi ke WebP, lalu persentase unggahan.')
-console.log('4. Setelah tersimpan, gambar harus tampil normal di kartu, dan di R2 tersimpan sebagai .webp dengan ukuran jauh lebih kecil dari 5 MB.')
-console.log('5. Unggah juga satu foto JPG biasa untuk memastikan jalur WebP tetap bekerja.')
-console.log('6. Coba file foto aneh misalnya RAW: harus muncul pesan ramah yang meminta konversi ke JPG atau PNG, bukan gambar rusak.')
-```
-
-## File: apply-hint-fileinput.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-
-const root = process.cwd()
-const FILE = 'src/components/controls.jsx'
-
-if (!fs.existsSync(path.join(root, FILE))) {
-  console.log('[GAGAL] File tidak ditemukan: ' + FILE)
-  process.exit(1)
-}
-
-let isi = fs.readFileSync(path.join(root, FILE), 'utf8').replace(/\r\n/g, '\n')
-
-const regex = /\{props\.hint \|\| '[^']*'\}/
-const baru = "{props.hint || 'Foto JPG, PNG, atau HEIC otomatis dikonversi. Video maksimal 50 MB.'}"
-
-if (!regex.test(isi)) {
-  console.log('[TIDAK KETEMU] Pola {props.hint || ...} di ' + FILE)
-  console.log('Buka file tersebut dan cari baris yang memuat props.hint, lalu ganti manual teks di dalam kutip.')
-  process.exit(1)
-}
-
-isi = isi.replace(regex, baru)
-fs.writeFileSync(path.join(root, FILE), isi, 'utf8')
-console.log('[BERHASIL] Petunjuk FileInput diperbarui menjadi:')
-console.log('  ' + baru)
-console.log('')
-console.log('Selesai. Vite akan memuat ulang otomatis.')
-```
-
-## File: apply-perbaiki-konversi.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-
-const root = process.cwd()
-
-function simpan(rel, isi) {
-  const full = path.join(root, rel)
-  fs.mkdirSync(path.dirname(full), { recursive: true })
-  fs.writeFileSync(full, isi, 'utf8')
-  console.log('[BERHASIL] ' + rel + ' ditulis ulang')
-}
-
-console.log('Mulai menulis ulang pipa konversi dan upload yang aman...')
-console.log('')
-
-/* ===== 1. konversi.js: foto ke WebP dengan log alasan jatuh kembali ===== */
-const isiKonversi = `const MAKS_SISI = 2560
-const KUALITAS = 0.9
-
-export function perluKonversiFoto(file) {
-  const t = file.type || ''
-  if (t === 'image/gif' || t === 'image/svg+xml' || t === 'image/webp') return false
-  return t.startsWith('image/')
-}
-
-export async function konversiFoto(file) {
-  let bitmap = null
-  try {
-    bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
-  } catch (e) {
-    bitmap = await createImageBitmap(file)
-  }
-  const skala = Math.min(1, MAKS_SISI / Math.max(bitmap.width, bitmap.height))
-  const w = Math.max(1, Math.round(bitmap.width * skala))
-  const h = Math.max(1, Math.round(bitmap.height * skala))
-  const canvas = document.createElement('canvas')
-  canvas.width = w
-  canvas.height = h
-  const ctx = canvas.getContext('2d')
-  ctx.imageSmoothingEnabled = true
-  ctx.imageSmoothingQuality = 'high'
-  ctx.drawImage(bitmap, 0, 0, w, h)
-  bitmap.close()
-  const blob = await new Promise(function (resolve) {
-    canvas.toBlob(resolve, 'image/webp', KUALITAS)
-  })
-  canvas.width = 0
-  canvas.height = 0
-  if (!blob || blob.type !== 'image/webp') {
-    console.warn('[KONVERSI] Dilewati: browser tidak menghasilkan WebP (tipe keluaran: ' + (blob ? blob.type : 'kosong') + '). File asli dipakai.')
-    return null
-  }
-  if (blob.size >= file.size) {
-    console.warn('[KONVERSI] Dilewati: WebP (' + blob.size + ' byte) tidak lebih kecil dari asli (' + file.size + ' byte). File asli dipakai.')
-    return null
-  }
-  console.log('[KONVERSI] Berhasil: ' + file.size + ' byte menjadi ' + blob.size + ' byte WebP.')
-  return blob
-}
-`
-simpan('src/lib/konversi.js', isiKonversi)
-
-/* ===== 2. upload.js: keputusan file final dulu, baru izin upload, dengan log ===== */
-const isiUpload = `import { supabase } from './supabase.js'
-import { perluKonversiFoto, konversiFoto } from './konversi.js'
-
-const MAKS_FOTO = 15 * 1024 * 1024
-const MAKS_VIDEO = 50 * 1024 * 1024
-
-async function getToken() {
-  const { data } = await supabase.auth.getSession()
-  return data.session ? data.session.access_token : ''
-}
-
-function namaDasar(nama) {
-  return String(nama || 'media').replace(/\\.[^.]+$/, '')
-}
-
-function kirimDenganProgres(uploadUrl, blob, contentType, onProgres) {
-  return new Promise(function (resolve, reject) {
-    const xhr = new XMLHttpRequest()
-    xhr.open('PUT', uploadUrl)
-    xhr.setRequestHeader('Content-Type', contentType)
-    if (onProgres) {
-      xhr.upload.onprogress = function (e) {
-        if (e.lengthComputable) onProgres(e.loaded / e.total)
-      }
-    }
-    xhr.onload = function () {
-      if (xhr.status >= 200 && xhr.status < 300) resolve()
-      else reject(new Error('Gagal upload file ke R2 (status ' + xhr.status + ')'))
-    }
-    xhr.onerror = function () { reject(new Error('Gagal jaringan saat upload ke R2')) }
-    xhr.send(blob)
-  })
-}
-
-export async function uploadMedia(file, kind, onInfo) {
-  const video = file.type.indexOf('video') === 0
-  if (video && file.size > MAKS_VIDEO) {
-    throw new Error('Video melebihi 50 MB. Potong dulu durasinya supaya upload cepat dan kuota aman.')
-  }
-  if (!video && file.size > MAKS_FOTO) {
-    throw new Error('Foto melebihi 15 MB. Pilih file dengan ukuran lebih kecil.')
-  }
-  let berkas = file
-  if (!video && perluKonversiFoto(file)) {
-    try {
-      if (onInfo) onInfo('Mengonversi foto ke WebP...')
-      const blob = await konversiFoto(file)
-      if (blob) {
-        berkas = new File([blob], namaDasar(file.name) + '.webp', { type: 'image/webp' })
-      }
-    } catch (e) {
-      console.warn('[KONVERSI] Gagal total, pakai file asli: ' + e.message)
-      berkas = file
-    }
-  }
-  if (onInfo) onInfo('')
-  const token = await getToken()
-  const res = await fetch('/api/r2/presign', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify({ filename: berkas.name, contentType: berkas.type, kind: kind })
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error('Gagal membuat izin upload (status ' + res.status + '): ' + text)
-  }
-  const info = await res.json()
-  await kirimDenganProgres(info.uploadUrl, berkas, berkas.type, function (p) {
-    if (onInfo) onInfo('Mengunggah... ' + Math.round(p * 100) + '%')
-  })
-  console.log('[UPLOAD] Tersimpan di R2: ' + info.key + ' (' + berkas.type + ', ' + berkas.size + ' byte)')
-  console.log('[UPLOAD] URL publik: ' + info.publicUrl)
-  return { path: info.key, publicUrl: info.publicUrl }
-}
-
-export async function deleteMedia(key) {
-  const token = await getToken()
-  const res = await fetch('/api/r2/delete', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify({ key: key })
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error('Gagal hapus media di R2 (status ' + res.status + '): ' + text)
-  }
-  return res.json()
-}
-`
-simpan('src/lib/upload.js', isiUpload)
-
-console.log('')
-console.log('Selesai. Vite akan memuat ulang otomatis.')
-console.log('')
-console.log('Langkah uji dan diagnosis:')
-console.log('1. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('2. Unggah satu foto uji lewat form logbook atau galeri.')
-console.log('3. Buka DevTools tab Console dan perhatikan baris [KONVERSI] dan [UPLOAD].')
-console.log('4. Baris [KONVERSI] akan menyebut alasan bila WebP dilewati, misalnya browser tidak mendukung encoder WebP.')
-console.log('5. Salin baris [UPLOAD] URL publik, buka di tab baru, gambar harus langsung tampil.')
-console.log('6. Cocokkan ekstensi kunci di baris [UPLOAD] Tersimpan dengan file yang kamu lihat di dashboard R2.')
-console.log('')
-console.log('Memperbaiki baris lama yang gambarnya rusak:')
-console.log('Cara termudah: buka Edit pada logbook atau galeri tersebut, lepas lampiran lama,')
-console.log('pasang kembali file fotonya, lalu simpan. Baris baru akan menunjuk URL yang benar.')
-```
-
-## File: apply-preview-heic-galeri.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-
-const root = process.cwd()
-const FILE = 'src/pages/DashboardPage.jsx'
-
-if (!fs.existsSync(path.join(root, FILE))) {
-  console.log('[GAGAL] File tidak ditemukan: ' + FILE)
-  process.exit(1)
-}
-
-let isi = fs.readFileSync(path.join(root, FILE), 'utf8').replace(/\r\n/g, '\n')
-
-if (isi.includes('pratinjauHeic(f)')) {
-  console.log('[SUDAH ADA] Pratinjau form galeri mendukung HEIC')
-} else {
-  const regex = /onChange=\{function \(e\) \{\s*\n\s*const f = e\.target\.files\[0\]\s*\n\s*if \(!f\) return\s*\n\s*setGalForm\(function \(g\) \{ return Object\.assign\(\{\}, g, \{ file: f, preview: URL\.createObjectURL\(f\) \}\) \}\)\s*\n\s*\}\} \/>/
-  const ganti = `onChange={async function (e) {
-                      const f = e.target.files[0]
-                      if (!f) return
-                      const blob = await pratinjauHeic(f)
-                      const preview = blob ? URL.createObjectURL(blob) : URL.createObjectURL(f)
-                      setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: preview }) })
-                    }} />`
-  if (!regex.test(isi)) {
-    console.log('[TIDAK KETEMU] Pola onChange FileInput galeri di DashboardPage.jsx')
-    process.exit(1)
-  }
-  isi = isi.replace(regex, ganti)
-  fs.writeFileSync(path.join(root, FILE), isi, 'utf8')
-  console.log('[BERHASIL] Pratinjau form galeri mendukung HEIC')
-}
-
-console.log('')
-console.log('Selesai. Vite akan memuat ulang otomatis.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('2. Buka form galeri di dashboard, pilih file HEIC yang kemarin.')
-console.log('3. Setelah sekitar satu detik, kotak pratinjau menampilkan foto, bukan icon rusak.')
-console.log('4. Pilih foto JPG biasa: pratinjau tetap muncul seketika seperti sebelumnya.')
-console.log('5. Simpan media: pipa upload tetap mengonversi HEIC menjadi WebP seperti biasa.')
-```
-
-## File: apply-preview-heic.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-
-const root = process.cwd()
-
-function baca(rel) {
-  return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n')
-}
-
-function simpan(rel, isi) {
-  fs.writeFileSync(path.join(root, rel), isi, 'utf8')
-}
-
-function ganti(rel, cari, gantiDengan, label) {
-  if (!fs.existsSync(path.join(root, rel))) {
-    console.log('[LEWATI] File tidak ditemukan: ' + rel)
-    return
-  }
-  let isi = baca(rel)
-  if (isi.includes(gantiDengan)) {
-    console.log('[SUDAH ADA] ' + label)
-    return
-  }
-  if (!isi.includes(cari)) {
-    console.log('[TIDAK KETEMU] ' + label + ' di ' + rel)
-    return
-  }
-  isi = isi.replace(cari, gantiDengan)
-  simpan(rel, isi)
-  console.log('[BERHASIL] ' + label)
-}
-
-function tambahkan(rel, penanda, blok, label) {
-  if (!fs.existsSync(path.join(root, rel))) {
-    console.log('[LEWATI] File tidak ditemukan: ' + rel)
-    return
-  }
-  let isi = baca(rel)
-  if (isi.includes(penanda)) {
-    console.log('[SUDAH ADA] ' + label)
-    return
-  }
-  isi = isi + '\n' + blok
-  simpan(rel, isi)
-  console.log('[BERHASIL] ' + label)
-}
-
-console.log('Mulai memasang pratinjau HEIC di form...')
-console.log('')
-
-/* ===== 1. konversi.js: fungsi pembuat blob pratinjau ===== */
-tambahkan(
-  'src/lib/konversi.js',
-  'export async function pratinjauHeic',
-  `
-export async function pratinjauHeic(file) {
-  if (!formatHeic(file)) return null
-  try {
-    const jpeg = await heicKeJpeg(file)
-    return jpeg || null
-  } catch (e) {
-    return null
-  }
-}
-`,
-  'Fungsi pratinjauHeic ditambahkan di konversi.js'
-)
-
-/* ===== 2. DashboardPage: import pratinjauHeic ===== */
-ganti(
-  'src/pages/DashboardPage.jsx',
-  `import { syncGaleriFromLogbook } from '../lib/logbook.js'`,
-  `import { syncGaleriFromLogbook } from '../lib/logbook.js'
-import { pratinjauHeic } from '../lib/konversi.js'`,
-  'Import pratinjauHeic di DashboardPage'
-)
-
-/* ===== 3. Pratinjau kegiatan logbook memakai blob JPEG untuk HEIC ===== */
-ganti(
-  'src/pages/DashboardPage.jsx',
-  `  function onItemFile(i, file) {
-    if (!file) return
-    patchItem(i, { file: file, preview: URL.createObjectURL(file) })
-  }`,
-  `  async function onItemFile(i, file) {
-    if (!file) return
-    const blob = await pratinjauHeic(file)
-    const preview = blob ? URL.createObjectURL(blob) : URL.createObjectURL(file)
-    patchItem(i, { file: file, preview: preview })
-  }`,
-  'Pratinjau kegiatan logbook mendukung HEIC'
-)
-
-/* ===== 4. Pratinjau form galeri memakai blob JPEG untuk HEIC ===== */
-ganti(
-  'src/pages/DashboardPage.jsx',
-  `                     onChange={function (e) {
-                       const f = e.target.files[0]
-                       if (!f) return
-                       setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: URL.createObjectURL(f) }) })
-                     }} />`,
-  `                     onChange={async function (e) {
-                       const f = e.target.files[0]
-                       if (!f) return
-                       const blob = await pratinjauHeic(f)
-                       const preview = blob ? URL.createObjectURL(blob) : URL.createObjectURL(f)
-                       setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: preview }) })
-                     }} />`,
-  'Pratinjau form galeri mendukung HEIC'
-)
-
-console.log('')
-console.log('Selesai. Vite akan memuat ulang otomatis.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('2. Buka mode Edit atau Tambah pada logbook, pilih file HEIC yang kemarin.')
-console.log('3. Setelah sekitar satu detik, kotak pratinjau harus menampilkan foto, bukan icon rusak.')
-console.log('4. Ulangi pada form galeri: pratinjau HEIC juga harus tampil normal.')
-console.log('5. Pilih foto JPG biasa: pratinjau tetap muncul seketika seperti sebelumnya.')
-console.log('6. Simpan logbook: pipa upload tetap mengonversi HEIC menjadi WebP seperti biasa.')
-```
-
-## File: apply-preview-loading.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-
-const root = process.cwd()
-const FILE = 'src/pages/DashboardPage.jsx'
-
-function baca(rel) {
-  return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n')
-}
-
-function simpan(rel, isi) {
-  fs.writeFileSync(path.join(root, rel), isi, 'utf8')
-}
-
-function ganti(rel, cari, gantiDengan, label, semua) {
-  if (!fs.existsSync(path.join(root, rel))) {
-    console.log('[LEWATI] File tidak ditemukan: ' + rel)
-    return
-  }
-  let isi = baca(rel)
-  if (isi.includes(gantiDengan)) {
-    console.log('[SUDAH ADA] ' + label)
-    return
-  }
-  if (!isi.includes(cari)) {
-    console.log('[TIDAK KETEMU] ' + label + ' di ' + rel)
-    return
-  }
-  isi = semua ? isi.split(cari).join(gantiDengan) : isi.replace(cari, gantiDengan)
-  simpan(rel, isi)
-  console.log('[BERHASIL] ' + label)
-}
-
-console.log('Mulai memasang indikator proses konversi pratinjau HEIC...')
-console.log('')
-
-/* ===== 1. Import formatHeic ===== */
-ganti(
-  FILE,
-  `import { pratinjauHeic } from '../lib/konversi.js'`,
-  `import { pratinjauHeic, formatHeic } from '../lib/konversi.js'`,
-  'Import formatHeic di DashboardPage'
-)
-
-/* ===== 2. newItem menyimpan flag previewLoading ===== */
-ganti(
-  FILE,
-  `return { key: Math.random().toString(36).slice(2), judul: '', deskripsi: '', hasil: '', file: null, preview: '', oldPath: '', oldThumb: '', show: false }`,
-  `return { key: Math.random().toString(36).slice(2), judul: '', deskripsi: '', hasil: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false, show: false }`,
-  'newItem menyimpan previewLoading'
-)
-
-/* ===== 3. onItemFile menampilkan status proses untuk HEIC ===== */
-ganti(
-  FILE,
-  `  async function onItemFile(i, file) {
-    if (!file) return
-    const blob = await pratinjauHeic(file)
-    const preview = blob ? URL.createObjectURL(blob) : URL.createObjectURL(file)
-    patchItem(i, { file: file, preview: preview })
-  }`,
-  `  async function onItemFile(i, file) {
-    if (!file) return
-    if (formatHeic(file)) {
-      patchItem(i, { file: file, preview: '', previewLoading: true })
-      const blob = await pratinjauHeic(file)
-      const preview = blob ? URL.createObjectURL(blob) : URL.createObjectURL(file)
-      patchItem(i, { preview: preview, previewLoading: false })
-    } else {
-      patchItem(i, { file: file, preview: URL.createObjectURL(file), previewLoading: false })
-    }
-  }`,
-  'onItemFile menampilkan status proses untuk HEIC'
-)
-
-/* ===== 4. removeItemFile mereset previewLoading ===== */
-ganti(
-  FILE,
-  `patchItem(i, { file: null, preview: '', oldPath: '', show: false })`,
-  `patchItem(i, { file: null, preview: '', oldPath: '', previewLoading: false, show: false })`,
-  'removeItemFile mereset previewLoading'
-)
-
-/* ===== 5. startEditLog menyertakan previewLoading ===== */
-ganti(
-  FILE,
-  `return { key: it.id, judul: it.judul, deskripsi: it.deskripsi || '', hasil: it.hasil || '', file: null, preview: it.media_path || '', oldPath: it.media_path || '', oldThumb: it.media_thumb || '', show: it.show_in_gallery }`,
-  `return { key: it.id, judul: it.judul, deskripsi: it.deskripsi || '', hasil: it.hasil || '', file: null, preview: it.media_path || '', oldPath: it.media_path || '', oldThumb: it.media_thumb || '', previewLoading: false, show: it.show_in_gallery }`,
-  'startEditLog menyertakan previewLoading'
-)
-
-/* ===== 6. Kotak proses pada rincian kegiatan ===== */
-ganti(
-  FILE,
-  `                      {it.preview ? (`,
-  `                      {it.previewLoading ? (
-                        <div className="rounded-2xl border border-slate-200 bg-slate-100 aspect-video grid place-items-center">
-                          <div className="flex flex-col items-center gap-3">
-                            <div className="h-9 w-9 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div>
-                            <p className="text-xs font-semibold text-slate-500">Mengonversi pratinjau HEIC...</p>
-                          </div>
-                        </div>
-                      ) : null}
-                      {it.preview ? (`,
-  'Kotak proses konversi pada rincian kegiatan'
-)
-
-/* ===== 7. galForm menyimpan previewLoading ===== */
-ganti(
-  FILE,
-  `{ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '', oldPath: '', oldThumb: '' }`,
-  `{ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false }`,
-  'galForm menyimpan previewLoading',
-  true
-)
-
-/* ===== 8. startEditGal menyertakan previewLoading ===== */
-ganti(
-  FILE,
-  `setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_path, oldPath: g.media_path, oldThumb: g.media_thumb || '' })`,
-  `setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_path, oldPath: g.media_path, oldThumb: g.media_thumb || '', previewLoading: false })`,
-  'startEditGal menyertakan previewLoading'
-)
-
-/* ===== 9. Form galeri mengonversi HEIC dengan status proses ===== */
-ganti(
-  FILE,
-  `                     onChange={function (e) {
-                       const f = e.target.files[0]
-                       if (!f) return
-                       setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: URL.createObjectURL(f) }) })
-                     }} />`,
-  `                     onChange={async function (e) {
-                       const f = e.target.files[0]
-                       if (!f) return
-                       if (formatHeic(f)) {
-                         setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: '', previewLoading: true }) })
-                         const blob = await pratinjauHeic(f)
-                         const preview = blob ? URL.createObjectURL(blob) : URL.createObjectURL(f)
-                         setGalForm(function (g) { return Object.assign({}, g, { preview: preview, previewLoading: false }) })
-                       } else {
-                         setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: URL.createObjectURL(f), previewLoading: false }) })
-                       }
-                     }} />`,
-  'Form galeri mengonversi HEIC dengan status proses'
-)
-
-/* ===== 10. Kotak proses pada form galeri ===== */
-ganti(
-  FILE,
-  `              {galForm.preview ? (`,
-  `              {galForm.previewLoading ? (
-                <div className="rounded-2xl border border-slate-200 bg-slate-100 aspect-video grid place-items-center">
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="h-9 w-9 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div>
-                    <p className="text-xs font-semibold text-slate-500">Mengonversi pratinjau HEIC...</p>
-                  </div>
-                </div>
-              ) : null}
-              {galForm.preview ? (`,
-  'Kotak proses konversi pada form galeri'
-)
-
-console.log('')
-console.log('Selesai. Vite akan memuat ulang otomatis.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Buka form logbook, pilih file HEIC pada salah satu kegiatan.')
-console.log('2. Kotak pratinjau langsung menampilkan spinner dan tulisan Mengonversi pratinjau HEIC...')
-console.log('3. Setelah konversi selesai, foto muncul menggantikan kotak proses tanpa langkah tambahan.')
-console.log('4. Pilih file JPG biasa: pratinjau muncul seketika tanpa kotak proses sama sekali.')
-console.log('5. Ulangi uji yang sama pada form galeri: perilaku dan penandanya identik.')
-console.log('6. Hapus lampiran lewat tombol silang saat proses berjalan: keadaan form kembali bersih.')
-```
-
-## File: apply-smartfit-fallback.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-
-const root = process.cwd()
-
-function baca(rel) {
-  return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n')
-}
-
-function simpan(rel, isi) {
-  fs.writeFileSync(path.join(root, rel), isi, 'utf8')
-}
-
-function ganti(rel, cari, gantiDengan, label) {
-  if (!fs.existsSync(path.join(root, rel))) {
-    console.log('[LEWATI] File tidak ditemukan: ' + rel)
-    return
-  }
-  let isi = baca(rel)
-  if (isi.includes(gantiDengan)) {
-    console.log('[SUDAH ADA] ' + label)
-    return
-  }
-  if (!isi.includes(cari)) {
-    console.log('[TIDAK KETEMU] ' + label + ' di ' + rel)
-    return
-  }
-  isi = isi.replace(cari, gantiDengan)
-  simpan(rel, isi)
-  console.log('[BERHASIL] ' + label)
-}
-
-function gantiRegex(rel, regex, gantiDengan, label, penanda) {
-  if (!fs.existsSync(path.join(root, rel))) {
-    console.log('[LEWATI] File tidak ditemukan: ' + rel)
-    return
-  }
-  let isi = baca(rel)
-  if (penanda && isi.includes(penanda)) {
-    console.log('[SUDAH ADA] ' + label)
-    return
-  }
-  if (!regex.test(isi)) {
-    console.log('[TIDAK KETEMU] ' + label + ' di ' + rel)
-    return
-  }
-  isi = isi.replace(regex, gantiDengan)
-  simpan(rel, isi)
-  console.log('[BERHASIL] ' + label)
-}
-
-console.log('Mulai memasang pengaman cadangan file penuh pada SmartFit...')
-console.log('')
-
-/* ===== 1. Fungsi cadangkan di SmartFit ===== */
-gantiRegex(
-  'src/components/ui.jsx',
-  /(function bacaUkuran\(e\) \{[\s\S]*?if \(w && h\) setRatio\(w \/ h\)\s*\n\s*\})/,
-  '$1\n   function cadangkan(e) {\n     const el = e.currentTarget\n     const cad = props.full && props.full !== props.src ? props.full : props.src\n     if (cad && el.src !== cad) el.src = cad\n   }',
-  'Fungsi cadangkan ditambahkan di SmartFit',
-  'function cadangkan(e)'
-)
-
-/* ===== 2. onError pada lapisan buram potret ===== */
-gantiRegex(
-  'src/components/ui.jsx',
-  /(alt="" aria-hidden="true") className=/,
-  '$1 onError={cadangkan} className=',
-  'Lapisan buram potret punya cadangan',
-  'aria-hidden="true" onError={cadangkan}'
-)
-
-/* ===== 3. onError pada gambar utama SmartFit ===== */
-gantiRegex(
-  'src/components/ui.jsx',
-  /(onLoad=\{bacaUkuran\}\s*\n\s*)(onClick=\{props\.onClick)/,
-  '$1onError={cadangkan}\n           $2',
-  'Gambar utama SmartFit punya cadangan',
-  null
-)
-
-/* ===== 4. ZoomableMedia meneruskan full ke SmartFit ===== */
-gantiRegex(
-  'src/components/ui.jsx',
-  /(<SmartFit\s*\n\s*src=\{props\.src\}\s*\n\s*type=\{props\.type\}\s*\n\s*alt=\{props\.title \|\| 'Media'\}\s*\n\s*)(controls=\{isVideo\})/,
-  '$1full={props.full || props.src}\n         $2',
-  'ZoomableMedia meneruskan full ke SmartFit',
-  'full={props.full || props.src}'
-)
-
-/* ===== 5. Carousel slide tunggal meneruskan full ===== */
-ganti(
-  'src/components/Carousel.jsx',
-  `<SmartFit src={s.src} type={s.type} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} />`,
-  `<SmartFit src={s.src} full={s.full} type={s.type} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} />`,
-  'Carousel slide tunggal meneruskan full'
-)
-
-/* ===== 6. Carousel slide ganda meneruskan full ===== */
-gantiRegex(
-  'src/components/Carousel.jsx',
-  /(<SmartFit\s*\n\s*src=\{s\.src\}\s*\n\s*)(type=\{s\.type\})/,
-  '$1full={s.full}\n                   $2',
-  'Carousel slide ganda meneruskan full',
-  null
-)
-
-/* ===== 7. Kartu galeri meneruskan full ===== */
-ganti(
-  'src/components/cards.jsx',
-  `<SmartFit src={item.media_thumb || item.media_path} type={item.media_type} alt={item.judul} />`,
-  `<SmartFit src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} alt={item.judul} />`,
-  'Kartu galeri meneruskan full ke SmartFit'
-)
-
-console.log('')
-console.log('Selesai. Vite akan memuat ulang otomatis.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('2. Unggah satu foto baru, pastikan di R2 muncul pasangan file penuh dan .thumb.webp.')
-console.log('3. Buka kartu dan carousel: tab Network harus menunjukkan permintaan .thumb.webp.')
-console.log('4. Buka lightbox dan unduh: yang dipakai tetap file penuh.')
-console.log('5. Media lama tanpa thumbnail tetap tampil normal karena jatuh ke file penuh.')
-```
-
-## File: apply-thumb-display-fix.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-
-const root = process.cwd()
-
-function baca(rel) {
-  return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n')
-}
-
-function simpan(rel, isi) {
-  fs.writeFileSync(path.join(root, rel), isi, 'utf8')
-}
-
-function gantiRegex(rel, regex, gantiDengan, label) {
-  if (!fs.existsSync(path.join(root, rel))) {
-    console.log('[LEWATI] File tidak ditemukan: ' + rel)
-    return
-  }
-  let isi = baca(rel)
-  if (isi.includes(gantiDengan)) {
-    console.log('[SUDAH ADA] ' + label)
-    return
-  }
-  if (!regex.test(isi)) {
-    console.log('[TIDAK KETEMU] ' + label + ' di ' + rel)
-    return
-  }
-  isi = isi.replace(regex, gantiDengan)
-  simpan(rel, isi)
-  console.log('[BERHASIL] ' + label)
-}
-
-console.log('Mulai memasang pemuaian thumbnail di sisi tampilan dengan pola fleksibel...')
-console.log('')
-
-/* ===== 1. ZoomableMedia di ui.jsx ===== */
-gantiRegex(
-  'src/components/ui.jsx',
-  /<img\s*\n\s*src=\{props\.src\}\s*\n\s*alt=\{props\.title \|\| 'Media'\}\s*\n\s*onClick=\{function \(e\) \{ e\.stopPropagation\(\); setOpen\(true\) \}\}\s*\n\s*className="absolute inset-0 h-full w-full cursor-zoom-in object-contain"\s*\n\s*\/>/,
-  `<img
-          src={props.src.replace(/\\.[^.]+$/, '.thumb.webp')}
-          alt={props.title || 'Media'}
-          onClick={function (e) { e.stopPropagation(); setOpen(true) }}
-          className="absolute inset-0 h-full w-full cursor-zoom-in object-contain"
-          onError={function (e) { if (e.currentTarget.src !== props.src) e.currentTarget.src = props.src }}
-        />`,
-  'ZoomableMedia memakai thumbnail dengan cadangan file penuh'
-)
-
-/* ===== 2. Kartu galeri di cards.jsx ===== */
-gantiRegex(
-  'src/components/cards.jsx',
-  /<img src=\{item\.media_path\} alt=\{item\.judul\} className="absolute inset-0 h-full w-full object-contain" \/>/,
-  `<img src={item.media_path.replace(/\\.[^.]+$/, '.thumb.webp')} alt={item.judul} className="absolute inset-0 h-full w-full object-contain" onError={function (e) { if (e.currentTarget.src !== item.media_path) e.currentTarget.src = item.media_path }} />`,
-  'Kartu galeri memakai thumbnail dengan cadangan file penuh'
-)
-
-/* ===== 3. Carousel slide tunggal ===== */
-gantiRegex(
-  'src/components/Carousel.jsx',
-  /<img src=\{s\.src\} alt=\{s\.title \|\| 'Media'\} className="h-full w-full cursor-zoom-in object-contain" onClick=\{function \(\) \{ setZoom\(s\) \}\} \/>/,
-  `<img src={s.src.replace(/\\.[^.]+$/, '.thumb.webp')} alt={s.title || 'Media'} className="h-full w-full cursor-zoom-in object-contain" onClick={function () { setZoom(s) }} onError={function (e) { if (e.currentTarget.src !== s.src) e.currentTarget.src = s.src }} />`,
-  'Carousel slide tunggal memakai thumbnail'
-)
-
-/* ===== 4. Carousel slide ganda ===== */
-gantiRegex(
-  'src/components/Carousel.jsx',
-  /<img\s*\n\s*src=\{s\.src\}\s*\n\s*alt=\{s\.title \|\| 'Media'\}\s*\n\s*className="cursor-zoom-in"/,
-  `<img
-                      src={s.src.replace(/\\.[^.]+$/, '.thumb.webp')}
-                      alt={s.title || 'Media'}
-                      className="cursor-zoom-in"
-                      onError={function (e) { if (e.currentTarget.src !== s.src) e.currentTarget.src = s.src }}`,
-  'Carousel slide ganda memakai thumbnail'
-)
-
-console.log('')
-console.log('Selesai. Vite akan memuat ulang otomatis.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('2. Unggah satu foto baru, lalu buka kartu atau carousel yang memuatnya.')
-console.log('3. Buka tab Network di DevTools: permintaan gambar harus berakhiran .thumb.webp.')
-console.log('4. Klik perbesar atau unduh: yang dimuat tetap file penuh sehingga detail dan unduhan tidak berubah.')
-console.log('5. Buka media lama yang belum punya thumbnail: gambar tetap tampil karena onError jatuh ke file penuh.')
-```
-
-## File: apply-thumb-display.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-
-const root = process.cwd()
-
-function baca(rel) {
-  return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n')
-}
-
-function simpan(rel, isi) {
-  fs.writeFileSync(path.join(root, rel), isi, 'utf8')
-}
-
-function ganti(rel, cari, gantiDengan, label) {
-  if (!fs.existsSync(path.join(root, rel))) {
-    console.log('[LEWATI] File tidak ditemukan: ' + rel)
-    return
-  }
-  let isi = baca(rel)
-  if (isi.includes(gantiDengan)) {
-    console.log('[SUDAH ADA] ' + label)
-    return
-  }
-  if (!isi.includes(cari)) {
-    console.log('[TIDAK KETEMU] ' + label + ' di ' + rel)
-    return
-  }
-  isi = isi.replace(cari, gantiDengan)
-  simpan(rel, isi)
-  console.log('[BERHASIL] ' + label)
-}
-
-console.log('Mulai memasang thumbnail tampilan berdampingan dengan file penuh...')
-console.log('')
-
-/* ===== 1. konversi.js: full WebP kualitas tinggi plus thumbnail halus ===== */
-simpan('src/lib/konversi.js', `const MAKS_SISI_FULL = 2560
-const KUALITAS_FULL = 0.92
-const MAKS_SISI_THUMB = 1200
-const KUALITAS_THUMB = 0.9
-const EXT_VIDEO = ['mp4', 'mov', 'm4v', 'webm', 'ogg', 'mkv', 'avi']
-
-export function ekstensiFile(file) {
-  return String(file.name || '').split('.').pop().toLowerCase()
-}
-
-export function iniVideo(file) {
-  if (file.type && file.type.indexOf('video') === 0) return true
-  return EXT_VIDEO.indexOf(ekstensiFile(file)) !== -1
-}
-
-export function formatHeic(file) {
-  const e = ekstensiFile(file)
-  return e === 'heic' || e === 'heif'
-}
-
-async function heicKeJpeg(file) {
-  const mod = await import('heic2any')
-  const heic = mod.default || mod
-  const hasil = await heic({ blob: file, toType: 'image/jpeg', quality: 0.92 })
-  return Array.isArray(hasil) ? hasil[0] : hasil
-}
-
-async function bitmapDari(berkas) {
-  try {
-    return await createImageBitmap(berkas, { imageOrientation: 'from-image' })
-  } catch (e) {
-    return await createImageBitmap(berkas)
-  }
-}
-
-async function keWebP(berkas, maksSisi, kualitas) {
-  const bitmap = await bitmapDari(berkas)
-  const skala = Math.min(1, maksSisi / Math.max(bitmap.width, bitmap.height))
-  const w = Math.max(1, Math.round(bitmap.width * skala))
-  const h = Math.max(1, Math.round(bitmap.height * skala))
-  const canvas = document.createElement('canvas')
-  canvas.width = w
-  canvas.height = h
-  const ctx = canvas.getContext('2d')
-  ctx.imageSmoothingEnabled = true
-  ctx.imageSmoothingQuality = 'high'
-  ctx.drawImage(bitmap, 0, 0, w, h)
-  bitmap.close()
-  const blob = await new Promise(function (resolve) {
-    canvas.toBlob(resolve, 'image/webp', kualitas)
-  })
-  canvas.width = 0
-  canvas.height = 0
-  if (!blob || blob.type !== 'image/webp') return null
-  return blob
-}
-
-export async function siapkanFoto(file, onInfo) {
-  let sumber = file
-  if (formatHeic(file)) {
-    if (onInfo) onInfo('Mengonversi HEIC ke JPG...')
-    const jpeg = await heicKeJpeg(file)
-    if (!jpeg) throw new Error('File HEIC tidak bisa dibaca')
-    sumber = new File([jpeg], 'sumber.jpg', { type: 'image/jpeg' })
-  }
-  if (onInfo) onInfo('Menyiapkan WebP...')
-  let fullBlob = null
-  try {
-    fullBlob = await keWebP(sumber, MAKS_SISI_FULL, KUALITAS_FULL)
-  } catch (e) {
-    fullBlob = null
-  }
-  const pakaiWebp = !!fullBlob && (sumber.type !== 'image/jpeg' || fullBlob.size < sumber.size)
-  const fullFinal = pakaiWebp ? fullBlob : sumber
-  const fullType = pakaiWebp ? 'image/webp' : sumber.type
-  let thumbBlob = null
-  try {
-    thumbBlob = await keWebP(fullFinal, MAKS_SISI_THUMB, KUALITAS_THUMB)
-  } catch (e) {
-    thumbBlob = null
-  }
-  return { fullBlob: fullFinal, fullType: fullType, thumbBlob: thumbBlob }
-}
-`)
-console.log('[BERHASIL] src/lib/konversi.js ditulis ulang dengan pembuat thumbnail')
-
-/* ===== 2. upload.js: unggah file penuh lalu thumbnail ===== */
-simpan('src/lib/upload.js', `import { supabase } from './supabase.js'
-import { iniVideo, ekstensiFile, siapkanFoto } from './konversi.js'
-
-const MAKS_FOTO = 15 * 1024 * 1024
-const MAKS_VIDEO = 50 * 1024 * 1024
-
-async function getToken() {
-  const { data } = await supabase.auth.getSession()
-  return data.session ? data.session.access_token : ''
-}
-
-function namaDasar(nama) {
-  return String(nama || 'media').replace(/\\.[^.]+$/, '')
-}
-
-function kirimDenganProgres(uploadUrl, blob, contentType, onProgres) {
-  return new Promise(function (resolve, reject) {
-    const xhr = new XMLHttpRequest()
-    xhr.open('PUT', uploadUrl)
-    xhr.setRequestHeader('Content-Type', contentType)
-    if (onProgres) {
-      xhr.upload.onprogress = function (e) {
-        if (e.lengthComputable) onProgres(e.loaded / e.total)
-      }
-    }
-    xhr.onload = function () {
-      if (xhr.status >= 200 && xhr.status < 300) resolve()
-      else reject(new Error('Gagal upload file ke R2 (status ' + xhr.status + ')'))
-    }
-    xhr.onerror = function () { reject(new Error('Gagal jaringan saat upload ke R2')) }
-    xhr.send(blob)
-  })
-}
-
-async function mintaIzin(token, filename, contentType, kind) {
-  const res = await fetch('/api/r2/presign', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify({ filename: filename, contentType: contentType, kind: kind })
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error('Gagal membuat izin upload (status ' + res.status + '): ' + text)
-  }
-  return res.json()
-}
-
-export async function uploadMedia(file, kind, onInfo) {
-  const video = iniVideo(file)
-  if (video && file.size > MAKS_VIDEO) {
-    throw new Error('Video melebihi 50 MB. Potong dulu durasinya supaya upload cepat dan kuota aman.')
-  }
-  if (!video && file.size > MAKS_FOTO) {
-    throw new Error('Foto melebihi 15 MB. Pilih file dengan ukuran lebih kecil.')
-  }
-  let fullBlob = file
-  let fullType = file.type
-  let thumbBlob = null
-  if (!video) {
-    try {
-      const hasil = await siapkanFoto(file, onInfo)
-      fullBlob = hasil.fullBlob
-      fullType = hasil.fullType
-      thumbBlob = hasil.thumbBlob
-    } catch (e) {
-      throw new Error('Foto format .' + ekstensiFile(file) + ' tidak bisa diproses browser. Ubah dulu ke JPG atau PNG. Di iPhone: Settings, Camera, Formats, pilih Most Compatible.')
-    }
-  }
-  if (onInfo) onInfo('')
-  const token = await getToken()
-  const extFull = fullType === 'image/webp' ? 'webp' : (fullType === 'image/jpeg' ? 'jpg' : ekstensiFile(file))
-  const infoFull = await mintaIzin(token, namaDasar(file.name) + '.' + extFull, fullType, kind)
-  await kirimDenganProgres(infoFull.uploadUrl, fullBlob, fullType, function (p) {
-    if (onInfo) onInfo('Mengunggah... ' + Math.round(p * 100) + '%')
-  })
-  let thumbUrl = null
-  if (thumbBlob) {
-    try {
-      const namaThumb = namaDasar(infoFull.key.split('/').pop()) + '.thumb.webp'
-      const infoThumb = await mintaIzin(token, namaThumb, 'image/webp', kind)
-      await kirimDenganProgres(infoThumb.uploadUrl, thumbBlob, 'image/webp', null)
-      thumbUrl = infoThumb.publicUrl
-    } catch (e) {
-      thumbUrl = null
-    }
-  }
-  console.log('[UPLOAD] File penuh: ' + infoFull.key + ' | Thumbnail: ' + (thumbUrl || 'tidak dibuat'))
-  return { path: infoFull.key, publicUrl: infoFull.publicUrl, thumbUrl: thumbUrl }
-}
-
-export async function deleteMedia(key) {
-  const token = await getToken()
-  const res = await fetch('/api/r2/delete', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify({ key: key })
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error('Gagal hapus media di R2 (status ' + res.status + '): ' + text)
-  }
-  return res.json()
-}
-`)
-console.log('[BERHASIL] src/lib/upload.js ditulis ulang dengan unggahan ganda')
-
-/* ===== 3. ZoomableMedia: tampilan pakai thumbnail, lightbox tetap file penuh ===== */
-ganti(
-  'src/components/ui.jsx',
-  `      ) : (
-        <img
-          src={props.src}
-          alt={props.title || 'Media'}
-          onClick={function (e) { e.stopPropagation(); setOpen(true) }}
-          className="absolute inset-0 h-full w-full cursor-zoom-in object-contain"
-        />
-      )}`,
-  `      ) : (
-        <img
-          src={props.src.replace(/\\.[^.]+$/, '.thumb.webp')}
-          alt={props.title || 'Media'}
-          onClick={function (e) { e.stopPropagation(); setOpen(true) }}
-          className="absolute inset-0 h-full w-full cursor-zoom-in object-contain"
-          onError={function (e) { if (e.currentTarget.src !== props.src) e.currentTarget.src = props.src }}
-        />
-      )}`,
-  'ZoomableMedia memakai thumbnail dengan cadangan file penuh'
-)
-
-/* ===== 4. Kartu galeri memakai thumbnail ===== */
-ganti(
-  'src/components/cards.jsx',
-  `          : <img src={item.media_path} alt={item.judul} className="absolute inset-0 h-full w-full object-contain" />}`,
-  `          : <img src={item.media_path.replace(/\\.[^.]+$/, '.thumb.webp')} alt={item.judul} className="absolute inset-0 h-full w-full object-contain" onError={function (e) { if (e.currentTarget.src !== item.media_path) e.currentTarget.src = item.media_path }} />}`,
-  'Kartu galeri memakai thumbnail dengan cadangan file penuh'
-)
-
-/* ===== 5. Carousel slide tunggal memakai thumbnail ===== */
-ganti(
-  'src/components/Carousel.jsx',
-  `            : <img src={s.src} alt={s.title || 'Media'} className="h-full w-full cursor-zoom-in object-contain" onClick={function () { setZoom(s) }} />}`,
-  `            : <img src={s.src.replace(/\\.[^.]+$/, '.thumb.webp')} alt={s.title || 'Media'} className="h-full w-full cursor-zoom-in object-contain" onClick={function () { setZoom(s) }} onError={function (e) { if (e.currentTarget.src !== s.src) e.currentTarget.src = s.src }} />}`,
-  'Carousel slide tunggal memakai thumbnail'
-)
-
-/* ===== 6. Carousel slide ganda memakai thumbnail ===== */
-ganti(
-  'src/components/Carousel.jsx',
-  `                  : <img
-                      src={s.src}
-                      alt={s.title || 'Media'}
-                      className="cursor-zoom-in"`,
-  `                  : <img
-                      src={s.src.replace(/\\.[^.]+$/, '.thumb.webp')}
-                      alt={s.title || 'Media'}
-                      className="cursor-zoom-in"
-                      onError={function (e) { if (e.currentTarget.src !== s.src) e.currentTarget.src = s.src }}`,
-  'Carousel slide ganda memakai thumbnail'
-)
-
-/* ===== 7. Hapus media ikut menghapus thumbnail ===== */
-ganti(
-  'src/pages/DashboardPage.jsx',
-  `    try {
-      await deleteMedia(key)
-      console.log('Media R2 terhapus:', key)
-    } catch (err) {
-      console.error('Gagal hapus media R2:', key, err.message)
-    }
-  }`,
-  `    try {
-      await deleteMedia(key)
-      console.log('Media R2 terhapus:', key)
-    } catch (err) {
-      console.error('Gagal hapus media R2:', key, err.message)
-    }
-    const keyThumb = key.replace(/\\.[^.]+$/, '.thumb.webp')
-    if (keyThumb !== key) {
-      try {
-        await deleteMedia(keyThumb)
-        console.log('Thumbnail R2 terhapus:', keyThumb)
-      } catch (e) {
-        console.warn('Thumbnail tidak ada atau sudah terhapus:', keyThumb)
-      }
-    }
-  }`,
-  'Penghapusan media ikut membersihkan thumbnail'
-)
-
-console.log('')
-console.log('Selesai. Vite akan memuat ulang otomatis.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('2. Unggah satu foto baru lewat form logbook atau galeri.')
-console.log('3. Buka dashboard R2: harus ada dua objek, file penuh dan berkas berakhiran .thumb.webp.')
-console.log('4. Lihat kartu dan carousel: gambar tampil halus karena memuat thumbnail berukuran dekat layar.')
-console.log('5. Klik perbesar atau unduh: yang dipakai tetap file penuh sehingga detail dan unduhan tidak berubah.')
-console.log('6. Uji media lama yang belum punya thumbnail: gambar tetap tampil karena otomatis jatuh ke file penuh.')
-console.log('7. Hapus satu logbook berfoto: console melaporkan file penuh dan thumbnail terhapus bersamaan.')
-```
-
-## File: apply-thumb-folder.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-
-const root = process.cwd()
-
-function baca(rel) {
-  return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n')
-}
-
-function simpan(rel, isi) {
-  fs.writeFileSync(path.join(root, rel), isi, 'utf8')
-}
-
-console.log('Mulai memisahkan folder thumbnail dari folder file asli di R2...')
-console.log('')
-
-/* ===== 1. upload.js: thumbnail masuk cabang folder thumb ===== */
-const FILE_U = 'src/lib/upload.js'
-if (!fs.existsSync(path.join(root, FILE_U))) {
-  console.log('[LEWATI] ' + FILE_U + ' tidak ditemukan')
-} else {
-  let u = baca(FILE_U)
-  const cariU = `      const namaThumb = namaDasar(infoFull.key.split('/').pop()) + '.thumb.webp'
-      const infoThumb = await mintaIzin(token, namaThumb, 'image/webp', kind)`
-  const gantiU = `      const namaThumb = namaDasar(infoFull.key.split('/').pop()) + '.webp'
-      const infoThumb = await mintaIzin(token, namaThumb, 'image/webp', 'thumb/' + kind)`
-  if (u.includes(gantiU)) {
-    console.log('[SUDAH ADA] Thumbnail sudah memakai cabang folder thumb')
-  } else if (!u.includes(cariU)) {
-    console.log('[TIDAK KETEMU] Blok pembuatan thumbnail di upload.js')
-  } else {
-    u = u.replace(cariU, gantiU)
-    simpan(FILE_U, u)
-    console.log('[BERHASIL] Thumbnail kini diunggah ke cabang folder thumb')
-  }
-}
-
-/* ===== 2. DashboardPage: buang penebakan nama thumbnail saat hapus ===== */
-const FILE_D = 'src/pages/DashboardPage.jsx'
-if (!fs.existsSync(path.join(root, FILE_D))) {
-  console.log('[LEWATI] ' + FILE_D + ' tidak ditemukan')
-} else {
-  let d = baca(FILE_D)
-  const cariD = `    const keyThumb = key.replace(/\\.[^.]+$/, '.thumb.webp')
-    if (keyThumb !== key) {
-      try {
-        await deleteMedia(keyThumb)
-        console.log('Thumbnail R2 terhapus:', keyThumb)
-      } catch (e) {
-        console.warn('Thumbnail tidak ada atau sudah terhapus:', keyThumb)
-      }
-    }
-`
-  if (!d.includes('keyThumb')) {
-    console.log('[SUDAH ADA] Blok penebakan thumbnail sudah tidak ada')
-  } else if (d.includes(cariD)) {
-    d = d.replace(cariD, '')
-    simpan(FILE_D, d)
-    console.log('[BERHASIL] Blok penebakan thumbnail dihapus dari DashboardPage')
-  } else {
-    console.log('[TIDAK KETEMU] Blok penebakan thumbnail di DashboardPage')
-  }
-}
-
-console.log('')
-console.log('Selesai. Vite akan memuat ulang otomatis.')
-console.log('')
-console.log('Struktur bucket setelah perubahan:')
-console.log('  File asli  : logbook/2026/... dan galeri/2026/...')
-console.log('  Thumbnail  : thumb/logbook/2026/... dan thumb/galeri/2026/...')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Unggah satu foto baru lewat form logbook atau galeri.')
-console.log('2. Buka dashboard R2: file asli berada di folder kind/2026, thumbnail di thumb/kind/2026.')
-console.log('3. Nama basis keduanya identik sehingga pasangan mudah dilacak.')
-console.log('4. Hapus logbook atau galeri tersebut: kedua objek di cabang folder berbeda harus hilang bersamaan.')
-```
-
-## File: api/r2/delete.js
-```javascript
-import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3'
 import { createClient } from '@supabase/supabase-js'
 
-const s3 = new S3Client({
-  region: 'auto',
-  endpoint: 'https://' + process.env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
-  }
-})
+export const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+)
+```
 
-export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
-  const authHeader = req.headers.authorization || ''
-  const token = authHeader.replace('Bearer ', '')
-  if (!token) return res.status(401).json({ error: 'Belum login' })
+## File: src/lib/theme.jsx
+```javascript
+import { createContext, useContext, useEffect, useState } from 'react'
 
-  const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: authHeader } }
+const ThemeContext = createContext(null)
+
+export function ThemeProvider(props) {
+  const [dark, setDark] = useState(function () {
+    const saved = localStorage.getItem('mbsi-theme')
+    if (saved) return saved === 'dark'
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
   })
-  const check = await supabase.auth.getUser(token)
-  if (check.error || !check.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
 
-  const { key } = req.body || {}
-  if (!key) return res.status(400).json({ error: 'Key tidak ada' })
-  await s3.send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key }))
-  return res.status(200).json({ ok: true })
+  useEffect(function () {
+    document.documentElement.classList.toggle('dark', dark)
+    localStorage.setItem('mbsi-theme', dark ? 'dark' : 'light')
+  }, [dark])
+
+  return (
+    <ThemeContext.Provider value={{ dark: dark, toggle: function () { setDark(function (d) { return !d }) } }}>
+      {props.children}
+    </ThemeContext.Provider>
+  )
+}
+
+export function useTheme() {
+  return useContext(ThemeContext)
 }
 ```
 
-## File: api/r2/presign.js
+## File: src/main.jsx
 ```javascript
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
-import { createClient } from '@supabase/supabase-js'
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import App from './App.jsx'
+import './index.css'
 
-const s3 = new S3Client({
-  region: 'auto',
-  endpoint: 'https://' + process.env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+)
+```
+
+## File: .env.example
+```
+VITE_SUPABASE_URL=
+VITE_SUPABASE_ANON_KEY=
+R2_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET_NAME=mbsi-media
+R2_PUBLIC_BASE_URL=
+```
+
+## File: .gitignore
+```
+node_modules
+dist
+.env.local
+.env
+*.log
+```
+
+## File: index.html
+```html
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>Logbook Magang BSI</title>
+  </head>
+  <body class="bg-slate-50 text-slate-800 min-h-screen antialiased">
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
+```
+
+## File: postcss.config.js
+```javascript
+export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {}
   }
-})
+}
+```
 
-export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
-  const authHeader = req.headers.authorization || ''
-  const token = authHeader.replace('Bearer ', '')
-  if (!token) return res.status(401).json({ error: 'Belum login' })
+## File: tailwind.config.js
+```javascript
+export default {
+  darkMode: 'class',
+  content: ['./index.html', './src/**/*.{js,jsx}'],
+  theme: {
+    extend: {
+      colors: {
+        bsi: {
+          50: '#effef5', 100: '#d9fbe5', 200: '#b5f5cd', 300: '#86ecb0',
+          400: '#50d98b', 500: '#27c06d', 600: '#1a9e57', 700: '#177c48',
+          800: '#16623c', 900: '#135033', 950: '#072c1b'
+        },
+        gold: { 400: '#fbbf24', 500: '#f59e0b', 600: '#d97706' }
+      }
+    }
+  },
+  plugins: []
+}
+```
 
-  const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: authHeader } }
-  })
-  const check = await supabase.auth.getUser(token)
-  if (check.error || !check.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
-
-  const { filename, contentType, kind } = req.body || {}
-  if (!filename || !contentType || !kind) return res.status(400).json({ error: 'Payload tidak lengkap' })
-
-  const ext = (filename.split('.').pop() || 'bin').toLowerCase()
-  const key = kind + '/' + new Date().getFullYear() + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + ext
-
-  const uploadUrl = await getSignedUrl(
-    s3,
-    new PutObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key, ContentType: contentType }),
-    { expiresIn: 300 }
-  )
-  const publicUrl = process.env.R2_PUBLIC_BASE_URL + '/' + key
-  return res.status(200).json({ uploadUrl, publicUrl, key })
+## File: vercel.json
+```json
+{
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }
 ```
 
@@ -2278,996 +737,6 @@ export function FileInput(props) {
 }
 ```
 
-## File: src/components/Skeleton.jsx
-```javascript
-export function SkeletonStatCard() {
-  return (
-    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
-      <div className="skeleton h-4 w-28"></div>
-      <div className="skeleton h-9 w-16 mt-3"></div>
-      <div className="skeleton h-3 w-36 mt-2"></div>
-    </div>
-  )
-}
-
-export function SkeletonLogbookCard() {
-  return (
-    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 flex flex-col gap-4">
-      <div className="skeleton h-40 w-full rounded-2xl"></div>
-      <div className="flex gap-2">
-        <div className="skeleton h-6 w-24 rounded-full"></div>
-        <div className="skeleton h-6 w-20 rounded-full"></div>
-      </div>
-      <div className="skeleton h-4 w-32"></div>
-      <div className="skeleton h-6 w-3/4"></div>
-      <div className="skeleton h-4 w-full"></div>
-      <div className="skeleton h-4 w-2/3"></div>
-      <div className="flex items-center gap-3 pt-2">
-        <div className="skeleton h-11 w-11 rounded-2xl"></div>
-        <div className="flex-1 space-y-2">
-          <div className="skeleton h-4 w-32"></div>
-          <div className="skeleton h-3 w-24"></div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonGalleryCard() {
-  return (
-    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-      <div className="skeleton aspect-video w-full rounded-none"></div>
-      <div className="p-5 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="skeleton h-6 w-24 rounded-full"></div>
-          <div className="skeleton h-4 w-16"></div>
-        </div>
-        <div className="skeleton h-5 w-3/4"></div>
-        <div className="skeleton h-4 w-full"></div>
-        <div className="skeleton h-4 w-1/2"></div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonAttendanceCard() {
-  return (
-    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="space-y-2">
-          <div className="skeleton h-4 w-40"></div>
-          <div className="skeleton h-5 w-32"></div>
-        </div>
-        <div className="skeleton h-6 w-16 rounded-full"></div>
-      </div>
-      <div className="skeleton h-16 w-full rounded-2xl"></div>
-    </div>
-  )
-}
-
-export function SkeletonPersonCard() {
-  return (
-    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
-      <div className="flex items-center gap-4">
-        <div className="skeleton h-14 w-14 rounded-3xl"></div>
-        <div className="flex-1 space-y-2">
-          <div className="skeleton h-5 w-32"></div>
-          <div className="skeleton h-4 w-24"></div>
-          <div className="skeleton h-4 w-28 rounded-full"></div>
-        </div>
-      </div>
-      <div className="mt-5 grid grid-cols-2 gap-3">
-        <div className="skeleton h-20 rounded-2xl"></div>
-        <div className="skeleton h-20 rounded-2xl"></div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonChartRow() {
-  return (
-    <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5">
-      <div className="flex items-center justify-between">
-        <div className="space-y-2">
-          <div className="skeleton h-4 w-32"></div>
-          <div className="skeleton h-3 w-24"></div>
-        </div>
-        <div className="skeleton h-4 w-40"></div>
-      </div>
-      <div className="skeleton h-4 w-full rounded-full mt-4"></div>
-    </div>
-  )
-}
-```
-
-## File: src/lib/supabase.js
-```javascript
-import { createClient } from '@supabase/supabase-js'
-
-export const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-)
-```
-
-## File: src/lib/theme.jsx
-```javascript
-import { createContext, useContext, useEffect, useState } from 'react'
-
-const ThemeContext = createContext(null)
-
-export function ThemeProvider(props) {
-  const [dark, setDark] = useState(function () {
-    const saved = localStorage.getItem('mbsi-theme')
-    if (saved) return saved === 'dark'
-    return window.matchMedia('(prefers-color-scheme: dark)').matches
-  })
-
-  useEffect(function () {
-    document.documentElement.classList.toggle('dark', dark)
-    localStorage.setItem('mbsi-theme', dark ? 'dark' : 'light')
-  }, [dark])
-
-  return (
-    <ThemeContext.Provider value={{ dark: dark, toggle: function () { setDark(function (d) { return !d }) } }}>
-      {props.children}
-    </ThemeContext.Provider>
-  )
-}
-
-export function useTheme() {
-  return useContext(ThemeContext)
-}
-```
-
-## File: src/main.jsx
-```javascript
-import React from 'react'
-import ReactDOM from 'react-dom/client'
-import App from './App.jsx'
-import './index.css'
-
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-)
-```
-
-## File: .env.example
-```
-VITE_SUPABASE_URL=
-VITE_SUPABASE_ANON_KEY=
-R2_ACCOUNT_ID=
-R2_ACCESS_KEY_ID=
-R2_SECRET_ACCESS_KEY=
-R2_BUCKET_NAME=mbsi-media
-R2_PUBLIC_BASE_URL=
-```
-
-## File: .gitignore
-```
-node_modules
-dist
-.env.local
-.env
-*.log
-```
-
-## File: apply-smart-fit-carousel.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-
-const root = process.cwd()
-const FILE = 'src/components/Carousel.jsx'
-
-if (!fs.existsSync(path.join(root, FILE))) {
-  console.log('File ' + FILE + ' tidak ditemukan.')
-  process.exit(1)
-}
-
-let isi = fs.readFileSync(path.join(root, FILE), 'utf8').replace(/\r\n/g, '\n')
-
-/* ===== 1. Slide tunggal memakai SmartFit ===== */
-const regexTunggal = /\{s\.type === 'video'\s*\n\s*\? <video src=\{s\.src\} className="h-full w-full object-contain" muted preload="metadata" \/>\s*\n\s*: <img src=\{s\.src\} alt=\{s\.title \|\| 'Media'\} className="h-full w-full cursor-zoom-in object-contain" onClick=\{function \(\) \{ setZoom\(s\) \}\} \/>\}/
-const gantiTunggal = `<SmartFit src={s.src} type={s.type} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} />`
-
-if (isi.includes(gantiTunggal)) {
-  console.log('[SUDAH ADA] Slide carousel tunggal memakai SmartFit')
-} else if (regexTunggal.test(isi)) {
-  isi = isi.replace(regexTunggal, gantiTunggal)
-  console.log('[BERHASIL] Slide carousel tunggal memakai SmartFit')
-} else {
-  console.log('[TIDAK KETEMU] Blok media slide tunggal di Carousel.jsx')
-}
-
-/* ===== 2. Slide ganda memakai SmartFit ===== */
-const regexGanda = /\{s\.type === 'video'\s*\n\s*\? <video src=\{s\.src\} muted preload="metadata" \/>\s*\n\s*: <img\s*\n\s*src=\{s\.src\}\s*\n\s*alt=\{s\.title \|\| 'Media'\}\s*\n\s*className="cursor-zoom-in"\s*\n\s*onClick=\{function \(\) \{\s*\n\s*if \(moved\.current\) \{ moved\.current = false; return \}\s*\n\s*setZoom\(s\)\s*\n\s*\}\}\s*\n\s*\/>\}/
-const gantiGanda = `<SmartFit
-                  src={s.src}
-                  type={s.type}
-                  alt={s.title || 'Media'}
-                  onClick={function () {
-                    if (moved.current) { moved.current = false; return }
-                    setZoom(s)
-                  }}
-                />`
-
-if (isi.includes(gantiGanda)) {
-  console.log('[SUDAH ADA] Slide carousel ganda memakai SmartFit')
-} else if (regexGanda.test(isi)) {
-  isi = isi.replace(regexGanda, gantiGanda)
-  console.log('[BERHASIL] Slide carousel ganda memakai SmartFit')
-} else {
-  console.log('[TIDAK KETEMU] Blok media slide ganda di Carousel.jsx')
-}
-
-fs.writeFileSync(path.join(root, FILE), isi, 'utf8')
-
-console.log('')
-console.log('Selesai. Vite akan memuat ulang otomatis.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Buka kartu logbook yang punya beberapa foto campur landscape dan potret.')
-console.log('2. Foto landscape pada carousel harus penuh tanpa ruang kosong di samping.')
-console.log('3. Foto potret pada carousel tampil utuh dengan sisi buram dari foto yang sama.')
-console.log('4. Klik foto atau tombol perbesar: lightbox tetap membuka media utuh seperti sebelumnya.')
-console.log('5. Geser slide di HP untuk memastikan swipe dan penjaga gerak tetap aman.')
-```
-
-## File: apply-smart-fit.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-
-const root = process.cwd()
-
-function baca(rel) {
-  return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n')
-}
-
-function simpan(rel, isi) {
-  fs.writeFileSync(path.join(root, rel), isi, 'utf8')
-}
-
-function ganti(rel, cari, gantiDengan, label) {
-  if (!fs.existsSync(path.join(root, rel))) {
-    console.log('[LEWATI] File tidak ditemukan: ' + rel)
-    return
-  }
-  let isi = baca(rel)
-  if (isi.includes(gantiDengan)) {
-    console.log('[SUDAH ADA] ' + label)
-    return
-  }
-  if (!isi.includes(cari)) {
-    console.log('[TIDAK KETEMU] ' + label + ' di ' + rel)
-    return
-  }
-  isi = isi.replace(cari, gantiDengan)
-  simpan(rel, isi)
-  console.log('[BERHASIL] ' + label)
-}
-
-function tambahkan(rel, penanda, blok, label) {
-  if (!fs.existsSync(path.join(root, rel))) {
-    console.log('[LEWATI] File tidak ditemukan: ' + rel)
-    return
-  }
-  let isi = baca(rel)
-  if (isi.includes(penanda)) {
-    console.log('[SUDAH ADA] ' + label)
-    return
-  }
-  isi = isi + '\n' + blok
-  simpan(rel, isi)
-  console.log('[BERHASIL] ' + label)
-}
-
-console.log('Mulai menerapkan tampilan media adaptif landscape potret...')
-console.log('')
-
-/* ===== 1. Komponen SmartFit di ui.jsx ===== */
-tambahkan(
-  'src/components/ui.jsx',
-  'export function SmartFit',
-  `
-export function SmartFit(props) {
-  const [ratio, setRatio] = useState(null)
-  const isVideo = props.type === 'video'
-  function bacaUkuran(e) {
-    const el = e.target
-    const w = isVideo ? el.videoWidth : el.naturalWidth
-    const h = isVideo ? el.videoHeight : el.naturalHeight
-    if (w && h) setRatio(w / h)
-  }
-  const cover = ratio !== null && ratio > 1
-  const potret = ratio !== null && ratio <= 1
-  return (
-    <>
-      {potret && !isVideo ? (
-        <img src={props.src} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-xl" />
-      ) : null}
-      {isVideo ? (
-        <video
-          src={props.src}
-          muted={props.controls ? false : true}
-          preload="metadata"
-          controls={props.controls || false}
-          onLoadedMetadata={bacaUkuran}
-          className={'absolute inset-0 h-full w-full ' + (cover ? 'object-cover' : 'object-contain')}
-        />
-      ) : (
-        <img
-          src={props.src}
-          alt={props.alt || 'Media'}
-          onLoad={bacaUkuran}
-          onClick={props.onClick || undefined}
-          className={'absolute inset-0 h-full w-full ' + (cover ? 'object-cover' : 'object-contain') + (props.onClick ? ' cursor-zoom-in' : '')}
-        />
-      )}
-    </>
-  )
-}
-`,
-  'Komponen SmartFit ditambahkan di ui.jsx'
-)
-
-/* ===== 2. ZoomableMedia memakai SmartFit ===== */
-ganti(
-  'src/components/ui.jsx',
-  `      {isVideo ? (
-        <video src={props.src} controls className="absolute inset-0 h-full w-full object-contain" />
-      ) : (
-        <img
-          src={props.src}
-          alt={props.title || 'Media'}
-          onClick={function (e) { e.stopPropagation(); setOpen(true) }}
-          className="absolute inset-0 h-full w-full cursor-zoom-in object-contain"
-        />
-      )}`,
-  `      <SmartFit
-        src={props.src}
-        type={props.type}
-        alt={props.title || 'Media'}
-        controls={isVideo}
-        onClick={isVideo ? null : function (e) { e.stopPropagation(); setOpen(true) }}
-      />`,
-  'ZoomableMedia memakai SmartFit'
-)
-
-/* ===== 3. cards.jsx: import SmartFit ===== */
-ganti(
-  'src/components/cards.jsx',
-  `import { StatusBadge, CategoryBadge, AttendanceBadge, btnSmall, ZoomableMedia } from './ui.jsx'`,
-  `import { StatusBadge, CategoryBadge, AttendanceBadge, btnSmall, ZoomableMedia, SmartFit } from './ui.jsx'`,
-  'Import SmartFit di cards.jsx'
-)
-
-/* ===== 4. cards.jsx: media kartu galeri memakai SmartFit ===== */
-ganti(
-  'src/components/cards.jsx',
-  `      <div className="relative aspect-video w-full overflow-hidden bg-slate-900">
-        {item.media_type === 'video'
-          ? <video src={item.media_path} muted preload="metadata" className="absolute inset-0 h-full w-full object-contain" />
-          : <img src={item.media_path} alt={item.judul} className="absolute inset-0 h-full w-full object-contain" />}
-      </div>`,
-  `      <div className="relative aspect-video w-full overflow-hidden bg-slate-900">
-        <SmartFit src={item.media_path} type={item.media_type} alt={item.judul} />
-      </div>`,
-  'Media kartu galeri memakai SmartFit'
-)
-
-/* ===== 5. Carousel.jsx: import SmartFit ===== */
-ganti(
-  'src/components/Carousel.jsx',
-  `import { Lightbox } from './ui.jsx'`,
-  `import { Lightbox, SmartFit } from './ui.jsx'`,
-  'Import SmartFit di Carousel.jsx'
-)
-
-/* ===== 6. Carousel.jsx: slide tunggal memakai SmartFit ===== */
-ganti(
-  'src/components/Carousel.jsx',
-  `        {s.type === 'video'
-          ? <video src={s.src} className="h-full w-full object-contain" muted preload="metadata" />
-          : <img src={s.src} alt={s.title || 'Media'} className="h-full w-full object-contain" />}`,
-  `        <div className="relative h-full w-full">
-          <SmartFit src={s.src} type={s.type} alt={s.title || 'Media'} />
-        </div>`,
-  'Slide carousel tunggal memakai SmartFit'
-)
-
-/* ===== 7. Carousel.jsx: slide ganda memakai SmartFit ===== */
-ganti(
-  'src/components/Carousel.jsx',
-  `              {s.type === 'video'
-                ? <video src={s.src} muted preload="metadata" />
-                : <img src={s.src} alt={s.title || 'Media'} />}`,
-  `              <SmartFit src={s.src} type={s.type} alt={s.title || 'Media'} />`,
-  'Slide carousel ganda memakai SmartFit'
-)
-
-/* ===== 8. index.css: hapus object-fit paksa pada slide carousel ===== */
-ganti(
-  'src/index.css',
-  `.carousel-slide img, .carousel-slide video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #020617; }`,
-  `.carousel-slide img, .carousel-slide video { position: absolute; inset: 0; width: 100%; height: 100%; background: #020617; }`,
-  'CSS slide carousel tidak memaksa object-fit lagi'
-)
-
-console.log('')
-console.log('Selesai. Vite akan memuat ulang otomatis.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Buka galeri yang punya foto landscape 4:3 atau 3:2: kartu harus penuh tanpa ruang kosong di samping.')
-console.log('2. Buka foto potret 3:4 atau 9:16: foto tampil utuh, sisi kanan kiri terisi buraman foto yang sama.')
-console.log('3. Buka video 16:9: memenuhi bingkai. Video 9:16 tampil utuh dengan sisi gelap.')
-console.log('4. Foto persegi tampil utuh dengan sisi buram, tidak terpotong.')
-console.log('5. Perbesar media lewat lightbox: media tetap tampil utuh apa adanya.')
-```
-
-## File: apply-thumb-cleanup.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-
-const root = process.cwd()
-
-function baca(rel) {
-  return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n')
-}
-
-function simpan(rel, isi) {
-  fs.writeFileSync(path.join(root, rel), isi, 'utf8')
-}
-
-function ganti(rel, cari, gantiDengan, label) {
-  if (!fs.existsSync(path.join(root, rel))) {
-    console.log('[LEWATI] File tidak ditemukan: ' + rel)
-    return
-  }
-  let isi = baca(rel)
-  if (isi.includes(gantiDengan)) {
-    console.log('[SUDAH ADA] ' + label)
-    return
-  }
-  if (!isi.includes(cari)) {
-    console.log('[TIDAK KETEMU] ' + label + ' di ' + rel)
-    return
-  }
-  isi = isi.replace(cari, gantiDengan)
-  simpan(rel, isi)
-  console.log('[BERHASIL] ' + label)
-}
-
-if (!fs.existsSync(path.join(root, 'src/lib/upload.js')) || !baca('src/lib/upload.js').includes('buatThumbnail')) {
-  console.log('[PERINGATAN] Fitur thumbnail belum terpasang di upload.js.')
-  console.log('Jalankan dulu SQL kolom media_thumb lalu node apply-thumbnail.cjs sebelum script ini.')
-  process.exit(1)
-}
-
-console.log('Mulai memperluas pembersihan R2 supaya thumbnail ikut terhapus...')
-console.log('')
-
-/* ===== 1. Hapus logbook ikut menghapus thumbnail ===== */
-ganti(
-  'src/pages/DashboardPage.jsx',
-  `      const urls = (target.data.logbook_items || []).map(function (it) { return it.media_path }).filter(Boolean)
-      await supabase.from('logbooks').delete().eq('id', target.data.id)
-      for (const u of urls) await hapusMediaR2(u)`,
-  `      const urls = []
-      ;(target.data.logbook_items || []).forEach(function (it) {
-        if (it.media_path) urls.push(it.media_path)
-        if (it.media_thumb) urls.push(it.media_thumb)
-      })
-      await supabase.from('logbooks').delete().eq('id', target.data.id)
-      for (const u of urls) await hapusMediaR2(u)`,
-  'Hapus logbook ikut menghapus thumbnail'
-)
-
-/* ===== 2. Hapus galeri manual ikut menghapus thumbnail ===== */
-ganti(
-  'src/pages/DashboardPage.jsx',
-  `      const url = target.data.logbook_item_id ? '' : target.data.media_path
-      await supabase.from('galeri').delete().eq('id', target.data.id)
-      if (target.data.logbook_item_id) {
-        await supabase.from('logbook_items').update({ show_in_gallery: false }).eq('id', target.data.logbook_item_id)
-      }
-      if (url) await hapusMediaR2(url)`,
-  `      const urls = target.data.logbook_item_id ? [] : [target.data.media_path, target.data.media_thumb].filter(Boolean)
-      await supabase.from('galeri').delete().eq('id', target.data.id)
-      if (target.data.logbook_item_id) {
-        await supabase.from('logbook_items').update({ show_in_gallery: false }).eq('id', target.data.logbook_item_id)
-      }
-      for (const u of urls) await hapusMediaR2(u)`,
-  'Hapus galeri manual ikut menghapus thumbnail'
-)
-
-/* ===== 3. Edit logbook mencatat thumbnail lama ===== */
-ganti(
-  'src/pages/DashboardPage.jsx',
-  `        const oldItems = await supabase.from('logbook_items').select('media_path').eq('logbook_id', editLogId)
-        oldUrls = (oldItems.data || []).map(function (it) { return it.media_path }).filter(Boolean)`,
-  `        const oldItems = await supabase.from('logbook_items').select('media_path, media_thumb').eq('logbook_id', editLogId)
-        oldUrls = []
-        ;(oldItems.data || []).forEach(function (it) {
-          if (it.media_path) oldUrls.push(it.media_path)
-          if (it.media_thumb) oldUrls.push(it.media_thumb)
-        })`,
-  'Edit logbook mencatat thumbnail lama'
-)
-
-/* ===== 4. Pembersihan edit logbook membandingkan thumbnail juga ===== */
-ganti(
-  'src/pages/DashboardPage.jsx',
-  `      const newUrls = clean.map(function (c) { return c.media_path }).filter(Boolean)`,
-  `      const newUrls = []
-      clean.forEach(function (c) {
-        if (c.media_path) newUrls.push(c.media_path)
-        if (c.media_thumb) newUrls.push(c.media_thumb)
-      })`,
-  'Pembersihan edit logbook membandingkan thumbnail juga'
-)
-
-/* ===== 5. Edit galeri ikut menghapus thumbnail lama ===== */
-ganti(
-  'src/pages/DashboardPage.jsx',
-  `      let oldGalUrl = ''
-      if (editGalId) {
-        const existing = galeri.find(function (g) { return g.id === editGalId })
-        oldGalUrl = existing && !existing.logbook_item_id && existing.media_path !== payload.media_path ? existing.media_path : ''
-        await supabase.from('galeri').update(payload).eq('id', editGalId)
-      } else {
-        await supabase.from('galeri').insert(payload)
-      }
-      if (oldGalUrl) await hapusMediaR2(oldGalUrl)`,
-  `      let oldGalUrls = []
-      if (editGalId) {
-        const existing = galeri.find(function (g) { return g.id === editGalId })
-        if (existing && !existing.logbook_item_id && existing.media_path !== payload.media_path) {
-          oldGalUrls = [existing.media_path, existing.media_thumb].filter(Boolean)
-        }
-        await supabase.from('galeri').update(payload).eq('id', editGalId)
-      } else {
-        await supabase.from('galeri').insert(payload)
-      }
-      for (const u of oldGalUrls) await hapusMediaR2(u)`,
-  'Edit galeri ikut menghapus thumbnail lama'
-)
-
-console.log('')
-console.log('Selesai. Vite akan memuat ulang otomatis.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Unggah logbook baru dengan satu foto beresolusi besar.')
-console.log('2. Buka bucket R2: harus ada file asli di folder logbook dan file kecil di folder thumb/logbook.')
-console.log('3. Buka dashboard: kartu dan carousel memakai thumbnail sehingga tampilan kecil terlihat mulus.')
-console.log('4. Perbesar foto lewat lightbox: yang terbuka adalah file asli yang tajam.')
-console.log('5. Hapus logbook tersebut: kedua file di bucket harus hilang bersamaan.')
-console.log('6. Edit logbook berfoto lalu ganti fotonya: file asli lama dan thumbnail lama harus terhapus.')
-```
-
-## File: apply-thumbnail.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-
-const root = process.cwd()
-
-function baca(rel) {
-  return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n')
-}
-
-function simpan(rel, isi) {
-  fs.writeFileSync(path.join(root, rel), isi, 'utf8')
-}
-
-function ganti(rel, cari, gantiDengan, label, semua) {
-  if (!fs.existsSync(path.join(root, rel))) {
-    console.log('[LEWATI] File tidak ditemukan: ' + rel)
-    return
-  }
-  let isi = baca(rel)
-  if (isi.includes(gantiDengan)) {
-    console.log('[SUDAH ADA] ' + label)
-    return
-  }
-  if (!isi.includes(cari)) {
-    console.log('[TIDAK KETEMU] ' + label + ' di ' + rel)
-    return
-  }
-  isi = semua ? isi.split(cari).join(gantiDengan) : isi.replace(cari, gantiDengan)
-  simpan(rel, isi)
-  console.log('[BERHASIL] ' + label)
-}
-
-console.log('Mulai memasang thumbnail otomatis untuk tampilan kecil...')
-console.log('')
-
-/* ===== 1. upload.js ditulis ulang dengan pembuat thumbnail ===== */
-const uploadBaru = `import { supabase } from './supabase.js'
-
-async function getToken() {
-  const { data } = await supabase.auth.getSession()
-  return data.session ? data.session.access_token : ''
-}
-
-async function mintaIzin(token, filename, contentType, kind) {
-  const res = await fetch('/api/r2/presign', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify({ filename: filename, contentType: contentType, kind: kind })
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error('Gagal membuat izin upload (status ' + res.status + '): ' + text)
-  }
-  return res.json()
-}
-
-async function kirimFile(uploadUrl, blob, contentType) {
-  const put = await fetch(uploadUrl, {
-    method: 'PUT',
-    headers: { 'Content-Type': contentType },
-    body: blob
-  })
-  if (!put.ok) {
-    const text = await put.text()
-    throw new Error('Gagal upload file ke R2 (status ' + put.status + '): ' + text)
-  }
-}
-
-async function buatThumbnail(file, maxSisi) {
-  if (!file.type.startsWith('image/')) return null
-  try {
-    const bitmap = await createImageBitmap(file)
-    const skala = Math.min(1, maxSisi / Math.max(bitmap.width, bitmap.height))
-    if (skala >= 1) {
-      bitmap.close()
-      return null
-    }
-    const w = Math.max(1, Math.round(bitmap.width * skala))
-    const h = Math.max(1, Math.round(bitmap.height * skala))
-    const canvas = document.createElement('canvas')
-    canvas.width = w
-    canvas.height = h
-    const ctx = canvas.getContext('2d')
-    ctx.imageSmoothingEnabled = true
-    ctx.imageSmoothingQuality = 'high'
-    ctx.drawImage(bitmap, 0, 0, w, h)
-    bitmap.close()
-    const blob = await new Promise(function (resolve) {
-      canvas.toBlob(resolve, 'image/jpeg', 0.82)
-    })
-    return blob
-  } catch (e) {
-    return null
-  }
-}
-
-export async function uploadMedia(file, kind) {
-  const token = await getToken()
-  const info = await mintaIzin(token, file.name, file.type, kind)
-  await kirimFile(info.uploadUrl, file, file.type)
-  let thumbUrl = null
-  try {
-    const thumbBlob = await buatThumbnail(file, 900)
-    if (thumbBlob) {
-      const namaThumb = file.name.replace(/\\.[^.]+$/, '') + '-thumb.jpg'
-      const t = await mintaIzin(token, namaThumb, 'image/jpeg', 'thumb/' + kind)
-      await kirimFile(t.uploadUrl, thumbBlob, 'image/jpeg')
-      thumbUrl = t.publicUrl
-    }
-  } catch (e) {
-    thumbUrl = null
-  }
-  return { path: info.key, publicUrl: info.publicUrl, thumbUrl: thumbUrl }
-}
-
-export async function deleteMedia(key) {
-  const token = await getToken()
-  const res = await fetch('/api/r2/delete', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify({ key: key })
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error('Gagal hapus media di R2 (status ' + res.status + '): ' + text)
-  }
-  return res.json()
-}
-`
-simpan('src/lib/upload.js', uploadBaru)
-console.log('[BERHASIL] upload.js kini membuat thumbnail otomatis')
-
-/* ===== 2. DashboardPage: state dan payload thumbnail ===== */
-ganti(
-  'src/pages/DashboardPage.jsx',
-  `return { key: Math.random().toString(36).slice(2), judul: '', deskripsi: '', hasil: '', file: null, preview: '', oldPath: '', show: false }`,
-  `return { key: Math.random().toString(36).slice(2), judul: '', deskripsi: '', hasil: '', file: null, preview: '', oldPath: '', oldThumb: '', show: false }`,
-  'newItem menyimpan oldThumb'
-)
-ganti(
-  'src/pages/DashboardPage.jsx',
-  `        let mediaPath = null
-        let mediaType = null
-        if (it.file) {
-          const up = await uploadMedia(it.file, 'logbook')
-          mediaPath = up.publicUrl
-          mediaType = it.file.type.indexOf('video') === 0 ? 'video' : 'foto'
-        } else if (it.oldPath) {
-          mediaPath = it.oldPath
-          mediaType = detectMediaType(it.oldPath)
-        }`,
-  `        let mediaPath = null
-        let mediaType = null
-        let mediaThumb = null
-        if (it.file) {
-          const up = await uploadMedia(it.file, 'logbook')
-          mediaPath = up.publicUrl
-          mediaType = it.file.type.indexOf('video') === 0 ? 'video' : 'foto'
-          mediaThumb = up.thumbUrl || null
-        } else if (it.oldPath) {
-          mediaPath = it.oldPath
-          mediaType = detectMediaType(it.oldPath)
-          mediaThumb = it.oldThumb || null
-        }`,
-  'submitLogbook mengambil thumbUrl'
-)
-ganti(
-  'src/pages/DashboardPage.jsx',
-  `clean.push({ judul: it.judul.trim(), deskripsi: it.deskripsi.trim(), hasil: it.hasil.trim(), media_path: mediaPath, media_type: mediaType, show_in_gallery: it.show && !!mediaPath })`,
-  `clean.push({ judul: it.judul.trim(), deskripsi: it.deskripsi.trim(), hasil: it.hasil.trim(), media_path: mediaPath, media_type: mediaType, media_thumb: mediaThumb, show_in_gallery: it.show && !!mediaPath })`,
-  'clean logbook menyimpan media_thumb'
-)
-ganti(
-  'src/pages/DashboardPage.jsx',
-  `return { logbook_id: logId, urutan: idx + 1, judul: c.judul, deskripsi: c.deskripsi, hasil: c.hasil, media_path: c.media_path, media_type: c.media_type, show_in_gallery: c.show_in_gallery }`,
-  `return { logbook_id: logId, urutan: idx + 1, judul: c.judul, deskripsi: c.deskripsi, hasil: c.hasil, media_path: c.media_path, media_type: c.media_type, media_thumb: c.media_thumb, show_in_gallery: c.show_in_gallery }`,
-  'rows logbook menyimpan media_thumb'
-)
-ganti(
-  'src/pages/DashboardPage.jsx',
-  `return { key: it.id, judul: it.judul, deskripsi: it.deskripsi || '', hasil: it.hasil || '', file: null, preview: it.media_path || '', oldPath: it.media_path || '', show: it.show_in_gallery }`,
-  `return { key: it.id, judul: it.judul, deskripsi: it.deskripsi || '', hasil: it.hasil || '', file: null, preview: it.media_path || '', oldPath: it.media_path || '', oldThumb: it.media_thumb || '', show: it.show_in_gallery }`,
-  'startEditLog membawa oldThumb'
-)
-ganti(
-  'src/pages/DashboardPage.jsx',
-  `      let mediaPath = ''
-      let mediaType = ''
-      if (galForm.file) {
-        const up = await uploadMedia(galForm.file, 'galeri')
-        mediaPath = up.publicUrl
-        mediaType = galForm.file.type.indexOf('video') === 0 ? 'video' : 'foto'
-      } else if (galForm.oldPath) {
-        mediaPath = galForm.oldPath
-        mediaType = detectMediaType(galForm.oldPath)
-      }`,
-  `      let mediaPath = ''
-      let mediaType = ''
-      let mediaThumb = null
-      if (galForm.file) {
-        const up = await uploadMedia(galForm.file, 'galeri')
-        mediaPath = up.publicUrl
-        mediaType = galForm.file.type.indexOf('video') === 0 ? 'video' : 'foto'
-        mediaThumb = up.thumbUrl || null
-      } else if (galForm.oldPath) {
-        mediaPath = galForm.oldPath
-        mediaType = detectMediaType(galForm.oldPath)
-        mediaThumb = galForm.oldThumb || null
-      }`,
-  'submitGaleri mengambil thumbUrl'
-)
-ganti(
-  'src/pages/DashboardPage.jsx',
-  `        kegiatan: galForm.kegiatan || 'Lainnya',
-        media_path: mediaPath,
-        media_type: mediaType
-      }`,
-  `        kegiatan: galForm.kegiatan || 'Lainnya',
-        media_path: mediaPath,
-        media_type: mediaType,
-        media_thumb: mediaThumb
-      }`,
-  'payload galeri menyimpan media_thumb'
-)
-ganti(
-  'src/pages/DashboardPage.jsx',
-  `{ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '', oldPath: '' }`,
-  `{ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '', oldPath: '', oldThumb: '' }`,
-  'Reset galForm menyertakan oldThumb',
-  true
-)
-ganti(
-  'src/pages/DashboardPage.jsx',
-  `setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_path, oldPath: g.media_path })`,
-  `setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_path, oldPath: g.media_path, oldThumb: g.media_thumb || '' })`,
-  'startEditGal membawa oldThumb'
-)
-
-/* ===== 3. logbook.js: sinkronisasi ikut membawa thumbnail ===== */
-ganti(
-  'src/lib/logbook.js',
-  `        await supabase.from('galeri').update({
-          media_path: item.media_path,
-          media_type: item.media_type || 'foto'
-        }).eq('id', existing.get(item.id))`,
-  `        await supabase.from('galeri').update({
-          media_path: item.media_path,
-          media_type: item.media_type || 'foto',
-          media_thumb: item.media_thumb || null
-        }).eq('id', existing.get(item.id))`,
-  'Sync galeri update membawa media_thumb'
-)
-ganti(
-  'src/lib/logbook.js',
-  `          kegiatan: meta.kategori,
-          media_path: item.media_path,
-          media_type: item.media_type || 'foto'
-        })`,
-  `          kegiatan: meta.kategori,
-          media_path: item.media_path,
-          media_type: item.media_type || 'foto',
-          media_thumb: item.media_thumb || null
-        })`,
-  'Sync galeri insert membawa media_thumb'
-)
-
-/* ===== 4. cards.jsx: tampilan kecil memakai thumbnail ===== */
-ganti(
-  'src/components/cards.jsx',
-  `return { src: i.media_path, type: i.media_type, title: i.judul }`,
-  `return { src: i.media_thumb || i.media_path, full: i.media_path, type: i.media_type, title: i.judul }`,
-  'slidesFromItems memakai thumbnail dan menyimpan file asli'
-)
-ganti(
-  'src/components/cards.jsx',
-  `<SmartFit src={item.media_path} type={item.media_type} alt={item.judul} />`,
-  `<SmartFit src={item.media_thumb || item.media_path} type={item.media_type} alt={item.judul} />`,
-  'Kartu galeri memakai thumbnail'
-)
-ganti(
-  'src/components/cards.jsx',
-  `<ZoomableMedia src={item.media_path} type={item.media_type} title={item.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900" />`,
-  `<ZoomableMedia src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} title={item.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900" />`,
-  'Detail galeri memakai thumbnail dengan fallback asli'
-)
-ganti(
-  'src/components/cards.jsx',
-  `<ZoomableMedia src={it.media_path} type={it.media_type} title={it.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3" />`,
-  `<ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3" />`,
-  'Rincian logbook memakai thumbnail dengan fallback asli'
-)
-
-/* ===== 5. ui.jsx: lightbox tetap memakai file asli ===== */
-ganti(
-  'src/components/ui.jsx',
-  `{open ? <Lightbox src={props.src} type={props.type} title={props.title} onClose={function () { setOpen(false) }} /> : null}`,
-  `{open ? <Lightbox src={props.full || props.src} type={props.type} title={props.title} onClose={function () { setOpen(false) }} /> : null}`,
-  'ZoomableMedia membuka file asli di lightbox'
-)
-
-/* ===== 6. Carousel.jsx: lightbox tetap memakai file asli ===== */
-ganti(
-  'src/components/Carousel.jsx',
-  `{zoom ? <Lightbox src={zoom.src} type={zoom.type} title={zoom.title} onClose={function () { setZoom(null) }} /> : null}`,
-  `{zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} onClose={function () { setZoom(null) }} /> : null}`,
-  'Carousel membuka file asli di lightbox',
-  true
-)
-
-console.log('')
-console.log('Selesai. Vite akan memuat ulang otomatis.')
-console.log('')
-console.log('Catatan penting:')
-console.log('1. Thumbnail hanya dibuat untuk upload BARU setelah script ini dijalankan.')
-console.log('2. Media lama tetap tampil memakai file asli sampai diunggah ulang.')
-console.log('3. Video tidak dibuatkan thumbnail karena butuh proses frame khusus, jadi tetap memakai metadata ringan.')
-console.log('4. Uji dengan mengunggah foto baru beresolusi besar, lalu lihat kartunya: tepi objek harus terlihat mulus.')
-```
-
-## File: index.html
-```html
-<!DOCTYPE html>
-<html lang="id">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="robots" content="noindex" />
-    <title>Logbook Magang BSI</title>
-  </head>
-  <body class="bg-slate-50 text-slate-800 min-h-screen antialiased">
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
-</html>
-```
-
-## File: postcss.config.js
-```javascript
-export default {
-  plugins: {
-    tailwindcss: {},
-    autoprefixer: {}
-  }
-}
-```
-
-## File: rename-peserta.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-
-const root = process.cwd()
-const targets = []
-
-function kumpul(dir) {
-  const entries = fs.readdirSync(path.join(root, dir), { withFileTypes: true })
-  for (const e of entries) {
-    const rel = dir + '/' + e.name
-    if (e.isDirectory()) kumpul(rel)
-    else if (e.name.endsWith('.js') || e.name.endsWith('.jsx')) targets.push(rel)
-  }
-}
-
-if (fs.existsSync(path.join(root, 'src'))) kumpul('src')
-if (fs.existsSync(path.join(root, 'api'))) kumpul('api')
-for (const extra of ['supabase/schema.sql', 'README.md']) {
-  if (fs.existsSync(path.join(root, extra))) targets.push(extra)
-}
-
-let total = 0
-for (const rel of targets) {
-  const full = path.join(root, rel)
-  const asli = fs.readFileSync(full, 'utf8')
-  const jumlah = (asli.match(/peserta/g) || []).length + (asli.match(/Peserta/g) || []).length
-  if (jumlah > 0) {
-    const baru = asli.split('peserta').join('mahasiswa').split('Peserta').join('Mahasiswa')
-    fs.writeFileSync(full, baru, 'utf8')
-    total += jumlah
-    console.log('[DIGANTI] ' + rel + ' (' + jumlah + ' kata)')
-  } else {
-    console.log('[TETAP] ' + rel)
-  }
-}
-
-console.log('')
-console.log('Selesai. Total kata yang diganti: ' + total)
-console.log('Pastikan langkah SQL di Supabase sudah dijalankan sebelum menguji aplikasi.')
-```
-
-## File: tailwind.config.js
-```javascript
-export default {
-  darkMode: 'class',
-  content: ['./index.html', './src/**/*.{js,jsx}'],
-  theme: {
-    extend: {
-      colors: {
-        bsi: {
-          50: '#effef5', 100: '#d9fbe5', 200: '#b5f5cd', 300: '#86ecb0',
-          400: '#50d98b', 500: '#27c06d', 600: '#1a9e57', 700: '#177c48',
-          800: '#16623c', 900: '#135033', 950: '#072c1b'
-        },
-        gold: { 400: '#fbbf24', 500: '#f59e0b', 600: '#d97706' }
-      }
-    }
-  },
-  plugins: []
-}
-```
-
-## File: vercel.json
-```json
-{
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
-}
-```
-
 ## File: src/lib/auth.js
 ```javascript
 import { useEffect, useState } from 'react'
@@ -3347,50 +816,6 @@ export const GALERI_KEGIATAN = [
   'Operasional',
   'Lainnya'
 ]
-```
-
-## File: src/lib/format.js
-```javascript
-export function formatTanggal(s) {
-  if (!s) return 'Tanggal belum diisi'
-  const d = new Date(s + 'T00:00:00')
-  if (Number.isNaN(d.getTime())) return s
-  return d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-}
-
-export function formatTanggalShort(s) {
-  if (!s) return ''
-  const d = new Date(s + 'T00:00:00')
-  if (Number.isNaN(d.getTime())) return s
-  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
-}
-
-export function todayInput() {
-  const d = new Date()
-  const m = ('0' + (d.getMonth() + 1)).slice(-2)
-  const day = ('0' + d.getDate()).slice(-2)
-  return d.getFullYear() + '-' + m + '-' + day
-}
-
-export function detectMediaType(u) {
-  const ext = String(u || '').split('?')[0].split('.').pop().toLowerCase()
-  return ['mp4', 'webm', 'ogg', 'mov', 'm4v'].indexOf(ext) !== -1 ? 'video' : 'foto'
-}
-
-export function matchesDateFilters(dateString, f) {
-  if (!dateString) return false
-  if (f.timeMode === 'bulan') {
-    if (f.bulan) {
-      if (f.bulan.length === 7) return dateString.slice(0, 7) === f.bulan
-      const p = dateString.split('-')
-      if (p.length < 2 || p[1] !== f.bulan) return false
-    }
-  } else if (f.timeMode === 'rentang') {
-    if (f.dari && dateString < f.dari) return false
-    if (f.sampai && dateString > f.sampai) return false
-  }
-  return true
-}
 ```
 
 ## File: src/App.jsx
@@ -3563,37 +988,6 @@ create policy "hadir_delete_self" on public.daftar_hadir for delete using (
 );
 ```
 
-## File: package.json
-```json
-{
-  "name": "mbsi-logbook",
-  "private": true,
-  "version": "1.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite --host",
-    "build": "vite build",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "@aws-sdk/client-s3": "^3.600.0",
-    "@aws-sdk/s3-request-presigner": "^3.600.0",
-    "@supabase/supabase-js": "^2.45.0",
-    "heic2any": "^0.0.4",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-router-dom": "^6.26.0"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.1",
-    "autoprefixer": "^10.4.19",
-    "postcss": "^8.4.38",
-    "tailwindcss": "^3.4.10",
-    "vite": "^5.4.0"
-  }
-}
-```
-
 ## File: vite.config.js
 ```javascript
 import { defineConfig, loadEnv } from 'vite'
@@ -3691,6 +1085,111 @@ export default defineConfig(function ({ mode }) {
     plugins: [react(), pluginApiR2(env)]
   }
 })
+```
+
+## File: src/lib/format.js
+```javascript
+export function formatTanggal(s) {
+  if (!s) return 'Tanggal belum diisi'
+  const d = new Date(s + 'T00:00:00')
+  if (Number.isNaN(d.getTime())) return s
+  return d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+export function formatTanggalShort(s) {
+  if (!s) return ''
+  const d = new Date(s + 'T00:00:00')
+  if (Number.isNaN(d.getTime())) return s
+  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+export function todayInput() {
+  const d = new Date()
+  const m = ('0' + (d.getMonth() + 1)).slice(-2)
+  const day = ('0' + d.getDate()).slice(-2)
+  return d.getFullYear() + '-' + m + '-' + day
+}
+
+export function detectMediaType(u) {
+  const ext = String(u || '').split('?')[0].split('.').pop().toLowerCase()
+  return ['mp4', 'webm', 'ogg', 'mov', 'm4v'].indexOf(ext) !== -1 ? 'video' : 'foto'
+}
+
+export function matchesDateFilters(dateString, f) {
+  if (!dateString) return false
+  if (f.timeMode === 'bulan') {
+    if (f.bulan) {
+      if (f.bulan.length === 7) return dateString.slice(0, 7) === f.bulan
+      const p = dateString.split('-')
+      if (p.length < 2 || p[1] !== f.bulan) return false
+    }
+  } else if (f.timeMode === 'rentang') {
+    if (f.dari && dateString < f.dari) return false
+    if (f.sampai && dateString > f.sampai) return false
+  }
+  return true
+}
+export function urutkanTanggal(rows, mode) {
+  const salin = (rows || []).slice()
+  salin.sort(function (a, b) {
+    const da = a.tanggal || ''
+    const db = b.tanggal || ''
+    if (da === db) return 0
+    if (mode === 'terlama') return da < db ? -1 : 1
+    return da < db ? 1 : -1
+  })
+  return salin
+}
+```
+
+## File: package.json
+```json
+{
+  "name": "mbsi-logbook",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.600.0",
+    "@aws-sdk/s3-request-presigner": "^3.600.0",
+    "@supabase/supabase-js": "^2.45.0",
+    "heic2any": "^0.0.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.10",
+    "vite": "^5.4.0"
+  }
+}
+```
+
+## File: README.md
+```markdown
+# Logbook Magang BSI
+
+Portal logbook, galeri, dan daftar hadir magang Bank Syariah Indonesia.
+
+## Menjalankan lokal
+1. node setup project saat ini (sudah dilakukan saat setup)
+2. npm run dev
+3. Buka http://localhost:5173
+
+## Database
+Jalankan isi file supabase/schema.sql di Supabase SQL Editor.
+Buat user Auth dengan pola email NIM@mbsi.local dan isi tabel mahasiswa beserta auth_uid.
+
+## Deploy
+Push ke GitHub, import di Vercel, salin isi .env.local ke Environment Variables Vercel.
 ```
 
 ## File: src/components/Carousel.jsx
@@ -3897,6 +1396,18 @@ export function FilterBar(props) {
   )
 }
 
+export function SortSelect(props) {
+  return (
+    <CustomSelect
+      icon={ICONS.sort}
+      value={props.value}
+      onChange={props.onChange}
+      options={[{ value: 'terbaru', label: 'Terbaru' }, { value: 'terlama', label: 'Terlama' }]}
+      className="min-w-[150px]"
+      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+    />
+  )
+}
 export function countActiveFilters(o) {
   let c = 0
   for (const k in o) {
@@ -3905,132 +1416,6 @@ export function countActiveFilters(o) {
   }
   return c
 }
-```
-
-## File: src/lib/upload.js
-```javascript
-import { supabase } from './supabase.js'
-import { iniVideo, ekstensiFile, siapkanFoto } from './konversi.js'
-
-const MAKS_FOTO = 15 * 1024 * 1024
-const MAKS_VIDEO = 50 * 1024 * 1024
-
-async function getToken() {
-  const { data } = await supabase.auth.getSession()
-  return data.session ? data.session.access_token : ''
-}
-
-function namaDasar(nama) {
-  return String(nama || 'media').replace(/\.[^.]+$/, '')
-}
-
-function kirimDenganProgres(uploadUrl, blob, contentType, onProgres) {
-  return new Promise(function (resolve, reject) {
-    const xhr = new XMLHttpRequest()
-    xhr.open('PUT', uploadUrl)
-    xhr.setRequestHeader('Content-Type', contentType)
-    if (onProgres) {
-      xhr.upload.onprogress = function (e) {
-        if (e.lengthComputable) onProgres(e.loaded / e.total)
-      }
-    }
-    xhr.onload = function () {
-      if (xhr.status >= 200 && xhr.status < 300) resolve()
-      else reject(new Error('Gagal upload file ke R2 (status ' + xhr.status + ')'))
-    }
-    xhr.onerror = function () { reject(new Error('Gagal jaringan saat upload ke R2')) }
-    xhr.send(blob)
-  })
-}
-
-async function mintaIzin(token, filename, contentType, kind) {
-  const res = await fetch('/api/r2/presign', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify({ filename: filename, contentType: contentType, kind: kind })
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error('Gagal membuat izin upload (status ' + res.status + '): ' + text)
-  }
-  return res.json()
-}
-
-export async function uploadMedia(file, kind, onInfo) {
-  const video = iniVideo(file)
-  if (video && file.size > MAKS_VIDEO) {
-    throw new Error('Video melebihi 50 MB. Potong dulu durasinya supaya upload cepat dan kuota aman.')
-  }
-  if (!video && file.size > MAKS_FOTO) {
-    throw new Error('Foto melebihi 15 MB. Pilih file dengan ukuran lebih kecil.')
-  }
-  let fullBlob = file
-  let fullType = file.type
-  let thumbBlob = null
-  if (!video) {
-    try {
-      const hasil = await siapkanFoto(file, onInfo)
-      fullBlob = hasil.fullBlob
-      fullType = hasil.fullType
-      thumbBlob = hasil.thumbBlob
-    } catch (e) {
-      throw new Error('Foto format .' + ekstensiFile(file) + ' tidak bisa diproses browser. Ubah dulu ke JPG atau PNG. Di iPhone: Settings, Camera, Formats, pilih Most Compatible.')
-    }
-  }
-  if (onInfo) onInfo('')
-  const token = await getToken()
-  const extFull = fullType === 'image/webp' ? 'webp' : (fullType === 'image/jpeg' ? 'jpg' : ekstensiFile(file))
-  const infoFull = await mintaIzin(token, namaDasar(file.name) + '.' + extFull, fullType, kind)
-  await kirimDenganProgres(infoFull.uploadUrl, fullBlob, fullType, function (p) {
-    if (onInfo) onInfo('Mengunggah... ' + Math.round(p * 100) + '%')
-  })
-  let thumbUrl = null
-  if (thumbBlob) {
-    try {
-      const namaThumb = namaDasar(infoFull.key.split('/').pop()) + '.webp'
-      const infoThumb = await mintaIzin(token, namaThumb, 'image/webp', 'thumb/' + kind)
-      await kirimDenganProgres(infoThumb.uploadUrl, thumbBlob, 'image/webp', null)
-      thumbUrl = infoThumb.publicUrl
-    } catch (e) {
-      thumbUrl = null
-    }
-  }
-  console.log('[UPLOAD] File penuh: ' + infoFull.key + ' | Thumbnail: ' + (thumbUrl || 'tidak dibuat'))
-  return { path: infoFull.key, publicUrl: infoFull.publicUrl, thumbUrl: thumbUrl }
-}
-
-export async function deleteMedia(key) {
-  const token = await getToken()
-  const res = await fetch('/api/r2/delete', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify({ key: key })
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error('Gagal hapus media di R2 (status ' + res.status + '): ' + text)
-  }
-  return res.json()
-}
-```
-
-## File: README.md
-```markdown
-# Logbook Magang BSI
-
-Portal logbook, galeri, dan daftar hadir magang Bank Syariah Indonesia.
-
-## Menjalankan lokal
-1. node setup project saat ini (sudah dilakukan saat setup)
-2. npm run dev
-3. Buka http://localhost:5173
-
-## Database
-Jalankan isi file supabase/schema.sql di Supabase SQL Editor.
-Buat user Auth dengan pola email NIM@mbsi.local dan isi tabel mahasiswa beserta auth_uid.
-
-## Deploy
-Push ke GitHub, import di Vercel, salin isi .env.local ke Environment Variables Vercel.
 ```
 
 ## File: src/components/Layout.jsx
@@ -4172,6 +1557,113 @@ export async function syncGaleriFromLogbook(mahasiswaId, items, meta) {
       await supabase.from('galeri').delete().eq('id', existing.get(item.id))
     }
   }
+}
+```
+
+## File: src/lib/upload.js
+```javascript
+import { supabase } from './supabase.js'
+import { iniVideo, ekstensiFile, siapkanFoto } from './konversi.js'
+
+const MAKS_FOTO = 15 * 1024 * 1024
+const MAKS_VIDEO = 50 * 1024 * 1024
+
+async function getToken() {
+  const { data } = await supabase.auth.getSession()
+  return data.session ? data.session.access_token : ''
+}
+
+function namaDasar(nama) {
+  return String(nama || 'media').replace(/\.[^.]+$/, '')
+}
+
+function kirimDenganProgres(uploadUrl, blob, contentType, onProgres) {
+  return new Promise(function (resolve, reject) {
+    const xhr = new XMLHttpRequest()
+    xhr.open('PUT', uploadUrl)
+    xhr.setRequestHeader('Content-Type', contentType)
+    if (onProgres) {
+      xhr.upload.onprogress = function (e) {
+        if (e.lengthComputable) onProgres(e.loaded / e.total)
+      }
+    }
+    xhr.onload = function () {
+      if (xhr.status >= 200 && xhr.status < 300) resolve()
+      else reject(new Error('Gagal upload file ke R2 (status ' + xhr.status + ')'))
+    }
+    xhr.onerror = function () { reject(new Error('Gagal jaringan saat upload ke R2')) }
+    xhr.send(blob)
+  })
+}
+
+async function mintaIzin(token, filename, contentType, kind) {
+  const res = await fetch('/api/r2/presign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ filename: filename, contentType: contentType, kind: kind })
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error('Gagal membuat izin upload (status ' + res.status + '): ' + text)
+  }
+  return res.json()
+}
+
+export async function uploadMedia(file, kind, onInfo) {
+  const video = iniVideo(file)
+  if (video && file.size > MAKS_VIDEO) {
+    throw new Error('Video melebihi 50 MB. Potong dulu durasinya supaya upload cepat dan kuota aman.')
+  }
+  if (!video && file.size > MAKS_FOTO) {
+    throw new Error('Foto melebihi 15 MB. Pilih file dengan ukuran lebih kecil.')
+  }
+  let fullBlob = file
+  let fullType = file.type
+  let thumbBlob = null
+  if (!video) {
+    try {
+      const hasil = await siapkanFoto(file, onInfo)
+      fullBlob = hasil.fullBlob
+      fullType = hasil.fullType
+      thumbBlob = hasil.thumbBlob
+    } catch (e) {
+      throw new Error('Foto format .' + ekstensiFile(file) + ' tidak bisa diproses browser. Ubah dulu ke JPG atau PNG. Di iPhone: Settings, Camera, Formats, pilih Most Compatible.')
+    }
+  }
+  if (onInfo) onInfo('')
+  const token = await getToken()
+  const extFull = fullType === 'image/webp' ? 'webp' : (fullType === 'image/jpeg' ? 'jpg' : ekstensiFile(file))
+  const infoFull = await mintaIzin(token, namaDasar(file.name) + '.' + extFull, fullType, kind)
+  await kirimDenganProgres(infoFull.uploadUrl, fullBlob, fullType, function (p) {
+    if (onInfo) onInfo('Mengunggah... ' + Math.round(p * 100) + '%')
+  })
+  let thumbUrl = null
+  if (thumbBlob) {
+    try {
+      const namaThumb = namaDasar(infoFull.key.split('/').pop()) + '.webp'
+      const infoThumb = await mintaIzin(token, namaThumb, 'image/webp', 'thumb/' + kind)
+      await kirimDenganProgres(infoThumb.uploadUrl, thumbBlob, 'image/webp', null)
+      thumbUrl = infoThumb.publicUrl
+    } catch (e) {
+      thumbUrl = null
+    }
+  }
+  console.log('[UPLOAD] File penuh: ' + infoFull.key + ' | Thumbnail: ' + (thumbUrl || 'tidak dibuat'))
+  return { path: infoFull.key, publicUrl: infoFull.publicUrl, thumbUrl: thumbUrl }
+}
+
+export async function deleteMedia(key) {
+  const token = await getToken()
+  const res = await fetch('/api/r2/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ key: key })
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error('Gagal hapus media di R2 (status ' + res.status + '): ' + text)
+  }
+  return res.json()
 }
 ```
 
@@ -4382,9 +1874,9 @@ import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../lib/auth.js'
 import { EmptyState, Modal } from '../components/ui.jsx'
 import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
-import { FilterBar, FilterSelect, TimeFilter, countActiveFilters } from '../components/FilterBar.jsx'
+import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
 import { ICONS } from '../components/icons.jsx'
-import { matchesDateFilters } from '../lib/format.js'
+import { matchesDateFilters, urutkanTanggal } from '../lib/format.js'
 import { KATEGORI } from '../lib/constants.js'
 import { SkeletonLogbookCard } from '../components/Skeleton.jsx'
 
@@ -4395,6 +1887,7 @@ export default function LogbookPage() {
   const [all, setAll] = useState([])
   const [people, setPeople] = useState([])
   const [filter, setFilter] = useState(INITIAL)
+  const [sort, setSort] = useState('terbaru')
   const [open, setOpen] = useState(false)
   const [detail, setDetail] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -4421,6 +1914,7 @@ export default function LogbookPage() {
     return matchesDateFilters(l.tanggal, filter)
   })
   const active = countActiveFilters(filter)
+  const sortedLogs = urutkanTanggal(logs, sort)
 
   return (
     <div>
@@ -4438,13 +1932,14 @@ export default function LogbookPage() {
           <FilterSelect icon={ICONS.tag} value={filter.kategori} onChange={function (v) { setFilter(Object.assign({}, filter, { kategori: v })) }}
             options={[{ value: '', label: 'Semua kategori' }].concat(KATEGORI.map(function (k) { return { value: k, label: k } }))} />
           <TimeFilter filter={filter} set={setFilter} />
+          <SortSelect value={sort} onChange={setSort} />
         </FilterBar>
       </section>
 
       <section className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
         {loading
           ? [0, 1, 2, 3, 4, 5].map(function (i) { return <SkeletonLogbookCard key={i} /> })
-          : logs.map(function (l) {
+          : sortedLogs.map(function (l) {
               return <LogbookCard key={l.id} log={l} isOwner={mahasiswa && mahasiswa.id === l.mahasiswa_id}
                 onDetail={function () { setDetail(l) }} />
             })}
@@ -4453,141 +1948,6 @@ export default function LogbookPage() {
 
       <Modal open={!!detail} onClose={function () { setDetail(null) }}>
         {detail ? <LogbookDetail log={detail} /> : null}
-      </Modal>
-    </div>
-  )
-}
-```
-
-## File: src/pages/AttendancePage.jsx
-```javascript
-import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase.js'
-import { useAuth } from '../lib/auth.js'
-import { StatCard, EmptyState, Modal } from '../components/ui.jsx'
-import { AttendanceCard, AttendanceDetail } from '../components/cards.jsx'
-import { FilterBar, FilterSelect, TimeFilter, countActiveFilters } from '../components/FilterBar.jsx'
-import { ICONS } from '../components/icons.jsx'
-import { matchesDateFilters } from '../lib/format.js'
-import { SkeletonStatCard, SkeletonChartRow, SkeletonAttendanceCard } from '../components/Skeleton.jsx'
-
-const INITIAL = { mahasiswa: '', status: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
-
-export default function AttendancePage() {
-  const { mahasiswa } = useAuth()
-  const [all, setAll] = useState([])
-  const [people, setPeople] = useState([])
-  const [filter, setFilter] = useState(INITIAL)
-  const [open, setOpen] = useState(false)
-  const [detail, setDetail] = useState(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(function () {
-    async function load() {
-      const a = await supabase.from('daftar_hadir').select('*, mahasiswa(nim, nama, prodi)').order('tanggal', { ascending: false })
-      const p = await supabase.from('mahasiswa').select('id, nama').order('nama')
-      setAll(a.data || [])
-      setPeople(p.data || [])
-      setLoading(false)
-    }
-    load()
-  }, [])
-
-  const rows = all.filter(function (r) {
-    if (filter.mahasiswa && r.mahasiswa_id !== filter.mahasiswa) return false
-    if (filter.status && r.status !== filter.status) return false
-    return matchesDateFilters(r.tanggal, filter)
-  })
-  const active = countActiveFilters(filter)
-
-  const counts = rows.reduce(function (acc, r) {
-    acc[r.status] = (acc[r.status] || 0) + 1
-    return acc
-  }, {})
-
-  const perPerson = people.map(function (p) {
-    const mine = rows.filter(function (r) { return r.mahasiswa_id === p.id })
-    const c = mine.reduce(function (acc, r) { acc[r.status] = (acc[r.status] || 0) + 1; return acc }, {})
-    return { nama: p.nama, nim: p.nim, Masuk: c.Masuk || 0, Izin: c.Izin || 0, Bolos: c.Bolos || 0, total: mine.length }
-  })
-  const maxTotal = Math.max.apply(null, perPerson.map(function (p) { return p.total }).concat([1]))
-
-  return (
-    <div>
-      <section className="rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Daftar hadir</p>
-        <h1 className="mt-2 text-3xl lg:text-4xl font-black text-slate-900">Monitoring kehadiran tim magang</h1>
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {loading
-            ? [0, 1, 2, 3].map(function (i) { return <SkeletonStatCard key={i} /> })
-            : [
-                <StatCard key="total" label="Total catatan hadir" value={rows.length} sub="Sesuai filter aktif" />,
-                <StatCard key="masuk" label="Masuk" value={counts.Masuk || 0} sub="Mahasiswa hadir" />,
-                <StatCard key="izin" label="Izin" value={counts.Izin || 0} sub="Dengan keterangan" />,
-                <StatCard key="bolos" label="Bolos" value={counts.Bolos || 0} sub="Tanpa keterangan" />
-              ]}
-        </div>
-      </section>
-
-      <section className="mt-6">
-        <FilterBar open={open} onToggle={function () { setOpen(function (o) { return !o }) }} activeCount={active}
-          onReset={function () { setFilter(INITIAL) }}>
-          <FilterSelect icon={ICONS.user} value={filter.mahasiswa} onChange={function (v) { setFilter(Object.assign({}, filter, { mahasiswa: v })) }}
-            options={[{ value: '', label: 'Semua mahasiswa' }].concat(people.map(function (p) { return { value: p.id, label: p.nama } }))} />
-          <FilterSelect icon={ICONS.check} value={filter.status} onChange={function (v) { setFilter(Object.assign({}, filter, { status: v })) }}
-            options={[{ value: '', label: 'Semua status' }, { value: 'Masuk', label: 'Masuk' }, { value: 'Izin', label: 'Izin' }, { value: 'Bolos', label: 'Bolos' }]} />
-          <TimeFilter filter={filter} set={setFilter} />
-        </FilterBar>
-      </section>
-
-      <section className="mt-8 card-hover rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <h2 className="text-2xl font-black text-slate-900">Grafik kehadiran per mahasiswa</h2>
-          <div className="flex flex-wrap gap-3 text-xs font-semibold">
-            <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-emerald-500" />Masuk</span>
-            <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-amber-500" />Izin</span>
-            <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-red-500" />Bolos</span>
-          </div>
-        </div>
-        <div className="mt-6 space-y-4">
-          {loading
-            ? [0, 1, 2].map(function (i) { return <SkeletonChartRow key={i} /> })
-            : perPerson.map(function (p) {
-                return (
-                  <div key={p.nim} className="card-hover rounded-[1.5rem] border border-slate-200 p-5">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <p className="font-bold text-slate-900">{p.nama}</p>
-                        <p className="text-xs text-slate-500">NIM {p.nim}</p>
-                      </div>
-                      <div className="text-xs text-slate-500">Masuk: {p.Masuk} | Izin: {p.Izin} | Bolos: {p.Bolos}</div>
-                    </div>
-                    <div className="mt-4 flex h-4 w-full overflow-hidden rounded-full bg-slate-100">
-                      <div className="bg-emerald-500 transition-all duration-500" style={{ width: (p.Masuk / maxTotal) * 100 + '%' }} />
-                      <div className="bg-amber-500 transition-all duration-500" style={{ width: (p.Izin / maxTotal) * 100 + '%' }} />
-                      <div className="bg-red-500 transition-all duration-500" style={{ width: (p.Bolos / maxTotal) * 100 + '%' }} />
-                    </div>
-                  </div>
-                )
-              })}
-        </div>
-      </section>
-
-      <section className="mt-8">
-        <h2 className="text-2xl lg:text-3xl font-black text-slate-900">Daftar kehadiran sesuai filter</h2>
-        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {loading
-            ? [0, 1, 2].map(function (i) { return <SkeletonAttendanceCard key={i} /> })
-            : rows.map(function (r) {
-                return <AttendanceCard key={r.id} row={r} isOwner={mahasiswa && mahasiswa.id === r.mahasiswa_id}
-                  onDetail={function () { setDetail(r) }} />
-              })}
-          {!loading && !rows.length ? <EmptyState icon="clipboard" title="Belum ada data kehadiran" desc="Data kehadiran akan tampil setelah mahasiswa mengisi daftar hadir." /> : null}
-        </div>
-      </section>
-
-      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
-        {detail ? <AttendanceDetail row={detail} /> : null}
       </Modal>
     </div>
   )
@@ -4723,6 +2083,144 @@ export default function TimPage() {
               )
             })}
       </section>
+    </div>
+  )
+}
+```
+
+## File: src/pages/AttendancePage.jsx
+```javascript
+import { useEffect, useState } from 'react'
+import { supabase } from '../lib/supabase.js'
+import { useAuth } from '../lib/auth.js'
+import { StatCard, EmptyState, Modal } from '../components/ui.jsx'
+import { AttendanceCard, AttendanceDetail } from '../components/cards.jsx'
+import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
+import { ICONS } from '../components/icons.jsx'
+import { matchesDateFilters, urutkanTanggal } from '../lib/format.js'
+import { SkeletonStatCard, SkeletonChartRow, SkeletonAttendanceCard } from '../components/Skeleton.jsx'
+
+const INITIAL = { mahasiswa: '', status: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
+
+export default function AttendancePage() {
+  const { mahasiswa } = useAuth()
+  const [all, setAll] = useState([])
+  const [people, setPeople] = useState([])
+  const [filter, setFilter] = useState(INITIAL)
+  const [sort, setSort] = useState('terbaru')
+  const [open, setOpen] = useState(false)
+  const [detail, setDetail] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(function () {
+    async function load() {
+      const a = await supabase.from('daftar_hadir').select('*, mahasiswa(nim, nama, prodi)').order('tanggal', { ascending: false })
+      const p = await supabase.from('mahasiswa').select('id, nama').order('nama')
+      setAll(a.data || [])
+      setPeople(p.data || [])
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  const rows = all.filter(function (r) {
+    if (filter.mahasiswa && r.mahasiswa_id !== filter.mahasiswa) return false
+    if (filter.status && r.status !== filter.status) return false
+    return matchesDateFilters(r.tanggal, filter)
+  })
+  const active = countActiveFilters(filter)
+  const sortedRows = urutkanTanggal(rows, sort)
+
+  const counts = rows.reduce(function (acc, r) {
+    acc[r.status] = (acc[r.status] || 0) + 1
+    return acc
+  }, {})
+
+  const perPerson = people.map(function (p) {
+    const mine = rows.filter(function (r) { return r.mahasiswa_id === p.id })
+    const c = mine.reduce(function (acc, r) { acc[r.status] = (acc[r.status] || 0) + 1; return acc }, {})
+    return { nama: p.nama, nim: p.nim, Masuk: c.Masuk || 0, Izin: c.Izin || 0, Bolos: c.Bolos || 0, total: mine.length }
+  })
+  const maxTotal = Math.max.apply(null, perPerson.map(function (p) { return p.total }).concat([1]))
+
+  return (
+    <div>
+      <section className="rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Daftar hadir</p>
+        <h1 className="mt-2 text-3xl lg:text-4xl font-black text-slate-900">Monitoring kehadiran tim magang</h1>
+        <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {loading
+            ? [0, 1, 2, 3].map(function (i) { return <SkeletonStatCard key={i} /> })
+            : [
+                <StatCard key="total" label="Total catatan hadir" value={rows.length} sub="Sesuai filter aktif" />,
+                <StatCard key="masuk" label="Masuk" value={counts.Masuk || 0} sub="Mahasiswa hadir" />,
+                <StatCard key="izin" label="Izin" value={counts.Izin || 0} sub="Dengan keterangan" />,
+                <StatCard key="bolos" label="Bolos" value={counts.Bolos || 0} sub="Tanpa keterangan" />
+              ]}
+        </div>
+      </section>
+
+      <section className="mt-6">
+        <FilterBar open={open} onToggle={function () { setOpen(function (o) { return !o }) }} activeCount={active}
+          onReset={function () { setFilter(INITIAL) }}>
+          <FilterSelect icon={ICONS.user} value={filter.mahasiswa} onChange={function (v) { setFilter(Object.assign({}, filter, { mahasiswa: v })) }}
+            options={[{ value: '', label: 'Semua mahasiswa' }].concat(people.map(function (p) { return { value: p.id, label: p.nama } }))} />
+          <FilterSelect icon={ICONS.check} value={filter.status} onChange={function (v) { setFilter(Object.assign({}, filter, { status: v })) }}
+            options={[{ value: '', label: 'Semua status' }, { value: 'Masuk', label: 'Masuk' }, { value: 'Izin', label: 'Izin' }, { value: 'Bolos', label: 'Bolos' }]} />
+          <TimeFilter filter={filter} set={setFilter} />
+          <SortSelect value={sort} onChange={setSort} />
+        </FilterBar>
+      </section>
+
+      <section className="mt-8 card-hover rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <h2 className="text-2xl font-black text-slate-900">Grafik kehadiran per mahasiswa</h2>
+          <div className="flex flex-wrap gap-3 text-xs font-semibold">
+            <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-emerald-500" />Masuk</span>
+            <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-amber-500" />Izin</span>
+            <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-red-500" />Bolos</span>
+          </div>
+        </div>
+        <div className="mt-6 space-y-4">
+          {loading
+            ? [0, 1, 2].map(function (i) { return <SkeletonChartRow key={i} /> })
+            : perPerson.map(function (p) {
+                return (
+                  <div key={p.nim} className="card-hover rounded-[1.5rem] border border-slate-200 p-5">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="font-bold text-slate-900">{p.nama}</p>
+                        <p className="text-xs text-slate-500">NIM {p.nim}</p>
+                      </div>
+                      <div className="text-xs text-slate-500">Masuk: {p.Masuk} | Izin: {p.Izin} | Bolos: {p.Bolos}</div>
+                    </div>
+                    <div className="mt-4 flex h-4 w-full overflow-hidden rounded-full bg-slate-100">
+                      <div className="bg-emerald-500 transition-all duration-500" style={{ width: (p.Masuk / maxTotal) * 100 + '%' }} />
+                      <div className="bg-amber-500 transition-all duration-500" style={{ width: (p.Izin / maxTotal) * 100 + '%' }} />
+                      <div className="bg-red-500 transition-all duration-500" style={{ width: (p.Bolos / maxTotal) * 100 + '%' }} />
+                    </div>
+                  </div>
+                )
+              })}
+        </div>
+      </section>
+
+      <section className="mt-8">
+        <h2 className="text-2xl lg:text-3xl font-black text-slate-900">Daftar kehadiran sesuai filter</h2>
+        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {loading
+            ? [0, 1, 2].map(function (i) { return <SkeletonAttendanceCard key={i} /> })
+            : sortedRows.map(function (r) {
+                return <AttendanceCard key={r.id} row={r} isOwner={mahasiswa && mahasiswa.id === r.mahasiswa_id}
+                  onDetail={function () { setDetail(r) }} />
+              })}
+          {!loading && !rows.length ? <EmptyState icon="clipboard" title="Belum ada data kehadiran" desc="Data kehadiran akan tampil setelah mahasiswa mengisi daftar hadir." /> : null}
+        </div>
+      </section>
+
+      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
+        {detail ? <AttendanceDetail row={detail} /> : null}
+      </Modal>
     </div>
   )
 }
@@ -4881,6 +2379,15 @@ const paths = {
       <polyline points="7 10 12 15 17 10" />
       <line x1="12" y1="3" x2="12" y2="15" />
     </>
+  ),
+  sort: (
+    <>
+      <path d="M3 6h13" />
+      <path d="M3 12h9" />
+      <path d="M3 18h5" />
+      <path d="M17 6v12" />
+      <path d="m14 15 3 3 3-3" />
+    </>
   )
 }
 
@@ -4932,9 +2439,9 @@ import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../lib/auth.js'
 import { EmptyState, Modal } from '../components/ui.jsx'
 import { GalleryCard, GalleryDetail } from '../components/cards.jsx'
-import { FilterBar, FilterSelect, TimeFilter, countActiveFilters } from '../components/FilterBar.jsx'
+import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
 import { ICONS } from '../components/icons.jsx'
-import { matchesDateFilters } from '../lib/format.js'
+import { matchesDateFilters, urutkanTanggal } from '../lib/format.js'
 import { GALERI_KEGIATAN } from '../lib/constants.js'
 import { SkeletonGalleryCard } from '../components/Skeleton.jsx'
 
@@ -4944,6 +2451,7 @@ export default function GalleryPage() {
   const { mahasiswa } = useAuth()
   const [all, setAll] = useState([])
   const [filter, setFilter] = useState(INITIAL)
+  const [sort, setSort] = useState('terbaru')
   const [open, setOpen] = useState(false)
   const [detail, setDetail] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -4963,6 +2471,7 @@ export default function GalleryPage() {
     return matchesDateFilters(i.tanggal, filter)
   })
   const active = countActiveFilters(filter)
+  const sortedItems = urutkanTanggal(items, sort)
 
   return (
     <div>
@@ -4980,13 +2489,14 @@ export default function GalleryPage() {
           <FilterSelect icon={ICONS.image} value={filter.tipe} onChange={function (v) { setFilter(Object.assign({}, filter, { tipe: v })) }}
             options={[{ value: '', label: 'Semua media' }, { value: 'foto', label: 'Foto' }, { value: 'video', label: 'Video' }]} />
           <TimeFilter filter={filter} set={setFilter} />
+          <SortSelect value={sort} onChange={setSort} />
         </FilterBar>
       </section>
 
       <section className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
         {loading
           ? [0, 1, 2, 3, 4, 5].map(function (i) { return <SkeletonGalleryCard key={i} /> })
-          : items.map(function (i) {
+          : sortedItems.map(function (i) {
               return <GalleryCard key={i.id} item={i} isOwner={mahasiswa && mahasiswa.id === i.mahasiswa_id}
                 onDetail={function () { setDetail(i) }} />
             })}
@@ -5642,28 +3152,50 @@ export function ZoomableMedia(props) {
 
 export function SmartFit(props) {
   const [ratio, setRatio] = useState(null)
+  const [near, setNear] = useState(false)
+  const mediaRef = useRef(null)
   const isVideo = props.type === 'video'
+  useEffect(function () {
+    const el = mediaRef.current
+    if (!el) return undefined
+    if (typeof IntersectionObserver === 'undefined') {
+      setNear(true)
+      return undefined
+    }
+    const io = new IntersectionObserver(function (entries) {
+      for (let i = 0; i < entries.length; i++) {
+        if (entries[i].isIntersecting) {
+          setNear(true)
+          io.disconnect()
+          break
+        }
+      }
+    }, { rootMargin: '400px' })
+    io.observe(el)
+    return function () { io.disconnect() }
+  }, [])
   function bacaUkuran(e) {
     const el = e.target
     const w = isVideo ? el.videoWidth : el.naturalWidth
     const h = isVideo ? el.videoHeight : el.naturalHeight
     if (w && h) setRatio(w / h)
   }
-   function cadangkan(e) {
-     const el = e.currentTarget
-     const cad = props.full && props.full !== props.src ? props.full : props.src
-     if (cad && el.src !== cad) el.src = cad
-   }
+  function cadangkan(e) {
+    const el = e.currentTarget
+    const cad = props.full && props.full !== props.src ? props.full : props.src
+    if (cad && el.src !== cad) el.src = cad
+  }
   const cover = ratio !== null && ratio > 1
   const potret = ratio !== null && ratio <= 1
   return (
     <>
       {potret && !isVideo ? (
-        <img src={props.src} alt="" aria-hidden="true" onError={cadangkan} className="absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-xl" />
+        <img src={props.src} alt="" aria-hidden="true" loading="lazy" decoding="async" onError={cadangkan} className="absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-xl" />
       ) : null}
       {isVideo ? (
         <video
-          src={props.src}
+          ref={mediaRef}
+          src={near ? props.src : undefined}
           muted={props.controls ? false : true}
           preload="metadata"
           controls={props.controls || false}
@@ -5672,11 +3204,14 @@ export function SmartFit(props) {
         />
       ) : (
         <img
-          src={props.src}
+          ref={mediaRef}
+          src={near ? props.src : undefined}
           alt={props.alt || 'Media'}
+          loading="lazy"
+          decoding="async"
           onLoad={bacaUkuran}
           onError={cadangkan}
-           onClick={props.onClick || undefined}
+          onClick={props.onClick || undefined}
           className={'absolute inset-0 h-full w-full ' + (cover ? 'object-cover' : 'object-contain') + (props.onClick ? ' cursor-zoom-in' : '')}
         />
       )}
@@ -5693,13 +3228,13 @@ import { useAuth } from '../lib/auth.js'
 import { uploadMedia, deleteMedia } from '../lib/upload.js'
 import { syncGaleriFromLogbook } from '../lib/logbook.js'
 import { pratinjauHeic, formatHeic } from '../lib/konversi.js'
-import { todayInput, detectMediaType, matchesDateFilters } from '../lib/format.js'
+import { todayInput, detectMediaType, matchesDateFilters, urutkanTanggal } from '../lib/format.js'
 import { KATEGORI, UNIT, GALERI_KEGIATAN } from '../lib/constants.js'
 import { EmptyState, Modal, ConfirmModal, inputCls, labelCls, btnPrimary, btnSmall, AutoTextArea } from '../components/ui.jsx'
 import { LogbookCard, LogbookDetail, GalleryCard, GalleryDetail, AttendanceCard, AttendanceDetail } from '../components/cards.jsx'
 import { CustomSelect, CustomDateInput, FileInput } from '../components/controls.jsx'
 import { SizedIcon, ICONS } from '../components/icons.jsx'
-import { FilterBar, FilterSelect, TimeFilter, countActiveFilters } from '../components/FilterBar.jsx'
+import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
 
 function newItem() {
   return { key: Math.random().toString(36).slice(2), judul: '', deskripsi: '', hasil: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false, show: false }
@@ -5755,6 +3290,7 @@ export default function DashboardPage() {
   const [galFilterOpen, setGalFilterOpen] = useState(false)
   const [hadirFilter, setHadirFilter] = useState(HADIR_INITIAL)
   const [hadirFilterOpen, setHadirFilterOpen] = useState(false)
+  const [sort, setSort] = useState('terbaru')
 
   async function refresh() {
     if (!mahasiswa) return
@@ -6086,6 +3622,7 @@ export default function DashboardPage() {
     if (logFilter.status && l.status !== logFilter.status) return false
     return matchesDateFilters(l.tanggal, logFilter)
   })
+  const sortedLogs = urutkanTanggal(filteredLogs, sort)
   const logFilterActive = countActiveFilters(logFilter)
 
   const filteredGaleri = galeri.filter(function (g) {
@@ -6093,12 +3630,14 @@ export default function DashboardPage() {
     if (galFilter.tipe && g.media_type !== galFilter.tipe) return false
     return matchesDateFilters(g.tanggal, galFilter)
   })
+  const sortedGaleri = urutkanTanggal(filteredGaleri, sort)
   const galFilterActive = countActiveFilters(galFilter)
 
   const filteredHadir = hadir.filter(function (h) {
     if (hadirFilter.status && h.status !== hadirFilter.status) return false
     return matchesDateFilters(h.tanggal, hadirFilter)
   })
+  const sortedHadir = urutkanTanggal(filteredHadir, sort)
   const hadirFilterActive = countActiveFilters(hadirFilter)
 
   const editGalDerived = editGalId ? ((galeri.find(function (g) { return g.id === editGalId }) || {}).logbook_item_id || null) : null
@@ -6234,10 +3773,11 @@ export default function DashboardPage() {
               <FilterSelect icon={ICONS.check} value={logFilter.status} onChange={function (v) { setLogFilter(Object.assign({}, logFilter, { status: v })) }}
                 options={[{ value: '', label: 'Semua status' }, { value: 'draft', label: 'Draft' }, { value: 'publik', label: 'Siap dilihat' }]} />
               <TimeFilter filter={logFilter} set={setLogFilter} />
+              <SortSelect value={sort} onChange={setSort} />
             </FilterBar>
             <p className="text-sm text-slate-500">Menampilkan {filteredLogs.length} dari {logs.length} logbook</p>
             <div className="grid gap-5 md:grid-cols-2">
-              {filteredLogs.map(function (l) {
+              {sortedLogs.map(function (l) {
                 return <LogbookCard key={l.id} log={l} isOwner
                   onDetail={function () { setDetail({ type: 'log', data: l }) }}
                   onEdit={function () { startEditLog(l) }}
@@ -6260,12 +3800,17 @@ export default function DashboardPage() {
                 <div className="mt-1.5">
                   <FileInput accept="image/*,video/*" fileName={galForm.file ? galForm.file.name : ''}
                     onChange={async function (e) {
-                      const f = e.target.files[0]
-                      if (!f) return
-                      const blob = await pratinjauHeic(f)
-                      const preview = blob ? URL.createObjectURL(blob) : URL.createObjectURL(f)
-                      setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: preview }) })
-                    }} />
+                       const f = e.target.files[0]
+                       if (!f) return
+                       if (formatHeic(f)) {
+                         setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: '', previewLoading: true }) })
+                         const blob = await pratinjauHeic(f)
+                         const preview = blob ? URL.createObjectURL(blob) : URL.createObjectURL(f)
+                         setGalForm(function (g) { return Object.assign({}, g, { preview: preview, previewLoading: false }) })
+                       } else {
+                         setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: URL.createObjectURL(f), previewLoading: false }) })
+                       }
+                     }} />
                 </div>
               </div>
               {galForm.previewLoading ? (
@@ -6319,10 +3864,11 @@ export default function DashboardPage() {
               <FilterSelect icon={ICONS.image} value={galFilter.tipe} onChange={function (v) { setGalFilter(Object.assign({}, galFilter, { tipe: v })) }}
                 options={[{ value: '', label: 'Semua media' }, { value: 'foto', label: 'Foto' }, { value: 'video', label: 'Video' }]} />
               <TimeFilter filter={galFilter} set={setGalFilter} />
+              <SortSelect value={sort} onChange={setSort} />
             </FilterBar>
             <p className="text-sm text-slate-500">Menampilkan {filteredGaleri.length} dari {galeri.length} media</p>
             <div className="grid gap-5 md:grid-cols-2">
-              {filteredGaleri.map(function (g) {
+              {sortedGaleri.map(function (g) {
                 return <GalleryCard key={g.id} item={g} isOwner
                   onDetail={function () { setDetail({ type: 'gal', data: g }) }}
                   onEdit={function () { startEditGal(g) }}
@@ -6378,10 +3924,11 @@ export default function DashboardPage() {
               <FilterSelect icon={ICONS.check} value={hadirFilter.status} onChange={function (v) { setHadirFilter(Object.assign({}, hadirFilter, { status: v })) }}
                 options={[{ value: '', label: 'Semua status' }, { value: 'Masuk', label: 'Masuk' }, { value: 'Izin', label: 'Izin' }, { value: 'Bolos', label: 'Bolos' }]} />
               <TimeFilter filter={hadirFilter} set={setHadirFilter} />
+              <SortSelect value={sort} onChange={setHadirFilterOpen && setSort ? setSort : setSort} />
             </FilterBar>
             <p className="text-sm text-slate-500">Menampilkan {filteredHadir.length} dari {hadir.length} catatan</p>
             <div className="grid gap-5 md:grid-cols-2">
-            {filteredHadir.map(function (h) {
+            {sortedHadir.map(function (h) {
               return <AttendanceCard key={h.id} row={h} isOwner
                 onDetail={function () { setDetail({ type: 'hadir', data: h }) }}
                 onEdit={function () { startEditHadir(h) }}

@@ -250,28 +250,50 @@ export function ZoomableMedia(props) {
 
 export function SmartFit(props) {
   const [ratio, setRatio] = useState(null)
+  const [near, setNear] = useState(false)
+  const mediaRef = useRef(null)
   const isVideo = props.type === 'video'
+  useEffect(function () {
+    const el = mediaRef.current
+    if (!el) return undefined
+    if (typeof IntersectionObserver === 'undefined') {
+      setNear(true)
+      return undefined
+    }
+    const io = new IntersectionObserver(function (entries) {
+      for (let i = 0; i < entries.length; i++) {
+        if (entries[i].isIntersecting) {
+          setNear(true)
+          io.disconnect()
+          break
+        }
+      }
+    }, { rootMargin: '400px' })
+    io.observe(el)
+    return function () { io.disconnect() }
+  }, [])
   function bacaUkuran(e) {
     const el = e.target
     const w = isVideo ? el.videoWidth : el.naturalWidth
     const h = isVideo ? el.videoHeight : el.naturalHeight
     if (w && h) setRatio(w / h)
   }
-   function cadangkan(e) {
-     const el = e.currentTarget
-     const cad = props.full && props.full !== props.src ? props.full : props.src
-     if (cad && el.src !== cad) el.src = cad
-   }
+  function cadangkan(e) {
+    const el = e.currentTarget
+    const cad = props.full && props.full !== props.src ? props.full : props.src
+    if (cad && el.src !== cad) el.src = cad
+  }
   const cover = ratio !== null && ratio > 1
   const potret = ratio !== null && ratio <= 1
   return (
     <>
       {potret && !isVideo ? (
-        <img src={props.src} alt="" aria-hidden="true" onError={cadangkan} className="absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-xl" />
+        <img src={props.src} alt="" aria-hidden="true" loading="lazy" decoding="async" onError={cadangkan} className="absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-xl" />
       ) : null}
       {isVideo ? (
         <video
-          src={props.src}
+          ref={mediaRef}
+          src={near ? props.src : undefined}
           muted={props.controls ? false : true}
           preload="metadata"
           controls={props.controls || false}
@@ -280,11 +302,14 @@ export function SmartFit(props) {
         />
       ) : (
         <img
-          src={props.src}
+          ref={mediaRef}
+          src={near ? props.src : undefined}
           alt={props.alt || 'Media'}
+          loading="lazy"
+          decoding="async"
           onLoad={bacaUkuran}
           onError={cadangkan}
-           onClick={props.onClick || undefined}
+          onClick={props.onClick || undefined}
           className={'absolute inset-0 h-full w-full ' + (cover ? 'object-cover' : 'object-contain') + (props.onClick ? ' cursor-zoom-in' : '')}
         />
       )}
