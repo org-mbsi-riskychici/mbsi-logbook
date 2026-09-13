@@ -1,5 +1,5 @@
 import Carousel from './Carousel.jsx'
-import { StatusBadge, CategoryBadge, AttendanceBadge, btnSmall, ZoomableMedia, SmartFit } from './ui.jsx'
+import { StatusBadge, CategoryBadge, AttendanceBadge, btnSmall, ZoomableMedia, SmartFit , MediaYouTube } from './ui.jsx'
 import { formatTanggal, formatTanggalShort } from '../lib/format.js'
 
 function PersonChip(props) {
@@ -38,7 +38,7 @@ function ActionButtons(props) {
 
 export function slidesFromItems(items) {
   return (items || []).filter(function (i) { return i.media_path }).map(function (i) {
-    return { src: i.media_thumb || i.media_path, full: i.media_path, type: i.media_type, title: i.judul }
+    return { src: i.media_thumb || i.media_path, full: i.media_path, type: i.media_source === 'youtube' ? 'foto' : i.media_type, title: i.judul, yt: i.youtube_id || null }
   })
 }
 
@@ -98,10 +98,14 @@ export function LogbookDetail(props) {
               <div key={it.id} className={'relative pl-12 ' + (i < items.length - 1 ? 'pb-6' : 'pb-0')}>
                 <span className="absolute left-0 top-0 h-9 w-9 rounded-full bg-bsi-800 text-white grid place-items-center text-sm font-bold">{i + 1}</span>
                 {i < items.length - 1 ? <span className="absolute left-4 top-9 bottom-0 w-px bg-slate-200 dark:bg-slate-700" /> : null}
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  {it.media_path ? (
-                    <ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3" />
-                  ) : null}
+                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                   {it.media_path ? (
+                     it.media_source === 'youtube' ? (
+                       <iframe src={'https://www.youtube-nocookie.com/embed/' + it.youtube_id + '?rel=0&modestbranding=1'} title={it.judul} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen className="rounded-2xl overflow-hidden aspect-video w-full bg-slate-900 mb-3" />
+                     ) : (
+                       <ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3" />
+                     )
+                   ) : null}
                   <p className="font-bold text-slate-900">
                     {it.judul}
                     {it.show_in_gallery && it.media_path ? <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gold-500/15 text-gold-600">Di galeri</span> : null}
@@ -135,7 +139,11 @@ export function GalleryCard(props) {
   return (
     <article onClick={props.onDetail} className="clickable cursor-pointer bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full">
       <div className="relative aspect-video w-full overflow-hidden bg-slate-900">
+        {item.media_source === 'youtube' ? (
+        <MediaYouTube src={item.media_path} alt={item.judul} />
+      ) : (
         <SmartFit src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} alt={item.judul} />
+      )}
       </div>
       <div className="p-5 space-y-3 flex-1 flex flex-col">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -167,7 +175,11 @@ export function GalleryDetail(props) {
   const item = props.item
   return (
     <div className="space-y-4">
-      <ZoomableMedia src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} title={item.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900" />
+      {item.media_source === 'youtube' ? (
+        <iframe src={'https://www.youtube-nocookie.com/embed/' + item.youtube_id + '?rel=0&modestbranding=1'} title={item.judul} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen className="rounded-2xl overflow-hidden aspect-video w-full bg-slate-900" />
+      ) : (
+        <ZoomableMedia src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} title={item.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900" />
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2">
           <CategoryBadge value={item.kegiatan} />

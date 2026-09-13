@@ -71,7 +71,7 @@ export async function uploadMedia(file, kind, onInfo) {
   const extFull = fullType === 'image/webp' ? 'webp' : (fullType === 'image/jpeg' ? 'jpg' : ekstensiFile(file))
   const infoFull = await mintaIzin(token, namaDasar(file.name) + '.' + extFull, fullType, kind)
   await kirimDenganProgres(infoFull.uploadUrl, fullBlob, fullType, function (p) {
-    if (onInfo) onInfo('Mengunggah... ' + Math.round(p * 100) + '%')
+    if (onInfo) onInfo('Mengunggah ' + Math.round(p * 100) + '%')
   })
   let thumbUrl = null
   if (thumbBlob) {

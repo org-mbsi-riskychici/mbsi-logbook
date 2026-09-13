@@ -37,7 +37,7 @@ export default function Carousel(props) {
             <SizedIcon name="expand" size={15} />
           </button>
         </div>
-        {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} onClose={function () { setZoom(null) }} /> : null}
+        {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} onClose={function () { setZoom(null) }} /> : null}
       </>
     )
   }
@@ -108,7 +108,7 @@ export default function Carousel(props) {
           })}
         </div>
       </div>
-      {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} onClose={function () { setZoom(null) }} /> : null}
+      {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} onClose={function () { setZoom(null) }} /> : null}
     </>
   )
 }

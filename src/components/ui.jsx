@@ -185,7 +185,9 @@ export function Lightbox(props) {
   return (
     <div className="anim-overlay fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/95 p-4" onClick={props.onClose}>
       <div className="relative w-full max-w-5xl" onClick={function (e) { e.stopPropagation() }}>
-        {props.type === 'video' ? (
+        {props.youtubeId ? (
+          <iframe src={'https://www.youtube-nocookie.com/embed/' + props.youtubeId + '?rel=0&modestbranding=1'} title={props.title || 'Video'} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen className="mx-auto aspect-video w-full rounded-2xl bg-slate-900" />
+        ) : props.type === 'video' ? (
           <video src={props.src} controls autoPlay className="mx-auto max-h-[85vh] w-full rounded-2xl bg-slate-900 object-contain" />
         ) : (
           <img
@@ -203,6 +205,7 @@ export function Lightbox(props) {
           title={busyUnduh ? 'Menyiapkan unduhan...' : 'Unduh media'}
           onClick={unduh}
           disabled={busyUnduh}
+          style={props.youtubeId ? { display: 'none' } : undefined}
           className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20 disabled:opacity-50"
         >
           <SizedIcon name="download" size={18} />
@@ -253,6 +256,9 @@ export function SmartFit(props) {
   const [near, setNear] = useState(false)
   const mediaRef = useRef(null)
   const isVideo = props.type === 'video'
+  if (!isVideo && String(props.src || '').indexOf('i.ytimg.com') !== -1) {
+    return <MediaYouTube src={props.src} alt={props.alt} onClick={props.onClick} className="absolute inset-0 h-full w-full object-cover" />
+  }
   useEffect(function () {
     const el = mediaRef.current
     if (!el) return undefined
@@ -314,5 +320,57 @@ export function SmartFit(props) {
         />
       )}
     </>
+  )
+}
+
+export function MediaYouTube(props) {
+  const [status, setStatus] = useState('muat')
+  const [coba, setCoba] = useState(0)
+  useEffect(function () {
+    if (status !== 'tunggu') return undefined
+    const t = setTimeout(function () {
+      setCoba(function (c) { return c + 1 })
+      setStatus('muat')
+    }, 15000)
+    return function () { clearTimeout(t) }
+  }, [status])
+  if (status === 'tunggu' || status === 'habis') {
+    return (
+      <div className={'grid place-items-center bg-slate-800 ' + (props.className || 'absolute inset-0 h-full w-full')}>
+        <div className="flex flex-col items-center gap-2 text-slate-400">
+          <SizedIcon name="video" size={26} />
+          <p className="px-2 text-center text-[11px] font-semibold">{status === 'habis' ? 'Pratinjau video belum siap' : 'Menyiapkan pratinjau video'}</p>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <img
+      src={props.src + (coba > 0 ? (String(props.src).indexOf('?') === -1 ? '?' : '&') + 'r=' + coba : '')}
+      alt={props.alt || 'Pratinjau video'}
+      onClick={props.onClick || undefined}
+      onError={function () { setStatus(coba >= 3 ? 'habis' : 'tunggu') }}
+      onLoad={function () { setStatus('muat') }}
+      className={props.className || 'absolute inset-0 h-full w-full object-cover'}
+    />
+  )
+}
+
+export function TitikAnim() {
+  return (
+    <span className="titik-anim" aria-hidden="true">
+      <i></i>
+      <i></i>
+      <i></i>
+    </span>
+  )
+}
+export function LabelProses(props) {
+  const bersih = String(props.teks || '').replace(/\.{3}/g, '').replace(/\s+/g, ' ').trim()
+  return (
+    <span className="inline-flex items-center justify-center">
+      <span>{bersih}</span>
+      <TitikAnim />
+    </span>
   )
 }

@@ -58,12 +58,12 @@ async function keWebP(berkas, maksSisi, kualitas) {
 export async function siapkanFoto(file, onInfo) {
   let sumber = file
   if (formatHeic(file)) {
-    if (onInfo) onInfo('Mengonversi HEIC ke JPG...')
+    if (onInfo) onInfo('Mengonversi HEIC ke JPG')
     const jpeg = await heicKeJpeg(file)
     if (!jpeg) throw new Error('File HEIC tidak bisa dibaca')
     sumber = new File([jpeg], 'sumber.jpg', { type: 'image/jpeg' })
   }
-  if (onInfo) onInfo('Menyiapkan WebP...')
+  if (onInfo) onInfo('Menyiapkan WebP')
   let fullBlob = null
   try {
     fullBlob = await keWebP(sumber, MAKS_SISI_FULL, KUALITAS_FULL)

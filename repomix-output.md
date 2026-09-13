@@ -38,6 +38,11 @@ api/
   r2/
     delete.js
     presign.js
+  youtube/
+    latest.js
+    quota.js
+    session.js
+    verify.js
 src/
   components/
     cards.jsx
@@ -57,6 +62,7 @@ src/
     supabase.js
     theme.jsx
     upload.js
+    youtube.js
   pages/
     AttendancePage.jsx
     DashboardPage.jsx
@@ -73,16 +79,3201 @@ supabase/
   schema.sql
 .env.example
 .gitignore
+apply-final-cleanup.cjs
+apply-fix-export-unggah.cjs
+apply-fix-sisa-netral.cjs
+apply-fix-token-aman.cjs
+apply-fix-youtube-scope.cjs
+apply-galeri-picker.cjs
+apply-netral-final.cjs
+apply-netral-youtube-dan-titik.cjs
+apply-preview-video-controls.cjs
+apply-thumb-youtube-fallback.cjs
+apply-youtube-backend.cjs
+apply-youtube-final-fix.cjs
+apply-youtube-final-response.cjs
+apply-youtube-final.cjs
+apply-youtube-frontend.cjs
+apply-youtube-latest-middleware.cjs
+apply-youtube-verify.cjs
+fix-errors.cjs
 index.html
 package.json
 postcss.config.js
 README.md
+setup-semua-fitur.cjs
+setup-youtube-token.cjs
 tailwind.config.js
 vercel.json
 vite.config.js
 ```
 
 # Files
+
+## File: api/youtube/latest.js
+```javascript
+import { createClient } from '@supabase/supabase-js'
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const authHeader = req.headers.authorization || ''
+  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
+  const authClient = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
+  const chk = await authClient.auth.getUser()
+  if (chk.error || !chk.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
+  const params = new URLSearchParams()
+  params.set('client_id', process.env.YOUTUBE_CLIENT_ID || '')
+  params.set('client_secret', process.env.YOUTUBE_CLIENT_SECRET || '')
+  params.set('refresh_token', process.env.YOUTUBE_REFRESH_TOKEN || '')
+  params.set('grant_type', 'refresh_token')
+  const tr = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
+  if (!tr.ok) return res.status(500).json({ error: 'Gagal refresh token YouTube' })
+  const tok = await tr.json()
+  const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&order=date&maxResults=1', {
+    headers: { Authorization: 'Bearer ' + tok.access_token }
+  })
+  if (!r.ok) { const t = await r.text(); return res.status(502).json({ error: 'Gagal memeriksa video terbaru: ' + r.status + ' ' + t }) }
+  const j = await r.json()
+  const item = (j.items || [])[0]
+  if (!item) return res.status(404).json({ error: 'Tidak ada video ditemukan' })
+  const published = Date.parse(item.snippet.publishedAt)
+  if (Date.now() - published > 15 * 60 * 1000) return res.status(404).json({ error: 'Video terbaru terlalu lama' })
+  return res.status(200).json({ videoId: item.id.videoId })
+}
+```
+
+## File: api/youtube/quota.js
+```javascript
+import { createClient } from '@supabase/supabase-js'
+const LIMIT = 5
+function ptToday() {
+  const now = new Date()
+  const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
+  const y = pt.getFullYear()
+  const m = String(pt.getMonth() + 1).padStart(2, '0')
+  const d = String(pt.getDate()).padStart(2, '0')
+  return y + '-' + m + '-' + d
+}
+export default async function handler(req, res) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+  const today = ptToday()
+  const { count, error } = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today)
+  const used = error ? 0 : (count || 0)
+  res.setHeader('Cache-Control', 'no-store')
+  return res.status(200).json({ limit: LIMIT, used: used, remaining: Math.max(0, LIMIT - used), ptDate: today })
+}
+```
+
+## File: api/youtube/session.js
+```javascript
+import { createClient } from '@supabase/supabase-js'
+const LIMIT = 5
+function ptToday() {
+  const now = new Date()
+  const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
+  const y = pt.getFullYear()
+  const m = String(pt.getMonth() + 1).padStart(2, '0')
+  const d = String(pt.getDate()).padStart(2, '0')
+  return y + '-' + m + '-' + d
+}
+async function getAccessToken() {
+  const params = new URLSearchParams()
+  params.set('client_id', process.env.YOUTUBE_CLIENT_ID || '')
+  params.set('client_secret', process.env.YOUTUBE_CLIENT_SECRET || '')
+  params.set('refresh_token', process.env.YOUTUBE_REFRESH_TOKEN || '')
+  params.set('grant_type', 'refresh_token')
+  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
+  if (!r.ok) throw new Error('Gagal refresh token YouTube')
+  const j = await r.json()
+  if (!j.access_token) throw new Error('Token akses YouTube tidak diterima')
+  return j.access_token
+}
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const authHeader = req.headers.authorization || ''
+  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
+  const authClient = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
+  const chk = await authClient.auth.getUser()
+  if (chk.error || !chk.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
+  const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+  const today = ptToday()
+  const { count } = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today)
+  const used = count || 0
+  if (used >= LIMIT) return res.status(429).json({ error: 'Kuota upload YouTube hari ini sudah habis. Gunakan link embed atau coba lagi setelah reset kuota.', remaining: 0 })
+  const body = req.body || {}
+  if (!body.title) return res.status(400).json({ error: 'Judul video wajib diisi' })
+  let access
+  try { access = await getAccessToken() } catch (e) { return res.status(500).json({ error: e.message }) }
+  const meta = {
+    snippet: { title: String(body.title).slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
+    status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
+  }
+  const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
+    body: JSON.stringify(meta)
+  })
+  if (!init.ok) { const t = await init.text(); return res.status(502).json({ error: 'Gagal memulai sesi YouTube: ' + t }) }
+  const sessionUri = init.headers.get('location')
+  if (!sessionUri) return res.status(502).json({ error: 'Sesi upload tidak mengembalikan lokasi' })
+  await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: chk.data.user.id })
+  return res.status(200).json({ sessionUri: sessionUri, remaining: Math.max(0, LIMIT - used - 1) })
+}
+```
+
+## File: api/youtube/verify.js
+```javascript
+import { createClient } from '@supabase/supabase-js'
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const authHeader = req.headers.authorization || ''
+  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
+  const authClient = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
+  const chk = await authClient.auth.getUser()
+  if (chk.error || !chk.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
+  const { ref } = req.body || {}
+  if (!ref) return res.status(400).json({ error: 'Ref tidak ada' })
+  const params = new URLSearchParams()
+  params.set('client_id', process.env.YOUTUBE_CLIENT_ID || '')
+  params.set('client_secret', process.env.YOUTUBE_CLIENT_SECRET || '')
+  params.set('refresh_token', process.env.YOUTUBE_REFRESH_TOKEN || '')
+  params.set('grant_type', 'refresh_token')
+  const tr = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
+  if (!tr.ok) return res.status(500).json({ error: 'Gagal refresh token YouTube' })
+  const tok = await tr.json()
+  const url = 'https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&forMine=true&order=date&maxResults=10&q=' + encodeURIComponent(ref)
+  const r = await fetch(url, { headers: { Authorization: 'Bearer ' + tok.access_token } })
+  if (!r.ok) return res.status(502).json({ error: 'Gagal memeriksa video di YouTube' })
+  const j = await r.json()
+  const items = j.items || []
+  const batas = Date.now() - 15 * 60 * 1000
+  const cocok = items.find(function (it) {
+    const desc = (it.snippet && it.snippet.description) || ''
+    const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
+    return desc.indexOf('REF ' + ref) === 0 && (isNaN(t) ? true : t >= batas)
+  }) || items[0]
+  if (!cocok) return res.status(404).json({ error: 'Video tidak ditemukan di channel' })
+  return res.status(200).json({ videoId: cocok.id && cocok.id.videoId })
+}
+```
+
+## File: src/lib/youtube.js
+```javascript
+import { supabase } from './supabase.js'
+
+export function parseYouTubeId(url) {
+  if (!url) return null
+  const s = String(url).trim()
+  if (/^[A-Za-z0-9_-]{11}$/.test(s)) return s
+  try {
+    const u = new URL(s)
+    const host = u.hostname.replace('www.', '').replace('m.', '')
+    if (host === 'youtu.be') {
+      const id = u.pathname.slice(1).split('/')[0]
+      return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null
+    }
+    if (host.endsWith('youtube.com') || host.endsWith('youtube-nocookie.com')) {
+      const v = u.searchParams.get('v')
+      if (v && /^[A-Za-z0-9_-]{11}$/.test(v)) return v
+      const parts = u.pathname.split('/').filter(Boolean)
+      if (parts[0] === 'embed' || parts[0] === 'shorts' || parts[0] === 'live') {
+        const id = parts[1]
+        return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null
+      }
+    }
+  } catch (e) {}
+  return null
+}
+export function ytThumb(id) {
+  return 'https://i.ytimg.com/vi/' + id + '/hqdefault.jpg'
+}
+export function ytEmbedUrl(id) {
+  return 'https://www.youtube-nocookie.com/embed/' + id + '?rel=0&modestbranding=1'
+}
+export async function fetchYouTubeQuota() {
+  try {
+    const r = await fetch('/api/youtube/quota', { cache: 'no-store' })
+    if (!r.ok) return { limit: 5, used: 0, remaining: 5 }
+    return await r.json()
+  } catch (e) {
+    return { limit: 5, used: 0, remaining: 5 }
+  }
+}
+export async function startYouTubeSession(title, description, contentType, token) {
+  if (!token) throw new Error('Sesi login tidak terbaca. Silakan masuk ulang lalu coba lagi.')
+  const r = await fetch('/api/youtube/session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ title: title, description: description, contentType: contentType })
+  })
+  if (!r.ok) {
+    const j = await r.json().catch(function () { return { error: 'Gagal memulai sesi upload video' } })
+    throw new Error(j.error || 'Gagal memulai sesi upload video')
+  }
+  return await r.json()
+}
+export async function uploadToYouTube(sessionUri, blob, onProgress) {
+  const hasil = await new Promise(function (resolve) {
+    const xhr = new XMLHttpRequest()
+    xhr.open('PUT', sessionUri)
+    xhr.setRequestHeader('Content-Type', blob.type || 'video/mp4')
+    if (onProgress) {
+      xhr.upload.onprogress = function (e) {
+        if (e.lengthComputable) onProgress(e.loaded / e.total)
+      }
+    }
+    xhr.onload = function () { resolve({ status: xhr.status, body: xhr.responseText }) }
+    xhr.onerror = function () { resolve({ status: 0, body: '' }) }
+    xhr.send(blob)
+  })
+  if (hasil.status >= 200 && hasil.status < 300) {
+    try {
+      const j = JSON.parse(hasil.body || '{}')
+      if (j && j.id) return { videoId: j.id }
+    } catch (e) { /* respons tidak terbaca, pulihkan lewat server */ }
+  } else if (hasil.status !== 0) {
+    throw new Error('Upload video gagal (status ' + hasil.status + ')')
+  }
+  const sesi = await supabase.auth.getSession()
+  const token = await ambilTokenSesi()
+  const r = await fetch('/api/youtube/latest', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({})
+  })
+  if (r.ok) {
+    try {
+      const j = await r.json()
+      if (j && j.videoId) return { videoId: j.videoId }
+    } catch (e) {
+      console.warn('Respons pemulihan bukan JSON, dilewati:', e.message)
+    }
+  }
+  throw new Error('Upload selesai tetapi id video tidak terbaca. Video kemungkinan sudah tersimpan; tempel link video secara manual.')
+}
+
+export async function unggahVideoYouTube(file, judul, onProgress) {
+  const sesiData = await supabase.auth.getSession()
+  const token = await ambilTokenSesi()
+  const sesi = await startYouTubeSession(judul || 'Dokumentasi Magang', 'Diunggah dari portal logbook magang BSI.', file.type || 'video/mp4', token)
+  return await uploadToYouTube(sesi.sessionUri, file, onProgress)
+}
+
+export async function ambilTokenSesi() {
+  try {
+    const r = await supabase.auth.getSession()
+    const ssn = r && r.data ? r.data.session : null
+    return ssn && ssn.access_token ? ssn.access_token : ''
+  } catch (e) {
+    return ''
+  }
+}
+```
+
+## File: apply-final-cleanup.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai pembersihan akhir jalur YouTube...')
+console.log('')
+
+/* ===== 1. youtube.js: bungkus parsing JSON pemulihan dengan try/catch ===== */
+const FILE_Y = 'src/lib/youtube.js'
+let y = baca(FILE_Y)
+const cariY = `  if (r.ok) {
+    const j = await r.json()
+    if (j.videoId) return { videoId: j.videoId }
+  }`
+const gantiY = `  if (r.ok) {
+    try {
+      const j = await r.json()
+      if (j && j.videoId) return { videoId: j.videoId }
+    } catch (e) {
+      console.warn('Respons pemulihan bukan JSON, dilewati:', e.message)
+    }
+  }`
+if (y.includes(gantiY)) {
+  console.log('[SUDAH ADA] Pengaman parsing JSON pemulihan di youtube.js')
+} else if (y.includes(cariY)) {
+  y = y.replace(cariY, gantiY)
+  simpan(FILE_Y, y)
+  console.log('[BERHASIL] Pengaman parsing JSON pemulihan dipasang di youtube.js')
+} else {
+  console.log('[TIDAK KETEMU] Pola pemulihan di youtube.js, periksa manual')
+}
+
+/* ===== 2. vite.config.js: samakan limit middleware kuota menjadi 5 ===== */
+const FILE_V = 'vite.config.js'
+let v = baca(FILE_V)
+const cariV = `res.end(JSON.stringify({ limit: 6, used: used, remaining: Math.max(0, 5 - used), ptDate: today }))`
+const gantiV = `res.end(JSON.stringify({ limit: 5, used: used, remaining: Math.max(0, 5 - used), ptDate: today }))`
+if (v.includes(gantiV)) {
+  console.log('[SUDAH ADA] Limit middleware kuota sudah 5')
+} else if (v.includes(cariV)) {
+  v = v.replace(cariV, gantiV)
+  simpan(FILE_V, v)
+  console.log('[BERHASIL] Limit middleware kuota disamakan menjadi 5')
+} else {
+  console.log('[TIDAK KETEMU] Pola limit middleware kuota, periksa manual')
+}
+
+console.log('')
+console.log('Selesai. Restart dev server: Ctrl+C lalu npm run dev -- --host')
+console.log('')
+console.log('Langkah uji akhir:')
+console.log('1. Upload satu video kecil dari form logbook atau galeri.')
+console.log('2. Progres 100 persen, lalu id video dipulihkan lewat /api/youtube/latest.')
+console.log('3. Logbook atau galeri tersimpan tanpa alert error.')
+console.log('4. Tulisan kuota tampil konsisten: sisa dari 5, baik di localhost maupun Vercel.')
+console.log('5. Bila pemulihan gagal, pesan yang muncul kini pesan ramah, bukan SyntaxError.')
+```
+
+## File: apply-fix-export-unggah.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai memperbaiki export unggahVideoYouTube dan favicon...')
+console.log('')
+
+/* ===== 1. youtube.js: tambahkan export jembatan unggahVideoYouTube ===== */
+const FILE_Y = 'src/lib/youtube.js'
+let y = baca(FILE_Y)
+if (y.includes('export async function unggahVideoYouTube')) {
+  console.log('[SUDAH ADA] export unggahVideoYouTube di youtube.js')
+} else if (!y.includes('export async function uploadToYouTube') || !y.includes('export async function startYouTubeSession')) {
+  console.log('[TIDAK KETEMU] startYouTubeSession atau uploadToYouTube di youtube.js, batal menambahkan')
+} else {
+  y = y.trimEnd() + '\n\n' + [
+    'export async function unggahVideoYouTube(file, judul, onProgress) {',
+    '  const sesiData = await supabase.auth.getSession()',
+    '  const token = sesiData.data.session ? sesiData.session.access_token : \'\'',
+    '  const sesi = await startYouTubeSession(judul || \'Dokumentasi Magang\', \'Diunggah dari portal logbook magang BSI.\', file.type || \'video/mp4\', token)',
+    '  return await uploadToYouTube(sesi.sessionUri, file, onProgress)',
+    '}',
+    ''
+  ].join('\n')
+  simpan(FILE_Y, y)
+  console.log('[BERHASIL] export unggahVideoYouTube ditambahkan di youtube.js')
+}
+
+/* ===== 2. index.html: tambahkan favicon supaya tidak 404 ===== */
+const FILE_H = 'index.html'
+let h = baca(FILE_H)
+if (h.includes('rel="icon"')) {
+  console.log('[SUDAH ADA] favicon di index.html')
+} else {
+  const favicon = '    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns=\'http://www.w3.org/2000/svg\'%20viewBox=\'0%200%2064%2064\'%3E%3Crect%20width=\'64\'%20height=\'64\'%20rx=\'14\'%20fill=\'%2316623c\'/%3E%3Ctext%20x=\'32\'%20y=\'44\'%20font-size=\'34\'%20font-weight=\'700\'%20text-anchor=\'middle\'%20fill=\'%23ffffff\'%20font-family=\'Arial,%20sans-serif\'%3EB%3C/text%3E%3C/svg%3E" />\n'
+  if (h.includes('    <title>')) {
+    h = h.replace('    <title>', favicon + '    <title>')
+    simpan(FILE_H, h)
+    console.log('[BERHASIL] favicon ditambahkan di index.html')
+  } else {
+    console.log('[TIDAK KETEMU] baris title di index.html, favicon dilewati')
+  }
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka kembali http://localhost:5173/dashboard, halaman tidak lagi blank.')
+console.log('2. Uji upload video: progres naik, lalu logbook tersimpan dan kartu menampilkan thumbnail YouTube.')
+console.log('3. Favicon hijau muncul di tab browser dan permintaan favicon.ico tidak lagi 404.')
+```
+
+## File: apply-fix-sisa-netral.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+function cariGanti(rel, cari, ganti, label) {
+  if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan'); return }
+  let isi = baca(rel)
+  if (isi.includes(ganti)) { console.log('[SUDAH ADA] ' + label); return }
+  if (!isi.includes(cari)) { console.log('[TIDAK KETEMU] ' + label + ' di ' + rel); return }
+  isi = isi.replace(cari, ganti)
+  simpan(rel, isi)
+  console.log('[BERHASIL] ' + label)
+}
+
+console.log('Memperbaiki regex LabelProses dan menangkap sisa teks...')
+console.log('')
+
+/* ===== 1. Fix regex double backslash di LabelProses (ui.jsx) ===== */
+cariGanti('src/components/ui.jsx',
+  `const bersih = String(props.teks|| '').replace(/\\\\.{3}/g, '').replace(/\\\\s+/g, ' ').trim()`,
+  `const bersih = String(props.teks || '').replace(/\\.\\.\\./g, '').replace(/\\s+/g, ' ').trim()`,
+  'Regex LabelProses diperbaiki')
+
+/* ===== 2. Fallback teks yang polanya sedikit berbeda ===== */
+cariGanti('src/lib/youtube.js',
+  'Jaringan gagal saat upload YouTube',
+  'Jaringan gagal saat upload video',
+  'Pesan jaringan youtube.js dinetralkan')
+cariGanti('src/pages/DashboardPage.jsx',
+  `Mengunggah... ' + Math.round(p * 100) + '%'`,
+  `Mengunggah ' + Math.round(p * 100) + '%'`,
+  'Progres R2 dinetralkan dari titik tiga')
+cariGanti('src/pages/DashboardPage.jsx',
+  'Mengonversi HEIC ke JPG',
+  'Mengonversi foto HEIC',
+  'Teks konversi HEIC dinetralkan')
+cariGanti('src/lib/upload.js',
+  'Mengonversi foto ke WebP',
+  'Mengonversi foto',
+  'Teks konversi WebP dinetralkan')
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+```
+
+## File: apply-fix-token-aman.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+const regexBaris = /^([ \t]*)const ([A-Za-z0-9_]+) = [^\n]*\.access_token[^\n]*$/gm
+
+console.log('Mulai mengamankan pengambilan token sesi...')
+console.log('')
+
+/* ===== 1. youtube.js ===== */
+const FILE_Y = 'src/lib/youtube.js'
+let y = baca(FILE_Y)
+const ySebelum = y
+y = y.replace(regexBaris, function (m, indent, name) {
+  return indent + 'const ' + name + ' = await ambilTokenSesi()'
+})
+if (y !== ySebelum) console.log('[BERHASIL] Baris access_token di youtube.js diganti fungsi aman')
+
+if (!y.includes('export async function ambilTokenSesi')) {
+  y = y.trimEnd() + '\n\n' + [
+    'export async function ambilTokenSesi() {',
+    '  try {',
+    '    const r = await supabase.auth.getSession()',
+    '    const ssn = r && r.data ? r.data.session : null',
+    '    return ssn && ssn.access_token ? ssn.access_token : \'\'',
+    '  } catch (e) {',
+    '    return \'\'',
+    '  }',
+    '}',
+    ''
+  ].join('\n')
+  console.log('[BERHASIL] Fungsi ambilTokenSesi ditambahkan di youtube.js')
+} else {
+  console.log('[SUDAH ADA] Fungsi ambilTokenSesi di youtube.js')
+}
+
+if (!y.includes('Sesi login tidak terbaca')) {
+  const cariGuard = `export async function startYouTubeSession(title, description, contentType, token) {
+  const r = await fetch('/api/youtube/session', {`
+  const gantiGuard = `export async function startYouTubeSession(title, description, contentType, token) {
+  if (!token) throw new Error('Sesi login tidak terbaca. Silakan masuk ulang lalu coba lagi.')
+  const r = await fetch('/api/youtube/session', {`
+  if (y.includes(cariGuard)) {
+    y = y.replace(cariGuard, gantiGuard)
+    console.log('[BERHASIL] Penjaga token kosong di startYouTubeSession')
+  } else {
+    console.log('[TIDAK KETEMU] Pola startYouTubeSession, penjaga dilewati')
+  }
+} else {
+  console.log('[SUDAH ADA] Penjaga token kosong di startYouTubeSession')
+}
+simpan(FILE_Y, y)
+
+/* ===== 2. DashboardPage.jsx ===== */
+const FILE_D = 'src/pages/DashboardPage.jsx'
+let d = baca(FILE_D)
+const dSebelum = d
+d = d.replace(regexBaris, function (m, indent, name) {
+  return indent + 'const ' + name + ' = await ambilTokenSesi()'
+})
+if (d !== dSebelum) {
+  console.log('[BERHASIL] Baris access_token di DashboardPage diganti fungsi aman')
+  if (d.includes('ambilTokenSesi()') && !d.includes('ambilTokenSesi }')) {
+    d = d.replace("} from '../lib/youtube.js'", ", ambilTokenSesi } from '../lib/youtube.js'")
+    console.log('[BERHASIL] Import ambilTokenSesi ditambahkan di DashboardPage')
+  }
+  simpan(FILE_D, d)
+} else {
+  console.log('[SUDAH AMAAN] Tidak ada baris access_token langsung di DashboardPage')
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka dashboard, pilih mode Video dengan file video kecil, lalu simpan.')
+console.log('2. Bila sesi login valid, progres upload berjalan dan logbook tersimpan.')
+console.log('3. Bila sesi kedaluwarsa, pesan yang muncul kini kalimat ramah, bukan error access_token.')
+console.log('4. Uji juga mode Foto dan mode link YouTube untuk memastikan tidak ada regresi.')
+```
+
+## File: apply-fix-youtube-scope.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai memperbaiki scope OAuth dan jalur pemulihan...')
+console.log('')
+
+/* ===== 1. setup-youtube-token.cjs: tambah scope baca ===== */
+const FILE_S = 'setup-youtube-token.cjs'
+if (!fs.existsSync(path.join(root, FILE_S))) {
+  console.log('[TIDAK KETEMU] ' + FILE_S)
+} else {
+  let s = baca(FILE_S)
+  const cariS = `const scope = 'https://www.googleapis.com/auth/youtube.upload'`
+  const gantiS = `const scope = 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly'`
+  if (s.includes('youtube.readonly')) {
+    console.log('[SUDAH ADA] Scope baca di setup-youtube-token.cjs')
+  } else if (s.includes(cariS)) {
+    s = s.replace(cariS, gantiS)
+    simpan(FILE_S, s)
+    console.log('[BERHASIL] Scope baca ditambahkan di setup-youtube-token.cjs')
+  } else {
+    console.log('[TIDAK KETEMU] Baris scope di setup-youtube-token.cjs')
+  }
+}
+
+/* ===== 2. api/youtube/latest.js: sertakan alasan asli dari YouTube ===== */
+const FILE_L = 'api/youtube/latest.js'
+if (!fs.existsSync(path.join(root, FILE_L))) {
+  console.log('[TIDAK KETEMU] ' + FILE_L)
+} else {
+  let l = baca(FILE_L)
+  const cariL = `if (!r.ok) return res.status(502).json({ error: 'Gagal memeriksa video terbaru' })`
+  const gantiL = `if (!r.ok) { const t = await r.text(); return res.status(502).json({ error: 'Gagal memeriksa video terbaru: ' + r.status + ' ' + t }) }`
+  if (l.includes('Gagal memeriksa video terbaru: ')) {
+    console.log('[SUDAH ADA] Detail error di api/youtube/latest.js')
+  } else if (l.includes(cariL)) {
+    l = l.replace(cariL, gantiL)
+    simpan(FILE_L, l)
+    console.log('[BERHASIL] Detail error ditambahkan di api/youtube/latest.js')
+  } else {
+    console.log('[TIDAK KETEMU] Baris 502 di api/youtube/latest.js')
+  }
+}
+
+/* ===== 3. vite.config.js: detail error middleware latest ===== */
+const FILE_V = 'vite.config.js'
+let v = baca(FILE_V)
+const cariV = `if (!r.ok) { res.statusCode = 502; res.end(JSON.stringify({ error: 'Gagal memeriksa video terbaru' })); return }`
+const gantiV = `if (!r.ok) { const t = await r.text(); res.statusCode = 502; res.end(JSON.stringify({ error: 'Gagal memeriksa video terbaru: ' + r.status + ' ' + t })); return }`
+if (v.includes('Gagal memeriksa video terbaru: ')) {
+  console.log('[SUDAH ADA] Detail error middleware latest')
+} else if (v.includes(cariV)) {
+  v = v.replace(cariV, gantiV)
+  simpan(FILE_V, v)
+  console.log('[BERHASIL] Detail error middleware latest ditambahkan')
+} else {
+  console.log('[TIDAK KETEMU] Baris 502 middleware latest di vite.config.js')
+}
+
+/* ===== 4. youtube.js: ulangi pemulihan hingga 3 kali ===== */
+const FILE_Y = 'src/lib/youtube.js'
+let y = baca(FILE_Y)
+if (y.includes('for (let percobaan = 0')) {
+  console.log('[SUDAH ADA] Pengulangan pemulihan di youtube.js')
+} else {
+  const regexY = /const v = await fetch\('\/api\/youtube\/latest', \{[\s\S]*?secara manual\.'\)/
+  const gantiY = `for (let percobaan = 0; percobaan < 3; percobaan++) {
+    if (percobaan > 0) await new Promise(function (tunggu) { setTimeout(tunggu, 4000) })
+    const v = await fetch('/api/youtube/latest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({})
+    })
+    if (v.ok) {
+      try {
+        const j = await v.json()
+        if (j && j.videoId) return { videoId: j.videoId }
+      } catch (e) {
+        console.warn('Respons pemulihan bukan JSON, dilewati.')
+      }
+    } else {
+      const teks = await v.text().catch(function () { return '' })
+      console.warn('Pemulihan percobaan ' + (percobaan + 1) + ' gagal: ' + teks)
+    }
+  }
+  throw new Error('Upload selesai tetapi id video tidak terbaca. Video kemungkinan sudah masuk channel; tempel link YouTube secara manual.')`
+  if (regexY.test(y)) {
+    y = y.replace(regexY, gantiY)
+    simpan(FILE_Y, y)
+    console.log('[BERHASIL] Pengulangan pemulihan dipasang di youtube.js')
+  } else {
+    console.log('[TIDAK KETEMU] Blok pemulihan di youtube.js')
+  }
+}
+
+console.log('')
+console.log('Selesai. Lanjutkan dengan langkah manual berikut:')
+console.log('1. Jalankan: node setup-youtube-token.cjs')
+console.log('2. Browser terbuka dan kini meminta dua izin: kelola upload dan lihat video YouTube kamu.')
+console.log('3. Setujui, lalu salin refresh token BARU yang tercetak di terminal.')
+console.log('4. Ganti nilai YOUTUBE_REFRESH_TOKEN di .env.local dengan token baru itu.')
+console.log('5. Restart dev server: Ctrl+C lalu npm run dev -- --host')
+console.log('6. Uji upload video kecil lagi dari dashboard.')
+console.log('7. Sebelum deploy, perbarui juga YOUTUBE_REFRESH_TOKEN di Environment Variables Vercel.')
+```
+
+## File: apply-galeri-picker.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+
+const root = process.cwd()
+
+function baca(rel) {
+  return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n')
+}
+
+function simpan(rel, isi) {
+  fs.writeFileSync(path.join(root, rel), isi, 'utf8')
+}
+
+function ganti(rel, cari, gantiDengan, label) {
+  if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan'); return }
+  let isi = baca(rel)
+  if (isi.includes(gantiDengan)) { console.log('[SUDAH ADA] ' + label); return }
+  if (!isi.includes(cari)) { console.log('[TIDAK KETEMU] ' + label + ' di ' + rel); return }
+  isi = isi.replace(cari, gantiDengan)
+  simpan(rel, isi)
+  console.log('[BERHASIL] ' + label)
+}
+
+function gantiRegex(rel, regex, gantiDengan, label, marker) {
+  if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan'); return }
+  let isi = baca(rel)
+  if (marker && isi.includes(marker)) { console.log('[SUDAH ADA] ' + label); return }
+  if (!regex.test(isi)) { console.log('[TIDAK KETEMU] ' + label + ' di ' + rel); return }
+  isi = isi.replace(regex, gantiDengan)
+  simpan(rel, isi)
+  console.log('[BERHASIL] ' + label)
+}
+
+const FILE_D = 'src/pages/DashboardPage.jsx'
+
+console.log('Mulai memasang pemilih jenis media pada form galeri...')
+console.log('')
+
+/* ===== 1. Import helper YouTube ===== */
+if (!fs.existsSync(path.join(root, FILE_D))) {
+  console.log('[GAGAL] ' + FILE_D + ' tidak ditemukan')
+  process.exit(1)
+}
+let d = baca(FILE_D)
+if (d.includes("from '../lib/youtube.js'")) {
+  console.log('[SUDAH ADA] Import helper YouTube')
+} else if (d.includes("from '../lib/konversi.js'")) {
+  d = d.replace("from '../lib/konversi.js'", "from '../lib/konversi.js'\nimport { parseYouTubeId, ytThumb, fetchYouTubeQuota, startYouTubeSession, uploadToYouTube } from '../lib/youtube.js'")
+  simpan(FILE_D, d)
+  console.log('[BERHASIL] Import helper YouTube')
+} else {
+  console.log('[TIDAK KETEMU] Import helper YouTube')
+}
+
+/* ===== 2. State YouTube dan mode galeri ===== */
+d = baca(FILE_D)
+const stateBaru = []
+if (!d.includes('const [ytQuota, setYtQuota]')) stateBaru.push("  const [ytQuota, setYtQuota] = useState({ limit: 6, used: 0, remaining: 6 })")
+if (!d.includes('const [galMode, setGalMode]')) stateBaru.push("  const [galMode, setGalMode] = useState('foto')")
+if (!d.includes('const [galYtLink, setGalYtLink]')) stateBaru.push("  const [galYtLink, setGalYtLink] = useState('')")
+if (!d.includes('const [galOldYt, setGalOldYt]')) stateBaru.push('  const [galOldYt, setGalOldYt] = useState(null)')
+if (stateBaru.length === 0) {
+  console.log('[SUDAH ADA] State YouTube dan mode galeri')
+} else if (d.includes("const [infoProses, setInfoProses] = useState('')")) {
+  d = d.replace("const [infoProses, setInfoProses] = useState('')", "const [infoProses, setInfoProses] = useState('')\n" + stateBaru.join('\n'))
+  simpan(FILE_D, d)
+  console.log('[BERHASIL] State YouTube dan mode galeri (' + stateBaru.length + ' baris)')
+} else {
+  console.log('[TIDAK KETEMU] State YouTube dan mode galeri')
+}
+
+/* ===== 3. Muat kuota YouTube berkala ===== */
+ganti(FILE_D,
+  `  useEffect(function () {
+    if (mahasiswa) refresh()
+  }, [mahasiswa])`,
+  `  useEffect(function () {
+    if (mahasiswa) refresh()
+    fetchYouTubeQuota().then(setYtQuota)
+    const iv = setInterval(function () { fetchYouTubeQuota().then(setYtQuota) }, 30000)
+    return function () { clearInterval(iv) }
+  }, [mahasiswa])`,
+  'Muat kuota YouTube berkala')
+
+/* ===== 4. Cabang YouTube pada submitGaleri ===== */
+ganti(FILE_D,
+  `      let mediaPath = ''
+      let mediaType = ''
+      let mediaThumb = null
+      if (galForm.file) {`,
+  `      let mediaPath = ''
+      let mediaType = ''
+      let mediaThumb = null
+      let mediaSource = galOldYt ? 'youtube' : 'r2'
+      let youtubeId = galOldYt || null
+      if (galMode === 'video' && galYtLink && !galForm.file) {
+        const id = parseYouTubeId(galYtLink)
+        if (!id) { alert('Link YouTube tidak valid.'); setBusy(false); return }
+        mediaSource = 'youtube'
+        youtubeId = id
+        mediaPath = ytThumb(id)
+        mediaThumb = ytThumb(id)
+        mediaType = 'video'
+      } else if (galMode === 'video' && galForm.file) {
+        if (ytQuota.remaining <= 0) { alert('Kuota upload YouTube hari ini sudah habis. Gunakan link YouTube.'); setBusy(false); return }
+        const sesiData = await supabase.auth.getSession()
+        const tokenS = sesiData.data.session ? sesiData.data.session.access_token : ''
+        const sesi = await startYouTubeSession(galForm.judul || ('Dokumentasi ' + galForm.tanggal), galForm.deskripsi || '', galForm.file.type || 'video/mp4', tokenS)
+        const hasilYt = await uploadToYouTube(sesi.sessionUri, galForm.file, function (p) { setInfoProses('Mengunggah ke YouTube... ' + Math.round(p * 100) + '%') })
+        mediaSource = 'youtube'
+        youtubeId = hasilYt.videoId
+        mediaPath = ytThumb(hasilYt.videoId)
+        mediaThumb = ytThumb(hasilYt.videoId)
+        mediaType = 'video'
+        setYtQuota(function (q) { return Object.assign({}, q, { used: q.used + 1, remaining: Math.max(0, q.remaining - 1) }) })
+        fetchYouTubeQuota().then(setYtQuota)
+      } else if (galForm.file) {`,
+  'Cabang YouTube pada submitGaleri')
+ganti(FILE_D,
+  `        media_path: mediaPath,
+        media_type: mediaType,
+        media_thumb: mediaThumb
+      }`,
+  `        media_path: mediaPath,
+        media_type: mediaType,
+        media_thumb: mediaThumb,
+        media_source: mediaSource,
+        youtube_id: youtubeId
+      }`,
+  'Payload galeri membawa kolom YouTube')
+
+/* ===== 5. startEditGal membawa mode dan sumber lama ===== */
+ganti(FILE_D,
+  `setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_path, oldPath: g.media_path, oldThumb: g.media_thumb || '', previewLoading: false })`,
+  `setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_path || '', oldPath: g.media_source === 'youtube' ? '' : (g.media_path || ''), oldThumb: g.media_source === 'youtube' ? '' : (g.media_thumb || ''), previewLoading: false })
+    setGalMode(g.media_source === 'youtube' ? 'video' : (g.media_type === 'video' ? 'video' : 'foto'))
+    setGalYtLink('')
+    setGalOldYt(g.youtube_id || null)`,
+  'startEditGal membawa mode dan sumber lama')
+
+/* ===== 6. Reset mode galeri setelah simpan dan batal ===== */
+d = baca(FILE_D)
+if (d.includes('setGalOldYt(null)')) {
+  console.log('[SUDAH ADA] Reset mode galeri')
+} else {
+  const polaReset = `setGalForm({ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false })`
+  const gantiReset = polaReset + `\n    setGalMode('foto')\n    setGalYtLink('')\n    setGalOldYt(null)`
+  if (d.includes(polaReset)) {
+    d = d.split(polaReset).join(gantiReset)
+    simpan(FILE_D, d)
+    console.log('[BERHASIL] Reset mode galeri')
+  } else {
+    console.log('[TIDAK KETEMU] Reset mode galeri')
+  }
+}
+
+/* ===== 7. hapusMediaR2 melewatkan URL YouTube ===== */
+ganti(FILE_D,
+  `  async function hapusMediaR2(url) {
+    const key = keyDariUrl(url)`,
+  `  async function hapusMediaR2(url) {
+    if (String(url || '').indexOf('i.ytimg.com') !== -1 || String(url || '').indexOf('youtube') !== -1) return
+    const key = keyDariUrl(url)`,
+  'hapusMediaR2 melewatkan URL YouTube')
+
+/* ===== 8. Hapus galeri melewatkan media YouTube ===== */
+ganti(FILE_D,
+  `      const urls = target.data.logbook_item_id ? [] : [target.data.media_path, target.data.media_thumb].filter(Boolean)`,
+  `      const urls = target.data.logbook_item_id || target.data.media_source === 'youtube' ? [] : [target.data.media_path, target.data.media_thumb].filter(Boolean)`,
+  'Hapus galeri melewatkan media YouTube')
+
+/* ===== 9. UI pemilih jenis media pada form galeri ===== */
+gantiRegex(FILE_D,
+  /<label className=\{labelCls\}>Pilih foto atau video[\s\S]*?\}\} \/>\s*<\/div>\s*<\/div>/,
+  `<label className={labelCls}>Jenis media {editGalId ? null : <span className="text-red-500">*</span>}</label>
+                <div className="mt-1.5 flex gap-2">
+                  <button type="button" onClick={function () { setGalMode('foto') }} className={'px-3 py-1.5 rounded-xl text-xs font-bold ' + (galMode !== 'video' ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600')}>Foto</button>
+                  <button type="button" onClick={function () { setGalMode('video') }} className={'px-3 py-1.5 rounded-xl text-xs font-bold ' + (galMode === 'video' ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600')}>Video</button>
+                </div>
+                <div className="mt-1.5">
+                  {galMode === 'video' ? (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-slate-500">Sisa kuota upload YouTube hari ini: {ytQuota.remaining} dari {ytQuota.limit}</p>
+                      <div className={ytQuota.remaining <= 0 && !galForm.file ? 'opacity-50 pointer-events-none' : ''}>
+                        <FileInput accept="video/*" fileName={galForm.file ? galForm.file.name : ''}
+                          onChange={function (e) {
+                            const f = e.target.files[0]
+                            if (!f) return
+                            setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: URL.createObjectURL(f), previewLoading: false }) })
+                          }} />
+                      </div>
+                      {ytQuota.remaining <= 0 ? <p className="text-xs text-red-600">Kuota habis. Gunakan link YouTube di bawah.</p> : null}
+                      <input className={inputCls} value={galYtLink} onChange={function (e) { setGalYtLink(e.target.value) }} placeholder="Atau tempel link YouTube (unlisted)" />
+                    </div>
+                  ) : (
+                    <FileInput accept="image/*" fileName={galForm.file ? galForm.file.name : ''}
+                      onChange={async function (e) {
+                        const f = e.target.files[0]
+                        if (!f) return
+                        if (formatHeic(f)) {
+                          setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: '', previewLoading: true }) })
+                          const blob = await pratinjauHeic(f)
+                          const preview = blob ? URL.createObjectURL(blob) : URL.createObjectURL(f)
+                          setGalForm(function (g) { return Object.assign({}, g, { preview: preview, previewLoading: false }) })
+                        } else {
+                          setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: URL.createObjectURL(f), previewLoading: false }) })
+                        }
+                      }} />
+                  )}
+                </div>
+              </div>`,
+  'UI pemilih jenis media pada form galeri',
+  'Jenis media {editGalId')
+
+/* ===== 10. Kartu galeri menampilkan thumbnail untuk media YouTube ===== */
+gantiRegex('src/components/cards.jsx',
+  /<SmartFit src=\{item\.media_thumb \|\| item\.media_path\}[^/]*\/>/,
+  `{item.media_source === 'youtube' ? (
+        <img src={item.media_path} alt={item.judul} className="absolute inset-0 h-full w-full object-cover" />
+      ) : (
+        <SmartFit src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} alt={item.judul} />
+      )}`,
+  'Kartu galeri menampilkan thumbnail untuk media YouTube',
+  '<img src={item.media_path} alt={item.judul} className="absolute inset-0 h-full w-full object-cover" />')
+
+console.log('')
+console.log('Selesai. Vite akan memuat ulang otomatis.')
+console.log('')
+console.log('Catatan:')
+console.log('1. Tidak ada SQL baru. Kolom media_source dan youtube_id sudah kamu tambahkan sebelumnya.')
+console.log('2. Script aman dijalankan ulang karena setiap langkah memeriksa penanda lebih dulu.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka dashboard, tab Galeri, perhatikan label kini bertuliskan Jenis media dengan tombol Foto dan Video.')
+console.log('2. Pilih Foto: muncul FileInput gambar dengan pratinjau HEIC seperti sebelumnya.')
+console.log('3. Pilih Video: muncul sisa kuota harian, FileInput video, dan kolom link YouTube.')
+console.log('4. Saat kuota habis, FileInput video mengabu dan hanya kolom link yang bisa dipakai.')
+console.log('5. Simpan media YouTube: kartu galeri menampilkan thumbnail YouTube, dan modal detail memutar embed.')
+console.log('6. Edit media YouTube: mode otomatis terpilih Video dan tombol simpan mempertahankan sumber lama.')
+console.log('7. Hapus media YouTube: tidak ada percobaan hapus ke R2 karena penjaga URL sudah aktif.')
+```
+
+## File: apply-netral-final.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Pembersihan akhir teks proses dan pemindaian sisa sebutan YouTube...')
+console.log('')
+
+/* ===== 1. Bersihkan titik tiga pada teks onInfo di upload.js dan konversi.js ===== */
+;['src/lib/upload.js', 'src/lib/konversi.js'].forEach(function (rel) {
+  if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan'); return }
+  let isi = baca(rel)
+  const sebelum = isi
+  isi = isi.replace(/onInfo\('([^'\n]*?)\.\.\.'\)/g, "onInfo('$1')")
+  isi = isi.replace(/Mengunggah\.\.\. ' \+ /g, "Mengunggah ' + ")
+  if (isi !== sebelum) {
+    simpan(rel, isi)
+    console.log('[BERHASIL] Teks proses dibersihkan di ' + rel)
+  } else {
+    console.log('[SUDAH BERSIH] ' + rel)
+  }
+})
+
+/* ===== 2. Bersihkan pola serupa di DashboardPage bila masih tersisa ===== */
+const FILE_D = 'src/pages/DashboardPage.jsx'
+if (!fs.existsSync(path.join(root, FILE_D))) {
+  console.log('[LEWATI] DashboardPage tidak ditemukan')
+} else {
+  let d = baca(FILE_D)
+  const sebelum = d
+  d = d.replace(/setInfoProses\('([^'\n]*?)\.\.\.'\)/g, "setInfoProses('$1')")
+  d = d.replace(/setInfoProses\('([^'\n]*?)\.\.\. ' \+ /g, "setInfoProses('$1 ' + ")
+  if (d !== sebelum) {
+    simpan(FILE_D, d)
+    console.log('[BERHASIL] Teks proses dibersihkan di DashboardPage')
+  } else {
+    console.log('[SUDAH BERSIH] DashboardPage')
+  }
+}
+
+/* ===== 3. Pindai sisa sebutan YouTube huruf kapital di seluruh src ===== */
+console.log('')
+console.log('Pemindaian sisa teks YouTube huruf kapital pada folder src:')
+let ketemu = 0
+function jalan(dir) {
+  const entries = fs.readdirSync(dir, { withFileTypes: true })
+  entries.forEach(function (e) {
+    const full = path.join(dir, e.name)
+    if (e.isDirectory()) { jalan(full); return }
+    if (!/\.(jsx?|css|html)$/.test(e.name)) return
+    const isi = fs.readFileSync(full, 'utf8')
+    isi.split('\n').forEach(function (b, i) {
+      if (b.includes('YouTube')) {
+        ketemu++
+        console.log('  ' + path.relative(root, full) + ':' + (i + 1) + '  ' + b.trim().slice(0, 120))
+      }
+    })
+  })
+}
+jalan(path.join(root, 'src'))
+if (ketemu === 0) console.log('  Tidak ada sisa teks YouTube huruf kapital. Bersih.')
+
+console.log('')
+console.log('Catatan: baris berisi alamat embed youtube-nocookie, i.ytimg, atau googleapis adalah teknis')
+console.log('dan tidak tampil sebagai teks merek kepada pengguna, jadi wajar bila muncul di pemindaian huruf kecil.')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Simpan logbook berisi foto atau video, perhatikan tombol simpan.')
+console.log('2. Teks proses tampil tanpa titik tiga statis, diikuti tiga titik animasi yang halus.')
+console.log('3. Contoh tampilan: Mengunggah 43 persen dengan titik berdenyut, bukan Mengunggah... 43 persen.')
+console.log('4. Tidak ada kata YouTube pada label kuota, placeholder, peringatan, maupun tombol.')
+```
+
+## File: apply-netral-youtube-dan-titik.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+function semua(rel, cari, ganti, label) {
+  if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan'); return }
+  let isi = baca(rel)
+  if (!isi.includes(cari)) { console.log('[TIDAK KETEMU] ' + label); return }
+  isi = isi.split(cari).join(ganti)
+  simpan(rel, isi)
+  console.log('[BERHASIL] ' + label)
+}
+
+function sisip(rel, cari, ganti, label) {
+  if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan'); return }
+  let isi = baca(rel)
+  if (isi.includes(ganti)) { console.log('[SUDAH ADA] ' + label); return }
+  if (!isi.includes(cari)) { console.log('[TIDAK KETEMU] ' + label); return }
+  isi = isi.replace(cari, ganti)
+  simpan(rel, isi)
+  console.log('[BERHASIL] ' + label)
+}
+
+function tambah(rel, marker, blok, label) {
+  if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan'); return }
+  let isi = baca(rel)
+  if (isi.includes(marker)) { console.log('[SUDAH ADA] ' + label); return }
+  isi = isi.trimEnd() + '\n\n' + blok
+  simpan(rel, isi)
+  console.log('[BERHASIL] ' + label)
+}
+
+console.log('Mulai menetralkan sebutan YouTube dan memasang animasi titik...')
+console.log('')
+
+/* ===== 1. index.css: animasi titik halus ===== */
+tambah('src/index.css', '.titik-anim', `.titik-anim {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 6px;
+}
+.titik-anim i {
+  width: 4px;
+  height: 4px;
+  border-radius: 9999px;
+  background: currentColor;
+  opacity: 0.2;
+  animation: titik-halus 1.1s ease-in-out infinite;
+}
+.titik-anim i:nth-child(2) { animation-delay: 0.18s; }
+.titik-anim i:nth-child(3) { animation-delay: 0.36s; }
+@keyframes titik-halus {
+  0%, 60%, 100% { opacity: 0.2; transform: translateY(0) scale(0.9); }
+  30% { opacity: 1; transform: translateY(-1px) scale(1); }
+}`, 'CSS animasi titik di index.css')
+
+/* ===== 2. ui.jsx: komponen TitikAnim dan LabelProses ===== */
+tambah('src/components/ui.jsx', 'export function LabelProses', `export function TitikAnim() {
+  return (
+    <span className="titik-anim" aria-hidden="true">
+      <i></i>
+      <i></i>
+      <i></i>
+    </span>
+  )
+}
+export function LabelProses(props) {
+  const bersih = String(props.teks || '').replace(/\\.{3}/g, '').replace(/\\s+/g, ' ').trim()
+  return (
+    <span className="inline-flex items-center justify-center">
+      <span>{bersih}</span>
+      <TitikAnim />
+    </span>
+  )
+}`, 'Komponen TitikAnim dan LabelProses di ui.jsx')
+
+/* ===== 3. ui.jsx: netralkan placeholder pratinjau dan pemutar ===== */
+semua('src/components/ui.jsx', `<SizedIcon name="youtube" size={26} />`, `<SizedIcon name="video" size={26} />`, 'Ikon placeholder pratinjau menjadi ikon video')
+semua('src/components/ui.jsx', `Menyiapkan thumbnail YouTube...`, `Menyiapkan pratinjau video`, 'Teks placeholder pratinjau dinetralkan')
+semua('src/components/ui.jsx', `Thumbnail belum siap di YouTube`, `Pratinjau video belum siap`, 'Teks placeholder permanen dinetralkan')
+semua('src/components/ui.jsx', `alt={props.alt || 'Thumbnail YouTube'}`, `alt={props.alt || 'Pratinjau video'}`, 'Alt text pratinjau dinetralkan')
+semua('src/components/ui.jsx', `src={'https://www.youtube-nocookie.com/embed/' + props.youtubeId}`, `src={'https://www.youtube-nocookie.com/embed/' + props.youtubeId + '?rel=0&modestbranding=1'}`, 'Pemutar lightbox meminimalkan merek')
+
+/* ===== 4. cards.jsx: minimalkan merek pada embed detail ===== */
+semua('src/components/cards.jsx', `embed/' + it.youtube_id}`, `embed/' + it.youtube_id + '?rel=0&modestbranding=1'}`, 'Embed detail logbook meminimalkan merek')
+semua('src/components/cards.jsx', `embed/' + item.youtube_id}`, `embed/' + item.youtube_id + '?rel=0&modestbranding=1'}`, 'Embed detail galeri meminimalkan merek')
+
+/* ===== 5. youtube.js: netralkan pesan error ===== */
+semua('src/lib/youtube.js', `Upload YouTube gagal (status `, `Upload video gagal (status `, 'Pesan gagal upload dinetralkan')
+semua('src/lib/youtube.js', `Jaringan gagal saat upload YouTube`, `Jaringan gagal saat upload video`, 'Pesan jaringan dinetralkan')
+semua('src/lib/youtube.js', `Video kemungkinan sudah masuk channel; tempel link YouTube secara manual.`, `Video kemungkinan sudah tersimpan; tempel link video secara manual.`, 'Pesan pemulihan dinetralkan')
+semua('src/lib/youtube.js', `Gagal membuat sesi YouTube`, `Gagal memulai sesi upload video`, 'Pesan sesi dinetralkan')
+
+/* ===== 6. upload.js: netralkan teks konversi ===== */
+semua('src/lib/upload.js', `Mengonversi foto ke WebP...`, `Mengonversi foto`, 'Teks konversi foto dinetralkan')
+
+/* ===== 7. DashboardPage: import LabelProses ===== */
+sisip('src/pages/DashboardPage.jsx',
+  `import { pratinjauHeic, formatHeic } from '../lib/konversi.js'`,
+  `import { pratinjauHeic, formatHeic } from '../lib/konversi.js'
+import { LabelProses } from '../components/ui.jsx'`,
+  'Import LabelProses di DashboardPage')
+
+/* ===== 8. DashboardPage: netralkan semua teks YouTube ===== */
+semua('src/pages/DashboardPage.jsx', `Sisa kuota upload YouTube hari ini:`, `Sisa kuota upload video hari ini:`, 'Label kuota dinetralkan')
+semua('src/pages/DashboardPage.jsx', `Atau tempel link YouTube (unlisted)`, `Atau tempel link video eksternal`, 'Placeholder link dinetralkan')
+semua('src/pages/DashboardPage.jsx', `Kuota habis. Gunakan link YouTube di bawah.`, `Kuota habis. Gunakan link video di bawah.`, 'Peringatan kuota dinetralkan')
+semua('src/pages/DashboardPage.jsx', `Kuota upload YouTube hari ini sudah habis. Gunakan link YouTube.`, `Kuota upload video hari ini sudah habis. Gunakan link video.`, 'Alert kuota dinetralkan')
+semua('src/pages/DashboardPage.jsx', `Link YouTube tidak valid`, `Link video tidak valid`, 'Alert link dinetralkan')
+semua('src/pages/DashboardPage.jsx', `Mengunggah ke YouTube... ' + Math.round(p * 100) + '%'`, `Mengunggah video ' + Math.round(p * 100) + '%'`, 'Progres upload video dinetralkan')
+semua('src/pages/DashboardPage.jsx', `Mengunggah... ' + Math.round(p * 100) + '%'`, `Mengunggah ' + Math.round(p * 100) + '%'`, 'Progres upload R2 tanpa titik statis')
+semua('src/pages/DashboardPage.jsx', `Mengonversi HEIC ke JPG...`, `Mengonversi foto HEIC`, 'Teks konversi HEIC dinetralkan')
+semua('src/pages/DashboardPage.jsx', `Mengonversi pratinjau HEIC...`, `Mengonversi pratinjau`, 'Teks pratinjau HEIC dinetralkan')
+
+/* ===== 9. DashboardPage: tombol proses memakai animasi titik ===== */
+semua('src/pages/DashboardPage.jsx', `{busy ? (infoProses || 'Menyimpan...') :`, `{busy ? <LabelProses teks={infoProses || 'Menyimpan'} /> :`, 'Tombol simpan logbook dan galeri beranimasi titik')
+semua('src/pages/DashboardPage.jsx', `{busy ? 'Menyimpan...' :`, `{busy ? <LabelProses teks="Menyimpan" /> :`, 'Tombol simpan lainnya beranimasi titik')
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Hasil yang akan terlihat:')
+console.log('1. Tidak ada lagi kata YouTube pada label kuota, placeholder link, peringatan, maupun progres.')
+console.log('2. Placeholder pratinjau video memakai ikon video umum, bukan ikon YouTube.')
+console.log('3. Tombol sibuk menampilkan tiga titik kecil yang memudar dan naik turun secara halus dan berurutan.')
+console.log('4. Progres persen tetap tampil, misalnya Mengunggah 43 persen, diikuti titik beranimasi.')
+console.log('5. Pemutar embed memakai parameter modestbranding dan rel=0 untuk meminimalkan merek bawaan.')
+```
+
+## File: apply-preview-video-controls.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+
+const root = process.cwd()
+const FILE = 'src/pages/DashboardPage.jsx'
+
+if (!fs.existsSync(path.join(root, FILE))) {
+  console.log('[GAGAL] File tidak ditemukan: ' + FILE)
+  process.exit(1)
+}
+
+let isi = fs.readFileSync(path.join(root, FILE), 'utf8').replace(/\r\n/g, '\n')
+let berubah = false
+
+const pasangan = [
+  {
+    cari: '<video src={it.preview} className="absolute inset-0 h-full w-full object-contain" muted />',
+    ganti: '<video src={it.preview} controls playsInline preload="metadata" className="absolute inset-0 h-full w-full object-contain" />',
+    label: 'Pratinjau video kegiatan bisa diputar dan digeser durasinya'
+  },
+  {
+    cari: '<video src={galForm.preview} className="absolute inset-0 h-full w-full object-contain" muted />',
+    ganti: '<video src={galForm.preview} controls playsInline preload="metadata" className="absolute inset-0 h-full w-full object-contain" />',
+    label: 'Pratinjau video galeri bisa diputar dan digeser durasinya'
+  }
+]
+
+for (const p of pasangan) {
+  if (isi.includes(p.ganti)) {
+    console.log('[SUDAH ADA] ' + p.label)
+  } else if (isi.includes(p.cari)) {
+    isi = isi.replace(p.cari, p.ganti)
+    berubah = true
+    console.log('[BERHASIL] ' + p.label)
+  } else {
+    console.log('[TIDAK KETEMU] ' + p.label)
+  }
+}
+
+if (berubah) {
+  fs.writeFileSync(path.join(root, FILE), isi, 'utf8')
+}
+
+console.log('')
+console.log('Selesai. Vite akan memuat ulang otomatis.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('2. Pilih file video di form logbook maupun form galeri.')
+console.log('3. Pratinjau kini menampilkan pemutar: tombol putar, garis durasi yang bisa digeser, pengatur suara, dan tombol layar penuh.')
+console.log('4. Durasi total muncul sesaat setelah file dipilih karena metadata dimuat lebih dulu.')
+console.log('5. Tombol silang merah di pojok kanan atas tetap berfungsi untuk melepas lampiran.')
+console.log('6. Video tidak berbunyi sendiri karena tidak ada autoplay, bunyi baru keluar setelah tombol putar ditekan.')
+```
+
+## File: apply-thumb-youtube-fallback.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai memasang fallback thumbnail YouTube...')
+console.log('')
+
+/* ===== 1. ui.jsx: komponen MediaYouTube dengan coba ulang otomatis ===== */
+const FILE_U = 'src/components/ui.jsx'
+let u = baca(FILE_U)
+if (u.includes('export function MediaYouTube')) {
+  console.log('[SUDAH ADA] Komponen MediaYouTube di ui.jsx')
+} else {
+  u = u.trimEnd() + '\n\n' + `export function MediaYouTube(props) {
+  const [status, setStatus] = useState('muat')
+  const [coba, setCoba] = useState(0)
+  useEffect(function () {
+    if (status !== 'tunggu') return undefined
+    const t = setTimeout(function () {
+      setCoba(function (c) { return c + 1 })
+      setStatus('muat')
+    }, 15000)
+    return function () { clearTimeout(t) }
+  }, [status])
+  if (status === 'tunggu' || status === 'habis') {
+    return (
+      <div className={'grid place-items-center bg-slate-800 ' + (props.className || 'absolute inset-0 h-full w-full')}>
+        <div className="flex flex-col items-center gap-2 text-slate-400">
+          <SizedIcon name="youtube" size={26} />
+          <p className="px-2 text-center text-[11px] font-semibold">{status === 'habis' ? 'Thumbnail belum siap di YouTube' : 'Menyiapkan thumbnail YouTube...'}</p>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <img
+      src={props.src + (coba > 0 ? (String(props.src).indexOf('?') === -1 ? '?' : '&') + 'r=' + coba : '')}
+      alt={props.alt || 'Thumbnail YouTube'}
+      onClick={props.onClick || undefined}
+      onError={function () { setStatus(coba >= 3 ? 'habis' : 'tunggu') }}
+      onLoad={function () { setStatus('muat') }}
+      className={props.className || 'absolute inset-0 h-full w-full object-cover'}
+    />
+  )
+}
+`
+  simpan(FILE_U, u)
+  console.log('[BERHASIL] Komponen MediaYouTube ditambahkan di ui.jsx')
+}
+
+/* ===== 2. ui.jsx: SmartFit delegasi thumbnail YouTube ke MediaYouTube ===== */
+u = baca(FILE_U)
+const anchorSmart = `  const mediaRef = useRef(null)
+  const isVideo = props.type === 'video'`
+const sisipSmart = `  const mediaRef = useRef(null)
+  const isVideo = props.type === 'video'
+  if (!isVideo && String(props.src || '').indexOf('i.ytimg.com') !== -1) {
+    return <MediaYouTube src={props.src} alt={props.alt} onClick={props.onClick} className="absolute inset-0 h-full w-full object-cover" />
+  }`
+if (u.includes("i.ytimg.com') !== -1")) {
+  console.log('[SUDAH ADA] Delegasi YouTube di SmartFit')
+} else if (u.includes(anchorSmart)) {
+  u = u.replace(anchorSmart, sisipSmart)
+  simpan(FILE_U, u)
+  console.log('[BERHASIL] SmartFit mendelegasikan thumbnail YouTube')
+} else {
+  console.log('[TIDAK KETEMU] Anchor SmartFit di ui.jsx')
+}
+
+/* ===== 3. cards.jsx: pakai MediaYouTube pada kartu media YouTube ===== */
+const FILE_C = 'src/components/cards.jsx'
+let c = baca(FILE_C)
+let berubahC = false
+if (!c.includes('MediaYouTube')) {
+  c = c.replace(/import \{([^}]*)\} from '\.\/ui\.jsx'/, function (m, g) {
+    return 'import {' + g + ', MediaYouTube } from \'./ui.jsx\''
+  })
+  berubahC = true
+}
+const imgYt = `<img src={item.media_path} alt={item.judul} className="absolute inset-0 h-full w-full object-cover" />`
+if (c.includes(imgYt)) {
+  c = c.replace(imgYt, `<MediaYouTube src={item.media_path} alt={item.judul} />`)
+  berubahC = true
+}
+if (berubahC) {
+  simpan(FILE_C, c)
+  console.log('[BERHASIL] cards.jsx memakai MediaYouTube')
+} else {
+  console.log('[SUDAH ADA] cards.jsx sudah memakai MediaYouTube')
+}
+
+/* ===== 4. App.jsx: bungkam peringatan React Router ===== */
+const FILE_A = 'src/App.jsx'
+let a = baca(FILE_A)
+if (a.includes('v7_startTransition')) {
+  console.log('[SUDAH ADA] Future flag React Router')
+} else if (a.includes('<BrowserRouter>')) {
+  a = a.replace('<BrowserRouter>', '<BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>')
+  simpan(FILE_A, a)
+  console.log('[BERHASIL] Future flag React Router dipasang')
+} else {
+  console.log('[TIDAK KETEMU] Baris BrowserRouter di App.jsx')
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Perilaku baru:')
+console.log('1. Saat thumbnail YouTube belum siap, kartu menampilkan placeholder rapi berikon YouTube.')
+console.log('2. Komponen mencoba ulang setiap 15 detik sampai empat kali, jadi gambar muncul sendiri.')
+console.log('3. Bila setelah empat percobaan masih belum ada, placeholder permanen tampil tanpa gambar rusak.')
+console.log('4. Peringatan React Router di konsol tidak muncul lagi.')
+console.log('5. Baris CORS dan pesan internal pemain YouTube tetap ada tetapi tidak mengganggu fungsi.')
+```
+
+## File: apply-youtube-backend.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function simpan(rel, isi) {
+  const full = path.join(root, rel)
+  fs.mkdirSync(path.dirname(full), { recursive: true })
+  fs.writeFileSync(full, isi, 'utf8')
+  console.log('[BERHASIL] ' + rel + ' ditulis')
+}
+
+const LIMIT_PER_DAY = 6
+
+const quotaJs = `import { createClient } from '@supabase/supabase-js'
+const LIMIT = 6
+function ptToday() {
+  const now = new Date()
+  const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
+  const y = pt.getFullYear()
+  const m = String(pt.getMonth() + 1).padStart(2, '0')
+  const d = String(pt.getDate()).padStart(2, '0')
+  return y + '-' + m + '-' + d
+}
+export default async function handler(req, res) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+  const today = ptToday()
+  const { count, error } = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today)
+  const used = error ? 0 : (count || 0)
+  res.setHeader('Cache-Control', 'no-store')
+  return res.status(200).json({ limit: LIMIT, used: used, remaining: Math.max(0, LIMIT - used), ptDate: today })
+}
+`
+
+const sessionJs = `import { createClient } from '@supabase/supabase-js'
+const LIMIT = 6
+function ptToday() {
+  const now = new Date()
+  const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
+  const y = pt.getFullYear()
+  const m = String(pt.getMonth() + 1).padStart(2, '0')
+  const d = String(pt.getDate()).padStart(2, '0')
+  return y + '-' + m + '-' + d
+}
+async function getAccessToken() {
+  const params = new URLSearchParams()
+  params.set('client_id', process.env.YOUTUBE_CLIENT_ID || '')
+  params.set('client_secret', process.env.YOUTUBE_CLIENT_SECRET || '')
+  params.set('refresh_token', process.env.YOUTUBE_REFRESH_TOKEN || '')
+  params.set('grant_type', 'refresh_token')
+  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
+  if (!r.ok) throw new Error('Gagal refresh token YouTube')
+  const j = await r.json()
+  if (!j.access_token) throw new Error('Token akses YouTube tidak diterima')
+  return j.access_token
+}
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const authHeader = req.headers.authorization || ''
+  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
+  const authClient = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
+  const chk = await authClient.auth.getUser()
+  if (chk.error || !chk.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
+  const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+  const today = ptToday()
+  const { count } = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today)
+  const used = count || 0
+  if (used >= LIMIT) return res.status(429).json({ error: 'Kuota upload YouTube hari ini sudah habis. Gunakan link embed atau coba lagi setelah reset kuota.', remaining: 0 })
+  const body = req.body || {}
+  if (!body.title) return res.status(400).json({ error: 'Judul video wajib diisi' })
+  let access
+  try { access = await getAccessToken() } catch (e) { return res.status(500).json({ error: e.message }) }
+  const meta = {
+    snippet: { title: String(body.title).slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
+    status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
+  }
+  const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+    method: 'POST',
+    headers: {
+      Authorization: 'Bearer ' + access,
+      'Content-Type': 'application/json; charset=UTF-8',
+      'X-Upload-Content-Type': body.contentType || 'video/mp4'
+    },
+    body: JSON.stringify(meta)
+  })
+  if (!init.ok) { const t = await init.text(); return res.status(502).json({ error: 'Gagal memulai sesi YouTube: ' + t }) }
+  const sessionUri = init.headers.get('location')
+  if (!sessionUri) return res.status(502).json({ error: 'Sesi upload tidak mengembalikan lokasi' })
+  await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: chk.data.user.id })
+  return res.status(200).json({ sessionUri, remaining: Math.max(0, LIMIT - used - 1) })
+}
+`
+
+simpan('api/youtube/quota.js', quotaJs)
+simpan('api/youtube/session.js', sessionJs)
+
+console.log('\nSelesai. Push ke GitHub untuk deploy endpoint di Vercel.')
+```
+
+## File: apply-youtube-final-fix.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai menyelesaikan sisa pemasangan fitur YouTube...')
+console.log('')
+
+/* ===== 1. UI pemilih jenis media pada form galeri ===== */
+const FILE_D = 'src/pages/DashboardPage.jsx'
+let d = baca(FILE_D)
+if (d.includes("galMode === 'video'")) {
+  console.log('[SUDAH ADA] UI pemilih jenis media pada form galeri')
+} else {
+  const regexGal = /<label className=\{labelCls\}>Pilih foto atau video[\s\S]*?\}\} \/>\s*<\/div>/
+  const blokGal = `<label className={labelCls}>Jenis media {editGalId ? null : <span className="text-red-500">*</span>}</label>
+                <div className="mt-1.5 flex gap-2">
+                  <button type="button" onClick={function () { setGalMode('foto') }} className={'px-3 py-1.5 rounded-xl text-xs font-bold ' + (galMode !== 'video' ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600')}>Foto</button>
+                  <button type="button" onClick={function () { setGalMode('video') }} className={'px-3 py-1.5 rounded-xl text-xs font-bold ' + (galMode === 'video' ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600')}>Video</button>
+                </div>
+                <div className="mt-1.5">
+                  {galMode === 'video' ? (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-slate-500">Sisa kuota upload YouTube hari ini: {ytQuota.remaining} dari {ytQuota.limit}</p>
+                      <div className={ytQuota.remaining <= 0 && !galForm.file ? 'opacity-50 pointer-events-none' : ''}>
+                        <FileInput accept="video/*" fileName={galForm.file ? galForm.file.name : ''}
+                          onChange={async function (e) {
+                            const f = e.target.files[0]
+                            if (!f) return
+                            if (formatHeic(f)) {
+                              setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: '', previewLoading: true }) })
+                              const blob = await pratinjauHeic(f)
+                              const preview = blob ? URL.createObjectURL(blob) : URL.createObjectURL(f)
+                              setGalForm(function (g) { return Object.assign({}, g, { preview: preview, previewLoading: false }) })
+                            } else {
+                              setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: URL.createObjectURL(f), previewLoading: false }) })
+                            }
+                          }} />
+                      </div>
+                      {ytQuota.remaining <= 0 ? <p className="text-xs text-red-600">Kuota habis. Gunakan link YouTube di bawah.</p> : null}
+                      <input className={inputCls} value={galYtLink} onChange={function (e) { setGalYtLink(e.target.value) }} placeholder="Atau tempel link YouTube (unlisted)" />
+                    </div>
+                  ) : (
+                    <FileInput accept="image/*" fileName={galForm.file ? galForm.file.name : ''}
+                      onChange={async function (e) {
+                        const f = e.target.files[0]
+                        if (!f) return
+                        if (formatHeic(f)) {
+                          setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: '', previewLoading: true }) })
+                          const blob = await pratinjauHeic(f)
+                          const preview = blob ? URL.createObjectURL(blob) : URL.createObjectURL(f)
+                          setGalForm(function (g) { return Object.assign({}, g, { preview: preview, previewLoading: false }) })
+                        } else {
+                          setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: URL.createObjectURL(f), previewLoading: false }) })
+                        }
+                      }} />
+                  )}
+                </div>`
+  if (!regexGal.test(d)) {
+    console.log('[TIDAK KETEMU] Blok form media galeri di DashboardPage.jsx')
+  } else {
+    d = d.replace(regexGal, blokGal)
+    simpan(FILE_D, d)
+    console.log('[BERHASIL] UI pemilih jenis media pada form galeri')
+  }
+}
+
+/* ===== 2. Middleware dan plugin YouTube di vite.config.js ===== */
+const FILE_V = 'vite.config.js'
+let v = baca(FILE_V)
+if (v.includes('pluginApiYoutube')) {
+  console.log('[SUDAH ADA] Middleware dan plugin YouTube di vite.config.js')
+} else {
+  const fungsiPlugin = `function pluginApiYoutube(env) {
+  const admin = createClient(env.VITE_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY)
+  function ptToday() {
+    const now = new Date()
+    const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
+    const y = pt.getFullYear()
+    const m = String(pt.getMonth() + 1).padStart(2, '0')
+    const d = String(pt.getDate()).padStart(2, '0')
+    return y + '-' + m + '-' + d
+  }
+  async function cekSesi(req) {
+    const authHeader = req.headers.authorization || ''
+    const token = authHeader.replace('Bearer ', '')
+    if (!token) return null
+    const supabase = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
+    const r = await supabase.auth.getUser(token)
+    return r.error ? null : r.data.user
+  }
+  return {
+    name: 'api-youtube-dev',
+    configureServer(server) {
+      server.middlewares.use('/api/youtube/quota', async function (req, res) {
+        const today = ptToday()
+        const { count } = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today)
+        const used = count || 0
+        res.setHeader('Content-Type', 'application/json')
+        res.setHeader('Cache-Control', 'no-store')
+        res.end(JSON.stringify({ limit: 6, used: used, remaining: Math.max(0, 6 - used), ptDate: today }))
+      })
+      server.middlewares.use('/api/youtube/session', async function (req, res) {
+        if (req.method !== 'POST') { res.statusCode = 405; res.end(JSON.stringify({ error: 'Method tidak diizinkan' })); return }
+        const user = await cekSesi(req)
+        if (!user) { res.statusCode = 401; res.end(JSON.stringify({ error: 'Sesi tidak valid' })); return }
+        const today = ptToday()
+        const { count } = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today)
+        const used = count || 0
+        if (used >= 6) { res.statusCode = 429; res.end(JSON.stringify({ error: 'Kuota upload YouTube hari ini sudah habis. Gunakan link embed.', remaining: 0 })); return }
+        const body = await bacaBody(req)
+        const params = new URLSearchParams()
+        params.set('client_id', env.YOUTUBE_CLIENT_ID || '')
+        params.set('client_secret', env.YOUTUBE_CLIENT_SECRET || '')
+        params.set('refresh_token', env.YOUTUBE_REFRESH_TOKEN || '')
+        params.set('grant_type', 'refresh_token')
+        const tr = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
+        if (!tr.ok) { res.statusCode = 500; res.end(JSON.stringify({ error: 'Gagal refresh token YouTube' })); return }
+        const tok = await tr.json()
+        const meta = {
+          snippet: { title: String(body.title || 'Dokumentasi Magang').slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
+          status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
+        }
+        const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + tok.access_token, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
+          body: JSON.stringify(meta)
+        })
+        if (!init.ok) { const t = await init.text(); res.statusCode = 502; res.end(JSON.stringify({ error: 'Gagal memulai sesi YouTube: ' + t })); return }
+        const sessionUri = init.headers.get('location')
+        if (!sessionUri) { res.statusCode = 502; res.end(JSON.stringify({ error: 'Sesi upload tidak mengembalikan lokasi' })); return }
+        await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: user.id })
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ sessionUri: sessionUri, remaining: Math.max(0, 6 - used - 1) }))
+      })
+    }
+  }
+}
+`
+  const cariExport = `export default defineConfig(function ({ mode }) {`
+  const cariPlugins = `plugins: [react(), pluginApiR2(env)]`
+  if (!v.includes(cariExport) || !v.includes(cariPlugins)) {
+    console.log('[TIDAK KETEMU] Pola export atau plugins di vite.config.js')
+  } else {
+    v = v.replace(cariExport, fungsiPlugin + cariExport)
+    v = v.replace(cariPlugins, `plugins: [react(), pluginApiR2(env), pluginApiYoutube(env)]`)
+    simpan(FILE_V, v)
+    console.log('[BERHASIL] Middleware dan plugin YouTube di vite.config.js')
+  }
+}
+
+console.log('')
+console.log('Selesai. Restart dev server agar middleware baru aktif:')
+console.log('  Ctrl+C lalu npm run dev -- --host')
+console.log('')
+console.log('Pastikan .env.local memuat: YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, YOUTUBE_REFRESH_TOKEN, SUPABASE_SERVICE_ROLE_KEY')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka dashboard, tab Galeri, perhatikan tombol Foto dan Video kini muncul.')
+console.log('2. Pilih Video: terlihat sisa kuota, FileInput video, dan kolom link YouTube.')
+console.log('3. Saat kuota habis, FileInput video menjadi abu-abu dan hanya link yang aktif.')
+console.log('4. Uji di localhost: endpoint /api/youtube/quota harus menjawab JSON sisa kuota.')
+```
+
+## File: apply-youtube-final-response.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) {
+  const full = path.join(root, rel)
+  fs.mkdirSync(path.dirname(full), { recursive: true })
+  fs.writeFileSync(full, isi, 'utf8')
+  console.log('[BERHASIL] ' + rel + ' ditulis')
+}
+function ganti(rel, cari, gantiDengan, label) {
+  let isi = baca(rel)
+  if (isi.includes(gantiDengan)) { console.log('[SUDAH ADA] ' + label); return }
+  if (!isi.includes(cari)) { console.log('[TIDAK KETEMU] ' + label + ' di ' + rel); return }
+  isi = isi.replace(cari, gantiDengan)
+  simpan(rel, isi)
+  console.log('[BERHASIL] ' + label)
+}
+function gantiSemua(rel, cari, gantiDengan, label) {
+  let isi = baca(rel)
+  if (!isi.includes(cari)) { console.log('[TIDAK KETEMU] ' + label + ' di ' + rel); return }
+  isi = isi.split(cari).join(gantiDengan)
+  simpan(rel, isi)
+  console.log('[BERHASIL] ' + label)
+}
+
+console.log('Mulai memperbaiki pemulihan respons final upload YouTube...')
+console.log('')
+
+/* ===== 1. youtube.js: pulihkan id video bila respons final diblokir CORS ===== */
+simpan('src/lib/youtube.js', `import { supabase } from './supabase.js'
+
+export function parseYouTubeId(url) {
+  if (!url) return null
+  const s = String(url).trim()
+  if (/^[A-Za-z0-9_-]{11}$/.test(s)) return s
+  try {
+    const u = new URL(s)
+    const host = u.hostname.replace('www.', '').replace('m.', '')
+    if (host === 'youtu.be') {
+      const id = u.pathname.slice(1).split('/')[0]
+      return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null
+    }
+    if (host.endsWith('youtube.com') || host.endsWith('youtube-nocookie.com')) {
+      const v = u.searchParams.get('v')
+      if (v && /^[A-Za-z0-9_-]{11}$/.test(v)) return v
+      const parts = u.pathname.split('/').filter(Boolean)
+      if (parts[0] === 'embed' || parts[0] === 'shorts' || parts[0] === 'live') {
+        const id = parts[1]
+        return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null
+      }
+    }
+  } catch (e) {}
+  return null
+}
+export function ytThumb(id) {
+  return 'https://i.ytimg.com/vi/' + id + '/hqdefault.jpg'
+}
+export function ytEmbedUrl(id) {
+  return 'https://www.youtube-nocookie.com/embed/' + id + '?rel=0&modestbranding=1'
+}
+export async function fetchYouTubeQuota() {
+  try {
+    const r = await fetch('/api/youtube/quota', { cache: 'no-store' })
+    if (!r.ok) return { limit: 5, used: 0, remaining: 5 }
+    return await r.json()
+  } catch (e) {
+    return { limit: 5, used: 0, remaining: 5 }
+  }
+}
+export async function startYouTubeSession(title, description, contentType, token) {
+  const r = await fetch('/api/youtube/session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ title: title, description: description, contentType: contentType })
+  })
+  if (!r.ok) {
+    const j = await r.json().catch(function () { return { error: 'Gagal membuat sesi YouTube' } })
+    throw new Error(j.error || 'Gagal membuat sesi YouTube')
+  }
+  return await r.json()
+}
+export async function uploadToYouTube(sessionUri, blob, onProgress) {
+  const hasil = await new Promise(function (resolve) {
+    const xhr = new XMLHttpRequest()
+    xhr.open('PUT', sessionUri)
+    xhr.setRequestHeader('Content-Type', blob.type || 'video/mp4')
+    if (onProgress) {
+      xhr.upload.onprogress = function (e) {
+        if (e.lengthComputable) onProgress(e.loaded / e.total)
+      }
+    }
+    xhr.onload = function () { resolve({ status: xhr.status, body: xhr.responseText }) }
+    xhr.onerror = function () { resolve({ status: 0, body: '' }) }
+    xhr.send(blob)
+  })
+  if (hasil.status >= 200 && hasil.status < 300) {
+    try {
+      const j = JSON.parse(hasil.body || '{}')
+      if (j && j.id) return { videoId: j.id }
+    } catch (e) { /* respons tidak terbaca, pulihkan lewat server */ }
+  } else if (hasil.status !== 0) {
+    throw new Error('Upload YouTube gagal (status ' + hasil.status + ')')
+  }
+  const sesi = await supabase.auth.getSession()
+  const token = sesi.data.session ? sesi.data.session.access_token : ''
+  const r = await fetch('/api/youtube/latest', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({})
+  })
+  if (r.ok) {
+    const j = await r.json()
+    if (j.videoId) return { videoId: j.videoId }
+  }
+  throw new Error('Upload selesai tetapi id video tidak terbaca. Video kemungkinan sudah masuk channel; tempel link YouTube secara manual.')
+}
+`)
+
+/* ===== 2. Endpoint pemulihan id video terbaru ===== */
+simpan('api/youtube/latest.js', `import { createClient } from '@supabase/supabase-js'
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const authHeader = req.headers.authorization || ''
+  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
+  const authClient = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
+  const chk = await authClient.auth.getUser()
+  if (chk.error || !chk.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
+  const params = new URLSearchParams()
+  params.set('client_id', process.env.YOUTUBE_CLIENT_ID || '')
+  params.set('client_secret', process.env.YOUTUBE_CLIENT_SECRET || '')
+  params.set('refresh_token', process.env.YOUTUBE_REFRESH_TOKEN || '')
+  params.set('grant_type', 'refresh_token')
+  const tr = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
+  if (!tr.ok) return res.status(500).json({ error: 'Gagal refresh token YouTube' })
+  const tok = await tr.json()
+  const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&order=date&maxResults=1', {
+    headers: { Authorization: 'Bearer ' + tok.access_token }
+  })
+  if (!r.ok) return res.status(502).json({ error: 'Gagal memeriksa video terbaru' })
+  const j = await r.json()
+  const item = (j.items || [])[0]
+  if (!item) return res.status(404).json({ error: 'Tidak ada video ditemukan' })
+  const published = Date.parse(item.snippet.publishedAt)
+  if (Date.now() - published > 15 * 60 * 1000) return res.status(404).json({ error: 'Video terbaru terlalu lama' })
+  return res.status(200).json({ videoId: item.id.videoId })
+}
+`)
+
+/* ===== 3. Kuota harian menjadi 5 di endpoint Vercel ===== */
+simpan('api/youtube/quota.js', `import { createClient } from '@supabase/supabase-js'
+const LIMIT = 5
+function ptToday() {
+  const now = new Date()
+  const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
+  const y = pt.getFullYear()
+  const m = String(pt.getMonth() + 1).padStart(2, '0')
+  const d = String(pt.getDate()).padStart(2, '0')
+  return y + '-' + m + '-' + d
+}
+export default async function handler(req, res) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+  const today = ptToday()
+  const { count, error } = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today)
+  const used = error ? 0 : (count || 0)
+  res.setHeader('Cache-Control', 'no-store')
+  return res.status(200).json({ limit: LIMIT, used: used, remaining: Math.max(0, LIMIT - used), ptDate: today })
+}
+`)
+simpan('api/youtube/session.js', `import { createClient } from '@supabase/supabase-js'
+const LIMIT = 5
+function ptToday() {
+  const now = new Date()
+  const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
+  const y = pt.getFullYear()
+  const m = String(pt.getMonth() + 1).padStart(2, '0')
+  const d = String(pt.getDate()).padStart(2, '0')
+  return y + '-' + m + '-' + d
+}
+async function getAccessToken() {
+  const params = new URLSearchParams()
+  params.set('client_id', process.env.YOUTUBE_CLIENT_ID || '')
+  params.set('client_secret', process.env.YOUTUBE_CLIENT_SECRET || '')
+  params.set('refresh_token', process.env.YOUTUBE_REFRESH_TOKEN || '')
+  params.set('grant_type', 'refresh_token')
+  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
+  if (!r.ok) throw new Error('Gagal refresh token YouTube')
+  const j = await r.json()
+  if (!j.access_token) throw new Error('Token akses YouTube tidak diterima')
+  return j.access_token
+}
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const authHeader = req.headers.authorization || ''
+  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
+  const authClient = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
+  const chk = await authClient.auth.getUser()
+  if (chk.error || !chk.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
+  const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+  const today = ptToday()
+  const { count } = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today)
+  const used = count || 0
+  if (used >= LIMIT) return res.status(429).json({ error: 'Kuota upload YouTube hari ini sudah habis. Gunakan link embed atau coba lagi setelah reset kuota.', remaining: 0 })
+  const body = req.body || {}
+  if (!body.title) return res.status(400).json({ error: 'Judul video wajib diisi' })
+  let access
+  try { access = await getAccessToken() } catch (e) { return res.status(500).json({ error: e.message }) }
+  const meta = {
+    snippet: { title: String(body.title).slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
+    status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
+  }
+  const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
+    body: JSON.stringify(meta)
+  })
+  if (!init.ok) { const t = await init.text(); return res.status(502).json({ error: 'Gagal memulai sesi YouTube: ' + t }) }
+  const sessionUri = init.headers.get('location')
+  if (!sessionUri) return res.status(502).json({ error: 'Sesi upload tidak mengembalikan lokasi' })
+  await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: chk.data.user.id })
+  return res.status(200).json({ sessionUri: sessionUri, remaining: Math.max(0, LIMIT - used - 1) })
+}
+`)
+
+/* ===== 4. Middleware dev lokal: endpoint latest dan kuota 5 ===== */
+ganti('vite.config.js',
+  `        server.middlewares.use('/api/youtube/session'`,
+  `        server.middlewares.use('/api/youtube/latest', async function (req, res) {
+          if (req.method !== 'POST') { res.statusCode = 405; res.end(JSON.stringify({ error: 'Method tidak diizinkan' })); return }
+          const user = await cekSesi(req)
+          if (!user) { res.statusCode = 401; res.end(JSON.stringify({ error: 'Sesi tidak valid' })); return }
+          const params = new URLSearchParams()
+          params.set('client_id', env.YOUTUBE_CLIENT_ID || '')
+          params.set('client_secret', env.YOUTUBE_CLIENT_SECRET || '')
+          params.set('refresh_token', env.YOUTUBE_REFRESH_TOKEN || '')
+          params.set('grant_type', 'refresh_token')
+          const tr = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
+          if (!tr.ok) { res.statusCode = 500; res.end(JSON.stringify({ error: 'Gagal refresh token YouTube' })); return }
+          const tok = await tr.json()
+          const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&order=date&maxResults=1', { headers: { Authorization: 'Bearer ' + tok.access_token } })
+          if (!r.ok) { res.statusCode = 502; res.end(JSON.stringify({ error: 'Gagal memeriksa video terbaru' })); return }
+          const j = await r.json()
+          const item = (j.items || [])[0]
+          if (!item) { res.statusCode = 404; res.end(JSON.stringify({ error: 'Tidak ada video ditemukan' })); return }
+          const published = Date.parse(item.snippet.publishedAt)
+          if (Date.now() - published > 15 * 60 * 1000) { res.statusCode = 404; res.end(JSON.stringify({ error: 'Video terbaru terlalu lama' })); return }
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ videoId: item.id.videoId }))
+        })
+        server.middlewares.use('/api/youtube/session'`,
+  'Middleware /api/youtube/latest untuk dev lokal')
+gantiSemua('vite.config.js', 'used >= 6', 'used >= 5', 'Batas kuota middleware session menjadi 5')
+gantiSemua('vite.config.js', '6 - used', '5 - used', 'Sisa kuota middleware menjadi 5')
+
+console.log('')
+console.log('Selesai. Restart dev server agar middleware baru aktif:')
+console.log('  Ctrl+C lalu npm run dev -- --host')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Upload satu video kecil lagi dari form logbook atau galeri.')
+console.log('2. Progres mencapai 100 persen lalu aplikasi otomatis memulihkan id video dari channel.')
+console.log('3. Logbook tersimpan tanpa error dan kartu menampilkan thumbnail YouTube.')
+console.log('4. Kuota harian kini tampil sebagai X dari 5 karena setiap upload memakai 1600 unit')
+console.log('   ditambah 100 unit untuk pemulihan id video, total 8500 dari 10000 unit harian.')
+```
+
+## File: apply-youtube-final.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+function ganti(rel, cari, gantiDengan, label, semua) {
+  if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan'); return }
+  let isi = baca(rel)
+  if (isi.includes(gantiDengan)) { console.log('[SUDAH ADA] ' + label); return }
+  if (!isi.includes(cari)) { console.log('[TIDAK KETEMU] ' + label + ' di ' + rel); return }
+  isi = semua ? isi.split(cari).join(gantiDengan) : isi.replace(cari, gantiDengan)
+  simpan(rel, isi)
+  console.log('[BERHASIL] ' + label)
+}
+function tulis(rel, isi, label) {
+  const full = path.join(root, rel)
+  fs.mkdirSync(path.dirname(full), { recursive: true })
+  fs.writeFileSync(full, isi, 'utf8')
+  console.log('[BERHASIL] ' + label)
+}
+
+console.log('Mulai memasang fitur media YouTube menyeluruh...')
+console.log('')
+
+/* ===== 1. api/youtube/quota.js ===== */
+tulis('api/youtube/quota.js', `import { createClient } from '@supabase/supabase-js'
+const LIMIT = 6
+function ptToday() {
+  const now = new Date()
+  const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
+  const y = pt.getFullYear()
+  const m = String(pt.getMonth() + 1).padStart(2, '0')
+  const d = String(pt.getDate()).padStart(2, '0')
+  return y + '-' + m + '-' + d
+}
+export default async function handler(req, res) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+  const today = ptToday()
+  const { count, error } = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today)
+  const used = error ? 0 : (count || 0)
+  res.setHeader('Cache-Control', 'no-store')
+  return res.status(200).json({ limit: LIMIT, used: used, remaining: Math.max(0, LIMIT - used), ptDate: today })
+}
+`, 'api/youtube/quota.js ditulis')
+
+/* ===== 2. api/youtube/session.js ===== */
+tulis('api/youtube/session.js', `import { createClient } from '@supabase/supabase-js'
+const LIMIT = 6
+function ptToday() {
+  const now = new Date()
+  const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
+  const y = pt.getFullYear()
+  const m = String(pt.getMonth() + 1).padStart(2, '0')
+  const d = String(pt.getDate()).padStart(2, '0')
+  return y + '-' + m + '-' + d
+}
+async function getAccessToken() {
+  const params = new URLSearchParams()
+  params.set('client_id', process.env.YOUTUBE_CLIENT_ID || '')
+  params.set('client_secret', process.env.YOUTUBE_CLIENT_SECRET || '')
+  params.set('refresh_token', process.env.YOUTUBE_REFRESH_TOKEN || '')
+  params.set('grant_type', 'refresh_token')
+  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
+  if (!r.ok) throw new Error('Gagal refresh token YouTube')
+  const j = await r.json()
+  if (!j.access_token) throw new Error('Token akses YouTube tidak diterima')
+  return j.access_token
+}
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const authHeader = req.headers.authorization || ''
+  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
+  const authClient = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
+  const chk = await authClient.auth.getUser()
+  if (chk.error || !chk.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
+  const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+  const today = ptToday()
+  const { count } = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today)
+  const used = count || 0
+  if (used >= LIMIT) return res.status(429).json({ error: 'Kuota upload YouTube hari ini sudah habis. Gunakan link embed atau coba lagi setelah reset kuota.', remaining: 0 })
+  const body = req.body || {}
+  if (!body.title) return res.status(400).json({ error: 'Judul video wajib diisi' })
+  let access
+  try { access = await getAccessToken() } catch (e) { return res.status(500).json({ error: e.message }) }
+  const meta = {
+    snippet: { title: String(body.title).slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
+    status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
+  }
+  const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
+    body: JSON.stringify(meta)
+  })
+  if (!init.ok) { const t = await init.text(); return res.status(502).json({ error: 'Gagal memulai sesi YouTube: ' + t }) }
+  const sessionUri = init.headers.get('location')
+  if (!sessionUri) return res.status(502).json({ error: 'Sesi upload tidak mengembalikan lokasi' })
+  await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: chk.data.user.id })
+  return res.status(200).json({ sessionUri: sessionUri, remaining: Math.max(0, LIMIT - used - 1) })
+}
+`, 'api/youtube/session.js ditulis')
+
+/* ===== 3. src/lib/youtube.js ===== */
+tulis('src/lib/youtube.js', `export function parseYouTubeId(url) {
+  if (!url) return null
+  const s = String(url).trim()
+  if (/^[A-Za-z0-9_-]{11}$/.test(s)) return s
+  try {
+    const u = new URL(s)
+    const host = u.hostname.replace('www.', '').replace('m.', '')
+    if (host === 'youtu.be') {
+      const id = u.pathname.slice(1).split('/')[0]
+      return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null
+    }
+    if (host.endsWith('youtube.com') || host.endsWith('youtube-nocookie.com')) {
+      const v = u.searchParams.get('v')
+      if (v && /^[A-Za-z0-9_-]{11}$/.test(v)) return v
+      const parts = u.pathname.split('/').filter(Boolean)
+      if (parts[0] === 'embed' || parts[0] === 'shorts' || parts[0] === 'live') {
+        const id = parts[1]
+        return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null
+      }
+    }
+  } catch (e) {}
+  return null
+}
+export function ytThumb(id) {
+  return 'https://i.ytimg.com/vi/' + id + '/hqdefault.jpg'
+}
+export function ytEmbedUrl(id) {
+  return 'https://www.youtube-nocookie.com/embed/' + id + '?rel=0&modestbranding=1'
+}
+export async function fetchYouTubeQuota() {
+  try {
+    const r = await fetch('/api/youtube/quota', { cache: 'no-store' })
+    if (!r.ok) return { limit: 6, used: 0, remaining: 6 }
+    return await r.json()
+  } catch (e) {
+    return { limit: 6, used: 0, remaining: 6 }
+  }
+}
+export async function startYouTubeSession(title, description, contentType, token) {
+  const r = await fetch('/api/youtube/session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ title: title, description: description, contentType: contentType })
+  })
+  if (!r.ok) {
+    const j = await r.json().catch(function () { return { error: 'Gagal membuat sesi YouTube' } })
+    throw new Error(j.error || 'Gagal membuat sesi YouTube')
+  }
+  return await r.json()
+}
+export function uploadToYouTube(sessionUri, blob, onProgress) {
+  return new Promise(function (resolve, reject) {
+    const xhr = new XMLHttpRequest()
+    xhr.open('PUT', sessionUri)
+    xhr.setRequestHeader('Content-Type', blob.type || 'video/mp4')
+    if (onProgress) {
+      xhr.upload.onprogress = function (e) {
+        if (e.lengthComputable) onProgress(e.loaded / e.total)
+      }
+    }
+    xhr.onload = function () {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const j = JSON.parse(xhr.responseText || '{}')
+          resolve({ videoId: j.id })
+        } catch (e) { reject(new Error('Respons YouTube tidak valid')) }
+      } else {
+        reject(new Error('Upload YouTube gagal (status ' + xhr.status + ')'))
+      }
+    }
+    xhr.onerror = function () { reject(new Error('Jaringan gagal saat upload YouTube')) }
+    xhr.send(blob)
+  })
+}
+`, 'src/lib/youtube.js ditulis')
+
+/* ===== 4. DashboardPage: import dan state ===== */
+ganti('src/pages/DashboardPage.jsx',
+  `import { pratinjauHeic, formatHeic } from '../lib/konversi.js'`,
+  `import { pratinjauHeic, formatHeic } from '../lib/konversi.js'
+import { parseYouTubeId, ytThumb, fetchYouTubeQuota, startYouTubeSession, uploadToYouTube } from '../lib/youtube.js'`,
+  'Import helper YouTube di DashboardPage')
+ganti('src/pages/DashboardPage.jsx',
+  `  const [infoProses, setInfoProses] = useState('')`,
+  `  const [infoProses, setInfoProses] = useState('')
+  const [ytQuota, setYtQuota] = useState({ limit: 6, used: 0, remaining: 6 })
+  const [galMode, setGalMode] = useState('foto')
+  const [galYtLink, setGalYtLink] = useState('')
+  const [galOldYt, setGalOldYt] = useState(null)`,
+  'State YouTube di DashboardPage')
+ganti('src/pages/DashboardPage.jsx',
+  `  useEffect(function () {
+    if (mahasiswa) refresh()
+  }, [mahasiswa])`,
+  `  useEffect(function () {
+    if (mahasiswa) refresh()
+    fetchYouTubeQuota().then(setYtQuota)
+    const iv = setInterval(function () { fetchYouTubeQuota().then(setYtQuota) }, 30000)
+    return function () { clearInterval(iv) }
+  }, [mahasiswa])`,
+  'Muat kuota YouTube berkala')
+ganti('src/pages/DashboardPage.jsx',
+  `return { key: Math.random().toString(36).slice(2), judul: '', deskripsi: '', hasil: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false, show: false }`,
+  `return { key: Math.random().toString(36).slice(2), judul: '', deskripsi: '', hasil: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false, show: false, mode: 'foto', ytLink: '', oldYtId: null, oldSource: 'r2' }`,
+  'newItem menyimpan mode dan YouTube')
+ganti('src/pages/DashboardPage.jsx',
+  `  async function hapusMediaR2(url) {
+    const key = keyDariUrl(url)`,
+  `  async function hapusMediaR2(url) {
+    if (String(url || '').indexOf('i.ytimg.com') !== -1 || String(url || '').indexOf('youtube') !== -1) return
+    const key = keyDariUrl(url)`,
+  'hapusMediaR2 melewatkan URL YouTube')
+
+/* ===== 5. DashboardPage: logika simpan logbook ===== */
+ganti('src/pages/DashboardPage.jsx',
+  `        let mediaPath = null
+        let mediaType = null
+        let mediaThumb = null
+        if (it.file) {
+          const up = await uploadMedia(it.file, 'logbook', function (pesan) { setInfoProses(pesan) })
+          mediaPath = up.publicUrl
+          mediaType = it.file.type.indexOf('video') === 0 ? 'video' : 'foto'
+          mediaThumb = up.thumbUrl || null
+        } else if (it.oldPath) {
+          mediaPath = it.oldPath
+          mediaType = detectMediaType(it.oldPath)
+          mediaThumb = it.oldThumb || null
+        }
+        clean.push({ judul: it.judul.trim(), deskripsi: it.deskripsi.trim(), hasil: it.hasil.trim(), media_path: mediaPath, media_type: mediaType, media_thumb: mediaThumb, show_in_gallery: it.show && !!mediaPath })`,
+  `        let mediaPath = null
+        let mediaType = null
+        let mediaThumb = null
+        let mediaSource = it.oldSource || 'r2'
+        let youtubeId = it.oldYtId || null
+        if (it.mode === 'video' && it.ytLink && !it.file) {
+          const id = parseYouTubeId(it.ytLink)
+          if (!id) { alert('Link YouTube tidak valid pada kegiatan ' + (i + 1) + '.'); setBusy(false); return }
+          mediaSource = 'youtube'
+          youtubeId = id
+          mediaPath = ytThumb(id)
+          mediaThumb = ytThumb(id)
+          mediaType = 'video'
+        } else if (it.mode === 'video' && it.file) {
+          if (ytQuota.remaining <= 0) { alert('Kuota upload YouTube hari ini sudah habis. Gunakan link YouTube.'); setBusy(false); return }
+          const sesiData = await supabase.auth.getSession()
+          const tokenS = sesiData.data.session ? sesiData.data.session.access_token : ''
+          const sesi = await startYouTubeSession(it.judul || 'Dokumentasi Magang', 'Diunggah dari portal logbook magang BSI.', it.file.type || 'video/mp4', tokenS)
+          const hasilYt = await uploadToYouTube(sesi.sessionUri, it.file, function (p) { setInfoProses('Mengunggah ke YouTube... ' + Math.round(p * 100) + '%') })
+          mediaSource = 'youtube'
+          youtubeId = hasilYt.videoId
+          mediaPath = ytThumb(hasilYt.videoId)
+          mediaThumb = ytThumb(hasilYt.videoId)
+          mediaType = 'video'
+          setYtQuota(function (q) { return Object.assign({}, q, { used: q.used + 1, remaining: Math.max(0, q.remaining - 1) }) })
+          fetchYouTubeQuota().then(setYtQuota)
+        } else if (it.file) {
+          const up = await uploadMedia(it.file, 'logbook', function (pesan) { setInfoProses(pesan) })
+          mediaPath = up.publicUrl
+          mediaType = it.file.type.indexOf('video') === 0 ? 'video' : 'foto'
+          mediaThumb = up.thumbUrl || null
+          mediaSource = 'r2'
+          youtubeId = null
+        } else if (it.oldPath) {
+          mediaPath = it.oldPath
+          mediaType = detectMediaType(it.oldPath)
+          mediaThumb = it.oldThumb || null
+          mediaSource = 'r2'
+          youtubeId = null
+        }
+        clean.push({ judul: it.judul.trim(), deskripsi: it.deskripsi.trim(), hasil: it.hasil.trim(), media_path: mediaPath, media_type: mediaType, media_thumb: mediaThumb, media_source: mediaSource, youtube_id: youtubeId, show_in_gallery: it.show && !!mediaPath })`,
+  'Cabang YouTube pada submitLogbook')
+ganti('src/pages/DashboardPage.jsx',
+  `        return { logbook_id: logId, urutan: idx + 1, judul: c.judul, deskripsi: c.deskripsi, hasil: c.hasil, media_path: c.media_path, media_type: c.media_type, media_thumb: c.media_thumb, show_in_gallery: c.show_in_gallery }`,
+  `        return { logbook_id: logId, urutan: idx + 1, judul: c.judul, deskripsi: c.deskripsi, hasil: c.hasil, media_path: c.media_path, media_type: c.media_type, media_thumb: c.media_thumb, media_source: c.media_source, youtube_id: c.youtube_id, show_in_gallery: c.show_in_gallery }`,
+  'rows logbook membawa kolom YouTube')
+ganti('src/pages/DashboardPage.jsx',
+  `        const oldItems = await supabase.from('logbook_items').select('media_path, media_thumb').eq('logbook_id', editLogId)
+        oldUrls = []
+        ;(oldItems.data || []).forEach(function (it) {
+          if (it.media_path) oldUrls.push(it.media_path)
+          if (it.media_thumb) oldUrls.push(it.media_thumb)
+        })`,
+  `        const oldItems = await supabase.from('logbook_items').select('media_path, media_thumb, media_source').eq('logbook_id', editLogId)
+        oldUrls = []
+        ;(oldItems.data || []).forEach(function (it) {
+          if (it.media_source === 'youtube') return
+          if (it.media_path) oldUrls.push(it.media_path)
+          if (it.media_thumb) oldUrls.push(it.media_thumb)
+        })`,
+  'oldUrls melewatkan media YouTube')
+ganti('src/pages/DashboardPage.jsx',
+  `      const newUrls = []
+      clean.forEach(function (c) {
+        if (c.media_path) newUrls.push(c.media_path)
+        if (c.media_thumb) newUrls.push(c.media_thumb)
+      })`,
+  `      const newUrls = []
+      clean.forEach(function (c) {
+        if (c.media_source === 'youtube') return
+        if (c.media_path) newUrls.push(c.media_path)
+        if (c.media_thumb) newUrls.push(c.media_thumb)
+      })`,
+  'newUrls melewatkan media YouTube')
+ganti('src/pages/DashboardPage.jsx',
+  `      return { key: it.id, judul: it.judul, deskripsi: it.deskripsi || '', hasil: it.hasil || '', file: null, preview: it.media_path || '', oldPath: it.media_path || '', oldThumb: it.media_thumb || '', previewLoading: false, show: it.show_in_gallery }`,
+  `      return { key: it.id, judul: it.judul, deskripsi: it.deskripsi || '', hasil: it.hasil || '', file: null, preview: it.media_path || '', oldPath: it.media_source === 'youtube' ? '' : (it.media_path || ''), oldThumb: it.media_source === 'youtube' ? '' : (it.media_thumb || ''), previewLoading: false, show: it.show_in_gallery, mode: it.media_source === 'youtube' ? 'video' : (it.media_type === 'video' ? 'video' : 'foto'), ytLink: '', oldYtId: it.youtube_id || null, oldSource: it.media_source || 'r2' }`,
+  'startEditLog membawa mode dan YouTube')
+
+/* ===== 6. DashboardPage: logika simpan galeri ===== */
+ganti('src/pages/DashboardPage.jsx',
+  `      let mediaPath = ''
+      let mediaType = ''
+      let mediaThumb = null
+      if (galForm.file) {
+        const up = await uploadMedia(galForm.file, 'galeri', function (pesan) { setInfoProses(pesan) })
+        mediaPath = up.publicUrl
+        mediaType = galForm.file.type.indexOf('video') === 0 ? 'video' : 'foto'
+        mediaThumb = up.thumbUrl || null
+      } else if (galForm.oldPath) {
+        mediaPath = galForm.oldPath
+        mediaType = detectMediaType(galForm.oldPath)
+        mediaThumb = galForm.oldThumb || null
+      }
+      if (!mediaPath) { alert('Galeri wajib memiliki media. Pilih file foto atau video terlebih dahulu.'); setBusy(false); return }
+      const payload = {
+        mahasiswa_id: mahasiswa.id,
+        judul: galForm.judul || ('Dokumentasi ' + galForm.tanggal),
+        deskripsi: galForm.deskripsi,
+        tanggal: galForm.tanggal,
+        kegiatan: galForm.kegiatan || 'Lainnya',
+        media_path: mediaPath,
+        media_type: mediaType,
+        media_thumb: mediaThumb
+      }`,
+  `      let mediaPath = ''
+      let mediaType = ''
+      let mediaThumb = null
+      let mediaSource = galOldYt ? 'youtube' : 'r2'
+      let youtubeId = galOldYt || null
+      if (galMode === 'video' && galYtLink && !galForm.file) {
+        const id = parseYouTubeId(galYtLink)
+        if (!id) { alert('Link YouTube tidak valid.'); setBusy(false); return }
+        mediaSource = 'youtube'
+        youtubeId = id
+        mediaPath = ytThumb(id)
+        mediaThumb = ytThumb(id)
+        mediaType = 'video'
+      } else if (galMode === 'video' && galForm.file) {
+        if (ytQuota.remaining <= 0) { alert('Kuota upload YouTube hari ini sudah habis. Gunakan link YouTube.'); setBusy(false); return }
+        const sesiData = await supabase.auth.getSession()
+        const tokenS = sesiData.data.session ? sesiData.data.session.access_token : ''
+        const sesi = await startYouTubeSession(galForm.judul || ('Dokumentasi ' + galForm.tanggal), galForm.deskripsi || '', galForm.file.type || 'video/mp4', tokenS)
+        const hasilYt = await uploadToYouTube(sesi.sessionUri, galForm.file, function (p) { setInfoProses('Mengunggah ke YouTube... ' + Math.round(p * 100) + '%') })
+        mediaSource = 'youtube'
+        youtubeId = hasilYt.videoId
+        mediaPath = ytThumb(hasilYt.videoId)
+        mediaThumb = ytThumb(hasilYt.videoId)
+        mediaType = 'video'
+        setYtQuota(function (q) { return Object.assign({}, q, { used: q.used + 1, remaining: Math.max(0, q.remaining - 1) }) })
+        fetchYouTubeQuota().then(setYtQuota)
+      } else if (galForm.file) {
+        const up = await uploadMedia(galForm.file, 'galeri', function (pesan) { setInfoProses(pesan) })
+        mediaPath = up.publicUrl
+        mediaType = galForm.file.type.indexOf('video') === 0 ? 'video' : 'foto'
+        mediaThumb = up.thumbUrl || null
+        mediaSource = 'r2'
+        youtubeId = null
+      } else if (galForm.oldPath) {
+        mediaPath = galForm.oldPath
+        mediaType = detectMediaType(galForm.oldPath)
+        mediaThumb = galForm.oldThumb || null
+        mediaSource = 'r2'
+        youtubeId = null
+      }
+      if (!mediaPath) { alert('Galeri wajib memiliki media. Pilih file foto atau video terlebih dahulu.'); setBusy(false); return }
+      const payload = {
+        mahasiswa_id: mahasiswa.id,
+        judul: galForm.judul || ('Dokumentasi ' + galForm.tanggal),
+        deskripsi: galForm.deskripsi,
+        tanggal: galForm.tanggal,
+        kegiatan: galForm.kegiatan || 'Lainnya',
+        media_path: mediaPath,
+        media_type: mediaType,
+        media_thumb: mediaThumb,
+        media_source: mediaSource,
+        youtube_id: youtubeId
+      }`,
+  'Cabang YouTube pada submitGaleri')
+ganti('src/pages/DashboardPage.jsx',
+  `        if (existing && !existing.logbook_item_id && existing.media_path !== payload.media_path) {
+          oldGalUrls = [existing.media_path, existing.media_thumb].filter(Boolean)
+        }`,
+  `        if (existing && !existing.logbook_item_id && existing.media_source !== 'youtube' && existing.media_path !== payload.media_path) {
+          oldGalUrls = [existing.media_path, existing.media_thumb].filter(Boolean)
+        }`,
+  'oldGalUrls melewatkan media YouTube')
+ganti('src/pages/DashboardPage.jsx',
+  `setGalForm({ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false })`,
+  `setGalForm({ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false })
+     setGalMode('foto')
+     setGalYtLink('')
+     setGalOldYt(null)`,
+  'Reset mode galeri setelah simpan dan batal', true)
+ganti('src/pages/DashboardPage.jsx',
+  `    setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_path, oldPath: g.media_path, oldThumb: g.media_thumb || '', previewLoading: false })`,
+  `    setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_path || '', oldPath: g.media_source === 'youtube' ? '' : (g.media_path || ''), oldThumb: g.media_source === 'youtube' ? '' : (g.media_thumb || ''), previewLoading: false })
+    setGalMode(g.media_source === 'youtube' ? 'video' : (g.media_type === 'video' ? 'video' : 'foto'))
+    setGalYtLink('')
+    setGalOldYt(g.youtube_id || null)`,
+  'startEditGal membawa mode dan YouTube')
+ganti('src/pages/DashboardPage.jsx',
+  `      const urls = target.data.logbook_item_id ? [] : [target.data.media_path, target.data.media_thumb].filter(Boolean)`,
+  `      const urls = target.data.logbook_item_id || target.data.media_source === 'youtube' ? [] : [target.data.media_path, target.data.media_thumb].filter(Boolean)`,
+  'Hapus galeri melewatkan media YouTube')
+ganti('src/pages/DashboardPage.jsx',
+  `      ;(target.data.logbook_items || []).forEach(function (it) {
+        if (it.media_path) urls.push(it.media_path)
+        if (it.media_thumb) urls.push(it.media_thumb)
+      })`,
+  `      ;(target.data.logbook_items || []).forEach(function (it) {
+        if (it.media_source === 'youtube') return
+        if (it.media_path) urls.push(it.media_path)
+        if (it.media_thumb) urls.push(it.media_thumb)
+      })`,
+  'Hapus logbook melewatkan media YouTube')
+
+/* ===== 7. DashboardPage: UI pemilih jenis media ===== */
+ganti('src/pages/DashboardPage.jsx',
+  `                      <FileInput accept="image/*,video/*" fileName={it.file ? it.file.name : ''}
+                        onChange={function (e) { onItemFile(i, e.target.files[0]) }} />`,
+  `                      <div className="flex gap-2">
+                        <button type="button" onClick={function () { patchItem(i, { mode: 'foto' }) }} className={'px-3 py-1.5 rounded-xl text-xs font-bold ' + (it.mode !== 'video' ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600')}>Foto</button>
+                        <button type="button" onClick={function () { patchItem(i, { mode: 'video' }) }} className={'px-3 py-1.5 rounded-xl text-xs font-bold ' + (it.mode === 'video' ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600')}>Video</button>
+                      </div>
+                      {it.mode === 'video' ? (
+                        <div className="space-y-2">
+                          <p className="text-xs font-semibold text-slate-500">Sisa kuota upload YouTube hari ini: {ytQuota.remaining} dari {ytQuota.limit}</p>
+                          <div className={ytQuota.remaining <= 0 && !it.file ? 'opacity-50 pointer-events-none' : ''}>
+                            <FileInput accept="video/*" fileName={it.file ? it.file.name : ''}
+                              onChange={function (e) { onItemFile(i, e.target.files[0]) }} />
+                          </div>
+                          {ytQuota.remaining <= 0 ? <p className="text-xs text-red-600">Kuota habis. Gunakan link YouTube di bawah.</p> : null}
+                          <input className={inputCls} value={it.ytLink} onChange={function (e) { patchItem(i, { ytLink: e.target.value }) }} placeholder="Atau tempel link YouTube (unlisted)" />
+                        </div>
+                      ) : (
+                        <FileInput accept="image/*" fileName={it.file ? it.file.name : ''}
+                          onChange={function (e) { onItemFile(i, e.target.files[0]) }} />
+                      )}`,
+  'UI pemilih jenis media pada rincian kegiatan')
+ganti('src/pages/DashboardPage.jsx',
+  `              <div>
+                <label className={labelCls}>Pilih foto atau video {editGalId ? null : <span className="text-red-500">*</span>}</label>
+                <div className="mt-1.5">
+                  <FileInput accept="image/*,video/*" fileName={galForm.file ? galForm.file.name : ''}
+                    onChange={async function (e) {
+                      const f = e.target.files[0]
+                      if (!f) return
+                      const blob = await pratinjauHeic(f)
+                      const preview = blob ? URL.createObjectURL(blob) : URL.createObjectURL(f)
+                      setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: preview }) })
+                    }} />
+                </div>
+              </div>`,
+  `              <div>
+                <label className={labelCls}>Jenis media {editGalId ? null : <span className="text-red-500">*</span>}</label>
+                <div className="mt-1.5 flex gap-2">
+                  <button type="button" onClick={function () { setGalMode('foto') }} className={'px-3 py-1.5 rounded-xl text-xs font-bold ' + (galMode !== 'video' ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600')}>Foto</button>
+                  <button type="button" onClick={function () { setGalMode('video') }} className={'px-3 py-1.5 rounded-xl text-xs font-bold ' + (galMode === 'video' ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600')}>Video</button>
+                </div>
+                <div className="mt-1.5">
+                  {galMode === 'video' ? (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-slate-500">Sisa kuota upload YouTube hari ini: {ytQuota.remaining} dari {ytQuota.limit}</p>
+                      <div className={ytQuota.remaining <= 0 && !galForm.file ? 'opacity-50 pointer-events-none' : ''}>
+                        <FileInput accept="video/*" fileName={galForm.file ? galForm.file.name : ''}
+                          onChange={async function (e) {
+                            const f = e.target.files[0]
+                            if (!f) return
+                            setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: URL.createObjectURL(f) }) })
+                          }} />
+                      </div>
+                      {ytQuota.remaining <= 0 ? <p className="text-xs text-red-600">Kuota habis. Gunakan link YouTube di bawah.</p> : null}
+                      <input className={inputCls} value={galYtLink} onChange={function (e) { setGalYtLink(e.target.value) }} placeholder="Atau tempel link YouTube (unlisted)" />
+                    </div>
+                  ) : (
+                    <FileInput accept="image/*" fileName={galForm.file ? galForm.file.name : ''}
+                      onChange={async function (e) {
+                        const f = e.target.files[0]
+                        if (!f) return
+                        const blob = await pratinjauHeic(f)
+                        const preview = blob ? URL.createObjectURL(blob) : URL.createObjectURL(f)
+                        setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: preview }) })
+                      }} />
+                  )}
+                </div>
+              </div>`,
+  'UI pemilih jenis media pada form galeri')
+
+/* ===== 8. cards.jsx: slide dan detail YouTube ===== */
+ganti('src/components/cards.jsx',
+  `    return { src: i.media_thumb || i.media_path, full: i.media_path, type: i.media_type, title: i.judul }`,
+  `    return { src: i.media_thumb || i.media_path, full: i.media_path, type: i.media_source === 'youtube' ? 'foto' : i.media_type, title: i.judul, yt: i.youtube_id || null }`,
+  'slidesFromItems membawa youtube_id')
+ganti('src/components/cards.jsx',
+  `                    <ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3" />`,
+  `                    {it.media_source === 'youtube' ? (
+                      <iframe src={'https://www.youtube-nocookie.com/embed/' + it.youtube_id} title={it.judul} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen className="rounded-2xl overflow-hidden aspect-video w-full bg-slate-900 mb-3" />
+                    ) : (
+                      <ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3" />
+                    )}`,
+  'Detail logbook menampilkan embed YouTube')
+ganti('src/components/cards.jsx',
+  `      <ZoomableMedia src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} title={item.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900" />`,
+  `      {item.media_source === 'youtube' ? (
+        <iframe src={'https://www.youtube-nocookie.com/embed/' + item.youtube_id} title={item.judul} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen className="rounded-2xl overflow-hidden aspect-video w-full bg-slate-900" />
+      ) : (
+        <ZoomableMedia src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} title={item.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900" />
+      )}`,
+  'Detail galeri menampilkan embed YouTube')
+
+/* ===== 9. Carousel: teruskan youtubeId ke Lightbox ===== */
+ganti('src/components/Carousel.jsx',
+  `{zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} onClose={function () { setZoom(null) }} /> : null}`,
+  `{zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} onClose={function () { setZoom(null) }} /> : null}`,
+  'Carousel meneruskan youtubeId ke Lightbox', true)
+
+/* ===== 10. ui.jsx: Lightbox mendukung embed YouTube ===== */
+ganti('src/components/ui.jsx',
+  `        {props.type === 'video' ? (
+          <video src={props.src} controls autoPlay className="mx-auto max-h-[85vh] w-full rounded-2xl bg-slate-900 object-contain" />
+        ) : (`,
+  `        {props.youtubeId ? (
+          <iframe src={'https://www.youtube-nocookie.com/embed/' + props.youtubeId} title={props.title || 'Video'} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen className="mx-auto aspect-video w-full rounded-2xl bg-slate-900" />
+        ) : props.type === 'video' ? (
+          <video src={props.src} controls autoPlay className="mx-auto max-h-[85vh] w-full rounded-2xl bg-slate-900 object-contain" />
+        ) : (`,
+  'Lightbox menampilkan embed YouTube')
+ganti('src/components/ui.jsx',
+  `          disabled={busyUnduh}
+          className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20 disabled:opacity-50"`,
+  `          disabled={busyUnduh}
+          style={props.youtubeId ? { display: 'none' } : undefined}
+          className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20 disabled:opacity-50"`,
+  'Tombol unduh disembunyikan untuk media YouTube')
+
+/* ===== 11. vite.config.js: middleware YouTube untuk dev lokal ===== */
+ganti('vite.config.js',
+  ` export default defineConfig(function ({ mode }) {`,
+  ` function pluginApiYoutube(env) {
+   const admin = createClient(env.VITE_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY || env.VITE_SUPABASE_ANON_KEY)
+   function ptToday() {
+     const now = new Date()
+     const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
+     const y = pt.getFullYear()
+     const m = String(pt.getMonth() + 1).padStart(2, '0')
+     const d = String(pt.getDate()).padStart(2, '0')
+     return y + '-' + m + '-' + d
+   }
+   async function cekSesi(req) {
+     const authHeader = req.headers.authorization || ''
+     const token = authHeader.replace('Bearer ', '')
+     if (!token) return null
+     const supabase = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
+     const r = await supabase.auth.getUser(token)
+     return r.error ? null : r.data.user
+   }
+   return {
+     name: 'api-youtube-dev',
+     configureServer(server) {
+       server.middlewares.use('/api/youtube/quota', async function (req, res) {
+         const today = ptToday()
+         const { count } = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today)
+         const used = count || 0
+         res.setHeader('Content-Type', 'application/json')
+         res.setHeader('Cache-Control', 'no-store')
+         res.end(JSON.stringify({ limit: 6, used: used, remaining: Math.max(0, 6 - used), ptDate: today }))
+       })
+       server.middlewares.use('/api/youtube/session', async function (req, res) {
+         if (req.method !== 'POST') { res.statusCode = 405; res.end(JSON.stringify({ error: 'Method tidak diizinkan' })); return }
+         const user = await cekSesi(req)
+         if (!user) { res.statusCode = 401; res.end(JSON.stringify({ error: 'Sesi tidak valid' })); return }
+         const today = ptToday()
+         const { count } = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today)
+         const used = count || 0
+         if (used >= 6) { res.statusCode = 429; res.end(JSON.stringify({ error: 'Kuota upload YouTube hari ini sudah habis. Gunakan link embed.', remaining: 0 })); return }
+         const body = await bacaBody(req)
+         const params = new URLSearchParams()
+         params.set('client_id', env.YOUTUBE_CLIENT_ID || '')
+         params.set('client_secret', env.YOUTUBE_CLIENT_SECRET || '')
+         params.set('refresh_token', env.YOUTUBE_REFRESH_TOKEN || '')
+         params.set('grant_type', 'refresh_token')
+         const tr = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
+         if (!tr.ok) { res.statusCode = 500; res.end(JSON.stringify({ error: 'Gagal refresh token YouTube' })); return }
+         const tok = await tr.json()
+         const meta = {
+           snippet: { title: String(body.title || 'Dokumentasi Magang').slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
+           status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
+         }
+         const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+           method: 'POST',
+           headers: { Authorization: 'Bearer ' + tok.access_token, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
+           body: JSON.stringify(meta)
+         })
+         if (!init.ok) { const t = await init.text(); res.statusCode = 502; res.end(JSON.stringify({ error: 'Gagal memulai sesi YouTube: ' + t })); return }
+         const sessionUri = init.headers.get('location')
+         if (!sessionUri) { res.statusCode = 502; res.end(JSON.stringify({ error: 'Sesi upload tidak mengembalikan lokasi' })); return }
+         await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: user.id })
+         res.setHeader('Content-Type', 'application/json')
+         res.end(JSON.stringify({ sessionUri: sessionUri, remaining: Math.max(0, 6 - used - 1) }))
+       })
+     }
+   }
+ }
+ export default defineConfig(function ({ mode }) {`,
+  'Middleware YouTube untuk dev lokal')
+ganti('vite.config.js',
+  `     plugins: [react(), pluginApiR2(env)]`,
+  `     plugins: [react(), pluginApiR2(env), pluginApiYoutube(env)]`,
+  'Plugin YouTube didaftarkan di vite')
+
+console.log('')
+console.log('Selesai. Restart dev server agar middleware baru aktif:')
+console.log('  Ctrl+C lalu npm run dev -- --host')
+console.log('')
+console.log('Pastikan variabel berikut ada di .env.local dan Environment Variables Vercel:')
+console.log('  YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, YOUTUBE_REFRESH_TOKEN, SUPABASE_SERVICE_ROLE_KEY')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka dashboard, tab Logbook, tambah kegiatan, perhatikan tombol Foto dan Video.')
+console.log('2. Pilih Video: terlihat sisa kuota harian, FileInput video, dan kolom link YouTube.')
+console.log('3. Saat kuota habis, FileInput video menjadi abu-abu dan hanya link YouTube yang aktif.')
+console.log('4. Simpan dengan link YouTube unlisted: kartu menampilkan thumbnail YouTube dan detail memutar embed.')
+console.log('5. Uji juga upload file video kecil: progres Mengunggah ke YouTube terlihat dan video masuk sebagai unlisted.')
+```
+
+## File: apply-youtube-frontend.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai memasang fitur YouTube di frontend...')
+
+/* ===== 1. Helper youtube.js baru ===== */
+const ytHelper = `export function parseYouTubeId(url) {
+  if (!url) return null
+  const s = String(url).trim()
+  if (/^[A-Za-z0-9_-]{11}$/.test(s)) return s
+  try {
+    const u = new URL(s)
+    const host = u.hostname.replace('www.', '').replace('m.', '')
+    if (host === 'youtu.be') {
+      const id = u.pathname.slice(1).split('/')[0]
+      return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null
+    }
+    if (host.endsWith('youtube.com') || host.endsWith('youtube-nocookie.com')) {
+      const v = u.searchParams.get('v')
+      if (v && /^[A-Za-z0-9_-]{11}$/.test(v)) return v
+      const parts = u.pathname.split('/').filter(Boolean)
+      if (parts[0] === 'embed' || parts[0] === 'shorts' || parts[0] === 'live') {
+        const id = parts[1]
+        return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null
+      }
+    }
+  } catch (e) {}
+  return null
+}
+export function ytThumb(id) {
+  return 'https://img.youtube.com/vi/' + id + '/hqdefault.jpg'
+}
+export function ytEmbedUrl(id) {
+  return 'https://www.youtube-nocookie.com/embed/' + id + '?rel=0&modestbranding=1'
+}
+export async function fetchYouTubeQuota() {
+  try {
+    const r = await fetch('/api/youtube/quota', { cache: 'no-store' })
+    if (!r.ok) return { limit: 6, used: 0, remaining: 6 }
+    return await r.json()
+  } catch (e) {
+    return { limit: 6, used: 0, remaining: 6 }
+  }
+}
+export async function startYouTubeSession(title, description, contentType, token) {
+  const r = await fetch('/api/youtube/session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ title, description, contentType })
+  })
+  if (!r.ok) {
+    const j = await r.json().catch(function () { return { error: 'Gagal membuat sesi YouTube' } })
+    throw new Error(j.error || 'Gagal membuat sesi YouTube')
+  }
+  return await r.json()
+}
+export function uploadToYouTube(sessionUri, blob, onProgress) {
+  return new Promise(function (resolve, reject) {
+    const xhr = new XMLHttpRequest()
+    xhr.open('PUT', sessionUri)
+    xhr.setRequestHeader('Content-Type', blob.type || 'video/mp4')
+    xhr.setRequestHeader('Content-Length', String(blob.size))
+    if (onProgress) {
+      xhr.upload.onprogress = function (e) {
+        if (e.lengthComputable) onProgress(e.loaded / e.total)
+      }
+    }
+    xhr.onload = function () {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const j = JSON.parse(xhr.responseText || '{}')
+          resolve({ videoId: j.id })
+        } catch (e) { reject(new Error('Respons YouTube tidak valid')) }
+      } else {
+        reject(new Error('Upload YouTube gagal (status ' + xhr.status + ')'))
+      }
+    }
+    xhr.onerror = function () { reject(new Error('Jaringan gagal saat upload YouTube')) }
+    xhr.send(blob)
+  })
+}
+`
+fs.mkdirSync(path.join(root, 'src', 'lib'), { recursive: true })
+simpan('src/lib/youtube.js', ytHelper)
+console.log('[BERHASIL] src/lib/youtube.js ditulis')
+
+/* ===== 2. Icon youtube di icons.jsx ===== */
+let icons = baca('src/components/icons.jsx')
+if (!icons.includes('youtube:')) {
+  icons = icons.replace(
+    "  download: (\n    <>",
+    "  youtube: (\n    <>\n      <path d=\"M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z\" />\n      <polygon points=\"9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02\" />\n    </>\n  ),\n  download: (\n    <>"
+  )
+  simpan('src/components/icons.jsx', icons)
+  console.log('[BERHASIL] Icon youtube ditambahkan')
+} else {
+  console.log('[SUDAH ADA] Icon youtube')
+}
+
+/* ===== 3. DashboardPage: import helper YouTube ===== */
+let dash = baca('src/pages/DashboardPage.jsx')
+if (!dash.includes("from '../lib/youtube.js'")) {
+  dash = dash.replace(
+    "import { syncGaleriFromLogbook } from '../lib/logbook.js'",
+    "import { syncGaleriFromLogbook } from '../lib/logbook.js'\nimport { parseYouTubeId, ytThumb, fetchYouTubeQuota, startYouTubeSession, uploadToYouTube } from '../lib/youtube.js'\nimport { supabase as sbClient } from '../lib/supabase.js'"
+  )
+  console.log('[BERHASIL] Import YouTube helper di DashboardPage')
+}
+
+/* ===== 4. Tambah state untuk YouTube ===== */
+if (!dash.includes('ytQuota')) {
+  dash = dash.replace(
+    "const [infoProses, setInfoProses] = useState('')",
+    "const [infoProses, setInfoProses] = useState('')\n  const [ytQuota, setYtQuota] = useState({ limit: 6, used: 0, remaining: 6 })\n  const [itemMode, setItemMode] = useState({})\n  const [galMode, setGalMode] = useState('foto')\n  const [galYtLink, setGalYtLink] = useState('')\n  const [galYtTitle, setGalYtTitle] = useState('')"
+  )
+  console.log('[BERHASIL] State YouTube ditambahkan')
+}
+
+/* ===== 5. Load quota saat mount ===== */
+if (!dash.includes('fetchYouTubeQuota()')) {
+  dash = dash.replace(
+    'useEffect(function () {\n    if (mahasiswa) refresh()\n  }, [mahasiswa])',
+    'useEffect(function () {\n    if (mahasiswa) refresh()\n    fetchYouTubeQuota().then(setYtQuota)\n    const iv = setInterval(function () { fetchYouTubeQuota().then(setYtQuota) }, 30000)\n    return function () { clearInterval(iv) }\n  }, [mahasiswa])'
+  )
+  console.log('[BERHASIL] Load quota YouTube saat mount')
+}
+
+/* ===== 6. Tambah helper functions untuk mode item ===== */
+if (!dash.includes('getItemMode')) {
+  dash = dash.replace(
+    'function patchItem(i, patch)',
+    'function getItemMode(i) { return itemMode[i] || \'foto\' }\n  function setItemModeAt(i, mode) { setItemMode(function (p) { const n = Object.assign({}, p); n[i] = mode; return n }) }\n  function patchItem(i, patch)'
+  )
+  console.log('[BERHASIL] Helper getItemMode ditambahkan')
+}
+
+simpan('src/pages/DashboardPage.jsx', dash)
+console.log('[SIMPAN] DashboardPage.jsx sementara')
+
+console.log('\nSelesai bagian dasar. Karena DashboardPage sudah sangat kompleks,')
+console.log('langkah berikutnya perlu kamu lakukan MANUAL dengan panduan yang akan aku berikan.')
+console.log('\nJalankan dulu script ini, lalu kabari aku untuk lanjut ke panduan manual.')
+```
+
+## File: apply-youtube-latest-middleware.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai menambahkan middleware /api/youtube/latest untuk dev lokal...')
+console.log('')
+
+/* ===== 1. Middleware /api/youtube/latest di vite.config.js ===== */
+const FILE_V = 'vite.config.js'
+let v = baca(FILE_V)
+if (v.includes("'/api/youtube/latest'")) {
+  console.log('[SUDAH ADA] Middleware /api/youtube/latest di vite.config.js')
+} else {
+  const marker = "server.middlewares.use('/api/youtube/session'"
+  if (!v.includes(marker)) {
+    console.log('[TIDAK KETEMU] Penanda middleware session di vite.config.js')
+    process.exit(1)
+  }
+  const middlewareLatest = `server.middlewares.use('/api/youtube/latest', async function (req, res) {
+        if (req.method !== 'POST') { res.statusCode = 405; res.end(JSON.stringify({ error: 'Method tidak diizinkan' })); return }
+        const user = await cekSesi(req)
+        if (!user) { res.statusCode = 401; res.end(JSON.stringify({ error: 'Sesi tidak valid' })); return }
+        const params = new URLSearchParams()
+        params.set('client_id', env.YOUTUBE_CLIENT_ID || '')
+        params.set('client_secret', env.YOUTUBE_CLIENT_SECRET || '')
+        params.set('refresh_token', env.YOUTUBE_REFRESH_TOKEN || '')
+        params.set('grant_type', 'refresh_token')
+        const tr = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
+        if (!tr.ok) { res.statusCode = 500; res.end(JSON.stringify({ error: 'Gagal refresh token YouTube' })); return }
+        const tok = await tr.json()
+        const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&forMine=true&order=date&maxResults=5', { headers: { Authorization: 'Bearer ' + tok.access_token } })
+        if (!r.ok) { res.statusCode = 502; res.end(JSON.stringify({ error: 'Gagal memeriksa video terbaru' })); return }
+        const j = await r.json()
+        const items = j.items || []
+        const batas = Date.now() - 15 * 60 * 1000
+        const cocok = items.find(function (it) {
+          const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
+          return isNaN(t) ? false : t >= batas
+        })
+        if (!cocok) { res.statusCode = 404; res.end(JSON.stringify({ error: 'Video terbaru tidak ditemukan' })); return }
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ videoId: cocok.id && cocok.id.videoId }))
+      })
+      `
+  v = v.replace(marker, middlewareLatest + marker)
+  simpan(FILE_V, v)
+  console.log('[BERHASIL] Middleware /api/youtube/latest ditambahkan di vite.config.js')
+}
+
+/* ===== 2. Pengaman respons bukan JSON di src/lib/youtube.js ===== */
+const FILE_Y = 'src/lib/youtube.js'
+let y = baca(FILE_Y)
+const cariJson = `  if (v.ok) {
+    const j = await v.json()
+    if (j.videoId) return { videoId: j.videoId }
+  }`
+const gantiJson = `  if (v.ok) {
+    try {
+      const j = await v.json()
+      if (j && j.videoId) return { videoId: j.videoId }
+    } catch (e) {
+      console.warn('Respons pemulihan bukan JSON, dilewati.')
+    }
+  }`
+if (y.includes(gantiJson)) {
+  console.log('[SUDAH ADA] Pengaman JSON di youtube.js')
+} else if (y.includes(cariJson)) {
+  y = y.replace(cariJson, gantiJson)
+  simpan(FILE_Y, y)
+  console.log('[BERHASIL] Pengaman JSON ditambahkan di youtube.js')
+} else {
+  console.log('[TIDAK KETEMU] Pola v.json() di youtube.js, kemungkinan sudah aman')
+}
+
+console.log('')
+console.log('Selesai. Restart dev server: Ctrl+C lalu npm run dev -- --host')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Upload satu video kecil dari form logbook atau galeri di localhost.')
+console.log('2. Progres mencapai 100 persen, lalu id video dipulihkan lewat /api/youtube/latest.')
+console.log('3. Logbook tersimpan tanpa error dan kartu menampilkan thumbnail YouTube.')
+console.log('4. Kuota harian tampil X dari 5, berkurang satu tiap upload sukses.')
+console.log('5. Di Vercel perilaku sama karena api/youtube/latest.js sudah ada sebagai serverless function.')
+```
+
+## File: apply-youtube-verify.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai memasang verifikasi upload YouTube anti CORS...')
+console.log('')
+
+/* ===== 1. Tulis ulang src/lib/youtube.js dengan verifikasi akhir ===== */
+simpan('src/lib/youtube.js', `import { supabase } from './supabase.js'
+export function parseYouTubeId(url) {
+  if (!url) return null
+  const s = String(url).trim()
+  if (/^[A-Za-z0-9_-]{11}$/.test(s)) return s
+  try {
+    const u = new URL(s)
+    const host = u.hostname.replace('www.', '').replace('m.', '')
+    if (host === 'youtu.be') {
+      const id = u.pathname.slice(1).split('/')[0]
+      return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null
+    }
+    if (host.endsWith('youtube.com') || host.endsWith('youtube-nocookie.com')) {
+      const v = u.searchParams.get('v')
+      if (v && /^[A-Za-z0-9_-]{11}$/.test(v)) return v
+      const parts = u.pathname.split('/').filter(Boolean)
+      if (parts[0] === 'embed' || parts[0] === 'shorts' || parts[0] === 'live') {
+        const id = parts[1]
+        return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null
+      }
+    }
+  } catch (e) {}
+  return null
+}
+export function ytThumb(id) {
+  return 'https://i.ytimg.com/vi/' + id + '/hqdefault.jpg'
+}
+export function ytEmbedUrl(id) {
+  return 'https://www.youtube-nocookie.com/embed/' + id + '?rel=0&modestbranding=1'
+}
+export async function fetchYouTubeQuota() {
+  try {
+    const r = await fetch('/api/youtube/quota', { cache: 'no-store' })
+    if (!r.ok) return { limit: 6, used: 0, remaining: 6 }
+    return await r.json()
+  } catch (e) {
+    return { limit: 6, used: 0, remaining: 6 }
+  }
+}
+export async function startYouTubeSession(title, description, contentType, token) {
+  const r = await fetch('/api/youtube/session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ title: title, description: description, contentType: contentType })
+  })
+  if (!r.ok) {
+    const j = await r.json().catch(function () { return { error: 'Gagal membuat sesi YouTube' } })
+    throw new Error(j.error || 'Gagal membuat sesi YouTube')
+  }
+  return await r.json()
+}
+export async function unggahVideoYouTube(file, judul, onProgress) {
+  const ref = Math.random().toString(36).slice(2, 10)
+  const sesiData = await supabase.auth.getSession()
+  const token = sesiData.data.session ? sesiData.data.session.access_token : ''
+  const sesi = await startYouTubeSession(judul, 'REF ' + ref + ' Diunggah dari portal logbook magang BSI.', file.type || 'video/mp4', token)
+  const hasil = await new Promise(function (resolve) {
+    const xhr = new XMLHttpRequest()
+    xhr.open('PUT', sesi.sessionUri)
+    xhr.setRequestHeader('Content-Type', file.type || 'video/mp4')
+    if (onProgress) {
+      xhr.upload.onprogress = function (e) {
+        if (e.lengthComputable) onProgress(e.loaded / e.total)
+      }
+    }
+    xhr.onload = function () {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        let id = null
+        try { id = JSON.parse(xhr.responseText || '{}').id || null } catch (e) { id = null }
+        resolve({ selesai: true, videoId: id })
+      } else {
+        resolve({ selesai: false })
+      }
+    }
+    xhr.onerror = function () { resolve({ selesai: false }) }
+    xhr.send(file)
+  })
+  if (hasil.selesai && hasil.videoId) return { videoId: hasil.videoId }
+  const v = await fetch('/api/youtube/verify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ ref: ref })
+  })
+  if (v.ok) {
+    const j = await v.json()
+    if (j.videoId) return { videoId: j.videoId }
+  }
+  throw new Error('Jaringan gagal saat upload YouTube')
+}
+`)
+console.log('[BERHASIL] src/lib/youtube.js ditulis ulang dengan verifikasi akhir')
+
+/* ===== 2. Endpoint verifikasi untuk Vercel ===== */
+const verifyJs = `import { createClient } from '@supabase/supabase-js'
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const authHeader = req.headers.authorization || ''
+  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
+  const authClient = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
+  const chk = await authClient.auth.getUser()
+  if (chk.error || !chk.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
+  const { ref } = req.body || {}
+  if (!ref) return res.status(400).json({ error: 'Ref tidak ada' })
+  const params = new URLSearchParams()
+  params.set('client_id', process.env.YOUTUBE_CLIENT_ID || '')
+  params.set('client_secret', process.env.YOUTUBE_CLIENT_SECRET || '')
+  params.set('refresh_token', process.env.YOUTUBE_REFRESH_TOKEN || '')
+  params.set('grant_type', 'refresh_token')
+  const tr = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
+  if (!tr.ok) return res.status(500).json({ error: 'Gagal refresh token YouTube' })
+  const tok = await tr.json()
+  const url = 'https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&forMine=true&order=date&maxResults=10&q=' + encodeURIComponent(ref)
+  const r = await fetch(url, { headers: { Authorization: 'Bearer ' + tok.access_token } })
+  if (!r.ok) return res.status(502).json({ error: 'Gagal memeriksa video di YouTube' })
+  const j = await r.json()
+  const items = j.items || []
+  const batas = Date.now() - 15 * 60 * 1000
+  const cocok = items.find(function (it) {
+    const desc = (it.snippet && it.snippet.description) || ''
+    const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
+    return desc.indexOf('REF ' + ref) === 0 && (isNaN(t) ? true : t >= batas)
+  }) || items[0]
+  if (!cocok) return res.status(404).json({ error: 'Video tidak ditemukan di channel' })
+  return res.status(200).json({ videoId: cocok.id && cocok.id.videoId })
+}
+`
+fs.mkdirSync(path.join(root, 'api', 'youtube'), { recursive: true })
+simpan('api/youtube/verify.js', verifyJs)
+console.log('[BERHASIL] api/youtube/verify.js ditulis')
+
+/* ===== 3. Middleware verify untuk dev lokal di vite.config.js ===== */
+const FILE_V = 'vite.config.js'
+let v = baca(FILE_V)
+if (v.includes("'/api/youtube/verify'")) {
+  console.log('[SUDAH ADA] Middleware verify di vite.config.js')
+} else {
+  const marker = "server.middlewares.use('/api/youtube/session'"
+  if (!v.includes(marker)) {
+    console.log('[TIDAK KETEMU] Middleware session di vite.config.js')
+  } else {
+    const middlewareVerify = `server.middlewares.use('/api/youtube/verify', async function (req, res) {
+        if (req.method !== 'POST') { res.statusCode = 405; res.end(JSON.stringify({ error: 'Method tidak diizinkan' })); return }
+        const user = await cekSesi(req)
+        if (!user) { res.statusCode = 401; res.end(JSON.stringify({ error: 'Sesi tidak valid' })); return }
+        const body = await bacaBody(req)
+        const ref = body.ref
+        if (!ref) { res.statusCode = 400; res.end(JSON.stringify({ error: 'Ref tidak ada' })); return }
+        const params = new URLSearchParams()
+        params.set('client_id', env.YOUTUBE_CLIENT_ID || '')
+        params.set('client_secret', env.YOUTUBE_CLIENT_SECRET || '')
+        params.set('refresh_token', env.YOUTUBE_REFRESH_TOKEN || '')
+        params.set('grant_type', 'refresh_token')
+        const tr = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
+        if (!tr.ok) { res.statusCode = 500; res.end(JSON.stringify({ error: 'Gagal refresh token YouTube' })); return }
+        const tok = await tr.json()
+        const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&forMine=true&order=date&maxResults=10&q=' + encodeURIComponent(ref), { headers: { Authorization: 'Bearer ' + tok.access_token } })
+        if (!r.ok) { res.statusCode = 502; res.end(JSON.stringify({ error: 'Gagal memeriksa video di YouTube' })); return }
+        const j = await r.json()
+        const items = j.items || []
+        const batas = Date.now() - 15 * 60 * 1000
+        const cocok = items.find(function (it) {
+          const desc = (it.snippet && it.snippet.description) || ''
+          const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
+          return desc.indexOf('REF ' + ref) === 0 && (isNaN(t) ? true : t >= batas)
+        }) || items[0]
+        if (!cocok) { res.statusCode = 404; res.end(JSON.stringify({ error: 'Video tidak ditemukan di channel' })); return }
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ videoId: cocok.id && cocok.id.videoId }))
+      })
+      `
+    v = v.replace(marker, middlewareVerify + marker)
+    simpan(FILE_V, v)
+    console.log('[BERHASIL] Middleware verify ditambahkan di vite.config.js')
+  }
+}
+
+/* ===== 4. DashboardPage: pakai unggahVideoYouTube ===== */
+const FILE_D = 'src/pages/DashboardPage.jsx'
+let d = baca(FILE_D)
+let berubah = false
+
+const impLama = `import { parseYouTubeId, ytThumb, fetchYouTubeQuota, startYouTubeSession, uploadToYouTube } from '../lib/youtube.js'`
+const impBaru = `import { parseYouTubeId, ytThumb, fetchYouTubeQuota, unggahVideoYouTube } from '../lib/youtube.js'`
+if (d.includes(impBaru)) {
+  console.log('[SUDAH ADA] Import unggahVideoYouTube')
+} else if (d.includes(impLama)) {
+  d = d.replace(impLama, impBaru)
+  berubah = true
+  console.log('[BERHASIL] Import YouTube diperbarui')
+} else {
+  console.log('[TIDAK KETEMU] Import YouTube di DashboardPage')
+}
+
+const logLama = `          const sesiData = await supabase.auth.getSession()
+          const tokenS = sesiData.data.session ? sesiData.data.session.access_token : ''
+          const sesi = await startYouTubeSession(it.judul || 'Dokumentasi Magang', 'Diunggah dari portal logbook magang BSI.', it.file.type || 'video/mp4', tokenS)
+          const hasilYt = await uploadToYouTube(sesi.sessionUri, it.file, function (p) { setInfoProses('Mengunggah ke YouTube... ' + Math.round(p * 100) + '%') })`
+const logBaru = `          const hasilYt = await unggahVideoYouTube(it.file, it.judul || 'Dokumentasi Magang', function (p) { setInfoProses('Mengunggah ke YouTube... ' + Math.round(p * 100) + '%') })`
+if (d.includes(logBaru)) {
+  console.log('[SUDAH ADA] Alur upload video logbook')
+} else if (d.includes(logLama)) {
+  d = d.replace(logLama, logBaru)
+  berubah = true
+  console.log('[BERHASIL] Alur upload video logbook diperbarui')
+} else {
+  console.log('[TIDAK KETEMU] Alur upload video logbook')
+}
+
+const galLama = `        const sesiData = await supabase.auth.getSession()
+        const tokenS = sesiData.data.session ? sesiData.data.session.access_token : ''
+        const sesi = await startYouTubeSession(galForm.judul || ('Dokumentasi ' + galForm.tanggal), galForm.deskripsi || '', galForm.file.type || 'video/mp4', tokenS)
+        const hasilYt = await uploadToYouTube(sesi.sessionUri, galForm.file, function (p) { setInfoProses('Mengunggah ke YouTube... ' + Math.round(p * 100) + '%') })`
+const galBaru = `        const hasilYt = await unggahVideoYouTube(galForm.file, galForm.judul || ('Dokumentasi ' + galForm.tanggal), function (p) { setInfoProses('Mengunggah ke YouTube... ' + Math.round(p * 100) + '%') })`
+if (d.includes(galBaru)) {
+  console.log('[SUDAH ADA] Alur upload video galeri')
+} else if (d.includes(galLama)) {
+  d = d.replace(galLama, galBaru)
+  berubah = true
+  console.log('[BERHASIL] Alur upload video galeri diperbarui')
+} else {
+  console.log('[TIDAK KETEMU] Alur upload video galeri')
+}
+
+if (berubah) {
+  simpan(FILE_D, d)
+}
+
+console.log('')
+console.log('Selesai. Restart dev server: Ctrl+C lalu npm run dev -- --host')
+console.log('')
+console.log('Catatan penting:')
+console.log('1. Video yang tadi sempat gagal tersimpan tetapi sudah masuk YouTube Studio bisa diselamatkan:')
+console.log('   salin link video tersebut dari YouTube Studio, lalu tempel di kolom link YouTube unlisted.')
+console.log('2. Upload berikutnya: progres 100 persen akan langsung dilanjutkan verifikasi, lalu logbook tersimpan.')
+console.log('3. Bila verifikasi gagal menemukan video, barulah muncul pesan gagal yang benar-benar gagal.')
+```
+
+## File: fix-errors.cjs
+```javascript
+const fs = require('fs');
+const path = require('path');
+
+console.log('Memulai perbaikan file...');
+
+// 1. Perbaiki sintaks JSX di cards.jsx
+const cardsPath = path.join(process.cwd(), 'src/components/cards.jsx');
+let cardsCode = fs.readFileSync(cardsPath, 'utf8');
+
+cardsCode = cardsCode.replace(
+  `{it.media_path ? (\n                     {it.media_source === 'youtube' ? (`,
+  `{it.media_path ? (\n                     it.media_source === 'youtube' ? (`
+);
+cardsCode = cardsCode.replace(
+  `<ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3" />\n                     )}\n                   ) : null}`,
+  `<ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3" />\n                     )\n                   ) : null}`
+);
+fs.writeFileSync(cardsPath, cardsCode);
+console.log('[BERHASIL] src/components/cards.jsx diperbaiki.');
+
+// 2. Hapus import dan state yang ganda di DashboardPage.jsx
+const dashPath = path.join(process.cwd(), 'src/pages/DashboardPage.jsx');
+let dashCode = fs.readFileSync(dashPath, 'utf8');
+
+dashCode = dashCode.replace(
+  `import { pratinjauHeic, formatHeic } from '../lib/konversi.js'\nimport { parseYouTubeId, ytThumb, fetchYouTubeQuota, startYouTubeSession, uploadToYouTube } from '../lib/youtube.js'`,
+  `import { pratinjauHeic, formatHeic } from '../lib/konversi.js'`
+);
+
+dashCode = dashCode.replace(
+  `  const [galOldYt, setGalOldYt] = useState(null)\n  const [ytQuota, setYtQuota] = useState({ limit: 6, used: 0, remaining: 6 })\n  const [itemMode, setItemMode] = useState({})\n  const [galMode, setGalMode] = useState('foto')\n  const [galYtLink, setGalYtLink] = useState('')\n  const [galYtTitle, setGalYtTitle] = useState('')`,
+  `  const [galOldYt, setGalOldYt] = useState(null)\n  const [itemMode, setItemMode] = useState({})\n  const [galYtTitle, setGalYtTitle] = useState('')`
+);
+
+fs.writeFileSync(dashPath, dashCode);
+console.log('[BERHASIL] src/pages/DashboardPage.jsx diperbaiki.');
+
+console.log('\nSelesai! Silakan jalankan ulang npm run dev.');
+```
+
+## File: setup-semua-fitur.cjs
+```javascript
+// setup-semua-fitur.cjs
+// Skrip induk untuk menjalankan seluruh pemasangan fitur secara otomatis.
+// Jalankan: node setup-semua-fitur.cjs
+
+const fs = require('fs')
+const path = require('path')
+const { execSync } = require('child_process')
+
+const root = process.cwd()
+
+// Urutan skrip yang harus dijalankan. Urutan penting karena
+// beberapa skrip bergantung pada hasil skrip sebelumnya.
+const URUTAN = [
+  // 1. Dasar konversi dan upload
+  'apply-perbaiki-konversi.cjs',
+  'apply-heic-webp.cjs',
+  'apply-foto-webp-progres.cjs',
+  'apply-hint-fileinput.cjs',
+  'apply-fix-progres-hint.cjs',
+
+  // 2. Pratinjau HEIC di form
+  'apply-preview-heic.cjs',
+  'apply-preview-heic-galeri.cjs',
+  'apply-preview-loading.cjs',
+
+  // 3. Thumbnail otomatis
+  'apply-thumbnail.cjs',
+  'apply-thumb-folder.cjs',
+  'apply-thumb-display.cjs',
+  'apply-thumb-cleanup.cjs',
+
+  // 4. Tampilan adaptif (SmartFit)
+  'apply-smart-fit.cjs',
+  'apply-smart-fit-carousel.cjs',
+  'apply-smartfit-fallback.cjs',
+
+  // 5. Integrasi YouTube (backend + frontend + UI)
+  'apply-youtube-backend.cjs',
+  'apply-youtube-frontend.cjs',
+  'apply-youtube-final.cjs',
+  'apply-youtube-final-fix.cjs',
+]
+
+function jalanSkrip(namaFile) {
+  const fullPath = path.join(root, namaFile)
+  if (!fs.existsSync(fullPath)) {
+    console.log('[LEWATI] ' + namaFile + ' tidak ditemukan.')
+    return { nama: namaFile, status: 'lewat', pesan: 'file tidak ada' }
+  }
+  try {
+    console.log('\n' + '='.repeat(60))
+    console.log('>>> Menjalankan: ' + namaFile)
+    console.log('='.repeat(60))
+    execSync('node "' + namaFile + '"', { stdio: 'inherit', cwd: root })
+    return { nama: namaFile, status: 'ok' }
+  } catch (err) {
+    console.error('[GAGAL] ' + namaFile + ': ' + err.message)
+    return { nama: namaFile, status: 'gagal', pesan: err.message }
+  }
+}
+
+console.log('========================================')
+console.log('  PEMASANGAN SEMUA FITUR SECARA OTOMATIS')
+console.log('========================================')
+console.log('Direktori kerja: ' + root)
+console.log('Jumlah skrip yang akan dijalankan: ' + URUTAN.length)
+
+const hasil = []
+for (const nama of URUTAN) {
+  hasil.push(jalanSkrip(nama))
+}
+
+console.log('\n' + '='.repeat(60))
+console.log('RINGKASAN PEMASANGAN')
+console.log('='.repeat(60))
+
+const ok = hasil.filter(h => h.status === 'ok').length
+const lewat = hasil.filter(h => h.status === 'lewat').length
+const gagal = hasil.filter(h => h.status === 'gagal').length
+
+hasil.forEach(h => {
+  const ikon = h.status === 'ok' ? '[OK]    ' : h.status === 'lewat' ? '[LEWAT] ' : '[GAGAL] '
+  console.log(ikon + h.nama + (h.pesan ? ' (' + h.pesan + ')' : ''))
+})
+
+console.log('\nTotal: ' + ok + ' berhasil, ' + lewat + ' dilewati, ' + gagal + ' gagal.')
+
+if (gagal > 0) {
+  console.log('\n[PERINGATAN] Ada skrip yang gagal. Periksa log di atas.')
+  process.exit(1)
+}
+
+console.log('\n========================================')
+console.log('  SEMUA FITUR TELAH TERPASANG')
+console.log('========================================')
+console.log('')
+console.log('Langkah selanjutnya yang perlu kamu lakukan:')
+console.log('  1. Pastikan node_modules sudah terpasang:')
+console.log('       npm install')
+console.log('     (terutama heic2any, @supabase/supabase-js, @aws-sdk/client-s3)')
+console.log('')
+console.log('  2. Salin .env.example menjadi .env.local dan isi:')
+console.log('       VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY,')
+console.log('       SUPABASE_SERVICE_ROLE_KEY,')
+console.log('       R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY,')
+console.log('       R2_BUCKET_NAME, R2_PUBLIC_BASE_URL,')
+console.log('       YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET')
+console.log('')
+console.log('  3. Dapatkan refresh token YouTube:')
+console.log('       node setup-youtube-token.cjs')
+console.log('     Salin token yang muncul ke YOUTUBE_REFRESH_TOKEN di .env.local')
+console.log('')
+console.log('  4. Jalankan skema database di Supabase SQL Editor:')
+console.log('       salin isi file supabase/schema.sql')
+console.log('')
+console.log('  5. Jalankan server pengembangan:')
+console.log('       npm run dev')
+console.log('     Buka http://localhost:5173')
+console.log('')
+console.log('  6. Untuk deploy ke Vercel:')
+console.log('       - Push ke GitHub')
+console.log('       - Import proyek di Vercel')
+console.log('       - Salin semua isi .env.local ke Environment Variables Vercel')
+```
+
+## File: setup-youtube-token.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const http = require('http')
+const crypto = require('crypto')
+
+const env = {}
+const envPath = path.join(process.cwd(), '.env.local')
+if (fs.existsSync(envPath)) {
+  fs.readFileSync(envPath, 'utf8').split('\n').forEach(function (line) {
+    const m = line.match(/^\s*([A-Za-z0-9_]+)\s*=\s*(.*)\s*$/)
+    if (m) env[m[1]] = m[2].replace(/^["']|["']$/g, '')
+  })
+}
+
+const clientId = env.YOUTUBE_CLIENT_ID
+const clientSecret = env.YOUTUBE_CLIENT_SECRET
+if (!clientId || !clientSecret) {
+  console.log('[GAGAL] Isi dulu YOUTUBE_CLIENT_ID dan YOUTUBE_CLIENT_SECRET di .env.local')
+  process.exit(1)
+}
+
+const PORT = 8790
+const redirect = 'http://localhost:' + PORT + '/callback'
+const state = crypto.randomBytes(8).toString('hex')
+const scope = 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly'
+const url = 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({
+  client_id: clientId, redirect_uri: redirect, response_type: 'code',
+  scope: scope, access_type: 'offline', prompt: 'consent', state: state
+})
+
+const server = http.createServer(async function (req, res) {
+  const u = new URL(req.url, 'http://localhost')
+  if (u.pathname !== '/callback') { res.end('ok'); return }
+  const code = u.searchParams.get('code')
+  const st = u.searchParams.get('state')
+  if (st !== state) { res.end('State tidak cocok'); return }
+  const body = new URLSearchParams({
+    code, client_id: clientId, client_secret: clientSecret,
+    redirect_uri: redirect, grant_type: 'authorization_code'
+  })
+  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body })
+  const j = await r.json()
+  res.setHeader('Content-Type', 'text/html; charset=utf-8')
+  if (j.refresh_token) {
+    res.end('<h2>Berhasil!</h2><p>Salin refresh token ini:</p><code style="word-break:break-all;background:#f1f5f9;padding:8px;display:block;">' + j.refresh_token + '</code>')
+    console.log('\nREFRESH TOKEN:')
+    console.log(j.refresh_token)
+  } else {
+    res.end('<h2>Gagal</h2><pre>' + JSON.stringify(j, null, 2) + '</pre>')
+  }
+  setTimeout(function () { server.close(); process.exit(0) }, 2000)
+})
+
+server.listen(PORT, function () {
+  console.log('Membuka browser... Jika tidak otomatis, buka URL ini:')
+  console.log(url)
+  try {
+    require('child_process').exec(process.platform === 'win32' ? 'start "" "' + url + '"' : 'xdg-open ' + url)
+  } catch (e) {}
+})
+```
 
 ## File: api/r2/delete.js
 ```javascript
@@ -324,12 +3515,12 @@ async function keWebP(berkas, maksSisi, kualitas) {
 export async function siapkanFoto(file, onInfo) {
   let sumber = file
   if (formatHeic(file)) {
-    if (onInfo) onInfo('Mengonversi HEIC ke JPG...')
+    if (onInfo) onInfo('Mengonversi HEIC ke JPG')
     const jpeg = await heicKeJpeg(file)
     if (!jpeg) throw new Error('File HEIC tidak bisa dibaca')
     sumber = new File([jpeg], 'sumber.jpg', { type: 'image/jpeg' })
   }
-  if (onInfo) onInfo('Menyiapkan WebP...')
+  if (onInfo) onInfo('Menyiapkan WebP')
   let fullBlob = null
   try {
     fullBlob = await keWebP(sumber, MAKS_SISI_FULL, KUALITAS_FULL)
@@ -442,6 +3633,7 @@ dist
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='14'%20fill='%2316623c'/%3E%3Ctext%20x='32'%20y='44'%20font-size='34'%20font-weight='700'%20text-anchor='middle'%20fill='%23ffffff'%20font-family='Arial,%20sans-serif'%3EB%3C/text%3E%3C/svg%3E" />
     <title>Logbook Magang BSI</title>
   </head>
   <body class="bg-slate-50 text-slate-800 min-h-screen antialiased">
@@ -843,7 +4035,7 @@ function RequireAuth(props) {
 export default function App() {
   return (
     <ThemeProvider>
-      <BrowserRouter>
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route element={<Layout />}>
             <Route path="/" element={<HomePage />} />
@@ -1079,10 +4271,129 @@ function pluginApiR2(env) {
   }
 }
 
+function pluginApiYoutube(env) {
+  const admin = createClient(env.VITE_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY)
+  function ptToday() {
+    const now = new Date()
+    const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
+    const y = pt.getFullYear()
+    const m = String(pt.getMonth() + 1).padStart(2, '0')
+    const d = String(pt.getDate()).padStart(2, '0')
+    return y + '-' + m + '-' + d
+  }
+  async function cekSesi(req) {
+    const authHeader = req.headers.authorization || ''
+    const token = authHeader.replace('Bearer ', '')
+    if (!token) return null
+    const supabase = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
+    const r = await supabase.auth.getUser(token)
+    return r.error ? null : r.data.user
+  }
+  return {
+    name: 'api-youtube-dev',
+    configureServer(server) {
+      server.middlewares.use('/api/youtube/quota', async function (req, res) {
+        const today = ptToday()
+        const { count } = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today)
+        const used = count || 0
+        res.setHeader('Content-Type', 'application/json')
+        res.setHeader('Cache-Control', 'no-store')
+        res.end(JSON.stringify({ limit: 5, used: used, remaining: Math.max(0, 5 - used), ptDate: today }))
+      })
+      server.middlewares.use('/api/youtube/verify', async function (req, res) {
+        if (req.method !== 'POST') { res.statusCode = 405; res.end(JSON.stringify({ error: 'Method tidak diizinkan' })); return }
+        const user = await cekSesi(req)
+        if (!user) { res.statusCode = 401; res.end(JSON.stringify({ error: 'Sesi tidak valid' })); return }
+        const body = await bacaBody(req)
+        const ref = body.ref
+        if (!ref) { res.statusCode = 400; res.end(JSON.stringify({ error: 'Ref tidak ada' })); return }
+        const params = new URLSearchParams()
+        params.set('client_id', env.YOUTUBE_CLIENT_ID || '')
+        params.set('client_secret', env.YOUTUBE_CLIENT_SECRET || '')
+        params.set('refresh_token', env.YOUTUBE_REFRESH_TOKEN || '')
+        params.set('grant_type', 'refresh_token')
+        const tr = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
+        if (!tr.ok) { res.statusCode = 500; res.end(JSON.stringify({ error: 'Gagal refresh token YouTube' })); return }
+        const tok = await tr.json()
+        const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&forMine=true&order=date&maxResults=10&q=' + encodeURIComponent(ref), { headers: { Authorization: 'Bearer ' + tok.access_token } })
+        if (!r.ok) { res.statusCode = 502; res.end(JSON.stringify({ error: 'Gagal memeriksa video di YouTube' })); return }
+        const j = await r.json()
+        const items = j.items || []
+        const batas = Date.now() - 15 * 60 * 1000
+        const cocok = items.find(function (it) {
+          const desc = (it.snippet && it.snippet.description) || ''
+          const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
+          return desc.indexOf('REF ' + ref) === 0 && (isNaN(t) ? true : t >= batas)
+        }) || items[0]
+        if (!cocok) { res.statusCode = 404; res.end(JSON.stringify({ error: 'Video tidak ditemukan di channel' })); return }
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ videoId: cocok.id && cocok.id.videoId }))
+      })
+      server.middlewares.use('/api/youtube/latest', async function (req, res) {
+        if (req.method !== 'POST') { res.statusCode = 405; res.end(JSON.stringify({ error: 'Method tidak diizinkan' })); return }
+        const user = await cekSesi(req)
+        if (!user) { res.statusCode = 401; res.end(JSON.stringify({ error: 'Sesi tidak valid' })); return }
+        const params = new URLSearchParams()
+        params.set('client_id', env.YOUTUBE_CLIENT_ID || '')
+        params.set('client_secret', env.YOUTUBE_CLIENT_SECRET || '')
+        params.set('refresh_token', env.YOUTUBE_REFRESH_TOKEN || '')
+        params.set('grant_type', 'refresh_token')
+        const tr = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
+        if (!tr.ok) { res.statusCode = 500; res.end(JSON.stringify({ error: 'Gagal refresh token YouTube' })); return }
+        const tok = await tr.json()
+        const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&forMine=true&order=date&maxResults=5', { headers: { Authorization: 'Bearer ' + tok.access_token } })
+        if (!r.ok) { const t = await r.text(); res.statusCode = 502; res.end(JSON.stringify({ error: 'Gagal memeriksa video terbaru: ' + r.status + ' ' + t })); return }
+        const j = await r.json()
+        const items = j.items || []
+        const batas = Date.now() - 15 * 60 * 1000
+        const cocok = items.find(function (it) {
+          const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
+          return isNaN(t) ? false : t >= batas
+        })
+        if (!cocok) { res.statusCode = 404; res.end(JSON.stringify({ error: 'Video terbaru tidak ditemukan' })); return }
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ videoId: cocok.id && cocok.id.videoId }))
+      })
+      server.middlewares.use('/api/youtube/session', async function (req, res) {
+        if (req.method !== 'POST') { res.statusCode = 405; res.end(JSON.stringify({ error: 'Method tidak diizinkan' })); return }
+        const user = await cekSesi(req)
+        if (!user) { res.statusCode = 401; res.end(JSON.stringify({ error: 'Sesi tidak valid' })); return }
+        const today = ptToday()
+        const { count } = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today)
+        const used = count || 0
+        if (used >= 5) { res.statusCode = 429; res.end(JSON.stringify({ error: 'Kuota upload YouTube hari ini sudah habis. Gunakan link embed.', remaining: 0 })); return }
+        const body = await bacaBody(req)
+        const params = new URLSearchParams()
+        params.set('client_id', env.YOUTUBE_CLIENT_ID || '')
+        params.set('client_secret', env.YOUTUBE_CLIENT_SECRET || '')
+        params.set('refresh_token', env.YOUTUBE_REFRESH_TOKEN || '')
+        params.set('grant_type', 'refresh_token')
+        const tr = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
+        if (!tr.ok) { res.statusCode = 500; res.end(JSON.stringify({ error: 'Gagal refresh token YouTube' })); return }
+        const tok = await tr.json()
+        const meta = {
+          snippet: { title: String(body.title || 'Dokumentasi Magang').slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
+          status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
+        }
+        const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + tok.access_token, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
+          body: JSON.stringify(meta)
+        })
+        if (!init.ok) { const t = await init.text(); res.statusCode = 502; res.end(JSON.stringify({ error: 'Gagal memulai sesi YouTube: ' + t })); return }
+        const sessionUri = init.headers.get('location')
+        if (!sessionUri) { res.statusCode = 502; res.end(JSON.stringify({ error: 'Sesi upload tidak mengembalikan lokasi' })); return }
+        await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: user.id })
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ sessionUri: sessionUri, remaining: Math.max(0, 5 - used - 1) }))
+      })
+    }
+  }
+}
 export default defineConfig(function ({ mode }) {
   const env = loadEnv(mode, process.cwd(), '')
   return {
-    plugins: [react(), pluginApiR2(env)]
+    plugins: [react(), pluginApiR2(env), pluginApiYoutube(env)]
   }
 })
 ```
@@ -1233,7 +4544,7 @@ export default function Carousel(props) {
             <SizedIcon name="expand" size={15} />
           </button>
         </div>
-        {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} onClose={function () { setZoom(null) }} /> : null}
+        {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} onClose={function () { setZoom(null) }} /> : null}
       </>
     )
   }
@@ -1304,7 +4615,7 @@ export default function Carousel(props) {
           })}
         </div>
       </div>
-      {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} onClose={function () { setZoom(null) }} /> : null}
+      {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} onClose={function () { setZoom(null) }} /> : null}
     </>
   )
 }
@@ -1635,7 +4946,7 @@ export async function uploadMedia(file, kind, onInfo) {
   const extFull = fullType === 'image/webp' ? 'webp' : (fullType === 'image/jpeg' ? 'jpg' : ekstensiFile(file))
   const infoFull = await mintaIzin(token, namaDasar(file.name) + '.' + extFull, fullType, kind)
   await kirimDenganProgres(infoFull.uploadUrl, fullBlob, fullType, function (p) {
-    if (onInfo) onInfo('Mengunggah... ' + Math.round(p * 100) + '%')
+    if (onInfo) onInfo('Mengunggah ' + Math.round(p * 100) + '%')
   })
   let thumbUrl = null
   if (thumbBlob) {
@@ -2373,6 +5684,12 @@ const paths = {
       <path d="M3 21l7-7" />
     </>
   ),
+  youtube: (
+    <>
+      <path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z" />
+      <polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02" />
+    </>
+  ),
   download: (
     <>
       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -2664,12 +5981,33 @@ textarea {
   transform: scale(.7);
   opacity: .6;
 }
+
+.titik-anim {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 6px;
+}
+.titik-anim i {
+  width: 4px;
+  height: 4px;
+  border-radius: 9999px;
+  background: currentColor;
+  opacity: 0.2;
+  animation: titik-halus 1.1s ease-in-out infinite;
+}
+.titik-anim i:nth-child(2) { animation-delay: 0.18s; }
+.titik-anim i:nth-child(3) { animation-delay: 0.36s; }
+@keyframes titik-halus {
+  0%, 60%, 100% { opacity: 0.2; transform: translateY(0) scale(0.9); }
+  30% { opacity: 1; transform: translateY(-1px) scale(1); }
+}
 ```
 
 ## File: src/components/cards.jsx
 ```javascript
 import Carousel from './Carousel.jsx'
-import { StatusBadge, CategoryBadge, AttendanceBadge, btnSmall, ZoomableMedia, SmartFit } from './ui.jsx'
+import { StatusBadge, CategoryBadge, AttendanceBadge, btnSmall, ZoomableMedia, SmartFit , MediaYouTube } from './ui.jsx'
 import { formatTanggal, formatTanggalShort } from '../lib/format.js'
 
 function PersonChip(props) {
@@ -2708,7 +6046,7 @@ function ActionButtons(props) {
 
 export function slidesFromItems(items) {
   return (items || []).filter(function (i) { return i.media_path }).map(function (i) {
-    return { src: i.media_thumb || i.media_path, full: i.media_path, type: i.media_type, title: i.judul }
+    return { src: i.media_thumb || i.media_path, full: i.media_path, type: i.media_source === 'youtube' ? 'foto' : i.media_type, title: i.judul, yt: i.youtube_id || null }
   })
 }
 
@@ -2768,10 +6106,14 @@ export function LogbookDetail(props) {
               <div key={it.id} className={'relative pl-12 ' + (i < items.length - 1 ? 'pb-6' : 'pb-0')}>
                 <span className="absolute left-0 top-0 h-9 w-9 rounded-full bg-bsi-800 text-white grid place-items-center text-sm font-bold">{i + 1}</span>
                 {i < items.length - 1 ? <span className="absolute left-4 top-9 bottom-0 w-px bg-slate-200 dark:bg-slate-700" /> : null}
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  {it.media_path ? (
-                    <ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3" />
-                  ) : null}
+                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                   {it.media_path ? (
+                     it.media_source === 'youtube' ? (
+                       <iframe src={'https://www.youtube-nocookie.com/embed/' + it.youtube_id + '?rel=0&modestbranding=1'} title={it.judul} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen className="rounded-2xl overflow-hidden aspect-video w-full bg-slate-900 mb-3" />
+                     ) : (
+                       <ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3" />
+                     )
+                   ) : null}
                   <p className="font-bold text-slate-900">
                     {it.judul}
                     {it.show_in_gallery && it.media_path ? <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gold-500/15 text-gold-600">Di galeri</span> : null}
@@ -2805,7 +6147,11 @@ export function GalleryCard(props) {
   return (
     <article onClick={props.onDetail} className="clickable cursor-pointer bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full">
       <div className="relative aspect-video w-full overflow-hidden bg-slate-900">
+        {item.media_source === 'youtube' ? (
+        <MediaYouTube src={item.media_path} alt={item.judul} />
+      ) : (
         <SmartFit src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} alt={item.judul} />
+      )}
       </div>
       <div className="p-5 space-y-3 flex-1 flex flex-col">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2837,7 +6183,11 @@ export function GalleryDetail(props) {
   const item = props.item
   return (
     <div className="space-y-4">
-      <ZoomableMedia src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} title={item.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900" />
+      {item.media_source === 'youtube' ? (
+        <iframe src={'https://www.youtube-nocookie.com/embed/' + item.youtube_id + '?rel=0&modestbranding=1'} title={item.judul} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen className="rounded-2xl overflow-hidden aspect-video w-full bg-slate-900" />
+      ) : (
+        <ZoomableMedia src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} title={item.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900" />
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2">
           <CategoryBadge value={item.kegiatan} />
@@ -3087,7 +6437,9 @@ export function Lightbox(props) {
   return (
     <div className="anim-overlay fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/95 p-4" onClick={props.onClose}>
       <div className="relative w-full max-w-5xl" onClick={function (e) { e.stopPropagation() }}>
-        {props.type === 'video' ? (
+        {props.youtubeId ? (
+          <iframe src={'https://www.youtube-nocookie.com/embed/' + props.youtubeId + '?rel=0&modestbranding=1'} title={props.title || 'Video'} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen className="mx-auto aspect-video w-full rounded-2xl bg-slate-900" />
+        ) : props.type === 'video' ? (
           <video src={props.src} controls autoPlay className="mx-auto max-h-[85vh] w-full rounded-2xl bg-slate-900 object-contain" />
         ) : (
           <img
@@ -3105,6 +6457,7 @@ export function Lightbox(props) {
           title={busyUnduh ? 'Menyiapkan unduhan...' : 'Unduh media'}
           onClick={unduh}
           disabled={busyUnduh}
+          style={props.youtubeId ? { display: 'none' } : undefined}
           className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20 disabled:opacity-50"
         >
           <SizedIcon name="download" size={18} />
@@ -3155,6 +6508,9 @@ export function SmartFit(props) {
   const [near, setNear] = useState(false)
   const mediaRef = useRef(null)
   const isVideo = props.type === 'video'
+  if (!isVideo && String(props.src || '').indexOf('i.ytimg.com') !== -1) {
+    return <MediaYouTube src={props.src} alt={props.alt} onClick={props.onClick} className="absolute inset-0 h-full w-full object-cover" />
+  }
   useEffect(function () {
     const el = mediaRef.current
     if (!el) return undefined
@@ -3218,6 +6574,58 @@ export function SmartFit(props) {
     </>
   )
 }
+
+export function MediaYouTube(props) {
+  const [status, setStatus] = useState('muat')
+  const [coba, setCoba] = useState(0)
+  useEffect(function () {
+    if (status !== 'tunggu') return undefined
+    const t = setTimeout(function () {
+      setCoba(function (c) { return c + 1 })
+      setStatus('muat')
+    }, 15000)
+    return function () { clearTimeout(t) }
+  }, [status])
+  if (status === 'tunggu' || status === 'habis') {
+    return (
+      <div className={'grid place-items-center bg-slate-800 ' + (props.className || 'absolute inset-0 h-full w-full')}>
+        <div className="flex flex-col items-center gap-2 text-slate-400">
+          <SizedIcon name="video" size={26} />
+          <p className="px-2 text-center text-[11px] font-semibold">{status === 'habis' ? 'Pratinjau video belum siap' : 'Menyiapkan pratinjau video'}</p>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <img
+      src={props.src + (coba > 0 ? (String(props.src).indexOf('?') === -1 ? '?' : '&') + 'r=' + coba : '')}
+      alt={props.alt || 'Pratinjau video'}
+      onClick={props.onClick || undefined}
+      onError={function () { setStatus(coba >= 3 ? 'habis' : 'tunggu') }}
+      onLoad={function () { setStatus('muat') }}
+      className={props.className || 'absolute inset-0 h-full w-full object-cover'}
+    />
+  )
+}
+
+export function TitikAnim() {
+  return (
+    <span className="titik-anim" aria-hidden="true">
+      <i></i>
+      <i></i>
+      <i></i>
+    </span>
+  )
+}
+export function LabelProses(props) {
+  const bersih = String(props.teks || '').replace(/\.{3}/g, '').replace(/\s+/g, ' ').trim()
+  return (
+    <span className="inline-flex items-center justify-center">
+      <span>{bersih}</span>
+      <TitikAnim />
+    </span>
+  )
+}
 ```
 
 ## File: src/pages/DashboardPage.jsx
@@ -3227,7 +6635,10 @@ import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../lib/auth.js'
 import { uploadMedia, deleteMedia } from '../lib/upload.js'
 import { syncGaleriFromLogbook } from '../lib/logbook.js'
+import { parseYouTubeId, ytThumb, fetchYouTubeQuota, unggahVideoYouTube } from '../lib/youtube.js'
+import { supabase as sbClient } from '../lib/supabase.js'
 import { pratinjauHeic, formatHeic } from '../lib/konversi.js'
+import { LabelProses } from '../components/ui.jsx'
 import { todayInput, detectMediaType, matchesDateFilters, urutkanTanggal } from '../lib/format.js'
 import { KATEGORI, UNIT, GALERI_KEGIATAN } from '../lib/constants.js'
 import { EmptyState, Modal, ConfirmModal, inputCls, labelCls, btnPrimary, btnSmall, AutoTextArea } from '../components/ui.jsx'
@@ -3237,7 +6648,7 @@ import { SizedIcon, ICONS } from '../components/icons.jsx'
 import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
 
 function newItem() {
-  return { key: Math.random().toString(36).slice(2), judul: '', deskripsi: '', hasil: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false, show: false }
+  return { key: Math.random().toString(36).slice(2), judul: '', deskripsi: '', hasil: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false, show: false, mode: 'foto', ytLink: '', oldYtId: null, oldSource: 'r2' }
 }
 
 const LOG_INITIAL = { kategori: '', status: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
@@ -3282,6 +6693,12 @@ export default function DashboardPage() {
 
   const [busy, setBusy] = useState(false)
   const [infoProses, setInfoProses] = useState('')
+  const [ytQuota, setYtQuota] = useState({ limit: 6, used: 0, remaining: 6 })
+  const [galMode, setGalMode] = useState('foto')
+  const [galYtLink, setGalYtLink] = useState('')
+  const [galOldYt, setGalOldYt] = useState(null)
+  const [itemMode, setItemMode] = useState({})
+  const [galYtTitle, setGalYtTitle] = useState('')
   const [pendingDelete, setPendingDelete] = useState(null)
 
   const [logFilter, setLogFilter] = useState(LOG_INITIAL)
@@ -3306,12 +6723,17 @@ export default function DashboardPage() {
 
   useEffect(function () {
     if (mahasiswa) refresh()
+    fetchYouTubeQuota().then(setYtQuota)
+    const iv = setInterval(function () { fetchYouTubeQuota().then(setYtQuota) }, 30000)
+    return function () { clearInterval(iv) }
   }, [mahasiswa])
 
   if (loading || !mahasiswa) {
     return <div className="p-10 text-center text-slate-500">Memuat sesi...</div>
   }
 
+  function getItemMode(i) { return itemMode[i] || 'foto' }
+  function setItemModeAt(i, mode) { setItemMode(function (p) { const n = Object.assign({}, p); n[i] = mode; return n }) }
   function patchItem(i, patch) {
     setItems(function (prev) {
       return prev.map(function (it, idx) { return idx === i ? Object.assign({}, it, patch) : it })
@@ -3343,6 +6765,7 @@ export default function DashboardPage() {
   }
 
   async function hapusMediaR2(url) {
+    if (String(url || '').indexOf('i.ytimg.com') !== -1 || String(url || '').indexOf('youtube') !== -1) return
     const key = keyDariUrl(url)
     if (!key) {
       console.warn('URL media tidak valid, dilewati:', url)
@@ -3367,26 +6790,51 @@ export default function DashboardPage() {
         let mediaPath = null
         let mediaType = null
         let mediaThumb = null
-        if (it.file) {
+        let mediaSource = it.oldSource || 'r2'
+        let youtubeId = it.oldYtId || null
+        if (it.mode === 'video' && it.ytLink && !it.file) {
+          const id = parseYouTubeId(it.ytLink)
+          if (!id) { alert('Link video tidak valid pada kegiatan ' + (i + 1) + '.'); setBusy(false); return }
+          mediaSource = 'youtube'
+          youtubeId = id
+          mediaPath = ytThumb(id)
+          mediaThumb = ytThumb(id)
+          mediaType = 'video'
+        } else if (it.mode === 'video' && it.file) {
+          if (ytQuota.remaining <= 0) { alert('Kuota upload video hari ini sudah habis. Gunakan link video.'); setBusy(false); return }
+          const hasilYt = await unggahVideoYouTube(it.file, it.judul || 'Dokumentasi Magang', function (p) { setInfoProses('Mengunggah video ' + Math.round(p * 100) + '%') })
+          mediaSource = 'youtube'
+          youtubeId = hasilYt.videoId
+          mediaPath = ytThumb(hasilYt.videoId)
+          mediaThumb = ytThumb(hasilYt.videoId)
+          mediaType = 'video'
+          setYtQuota(function (q) { return Object.assign({}, q, { used: q.used + 1, remaining: Math.max(0, q.remaining - 1) }) })
+          fetchYouTubeQuota().then(setYtQuota)
+        } else if (it.file) {
           const up = await uploadMedia(it.file, 'logbook', function (pesan) { setInfoProses(pesan) })
           mediaPath = up.publicUrl
           mediaType = it.file.type.indexOf('video') === 0 ? 'video' : 'foto'
           mediaThumb = up.thumbUrl || null
+          mediaSource = 'r2'
+          youtubeId = null
         } else if (it.oldPath) {
           mediaPath = it.oldPath
           mediaType = detectMediaType(it.oldPath)
           mediaThumb = it.oldThumb || null
+          mediaSource = 'r2'
+          youtubeId = null
         }
-        clean.push({ judul: it.judul.trim(), deskripsi: it.deskripsi.trim(), hasil: it.hasil.trim(), media_path: mediaPath, media_type: mediaType, media_thumb: mediaThumb, show_in_gallery: it.show && !!mediaPath })
+        clean.push({ judul: it.judul.trim(), deskripsi: it.deskripsi.trim(), hasil: it.hasil.trim(), media_path: mediaPath, media_type: mediaType, media_thumb: mediaThumb, media_source: mediaSource, youtube_id: youtubeId, show_in_gallery: it.show && !!mediaPath })
       }
       if (!clean.length) { alert('Tambahkan minimal satu kegiatan dengan judul.'); setBusy(false); return }
 
       let logId = editLogId
       let oldUrls = []
       if (editLogId) {
-        const oldItems = await supabase.from('logbook_items').select('media_path, media_thumb').eq('logbook_id', editLogId)
+        const oldItems = await supabase.from('logbook_items').select('media_path, media_thumb, media_source').eq('logbook_id', editLogId)
         oldUrls = []
         ;(oldItems.data || []).forEach(function (it) {
+          if (it.media_source === 'youtube') return
           if (it.media_path) oldUrls.push(it.media_path)
           if (it.media_thumb) oldUrls.push(it.media_thumb)
         })
@@ -3404,13 +6852,14 @@ export default function DashboardPage() {
       }
 
       const rows = clean.map(function (c, idx) {
-        return { logbook_id: logId, urutan: idx + 1, judul: c.judul, deskripsi: c.deskripsi, hasil: c.hasil, media_path: c.media_path, media_type: c.media_type, media_thumb: c.media_thumb, show_in_gallery: c.show_in_gallery }
+        return { logbook_id: logId, urutan: idx + 1, judul: c.judul, deskripsi: c.deskripsi, hasil: c.hasil, media_path: c.media_path, media_type: c.media_type, media_thumb: c.media_thumb, media_source: c.media_source, youtube_id: c.youtube_id, show_in_gallery: c.show_in_gallery }
       })
       const insItems = await supabase.from('logbook_items').insert(rows).select()
       await syncGaleriFromLogbook(mahasiswa.id, insItems.data || [], { tanggal: form.tanggal, kategori: form.kategori })
 
       const newUrls = []
       clean.forEach(function (c) {
+        if (c.media_source === 'youtube') return
         if (c.media_path) newUrls.push(c.media_path)
         if (c.media_thumb) newUrls.push(c.media_thumb)
       })
@@ -3436,7 +6885,7 @@ export default function DashboardPage() {
       kendala: log.kendala || '', solusi: log.solusi || '', pembelajaran: log.pembelajaran || '', status: log.status
     })
     const mapped = (log.logbook_items || []).map(function (it) {
-      return { key: it.id, judul: it.judul, deskripsi: it.deskripsi || '', hasil: it.hasil || '', file: null, preview: it.media_path || '', oldPath: it.media_path || '', oldThumb: it.media_thumb || '', previewLoading: false, show: it.show_in_gallery }
+      return { key: it.id, judul: it.judul, deskripsi: it.deskripsi || '', hasil: it.hasil || '', file: null, preview: it.media_path || '', oldPath: it.media_source === 'youtube' ? '' : (it.media_path || ''), oldThumb: it.media_source === 'youtube' ? '' : (it.media_thumb || ''), previewLoading: false, show: it.show_in_gallery, mode: it.media_source === 'youtube' ? 'video' : (it.media_type === 'video' ? 'video' : 'foto'), ytLink: '', oldYtId: it.youtube_id || null, oldSource: it.media_source || 'r2' }
     })
     setItems(mapped.length ? mapped : [newItem()])
     setTab('logbook')
@@ -3451,13 +6900,19 @@ export default function DashboardPage() {
 
   function startEditGal(g) {
     setEditGalId(g.id)
-    setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_path, oldPath: g.media_path, oldThumb: g.media_thumb || '', previewLoading: false })
+    setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_path || '', oldPath: g.media_source === 'youtube' ? '' : (g.media_path || ''), oldThumb: g.media_source === 'youtube' ? '' : (g.media_thumb || ''), previewLoading: false })
+    setGalMode(g.media_source === 'youtube' ? 'video' : (g.media_type === 'video' ? 'video' : 'foto'))
+    setGalYtLink('')
+    setGalOldYt(g.youtube_id || null)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   function cancelEditGal() {
     setEditGalId(null)
     setGalForm({ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false })
+     setGalMode('foto')
+     setGalYtLink('')
+     setGalOldYt(null)
   }
 
   function startEditHadir(h) {
@@ -3482,15 +6937,39 @@ export default function DashboardPage() {
       let mediaPath = ''
       let mediaType = ''
       let mediaThumb = null
-      if (galForm.file) {
+      let mediaSource = galOldYt ? 'youtube' : 'r2'
+      let youtubeId = galOldYt || null
+      if (galMode === 'video' && galYtLink && !galForm.file) {
+        const id = parseYouTubeId(galYtLink)
+        if (!id) { alert('Link video tidak valid.'); setBusy(false); return }
+        mediaSource = 'youtube'
+        youtubeId = id
+        mediaPath = ytThumb(id)
+        mediaThumb = ytThumb(id)
+        mediaType = 'video'
+      } else if (galMode === 'video' && galForm.file) {
+        if (ytQuota.remaining <= 0) { alert('Kuota upload video hari ini sudah habis. Gunakan link video.'); setBusy(false); return }
+        const hasilYt = await unggahVideoYouTube(galForm.file, galForm.judul || ('Dokumentasi ' + galForm.tanggal), function (p) { setInfoProses('Mengunggah video ' + Math.round(p * 100) + '%') })
+        mediaSource = 'youtube'
+        youtubeId = hasilYt.videoId
+        mediaPath = ytThumb(hasilYt.videoId)
+        mediaThumb = ytThumb(hasilYt.videoId)
+        mediaType = 'video'
+        setYtQuota(function (q) { return Object.assign({}, q, { used: q.used + 1, remaining: Math.max(0, q.remaining - 1) }) })
+        fetchYouTubeQuota().then(setYtQuota)
+      } else if (galForm.file) {
         const up = await uploadMedia(galForm.file, 'galeri', function (pesan) { setInfoProses(pesan) })
         mediaPath = up.publicUrl
         mediaType = galForm.file.type.indexOf('video') === 0 ? 'video' : 'foto'
         mediaThumb = up.thumbUrl || null
+        mediaSource = 'r2'
+        youtubeId = null
       } else if (galForm.oldPath) {
         mediaPath = galForm.oldPath
         mediaType = detectMediaType(galForm.oldPath)
         mediaThumb = galForm.oldThumb || null
+        mediaSource = 'r2'
+        youtubeId = null
       }
       if (!mediaPath) { alert('Galeri wajib memiliki media. Pilih file foto atau video terlebih dahulu.'); setBusy(false); return }
       const payload = {
@@ -3501,12 +6980,14 @@ export default function DashboardPage() {
         kegiatan: galForm.kegiatan || 'Lainnya',
         media_path: mediaPath,
         media_type: mediaType,
-        media_thumb: mediaThumb
+        media_thumb: mediaThumb,
+        media_source: mediaSource,
+        youtube_id: youtubeId
       }
       let oldGalUrls = []
       if (editGalId) {
         const existing = galeri.find(function (g) { return g.id === editGalId })
-        if (existing && !existing.logbook_item_id && existing.media_path !== payload.media_path) {
+        if (existing && !existing.logbook_item_id && existing.media_source !== 'youtube' && existing.media_path !== payload.media_path) {
           oldGalUrls = [existing.media_path, existing.media_thumb].filter(Boolean)
         }
         await supabase.from('galeri').update(payload).eq('id', editGalId)
@@ -3516,6 +6997,9 @@ export default function DashboardPage() {
       for (const u of oldGalUrls) await hapusMediaR2(u)
       setEditGalId(null)
       setGalForm({ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false })
+     setGalMode('foto')
+     setGalYtLink('')
+     setGalOldYt(null)
       await refresh()
     } catch (err) {
       alert('Gagal menyimpan galeri: ' + err.message)
@@ -3599,13 +7083,14 @@ export default function DashboardPage() {
     if (target.type === 'log') {
       const urls = []
       ;(target.data.logbook_items || []).forEach(function (it) {
+        if (it.media_source === 'youtube') return
         if (it.media_path) urls.push(it.media_path)
         if (it.media_thumb) urls.push(it.media_thumb)
       })
       await supabase.from('logbooks').delete().eq('id', target.data.id)
       for (const u of urls) await hapusMediaR2(u)
     } else if (target.type === 'gal') {
-      const urls = target.data.logbook_item_id ? [] : [target.data.media_path, target.data.media_thumb].filter(Boolean)
+      const urls = target.data.logbook_item_id || target.data.media_source === 'youtube' ? [] : [target.data.media_path, target.data.media_thumb].filter(Boolean)
       await supabase.from('galeri').delete().eq('id', target.data.id)
       if (target.data.logbook_item_id) {
         await supabase.from('logbook_items').update({ show_in_gallery: false }).eq('id', target.data.logbook_item_id)
@@ -3728,14 +7213,14 @@ export default function DashboardPage() {
                         <div className="rounded-2xl border border-slate-200 bg-slate-100 aspect-video grid place-items-center">
                           <div className="flex flex-col items-center gap-3">
                             <div className="h-9 w-9 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div>
-                            <p className="text-xs font-semibold text-slate-500">Mengonversi pratinjau HEIC...</p>
+                            <p className="text-xs font-semibold text-slate-500">Mengonversi pratinjau</p>
                           </div>
                         </div>
                       ) : null}
                       {it.preview ? (
                         <div className="relative rounded-2xl overflow-hidden aspect-video bg-slate-900">
                           {it.file && it.file.type.indexOf('video') === 0
-                            ? <video src={it.preview} className="absolute inset-0 h-full w-full object-contain" muted />
+                            ? <video src={it.preview} controls playsInline preload="metadata" className="absolute inset-0 h-full w-full object-contain" />
                             : <img src={it.preview} alt="Pratinjau" className="absolute inset-0 h-full w-full object-contain" />}
                           <button type="button" onClick={function () { setPendingDelete({ type: 'media-item', data: i }) }} title="Hapus gambar"
                             className="absolute top-2 right-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-red-500 text-white hover:bg-red-600">
@@ -3743,8 +7228,24 @@ export default function DashboardPage() {
                           </button>
                         </div>
                       ) : null}
-                      <FileInput accept="image/*,video/*" fileName={it.file ? it.file.name : ''}
-                        onChange={function (e) { onItemFile(i, e.target.files[0]) }} />
+                      <div className="flex gap-2">
+                        <button type="button" onClick={function () { patchItem(i, { mode: 'foto' }) }} className={'px-3 py-1.5 rounded-xl text-xs font-bold ' + (it.mode !== 'video' ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600')}>Foto</button>
+                        <button type="button" onClick={function () { patchItem(i, { mode: 'video' }) }} className={'px-3 py-1.5 rounded-xl text-xs font-bold ' + (it.mode === 'video' ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600')}>Video</button>
+                      </div>
+                      {it.mode === 'video' ? (
+                        <div className="space-y-2">
+                          <p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuota.remaining} dari {ytQuota.limit}</p>
+                          <div className={ytQuota.remaining <= 0 && !it.file ? 'opacity-50 pointer-events-none' : ''}>
+                            <FileInput accept="video/*" fileName={it.file ? it.file.name : ''}
+                              onChange={function (e) { onItemFile(i, e.target.files[0]) }} />
+                          </div>
+                          {ytQuota.remaining <= 0 ? <p className="text-xs text-red-600">Kuota habis. Gunakan link video di bawah.</p> : null}
+                          <input className={inputCls} value={it.ytLink} onChange={function (e) { patchItem(i, { ytLink: e.target.value }) }} placeholder="Atau tempel link video eksternal" />
+                        </div>
+                      ) : (
+                        <FileInput accept="image/*" fileName={it.file ? it.file.name : ''}
+                          onChange={function (e) { onItemFile(i, e.target.files[0]) }} />
+                      )}
                       <label className={'flex items-start gap-3 rounded-2xl border p-3 cursor-pointer w-full ' + (it.preview ? (it.show ? 'border-gold-500 bg-gold-500/5' : 'border-slate-200') : 'border-slate-200 bg-slate-50 opacity-50 cursor-not-allowed')}>
                         <input type="checkbox" disabled={!it.preview} checked={it.show} onChange={function (e) { patchItem(i, { show: e.target.checked }) }} className="mt-0.5 h-4 w-4 rounded accent-bsi-800" />
                         <span className="text-sm font-semibold text-slate-800">Tampilkan kegiatan ini di galeri</span>
@@ -3760,7 +7261,7 @@ export default function DashboardPage() {
                 <div><label className={labelCls}>Pembelajaran</label><AutoTextArea className={inputCls} value={form.pembelajaran} onChange={function (e) { setForm(Object.assign({}, form, { pembelajaran: e.target.value })) }} placeholder="Opsional" /></div>
               </div>
 
-              <button type="submit" disabled={busy} className={btnPrimary}>{busy ? (infoProses || 'Menyimpan...') : (editLogId ? 'Simpan perubahan' : 'Simpan logbook')}</button>
+              <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks={infoProses || 'Menyimpan'} /> : (editLogId ? 'Simpan perubahan' : 'Simpan logbook')}</button>
             </form>
           </div>
 
@@ -3796,35 +7297,55 @@ export default function DashboardPage() {
             <h2 className="mt-3 text-2xl font-black text-slate-900">{editGalId ? 'Ubah media galeri' : 'Tambah media galeri'}</h2>
             <form onSubmit={submitGaleri} className="mt-6 space-y-4">
               <div>
-                <label className={labelCls}>Pilih foto atau video {editGalId ? null : <span className="text-red-500">*</span>}</label>
+                <label className={labelCls}>Jenis media {editGalId ? null : <span className="text-red-500">*</span>}</label>
+                <div className="mt-1.5 flex gap-2">
+                  <button type="button" onClick={function () { setGalMode('foto') }} className={'px-3 py-1.5 rounded-xl text-xs font-bold ' + (galMode !== 'video' ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600')}>Foto</button>
+                  <button type="button" onClick={function () { setGalMode('video') }} className={'px-3 py-1.5 rounded-xl text-xs font-bold ' + (galMode === 'video' ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600')}>Video</button>
+                </div>
                 <div className="mt-1.5">
-                  <FileInput accept="image/*,video/*" fileName={galForm.file ? galForm.file.name : ''}
-                    onChange={async function (e) {
-                       const f = e.target.files[0]
-                       if (!f) return
-                       if (formatHeic(f)) {
-                         setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: '', previewLoading: true }) })
-                         const blob = await pratinjauHeic(f)
-                         const preview = blob ? URL.createObjectURL(blob) : URL.createObjectURL(f)
-                         setGalForm(function (g) { return Object.assign({}, g, { preview: preview, previewLoading: false }) })
-                       } else {
-                         setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: URL.createObjectURL(f), previewLoading: false }) })
-                       }
-                     }} />
+                  {galMode === 'video' ? (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuota.remaining} dari {ytQuota.limit}</p>
+                      <div className={ytQuota.remaining <= 0 && !galForm.file ? 'opacity-50 pointer-events-none' : ''}>
+                        <FileInput accept="video/*" fileName={galForm.file ? galForm.file.name : ''}
+                          onChange={function (e) {
+                            const f = e.target.files[0]
+                            if (!f) return
+                            setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: URL.createObjectURL(f), previewLoading: false }) })
+                          }} />
+                      </div>
+                      {ytQuota.remaining <= 0 ? <p className="text-xs text-red-600">Kuota habis. Gunakan link video di bawah.</p> : null}
+                      <input className={inputCls} value={galYtLink} onChange={function (e) { setGalYtLink(e.target.value) }} placeholder="Atau tempel link video eksternal" />
+                    </div>
+                  ) : (
+                    <FileInput accept="image/*" fileName={galForm.file ? galForm.file.name : ''}
+                      onChange={async function (e) {
+                        const f = e.target.files[0]
+                        if (!f) return
+                        if (formatHeic(f)) {
+                          setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: '', previewLoading: true }) })
+                          const blob = await pratinjauHeic(f)
+                          const preview = blob ? URL.createObjectURL(blob) : URL.createObjectURL(f)
+                          setGalForm(function (g) { return Object.assign({}, g, { preview: preview, previewLoading: false }) })
+                        } else {
+                          setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: URL.createObjectURL(f), previewLoading: false }) })
+                        }
+                      }} />
+                  )}
                 </div>
               </div>
               {galForm.previewLoading ? (
                 <div className="rounded-2xl border border-slate-200 bg-slate-100 aspect-video grid place-items-center">
                   <div className="flex flex-col items-center gap-3">
                     <div className="h-9 w-9 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div>
-                    <p className="text-xs font-semibold text-slate-500">Mengonversi pratinjau HEIC...</p>
+                    <p className="text-xs font-semibold text-slate-500">Mengonversi pratinjau</p>
                   </div>
                 </div>
               ) : null}
               {galForm.preview ? (
                 <div className="relative rounded-2xl overflow-hidden aspect-video bg-slate-900">
                   {galForm.file && galForm.file.type.indexOf('video') === 0
-                    ? <video src={galForm.preview} className="absolute inset-0 h-full w-full object-contain" muted />
+                    ? <video src={galForm.preview} controls playsInline preload="metadata" className="absolute inset-0 h-full w-full object-contain" />
                     : <img src={galForm.preview} alt="Pratinjau" className="absolute inset-0 h-full w-full object-contain" />}
                   <button type="button" onClick={function () { setPendingDelete({ type: 'media-gal' }) }} title="Hapus gambar"
                     className="absolute top-2 right-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-red-500 text-white hover:bg-red-600">
@@ -3851,7 +7372,7 @@ export default function DashboardPage() {
                 {editGalDerived ? <p className="mt-1 text-xs text-slate-400">Media ini berasal dari logbook. Perubahan judul, deskripsi, kegiatan, dan tanggal hanya memengaruhi galeri dan tidak akan ditimpa saat logbook disimpan.</p> : null}
               </div>
               <div><label className={labelCls}>Deskripsi (opsional)</label><AutoTextArea className={inputCls} value={galForm.deskripsi} onChange={function (e) { setGalForm(Object.assign({}, galForm, { deskripsi: e.target.value })) }} placeholder="Tambahkan keterangan media." /></div>
-              <button type="submit" disabled={busy} className={btnPrimary}>{busy ? (infoProses || 'Menyimpan...') : (editGalId ? 'Simpan perubahan media' : 'Unggah media')}</button>
+              <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks={infoProses || 'Menyimpan'} /> : (editGalId ? 'Simpan perubahan media' : 'Unggah media')}</button>
             </form>
           </div>
 
@@ -3913,7 +7434,7 @@ export default function DashboardPage() {
                 />
                 {hadirForm.status === 'Masuk' ? <p className="mt-1 text-xs text-slate-400">Field ini hanya terisi untuk status Izin atau Bolos.</p> : null}
               </div>
-              <button type="submit" disabled={busy} className={btnPrimary}>{busy ? 'Menyimpan...' : (editHadirId ? 'Simpan perubahan' : 'Simpan daftar hadir')}</button>
+              <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks="Menyimpan" /> : (editHadirId ? 'Simpan perubahan' : 'Simpan daftar hadir')}</button>
             </form>
           </div>
 

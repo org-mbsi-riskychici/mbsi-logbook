@@ -3,7 +3,10 @@ import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../lib/auth.js'
 import { uploadMedia, deleteMedia } from '../lib/upload.js'
 import { syncGaleriFromLogbook } from '../lib/logbook.js'
+import { parseYouTubeId, ytThumb, fetchYouTubeQuota, unggahVideoYouTube } from '../lib/youtube.js'
+import { supabase as sbClient } from '../lib/supabase.js'
 import { pratinjauHeic, formatHeic } from '../lib/konversi.js'
+import { LabelProses } from '../components/ui.jsx'
 import { todayInput, detectMediaType, matchesDateFilters, urutkanTanggal } from '../lib/format.js'
 import { KATEGORI, UNIT, GALERI_KEGIATAN } from '../lib/constants.js'
 import { EmptyState, Modal, ConfirmModal, inputCls, labelCls, btnPrimary, btnSmall, AutoTextArea } from '../components/ui.jsx'
@@ -13,7 +16,7 @@ import { SizedIcon, ICONS } from '../components/icons.jsx'
 import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
 
 function newItem() {
-  return { key: Math.random().toString(36).slice(2), judul: '', deskripsi: '', hasil: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false, show: false }
+  return { key: Math.random().toString(36).slice(2), judul: '', deskripsi: '', hasil: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false, show: false, mode: 'foto', ytLink: '', oldYtId: null, oldSource: 'r2' }
 }
 
 const LOG_INITIAL = { kategori: '', status: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
@@ -58,6 +61,12 @@ export default function DashboardPage() {
 
   const [busy, setBusy] = useState(false)
   const [infoProses, setInfoProses] = useState('')
+  const [ytQuota, setYtQuota] = useState({ limit: 6, used: 0, remaining: 6 })
+  const [galMode, setGalMode] = useState('foto')
+  const [galYtLink, setGalYtLink] = useState('')
+  const [galOldYt, setGalOldYt] = useState(null)
+  const [itemMode, setItemMode] = useState({})
+  const [galYtTitle, setGalYtTitle] = useState('')
   const [pendingDelete, setPendingDelete] = useState(null)
 
   const [logFilter, setLogFilter] = useState(LOG_INITIAL)
@@ -82,12 +91,17 @@ export default function DashboardPage() {
 
   useEffect(function () {
     if (mahasiswa) refresh()
+    fetchYouTubeQuota().then(setYtQuota)
+    const iv = setInterval(function () { fetchYouTubeQuota().then(setYtQuota) }, 30000)
+    return function () { clearInterval(iv) }
   }, [mahasiswa])
 
   if (loading || !mahasiswa) {
     return <div className="p-10 text-center text-slate-500">Memuat sesi...</div>
   }
 
+  function getItemMode(i) { return itemMode[i] || 'foto' }
+  function setItemModeAt(i, mode) { setItemMode(function (p) { const n = Object.assign({}, p); n[i] = mode; return n }) }
   function patchItem(i, patch) {
     setItems(function (prev) {
       return prev.map(function (it, idx) { return idx === i ? Object.assign({}, it, patch) : it })
@@ -119,6 +133,7 @@ export default function DashboardPage() {
   }
 
   async function hapusMediaR2(url) {
+    if (String(url || '').indexOf('i.ytimg.com') !== -1 || String(url || '').indexOf('youtube') !== -1) return
     const key = keyDariUrl(url)
     if (!key) {
       console.warn('URL media tidak valid, dilewati:', url)
@@ -143,26 +158,51 @@ export default function DashboardPage() {
         let mediaPath = null
         let mediaType = null
         let mediaThumb = null
-        if (it.file) {
+        let mediaSource = it.oldSource || 'r2'
+        let youtubeId = it.oldYtId || null
+        if (it.mode === 'video' && it.ytLink && !it.file) {
+          const id = parseYouTubeId(it.ytLink)
+          if (!id) { alert('Link video tidak valid pada kegiatan ' + (i + 1) + '.'); setBusy(false); return }
+          mediaSource = 'youtube'
+          youtubeId = id
+          mediaPath = ytThumb(id)
+          mediaThumb = ytThumb(id)
+          mediaType = 'video'
+        } else if (it.mode === 'video' && it.file) {
+          if (ytQuota.remaining <= 0) { alert('Kuota upload video hari ini sudah habis. Gunakan link video.'); setBusy(false); return }
+          const hasilYt = await unggahVideoYouTube(it.file, it.judul || 'Dokumentasi Magang', function (p) { setInfoProses('Mengunggah video ' + Math.round(p * 100) + '%') })
+          mediaSource = 'youtube'
+          youtubeId = hasilYt.videoId
+          mediaPath = ytThumb(hasilYt.videoId)
+          mediaThumb = ytThumb(hasilYt.videoId)
+          mediaType = 'video'
+          setYtQuota(function (q) { return Object.assign({}, q, { used: q.used + 1, remaining: Math.max(0, q.remaining - 1) }) })
+          fetchYouTubeQuota().then(setYtQuota)
+        } else if (it.file) {
           const up = await uploadMedia(it.file, 'logbook', function (pesan) { setInfoProses(pesan) })
           mediaPath = up.publicUrl
           mediaType = it.file.type.indexOf('video') === 0 ? 'video' : 'foto'
           mediaThumb = up.thumbUrl || null
+          mediaSource = 'r2'
+          youtubeId = null
         } else if (it.oldPath) {
           mediaPath = it.oldPath
           mediaType = detectMediaType(it.oldPath)
           mediaThumb = it.oldThumb || null
+          mediaSource = 'r2'
+          youtubeId = null
         }
-        clean.push({ judul: it.judul.trim(), deskripsi: it.deskripsi.trim(), hasil: it.hasil.trim(), media_path: mediaPath, media_type: mediaType, media_thumb: mediaThumb, show_in_gallery: it.show && !!mediaPath })
+        clean.push({ judul: it.judul.trim(), deskripsi: it.deskripsi.trim(), hasil: it.hasil.trim(), media_path: mediaPath, media_type: mediaType, media_thumb: mediaThumb, media_source: mediaSource, youtube_id: youtubeId, show_in_gallery: it.show && !!mediaPath })
       }
       if (!clean.length) { alert('Tambahkan minimal satu kegiatan dengan judul.'); setBusy(false); return }
 
       let logId = editLogId
       let oldUrls = []
       if (editLogId) {
-        const oldItems = await supabase.from('logbook_items').select('media_path, media_thumb').eq('logbook_id', editLogId)
+        const oldItems = await supabase.from('logbook_items').select('media_path, media_thumb, media_source').eq('logbook_id', editLogId)
         oldUrls = []
         ;(oldItems.data || []).forEach(function (it) {
+          if (it.media_source === 'youtube') return
           if (it.media_path) oldUrls.push(it.media_path)
           if (it.media_thumb) oldUrls.push(it.media_thumb)
         })
@@ -180,13 +220,14 @@ export default function DashboardPage() {
       }
 
       const rows = clean.map(function (c, idx) {
-        return { logbook_id: logId, urutan: idx + 1, judul: c.judul, deskripsi: c.deskripsi, hasil: c.hasil, media_path: c.media_path, media_type: c.media_type, media_thumb: c.media_thumb, show_in_gallery: c.show_in_gallery }
+        return { logbook_id: logId, urutan: idx + 1, judul: c.judul, deskripsi: c.deskripsi, hasil: c.hasil, media_path: c.media_path, media_type: c.media_type, media_thumb: c.media_thumb, media_source: c.media_source, youtube_id: c.youtube_id, show_in_gallery: c.show_in_gallery }
       })
       const insItems = await supabase.from('logbook_items').insert(rows).select()
       await syncGaleriFromLogbook(mahasiswa.id, insItems.data || [], { tanggal: form.tanggal, kategori: form.kategori })
 
       const newUrls = []
       clean.forEach(function (c) {
+        if (c.media_source === 'youtube') return
         if (c.media_path) newUrls.push(c.media_path)
         if (c.media_thumb) newUrls.push(c.media_thumb)
       })
@@ -212,7 +253,7 @@ export default function DashboardPage() {
       kendala: log.kendala || '', solusi: log.solusi || '', pembelajaran: log.pembelajaran || '', status: log.status
     })
     const mapped = (log.logbook_items || []).map(function (it) {
-      return { key: it.id, judul: it.judul, deskripsi: it.deskripsi || '', hasil: it.hasil || '', file: null, preview: it.media_path || '', oldPath: it.media_path || '', oldThumb: it.media_thumb || '', previewLoading: false, show: it.show_in_gallery }
+      return { key: it.id, judul: it.judul, deskripsi: it.deskripsi || '', hasil: it.hasil || '', file: null, preview: it.media_path || '', oldPath: it.media_source === 'youtube' ? '' : (it.media_path || ''), oldThumb: it.media_source === 'youtube' ? '' : (it.media_thumb || ''), previewLoading: false, show: it.show_in_gallery, mode: it.media_source === 'youtube' ? 'video' : (it.media_type === 'video' ? 'video' : 'foto'), ytLink: '', oldYtId: it.youtube_id || null, oldSource: it.media_source || 'r2' }
     })
     setItems(mapped.length ? mapped : [newItem()])
     setTab('logbook')
@@ -227,13 +268,19 @@ export default function DashboardPage() {
 
   function startEditGal(g) {
     setEditGalId(g.id)
-    setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_path, oldPath: g.media_path, oldThumb: g.media_thumb || '', previewLoading: false })
+    setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_path || '', oldPath: g.media_source === 'youtube' ? '' : (g.media_path || ''), oldThumb: g.media_source === 'youtube' ? '' : (g.media_thumb || ''), previewLoading: false })
+    setGalMode(g.media_source === 'youtube' ? 'video' : (g.media_type === 'video' ? 'video' : 'foto'))
+    setGalYtLink('')
+    setGalOldYt(g.youtube_id || null)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   function cancelEditGal() {
     setEditGalId(null)
     setGalForm({ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false })
+     setGalMode('foto')
+     setGalYtLink('')
+     setGalOldYt(null)
   }
 
   function startEditHadir(h) {
@@ -258,15 +305,39 @@ export default function DashboardPage() {
       let mediaPath = ''
       let mediaType = ''
       let mediaThumb = null
-      if (galForm.file) {
+      let mediaSource = galOldYt ? 'youtube' : 'r2'
+      let youtubeId = galOldYt || null
+      if (galMode === 'video' && galYtLink && !galForm.file) {
+        const id = parseYouTubeId(galYtLink)
+        if (!id) { alert('Link video tidak valid.'); setBusy(false); return }
+        mediaSource = 'youtube'
+        youtubeId = id
+        mediaPath = ytThumb(id)
+        mediaThumb = ytThumb(id)
+        mediaType = 'video'
+      } else if (galMode === 'video' && galForm.file) {
+        if (ytQuota.remaining <= 0) { alert('Kuota upload video hari ini sudah habis. Gunakan link video.'); setBusy(false); return }
+        const hasilYt = await unggahVideoYouTube(galForm.file, galForm.judul || ('Dokumentasi ' + galForm.tanggal), function (p) { setInfoProses('Mengunggah video ' + Math.round(p * 100) + '%') })
+        mediaSource = 'youtube'
+        youtubeId = hasilYt.videoId
+        mediaPath = ytThumb(hasilYt.videoId)
+        mediaThumb = ytThumb(hasilYt.videoId)
+        mediaType = 'video'
+        setYtQuota(function (q) { return Object.assign({}, q, { used: q.used + 1, remaining: Math.max(0, q.remaining - 1) }) })
+        fetchYouTubeQuota().then(setYtQuota)
+      } else if (galForm.file) {
         const up = await uploadMedia(galForm.file, 'galeri', function (pesan) { setInfoProses(pesan) })
         mediaPath = up.publicUrl
         mediaType = galForm.file.type.indexOf('video') === 0 ? 'video' : 'foto'
         mediaThumb = up.thumbUrl || null
+        mediaSource = 'r2'
+        youtubeId = null
       } else if (galForm.oldPath) {
         mediaPath = galForm.oldPath
         mediaType = detectMediaType(galForm.oldPath)
         mediaThumb = galForm.oldThumb || null
+        mediaSource = 'r2'
+        youtubeId = null
       }
       if (!mediaPath) { alert('Galeri wajib memiliki media. Pilih file foto atau video terlebih dahulu.'); setBusy(false); return }
       const payload = {
@@ -277,12 +348,14 @@ export default function DashboardPage() {
         kegiatan: galForm.kegiatan || 'Lainnya',
         media_path: mediaPath,
         media_type: mediaType,
-        media_thumb: mediaThumb
+        media_thumb: mediaThumb,
+        media_source: mediaSource,
+        youtube_id: youtubeId
       }
       let oldGalUrls = []
       if (editGalId) {
         const existing = galeri.find(function (g) { return g.id === editGalId })
-        if (existing && !existing.logbook_item_id && existing.media_path !== payload.media_path) {
+        if (existing && !existing.logbook_item_id && existing.media_source !== 'youtube' && existing.media_path !== payload.media_path) {
           oldGalUrls = [existing.media_path, existing.media_thumb].filter(Boolean)
         }
         await supabase.from('galeri').update(payload).eq('id', editGalId)
@@ -292,6 +365,9 @@ export default function DashboardPage() {
       for (const u of oldGalUrls) await hapusMediaR2(u)
       setEditGalId(null)
       setGalForm({ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false })
+     setGalMode('foto')
+     setGalYtLink('')
+     setGalOldYt(null)
       await refresh()
     } catch (err) {
       alert('Gagal menyimpan galeri: ' + err.message)
@@ -375,13 +451,14 @@ export default function DashboardPage() {
     if (target.type === 'log') {
       const urls = []
       ;(target.data.logbook_items || []).forEach(function (it) {
+        if (it.media_source === 'youtube') return
         if (it.media_path) urls.push(it.media_path)
         if (it.media_thumb) urls.push(it.media_thumb)
       })
       await supabase.from('logbooks').delete().eq('id', target.data.id)
       for (const u of urls) await hapusMediaR2(u)
     } else if (target.type === 'gal') {
-      const urls = target.data.logbook_item_id ? [] : [target.data.media_path, target.data.media_thumb].filter(Boolean)
+      const urls = target.data.logbook_item_id || target.data.media_source === 'youtube' ? [] : [target.data.media_path, target.data.media_thumb].filter(Boolean)
       await supabase.from('galeri').delete().eq('id', target.data.id)
       if (target.data.logbook_item_id) {
         await supabase.from('logbook_items').update({ show_in_gallery: false }).eq('id', target.data.logbook_item_id)
@@ -504,14 +581,14 @@ export default function DashboardPage() {
                         <div className="rounded-2xl border border-slate-200 bg-slate-100 aspect-video grid place-items-center">
                           <div className="flex flex-col items-center gap-3">
                             <div className="h-9 w-9 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div>
-                            <p className="text-xs font-semibold text-slate-500">Mengonversi pratinjau HEIC...</p>
+                            <p className="text-xs font-semibold text-slate-500">Mengonversi pratinjau</p>
                           </div>
                         </div>
                       ) : null}
                       {it.preview ? (
                         <div className="relative rounded-2xl overflow-hidden aspect-video bg-slate-900">
                           {it.file && it.file.type.indexOf('video') === 0
-                            ? <video src={it.preview} className="absolute inset-0 h-full w-full object-contain" muted />
+                            ? <video src={it.preview} controls playsInline preload="metadata" className="absolute inset-0 h-full w-full object-contain" />
                             : <img src={it.preview} alt="Pratinjau" className="absolute inset-0 h-full w-full object-contain" />}
                           <button type="button" onClick={function () { setPendingDelete({ type: 'media-item', data: i }) }} title="Hapus gambar"
                             className="absolute top-2 right-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-red-500 text-white hover:bg-red-600">
@@ -519,8 +596,24 @@ export default function DashboardPage() {
                           </button>
                         </div>
                       ) : null}
-                      <FileInput accept="image/*,video/*" fileName={it.file ? it.file.name : ''}
-                        onChange={function (e) { onItemFile(i, e.target.files[0]) }} />
+                      <div className="flex gap-2">
+                        <button type="button" onClick={function () { patchItem(i, { mode: 'foto' }) }} className={'px-3 py-1.5 rounded-xl text-xs font-bold ' + (it.mode !== 'video' ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600')}>Foto</button>
+                        <button type="button" onClick={function () { patchItem(i, { mode: 'video' }) }} className={'px-3 py-1.5 rounded-xl text-xs font-bold ' + (it.mode === 'video' ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600')}>Video</button>
+                      </div>
+                      {it.mode === 'video' ? (
+                        <div className="space-y-2">
+                          <p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuota.remaining} dari {ytQuota.limit}</p>
+                          <div className={ytQuota.remaining <= 0 && !it.file ? 'opacity-50 pointer-events-none' : ''}>
+                            <FileInput accept="video/*" fileName={it.file ? it.file.name : ''}
+                              onChange={function (e) { onItemFile(i, e.target.files[0]) }} />
+                          </div>
+                          {ytQuota.remaining <= 0 ? <p className="text-xs text-red-600">Kuota habis. Gunakan link video di bawah.</p> : null}
+                          <input className={inputCls} value={it.ytLink} onChange={function (e) { patchItem(i, { ytLink: e.target.value }) }} placeholder="Atau tempel link video eksternal" />
+                        </div>
+                      ) : (
+                        <FileInput accept="image/*" fileName={it.file ? it.file.name : ''}
+                          onChange={function (e) { onItemFile(i, e.target.files[0]) }} />
+                      )}
                       <label className={'flex items-start gap-3 rounded-2xl border p-3 cursor-pointer w-full ' + (it.preview ? (it.show ? 'border-gold-500 bg-gold-500/5' : 'border-slate-200') : 'border-slate-200 bg-slate-50 opacity-50 cursor-not-allowed')}>
                         <input type="checkbox" disabled={!it.preview} checked={it.show} onChange={function (e) { patchItem(i, { show: e.target.checked }) }} className="mt-0.5 h-4 w-4 rounded accent-bsi-800" />
                         <span className="text-sm font-semibold text-slate-800">Tampilkan kegiatan ini di galeri</span>
@@ -536,7 +629,7 @@ export default function DashboardPage() {
                 <div><label className={labelCls}>Pembelajaran</label><AutoTextArea className={inputCls} value={form.pembelajaran} onChange={function (e) { setForm(Object.assign({}, form, { pembelajaran: e.target.value })) }} placeholder="Opsional" /></div>
               </div>
 
-              <button type="submit" disabled={busy} className={btnPrimary}>{busy ? (infoProses || 'Menyimpan...') : (editLogId ? 'Simpan perubahan' : 'Simpan logbook')}</button>
+              <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks={infoProses || 'Menyimpan'} /> : (editLogId ? 'Simpan perubahan' : 'Simpan logbook')}</button>
             </form>
           </div>
 
@@ -572,35 +665,55 @@ export default function DashboardPage() {
             <h2 className="mt-3 text-2xl font-black text-slate-900">{editGalId ? 'Ubah media galeri' : 'Tambah media galeri'}</h2>
             <form onSubmit={submitGaleri} className="mt-6 space-y-4">
               <div>
-                <label className={labelCls}>Pilih foto atau video {editGalId ? null : <span className="text-red-500">*</span>}</label>
+                <label className={labelCls}>Jenis media {editGalId ? null : <span className="text-red-500">*</span>}</label>
+                <div className="mt-1.5 flex gap-2">
+                  <button type="button" onClick={function () { setGalMode('foto') }} className={'px-3 py-1.5 rounded-xl text-xs font-bold ' + (galMode !== 'video' ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600')}>Foto</button>
+                  <button type="button" onClick={function () { setGalMode('video') }} className={'px-3 py-1.5 rounded-xl text-xs font-bold ' + (galMode === 'video' ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600')}>Video</button>
+                </div>
                 <div className="mt-1.5">
-                  <FileInput accept="image/*,video/*" fileName={galForm.file ? galForm.file.name : ''}
-                    onChange={async function (e) {
-                       const f = e.target.files[0]
-                       if (!f) return
-                       if (formatHeic(f)) {
-                         setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: '', previewLoading: true }) })
-                         const blob = await pratinjauHeic(f)
-                         const preview = blob ? URL.createObjectURL(blob) : URL.createObjectURL(f)
-                         setGalForm(function (g) { return Object.assign({}, g, { preview: preview, previewLoading: false }) })
-                       } else {
-                         setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: URL.createObjectURL(f), previewLoading: false }) })
-                       }
-                     }} />
+                  {galMode === 'video' ? (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuota.remaining} dari {ytQuota.limit}</p>
+                      <div className={ytQuota.remaining <= 0 && !galForm.file ? 'opacity-50 pointer-events-none' : ''}>
+                        <FileInput accept="video/*" fileName={galForm.file ? galForm.file.name : ''}
+                          onChange={function (e) {
+                            const f = e.target.files[0]
+                            if (!f) return
+                            setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: URL.createObjectURL(f), previewLoading: false }) })
+                          }} />
+                      </div>
+                      {ytQuota.remaining <= 0 ? <p className="text-xs text-red-600">Kuota habis. Gunakan link video di bawah.</p> : null}
+                      <input className={inputCls} value={galYtLink} onChange={function (e) { setGalYtLink(e.target.value) }} placeholder="Atau tempel link video eksternal" />
+                    </div>
+                  ) : (
+                    <FileInput accept="image/*" fileName={galForm.file ? galForm.file.name : ''}
+                      onChange={async function (e) {
+                        const f = e.target.files[0]
+                        if (!f) return
+                        if (formatHeic(f)) {
+                          setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: '', previewLoading: true }) })
+                          const blob = await pratinjauHeic(f)
+                          const preview = blob ? URL.createObjectURL(blob) : URL.createObjectURL(f)
+                          setGalForm(function (g) { return Object.assign({}, g, { preview: preview, previewLoading: false }) })
+                        } else {
+                          setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: URL.createObjectURL(f), previewLoading: false }) })
+                        }
+                      }} />
+                  )}
                 </div>
               </div>
               {galForm.previewLoading ? (
                 <div className="rounded-2xl border border-slate-200 bg-slate-100 aspect-video grid place-items-center">
                   <div className="flex flex-col items-center gap-3">
                     <div className="h-9 w-9 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div>
-                    <p className="text-xs font-semibold text-slate-500">Mengonversi pratinjau HEIC...</p>
+                    <p className="text-xs font-semibold text-slate-500">Mengonversi pratinjau</p>
                   </div>
                 </div>
               ) : null}
               {galForm.preview ? (
                 <div className="relative rounded-2xl overflow-hidden aspect-video bg-slate-900">
                   {galForm.file && galForm.file.type.indexOf('video') === 0
-                    ? <video src={galForm.preview} className="absolute inset-0 h-full w-full object-contain" muted />
+                    ? <video src={galForm.preview} controls playsInline preload="metadata" className="absolute inset-0 h-full w-full object-contain" />
                     : <img src={galForm.preview} alt="Pratinjau" className="absolute inset-0 h-full w-full object-contain" />}
                   <button type="button" onClick={function () { setPendingDelete({ type: 'media-gal' }) }} title="Hapus gambar"
                     className="absolute top-2 right-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-red-500 text-white hover:bg-red-600">
@@ -627,7 +740,7 @@ export default function DashboardPage() {
                 {editGalDerived ? <p className="mt-1 text-xs text-slate-400">Media ini berasal dari logbook. Perubahan judul, deskripsi, kegiatan, dan tanggal hanya memengaruhi galeri dan tidak akan ditimpa saat logbook disimpan.</p> : null}
               </div>
               <div><label className={labelCls}>Deskripsi (opsional)</label><AutoTextArea className={inputCls} value={galForm.deskripsi} onChange={function (e) { setGalForm(Object.assign({}, galForm, { deskripsi: e.target.value })) }} placeholder="Tambahkan keterangan media." /></div>
-              <button type="submit" disabled={busy} className={btnPrimary}>{busy ? (infoProses || 'Menyimpan...') : (editGalId ? 'Simpan perubahan media' : 'Unggah media')}</button>
+              <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks={infoProses || 'Menyimpan'} /> : (editGalId ? 'Simpan perubahan media' : 'Unggah media')}</button>
             </form>
           </div>
 
@@ -689,7 +802,7 @@ export default function DashboardPage() {
                 />
                 {hadirForm.status === 'Masuk' ? <p className="mt-1 text-xs text-slate-400">Field ini hanya terisi untuk status Izin atau Bolos.</p> : null}
               </div>
-              <button type="submit" disabled={busy} className={btnPrimary}>{busy ? 'Menyimpan...' : (editHadirId ? 'Simpan perubahan' : 'Simpan daftar hadir')}</button>
+              <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks="Menyimpan" /> : (editHadirId ? 'Simpan perubahan' : 'Simpan daftar hadir')}</button>
             </form>
           </div>
 
