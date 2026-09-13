@@ -62,6 +62,7 @@ export default function DashboardPage() {
   const [busy, setBusy] = useState(false)
   const [infoProses, setInfoProses] = useState('')
   const [ytQuota, setYtQuota] = useState({ limit: 6, used: 0, remaining: 6 })
+  const [ytQuotaLoading, setYtQuotaLoading] = useState(true)
   const [galMode, setGalMode] = useState('foto')
   const [galYtLink, setGalYtLink] = useState('')
   const [galOldYt, setGalOldYt] = useState(null)
@@ -91,8 +92,12 @@ export default function DashboardPage() {
 
   useEffect(function () {
     if (mahasiswa) refresh()
-    fetchYouTubeQuota().then(setYtQuota)
-    const iv = setInterval(function () { fetchYouTubeQuota().then(setYtQuota) }, 30000)
+    setYtQuotaLoading(true)
+    fetchYouTubeQuota().then(function (data) {
+      setYtQuota(data)
+      setYtQuotaLoading(false)
+    })
+    const iv = setInterval(function () { fetchYouTubeQuota().then(function (data) { setYtQuota(data); setYtQuotaLoading(false) }) }, 30000)
     return function () { clearInterval(iv) }
   }, [mahasiswa])
 
@@ -602,7 +607,7 @@ export default function DashboardPage() {
                       </div>
                       {it.mode === 'video' ? (
                         <div className="space-y-2">
-                          <p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuota.remaining} dari {ytQuota.limit}</p>
+                          <p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuotaLoading ? <span className="inline-block w-3 h-3 ml-1 border-2 border-slate-400 border-t-transparent rounded-full animate-spin align-middle"></span> : <>{ytQuota.remaining} dari {ytQuota.limit}</>}</p>
                           <div className={ytQuota.remaining <= 0 && !it.file ? 'opacity-50 pointer-events-none' : ''}>
                             <FileInput accept="video/*" fileName={it.file ? it.file.name : ''}
                               onChange={function (e) { onItemFile(i, e.target.files[0]) }} />
@@ -673,7 +678,7 @@ export default function DashboardPage() {
                 <div className="mt-1.5">
                   {galMode === 'video' ? (
                     <div className="space-y-2">
-                      <p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuota.remaining} dari {ytQuota.limit}</p>
+                      <p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuotaLoading ? <span className="inline-block w-3 h-3 ml-1 border-2 border-slate-400 border-t-transparent rounded-full animate-spin align-middle"></span> : <>{ytQuota.remaining} dari {ytQuota.limit}</>}</p>
                       <div className={ytQuota.remaining <= 0 && !galForm.file ? 'opacity-50 pointer-events-none' : ''}>
                         <FileInput accept="video/*" fileName={galForm.file ? galForm.file.name : ''}
                           onChange={function (e) {

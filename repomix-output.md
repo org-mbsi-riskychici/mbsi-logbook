@@ -79,12 +79,15 @@ supabase/
   schema.sql
 .env.example
 .gitignore
+apply-auto-rotate-youtube.cjs
 apply-final-cleanup.cjs
 apply-fix-export-unggah.cjs
 apply-fix-sisa-netral.cjs
+apply-fix-state-loading.cjs
 apply-fix-token-aman.cjs
 apply-fix-youtube-scope.cjs
 apply-galeri-picker.cjs
+apply-loading-kuota.cjs
 apply-netral-final.cjs
 apply-netral-youtube-dan-titik.cjs
 apply-preview-video-controls.cjs
@@ -102,7 +105,9 @@ package.json
 postcss.config.js
 README.md
 setup-semua-fitur.cjs
+setup-youtube-token-multi.cjs
 setup-youtube-token.cjs
+siapkan-env-youtube-lokal.cjs
 tailwind.config.js
 vercel.json
 vite.config.js
@@ -110,9 +115,680 @@ vite.config.js
 
 # Files
 
+## File: apply-auto-rotate-youtube.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function simpan(rel, isi) {
+  const full = path.join(root, rel)
+  fs.mkdirSync(path.dirname(full), { recursive: true })
+  fs.writeFileSync(full, isi, 'utf8')
+  console.log('[BERHASIL] ' + rel + ' ditulis')
+}
+
+const KEPALA = `import { createClient } from '@supabase/supabase-js'
+const LIMIT_PER_PROJECT = 5
+function ptToday() {
+  const now = new Date()
+  const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
+  const y = pt.getFullYear()
+  const m = String(pt.getMonth() + 1).padStart(2, '0')
+  const d = String(pt.getDate()).padStart(2, '0')
+  return y + '-' + m + '-' + d
+}
+function daftarKredensial() {
+  const list = []
+  for (let n = 1; n <= 6; n++) {
+    const id = process.env['YOUTUBE_CLIENT_ID_' + n]
+    const secret = process.env['YOUTUBE_CLIENT_SECRET_' + n]
+    const refresh = process.env['YOUTUBE_REFRESH_TOKEN_' + n]
+    if (id && secret && refresh) list.push({ n: n, id: id, secret: secret, refresh: refresh })
+  }
+  if (!list.length && process.env.YOUTUBE_CLIENT_ID && process.env.YOUTUBE_CLIENT_SECRET && process.env.YOUTUBE_REFRESH_TOKEN) {
+    list.push({ n: 1, id: process.env.YOUTUBE_CLIENT_ID, secret: process.env.YOUTUBE_CLIENT_SECRET, refresh: process.env.YOUTUBE_REFRESH_TOKEN })
+  }
+  return list
+}
+const cacheToken = {}
+async function getAccessToken(kred) {
+  const now = Date.now()
+  const c = cacheToken[kred.n]
+  if (c && c.expire > now + 60000) return c.token
+  const params = new URLSearchParams()
+  params.set('client_id', kred.id)
+  params.set('client_secret', kred.secret)
+  params.set('refresh_token', kred.refresh)
+  params.set('grant_type', 'refresh_token')
+  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
+  if (!r.ok) throw new Error('refresh token project ' + kred.n + ' gagal (status ' + r.status + ')')
+  const j = await r.json()
+  cacheToken[kred.n] = { token: j.access_token, expire: now + (j.expires_in || 3600) * 1000 }
+  return j.access_token
+}
+`
+
+/* ===== 1. api/youtube/quota.js ===== */
+simpan('api/youtube/quota.js', KEPALA + `export default async function handler(req, res) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+  const today = ptToday()
+  const kredensial = daftarKredensial()
+  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
+  let usedTotal = 0
+  const perProject = []
+  for (const kred of kredensial) {
+    const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
+    const used = hit.count || 0
+    usedTotal += used
+    perProject.push({ project: kred.n, used: used, remaining: Math.max(0, LIMIT_PER_PROJECT - used) })
+  }
+  const limit = kredensial.length * LIMIT_PER_PROJECT
+  res.setHeader('Cache-Control', 'no-store')
+  return res.status(200).json({ limit: limit, used: usedTotal, remaining: Math.max(0, limit - usedTotal), perProject: perProject, ptDate: today })
+}
+`)
+
+/* ===== 2. api/youtube/session.js ===== */
+simpan('api/youtube/session.js', KEPALA + `export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const authHeader = req.headers.authorization || ''
+  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
+  const authClient = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
+  const chk = await authClient.auth.getUser()
+  if (chk.error || !chk.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
+  const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+  const today = ptToday()
+  const kredensial = daftarKredensial()
+  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
+  const body = req.body || {}
+  if (!body.title) return res.status(400).json({ error: 'Judul video wajib diisi' })
+  let terakhir = ''
+  for (const kred of kredensial) {
+    const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
+    if ((hit.count || 0) >= LIMIT_PER_PROJECT) { terakhir = 'project ' + kred.n + ' sudah penuh'; continue }
+    let access
+    try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
+    const meta = {
+      snippet: { title: String(body.title).slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
+      status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
+    }
+    const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
+      body: JSON.stringify(meta)
+    })
+    if (!init.ok) { terakhir = 'project ' + kred.n + ' ditolak Google (status ' + init.status + ')'; continue }
+    const sessionUri = init.headers.get('location')
+    if (!sessionUri) { terakhir = 'project ' + kred.n + ' tanpa lokasi upload'; continue }
+    await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: chk.data.user.id, project_id: kred.n })
+    return res.status(200).json({ sessionUri: sessionUri, project: kred.n })
+  }
+  return res.status(429).json({ error: 'Kuota harian semua project video sudah habis. Coba lagi besok atau gunakan link video eksternal.', detail: terakhir })
+}
+`)
+
+/* ===== 3. api/youtube/latest.js ===== */
+simpan('api/youtube/latest.js', KEPALA + `export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const authHeader = req.headers.authorization || ''
+  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
+  const authClient = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
+  const chk = await authClient.auth.getUser()
+  if (chk.error || !chk.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
+  const kredensial = daftarKredensial()
+  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
+  let terakhir = ''
+  for (const kred of kredensial) {
+    let access
+    try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
+    const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&order=date&maxResults=5', { headers: { Authorization: 'Bearer ' + access } })
+    if (!r.ok) { terakhir = 'project ' + kred.n + ' status ' + r.status; continue }
+    const j = await r.json()
+    const items = j.items || []
+    const batas = Date.now() - 15 * 60 * 1000
+    const cocok = items.find(function (it) {
+      const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
+      return isNaN(t) ? false : t >= batas
+    })
+    if (!cocok) return res.status(404).json({ error: 'Video terbaru tidak ditemukan' })
+    return res.status(200).json({ videoId: cocok.id && cocok.id.videoId, project: kred.n })
+  }
+  return res.status(502).json({ error: 'Gagal memeriksa video terbaru: ' + terakhir })
+}
+`)
+
+/* ===== 4. vite.config.js: ganti seluruh plugin YouTube ===== */
+const FILE_V = 'vite.config.js'
+let v = fs.readFileSync(path.join(root, FILE_V), 'utf8').replace(/\r\n/g, '\n')
+const mulai = v.indexOf('function pluginApiYoutube(env) {')
+const akhir = v.indexOf('export default defineConfig')
+if (mulai === -1 || akhir === -1) {
+  console.log('[TIDAK KETEMU] Blok pluginApiYoutube di vite.config.js')
+} else if (v.includes('LIMIT_PER_PROJECT')) {
+  console.log('[SUDAH ADA] Plugin YouTube multi-project di vite.config.js')
+} else {
+  const pluginBaru = `function pluginApiYoutube(env) {
+  const admin = createClient(env.VITE_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY)
+  const LIMIT_PER_PROJECT = 5
+  function ptToday() {
+    const now = new Date()
+    const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
+    const y = pt.getFullYear()
+    const m = String(pt.getMonth() + 1).padStart(2, '0')
+    const d = String(pt.getDate()).padStart(2, '0')
+    return y + '-' + m + '-' + d
+  }
+  function daftarKredensial() {
+    const list = []
+    for (let n = 1; n <= 6; n++) {
+      const id = env['YOUTUBE_CLIENT_ID_' + n]
+      const secret = env['YOUTUBE_CLIENT_SECRET_' + n]
+      const refresh = env['YOUTUBE_REFRESH_TOKEN_' + n]
+      if (id && secret && refresh) list.push({ n: n, id: id, secret: secret, refresh: refresh })
+    }
+    if (!list.length && env.YOUTUBE_CLIENT_ID && env.YOUTUBE_CLIENT_SECRET && env.YOUTUBE_REFRESH_TOKEN) {
+      list.push({ n: 1, id: env.YOUTUBE_CLIENT_ID, secret: env.YOUTUBE_CLIENT_SECRET, refresh: env.YOUTUBE_REFRESH_TOKEN })
+    }
+    return list
+  }
+  const cacheToken = {}
+  async function getAccessToken(kred) {
+    const now = Date.now()
+    const c = cacheToken[kred.n]
+    if (c && c.expire > now + 60000) return c.token
+    const params = new URLSearchParams()
+    params.set('client_id', kred.id)
+    params.set('client_secret', kred.secret)
+    params.set('refresh_token', kred.refresh)
+    params.set('grant_type', 'refresh_token')
+    const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
+    if (!r.ok) throw new Error('refresh token project ' + kred.n + ' gagal (status ' + r.status + ')')
+    const j = await r.json()
+    cacheToken[kred.n] = { token: j.access_token, expire: now + (j.expires_in || 3600) * 1000 }
+    return j.access_token
+  }
+  async function cekSesi(req) {
+    const authHeader = req.headers.authorization || ''
+    const token = authHeader.replace('Bearer ', '')
+    if (!token) return null
+    const supabase = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
+    const r = await supabase.auth.getUser(token)
+    return r.error ? null : r.data.user
+  }
+  function kirim(res, code, obj) {
+    res.statusCode = code
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify(obj))
+  }
+  return {
+    name: 'api-youtube-dev',
+    configureServer(server) {
+      server.middlewares.use('/api/youtube/quota', async function (req, res) {
+        const today = ptToday()
+        const kredensial = daftarKredensial()
+        if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
+        let usedTotal = 0
+        const perProject = []
+        for (const kred of kredensial) {
+          const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
+          const used = hit.count || 0
+          usedTotal += used
+          perProject.push({ project: kred.n, used: used, remaining: Math.max(0, LIMIT_PER_PROJECT - used) })
+        }
+        const limit = kredensial.length * LIMIT_PER_PROJECT
+        res.setHeader('Cache-Control', 'no-store')
+        kirim(res, 200, { limit: limit, used: usedTotal, remaining: Math.max(0, limit - usedTotal), perProject: perProject, ptDate: today })
+      })
+      server.middlewares.use('/api/youtube/session', async function (req, res) {
+        if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
+        const user = await cekSesi(req)
+        if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
+        const today = ptToday()
+        const kredensial = daftarKredensial()
+        if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
+        const body = await bacaBody(req)
+        if (!body.title) { kirim(res, 400, { error: 'Judul video wajib diisi' }); return }
+        let terakhir = ''
+        for (const kred of kredensial) {
+          const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
+          if ((hit.count || 0) >= LIMIT_PER_PROJECT) { terakhir = 'project ' + kred.n + ' sudah penuh'; continue }
+          let access
+          try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
+          const meta = {
+            snippet: { title: String(body.title).slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
+            status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
+          }
+          const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+            method: 'POST',
+            headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
+            body: JSON.stringify(meta)
+          })
+          if (!init.ok) { terakhir = 'project ' + kred.n + ' ditolak Google (status ' + init.status + ')'; continue }
+          const sessionUri = init.headers.get('location')
+          if (!sessionUri) { terakhir = 'project ' + kred.n + ' tanpa lokasi upload'; continue }
+          await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: user.id, project_id: kred.n })
+          kirim(res, 200, { sessionUri: sessionUri, project: kred.n })
+          return
+        }
+        kirim(res, 429, { error: 'Kuota harian semua project video sudah habis. Coba lagi besok atau gunakan link video eksternal.', detail: terakhir })
+      })
+      server.middlewares.use('/api/youtube/latest', async function (req, res) {
+        if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
+        const user = await cekSesi(req)
+        if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
+        const kredensial = daftarKredensial()
+        if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
+        let terakhir = ''
+        for (const kred of kredensial) {
+          let access
+          try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
+          const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&order=date&maxResults=5', { headers: { Authorization: 'Bearer ' + access } })
+          if (!r.ok) { terakhir = 'project ' + kred.n + ' status ' + r.status; continue }
+          const j = await r.json()
+          const items = j.items || []
+          const batas = Date.now() - 15 * 60 * 1000
+          const cocok = items.find(function (it) {
+            const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
+            return isNaN(t) ? false : t >= batas
+          })
+          if (!cocok) { kirim(res, 404, { error: 'Video terbaru tidak ditemukan' }); return }
+          kirim(res, 200, { videoId: cocok.id && cocok.id.videoId, project: kred.n })
+          return
+        }
+        kirim(res, 502, { error: 'Gagal memeriksa video terbaru: ' + terakhir })
+      })
+    }
+  }
+}
+
+`
+  v = v.slice(0, mulai) + pluginBaru + v.slice(akhir)
+  fs.writeFileSync(path.join(root, FILE_V), v, 'utf8')
+  console.log('[BERHASIL] Plugin YouTube multi-project dipasang di vite.config.js')
+}
+
+console.log('')
+console.log('Selesai. Restart dev server sekali: Ctrl+C lalu npm run dev -- --host')
+console.log('Setelah itu rotasi project berjalan otomatis tanpa restart lagi.')
+```
+
+## File: apply-fix-state-loading.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+const FILE_D = 'src/pages/DashboardPage.jsx'
+
+if (!fs.existsSync(path.join(root, FILE_D))) {
+  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
+  process.exit(1)
+}
+let d = fs.readFileSync(path.join(root, FILE_D), 'utf8').replace(/\r\n/g, '\n')
+
+if (d.includes('const [ytQuotaLoading, setYtQuotaLoading]')) {
+  console.log('[SUDAH ADA] State ytQuotaLoading, tidak ada yang perlu ditambah')
+} else {
+  const regex = /([ \t]*)const \[ytQuota, setYtQuota\] = useState\([^\n]*\)\n/
+  if (regex.test(d)) {
+    d = d.replace(regex, function (m, indent) {
+      return m + indent + 'const [ytQuotaLoading, setYtQuotaLoading] = useState(true)\n'
+    })
+    fs.writeFileSync(path.join(root, FILE_D), d, 'utf8')
+    console.log('[BERHASIL] State ytQuotaLoading ditambahkan tepat di bawah state ytQuota')
+  } else {
+    console.log('[TIDAK KETEMU] Baris state ytQuota. Tambahkan manual baris berikut tepat di bawahnya:')
+    console.log('  const [ytQuotaLoading, setYtQuotaLoading] = useState(true)')
+  }
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('Error ytQuotaLoading is not defined akan hilang setelah perbaikan ini.')
+```
+
+## File: apply-loading-kuota.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai menambahkan indikator loading pada kuota...')
+console.log('')
+
+const FILE_D = 'src/pages/DashboardPage.jsx'
+let d = baca(FILE_D)
+let berubah = false
+
+/* ===== 1. Tambah state ytQuotaLoading ===== */
+const cariState = `  const [ytQuota, setYtQuota] = useState({ limit: 5, used: 0, remaining: 5 })`
+const gantiState = `  const [ytQuota, setYtQuota] = useState({ limit: 5, used: 0, remaining: 5 })
+  const [ytQuotaLoading, setYtQuotaLoading] = useState(true)`
+if (d.includes('ytQuotaLoading')) {
+  console.log('[SUDAH ADA] State ytQuotaLoading')
+} else if (d.includes(cariState)) {
+  d = d.replace(cariState, gantiState)
+  berubah = true
+  console.log('[BERHASIL] State ytQuotaLoading ditambahkan')
+} else {
+  console.log('[TIDAK KETEMU] State ytQuota')
+}
+
+/* ===== 2. Set loading saat fetch kuota ===== */
+const cariFetch = `  useEffect(function () {
+    if (mahasiswa) refresh()
+    fetchYouTubeQuota().then(setYtQuota)`
+const gantiFetch = `  useEffect(function () {
+    if (mahasiswa) refresh()
+    setYtQuotaLoading(true)
+    fetchYouTubeQuota().then(function (data) {
+      setYtQuota(data)
+      setYtQuotaLoading(false)
+    })`
+if (d.includes('setYtQuotaLoading(true)')) {
+  console.log('[SUDAH ADA] Loading state pada fetch kuota')
+} else if (d.includes(cariFetch)) {
+  d = d.replace(cariFetch, gantiFetch)
+  berubah = true
+  console.log('[BERHASIL] Loading state dipasang pada fetch kuota')
+} else {
+  console.log('[TIDAK KETEMU] Blok fetch kuota di useEffect')
+}
+
+/* ===== 3. Set loading false juga di interval ===== */
+const cariInterval = `    const iv = setInterval(function () { fetchYouTubeQuota().then(setYtQuota) }, 30000)`
+const gantiInterval = `    const iv = setInterval(function () { fetchYouTubeQuota().then(function (data) { setYtQuota(data); setYtQuotaLoading(false) }) }, 30000)`
+if (d.includes(gantiInterval)) {
+  console.log('[SUDAH ADA] Loading state pada interval')
+} else if (d.includes(cariInterval)) {
+  d = d.replace(cariInterval, gantiInterval)
+  berubah = true
+  console.log('[BERHASIL] Loading state dipasang pada interval')
+} else {
+  console.log('[TIDAK KETEMU] Blok interval kuota')
+}
+
+/* ===== 4. Update tampilan kuota di form logbook ===== */
+const cariLogbook = `<p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuota.remaining} dari {ytQuota.limit}</p>`
+const gantiLogbook = `<p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuotaLoading ? <span className="inline-block w-3 h-3 ml-1 border-2 border-slate-400 border-t-transparent rounded-full animate-spin align-middle"></span> : <>{ytQuota.remaining} dari {ytQuota.limit}</>}</p>`
+if (d.includes('border-t-transparent rounded-full animate-spin')) {
+  console.log('[SUDAH ADA] Indikator loading di form logbook')
+} else if (d.includes(cariLogbook)) {
+  d = d.split(cariLogbook).join(gantiLogbook)
+  berubah = true
+  console.log('[BERHASIL] Indikator loading dipasang di form logbook')
+} else {
+  console.log('[TIDAK KETEMU] Teks kuota di form logbook')
+}
+
+/* ===== 5. Update tampilan kuota di form galeri ===== */
+const cariGaleri = `<p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuota.remaining} dari {ytQuota.limit}</p>`
+if (d.includes(cariGaleri) && d.includes('galMode === \'video\'')) {
+  d = d.split(cariGaleri).join(gantiLogbook)
+  berubah = true
+  console.log('[BERHASIL] Indikator loading dipasang di form galeri')
+}
+
+/* ===== 6. Update tampilan kuota di form rincian kegiatan ===== */
+const cariRincian = `<p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuota.remaining} dari {ytQuota.limit}</p>`
+if (d.includes(cariRincian) && d.includes('it.mode === \'video\'')) {
+  d = d.split(cariRincian).join(gantiLogbook)
+  berubah = true
+  console.log('[BERHASIL] Indikator loading dipasang di form rincian kegiatan')
+}
+
+if (berubah) {
+  simpan(FILE_D, d)
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Perilaku baru:')
+console.log('1. Saat halaman dibuka, tulisan kuota menampilkan spinner kecil berputar.')
+console.log('2. Begitu data dari server datang (biasanya < 1 detik), spinner hilang dan angka muncul.')
+console.log('3. Tidak ada lagi kedipan angka dari 6 ke 26, karena loading state menahan tampilan.')
+```
+
+## File: setup-youtube-token-multi.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const http = require('http')
+const crypto = require('crypto')
+
+const n = String(process.argv[2] || '1')
+const envPath = path.join(process.cwd(), '.env.local')
+if (!fs.existsSync(envPath)) {
+  console.log('[GAGAL] .env.local belum ada')
+  process.exit(1)
+}
+const env = {}
+fs.readFileSync(envPath, 'utf8').split('\n').forEach(function (line) {
+  const m = line.match(/^\s*([A-Za-z0-9_]+)\s*=\s*(.*)\s*$/)
+  if (m) env[m[1]] = m[2].replace(/^["']|["']$/g, '')
+})
+const clientId = env['YOUTUBE_CLIENT_ID_' + n]
+const clientSecret = env['YOUTUBE_CLIENT_SECRET_' + n]
+if (!clientId || !clientSecret) {
+  console.log('[GAGAL] Isi dulu YOUTUBE_CLIENT_ID_' + n + ' dan YOUTUBE_CLIENT_SECRET_' + n + ' di .env.local')
+  process.exit(1)
+}
+
+const PORT = 8790
+const redirect = 'http://localhost:' + PORT + '/callback'
+const state = crypto.randomBytes(8).toString('hex')
+const scope = 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly'
+const url = 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({
+  client_id: clientId, redirect_uri: redirect, response_type: 'code',
+  scope: scope, access_type: 'offline', prompt: 'consent', state: state
+})
+
+function simpanToken(token) {
+  let isi = fs.readFileSync(envPath, 'utf8')
+  const key = 'YOUTUBE_REFRESH_TOKEN_' + n
+  const re = new RegExp('^' + key + '=.*$', 'm')
+  if (re.test(isi)) isi = isi.replace(re, key + '=' + token)
+  else isi = isi.trimEnd() + '\n' + key + '=' + token + '\n'
+  fs.writeFileSync(envPath, isi, 'utf8')
+}
+
+const server = http.createServer(async function (req, res) {
+  const u = new URL(req.url, 'http://localhost')
+  if (u.pathname !== '/callback') { res.end('ok'); return }
+  const code = u.searchParams.get('code')
+  const st = u.searchParams.get('state')
+  if (st !== state) { res.end('State tidak cocok'); return }
+  const body = new URLSearchParams({
+    code: code, client_id: clientId, client_secret: clientSecret,
+    redirect_uri: redirect, grant_type: 'authorization_code'
+  })
+  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: body })
+  const j = await r.json()
+  res.setHeader('Content-Type', 'text/html; charset=utf-8')
+  if (j.refresh_token) {
+    simpanToken(j.refresh_token)
+    res.end('<h2>Berhasil untuk project ' + n + '</h2><p>Refresh token tersimpan otomatis ke YOUTUBE_REFRESH_TOKEN_' + n + ' di .env.local</p>')
+    console.log('[BERHASIL] Refresh token project ' + n + ' disimpan ke .env.local')
+  } else {
+    res.end('<h2>Gagal</h2><pre>' + JSON.stringify(j, null, 2) + '</pre>')
+    console.log('[GAGAL] ' + JSON.stringify(j))
+  }
+  setTimeout(function () { server.close(); process.exit(0) }, 1500)
+})
+
+server.listen(PORT, function () {
+  console.log('Project ' + n + ': membuka browser untuk otorisasi...')
+  console.log('Jika tidak terbuka otomatis, buka manual URL ini:')
+  console.log(url)
+  try {
+    require('child_process').exec(process.platform === 'win32' ? 'start "" "' + url + '"' : 'xdg-open ' + url)
+  } catch (e) {}
+})
+```
+
+## File: siapkan-env-youtube-lokal.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+const envPath = path.join(root, '.env.local')
+
+if (!fs.existsSync(envPath)) {
+  console.log('[GAGAL] .env.local belum ada. Buat dulu dari .env.example lalu isi nilai Supabase dan R2.')
+  process.exit(1)
+}
+let isi = fs.readFileSync(envPath, 'utf8')
+if (isi.includes('YOUTUBE_CLIENT_ID_1=')) {
+  console.log('[SUDAH ADA] Blok variabel YouTube bernomor di .env.local')
+} else {
+  const blok = [
+    '',
+    '# -----------------------------------------------------',
+    '# 4) YOUTUBE API MULTI-PROJECT (auto-rotate kuota)',
+    '# Enam set kredensial untuk enam project Google Cloud.',
+    '# Sistem otomatis memilih project yang masih punya kuota.',
+    '# Isi CLIENT_ID dan CLIENT_SECRET per nomor setelah membuat',
+    '# OAuth Client ID di Console. REFRESH_TOKEN terisi otomatis',
+    '# oleh setup-youtube-token-multi.cjs <nomor>.',
+    '# -----------------------------------------------------'
+  ]
+  for (let n = 1; n <= 6; n++) {
+    blok.push('YOUTUBE_CLIENT_ID_' + n + '=')
+    blok.push('YOUTUBE_CLIENT_SECRET_' + n + '=')
+    blok.push('YOUTUBE_REFRESH_TOKEN_' + n + '=')
+  }
+  isi = isi.trimEnd() + '\n' + blok.join('\n') + '\n'
+  fs.writeFileSync(envPath, isi, 'utf8')
+  console.log('[BERHASIL] Blok variabel YouTube bernomor ditambahkan ke .env.local')
+}
+console.log('')
+console.log('Lanjut: buat 6 project di Console, tempel Client ID dan Secret')
+console.log('ke variabel bernomor di .env.local, lalu jalankan')
+console.log('node setup-youtube-token-multi.cjs 1 sampai 6')
+```
+
+## File: api/r2/delete.js
+```javascript
+import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3'
+import { createClient } from '@supabase/supabase-js'
+
+const s3 = new S3Client({
+  region: 'auto',
+  endpoint: 'https://' + process.env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
+  }
+})
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const authHeader = req.headers.authorization || ''
+  const token = authHeader.replace('Bearer ', '')
+  if (!token) return res.status(401).json({ error: 'Belum login' })
+
+  const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: authHeader } }
+  })
+  const check = await supabase.auth.getUser(token)
+  if (check.error || !check.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
+
+  const { key } = req.body || {}
+  if (!key) return res.status(400).json({ error: 'Key tidak ada' })
+  await s3.send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key }))
+  return res.status(200).json({ ok: true })
+}
+```
+
+## File: api/r2/presign.js
+```javascript
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { createClient } from '@supabase/supabase-js'
+
+const s3 = new S3Client({
+  region: 'auto',
+  endpoint: 'https://' + process.env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
+  }
+})
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const authHeader = req.headers.authorization || ''
+  const token = authHeader.replace('Bearer ', '')
+  if (!token) return res.status(401).json({ error: 'Belum login' })
+
+  const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: authHeader } }
+  })
+  const check = await supabase.auth.getUser(token)
+  if (check.error || !check.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
+
+  const { filename, contentType, kind } = req.body || {}
+  if (!filename || !contentType || !kind) return res.status(400).json({ error: 'Payload tidak lengkap' })
+
+  const ext = (filename.split('.').pop() || 'bin').toLowerCase()
+  const key = kind + '/' + new Date().getFullYear() + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + ext
+
+  const uploadUrl = await getSignedUrl(
+    s3,
+    new PutObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key, ContentType: contentType }),
+    { expiresIn: 300 }
+  )
+  const publicUrl = process.env.R2_PUBLIC_BASE_URL + '/' + key
+  return res.status(200).json({ uploadUrl, publicUrl, key })
+}
+```
+
 ## File: api/youtube/latest.js
 ```javascript
 import { createClient } from '@supabase/supabase-js'
+const LIMIT_PER_PROJECT = 5
+function ptToday() {
+  const now = new Date()
+  const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
+  const y = pt.getFullYear()
+  const m = String(pt.getMonth() + 1).padStart(2, '0')
+  const d = String(pt.getDate()).padStart(2, '0')
+  return y + '-' + m + '-' + d
+}
+function daftarKredensial() {
+  const list = []
+  for (let n = 1; n <= 6; n++) {
+    const id = process.env['YOUTUBE_CLIENT_ID_' + n]
+    const secret = process.env['YOUTUBE_CLIENT_SECRET_' + n]
+    const refresh = process.env['YOUTUBE_REFRESH_TOKEN_' + n]
+    if (id && secret && refresh) list.push({ n: n, id: id, secret: secret, refresh: refresh })
+  }
+  if (!list.length && process.env.YOUTUBE_CLIENT_ID && process.env.YOUTUBE_CLIENT_SECRET && process.env.YOUTUBE_REFRESH_TOKEN) {
+    list.push({ n: 1, id: process.env.YOUTUBE_CLIENT_ID, secret: process.env.YOUTUBE_CLIENT_SECRET, refresh: process.env.YOUTUBE_REFRESH_TOKEN })
+  }
+  return list
+}
+const cacheToken = {}
+async function getAccessToken(kred) {
+  const now = Date.now()
+  const c = cacheToken[kred.n]
+  if (c && c.expire > now + 60000) return c.token
+  const params = new URLSearchParams()
+  params.set('client_id', kred.id)
+  params.set('client_secret', kred.secret)
+  params.set('refresh_token', kred.refresh)
+  params.set('grant_type', 'refresh_token')
+  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
+  if (!r.ok) throw new Error('refresh token project ' + kred.n + ' gagal (status ' + r.status + ')')
+  const j = await r.json()
+  cacheToken[kred.n] = { token: j.access_token, expire: now + (j.expires_in || 3600) * 1000 }
+  return j.access_token
+}
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
   const authHeader = req.headers.authorization || ''
@@ -120,31 +796,32 @@ export default async function handler(req, res) {
   const authClient = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
   const chk = await authClient.auth.getUser()
   if (chk.error || !chk.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
-  const params = new URLSearchParams()
-  params.set('client_id', process.env.YOUTUBE_CLIENT_ID || '')
-  params.set('client_secret', process.env.YOUTUBE_CLIENT_SECRET || '')
-  params.set('refresh_token', process.env.YOUTUBE_REFRESH_TOKEN || '')
-  params.set('grant_type', 'refresh_token')
-  const tr = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
-  if (!tr.ok) return res.status(500).json({ error: 'Gagal refresh token YouTube' })
-  const tok = await tr.json()
-  const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&order=date&maxResults=1', {
-    headers: { Authorization: 'Bearer ' + tok.access_token }
-  })
-  if (!r.ok) { const t = await r.text(); return res.status(502).json({ error: 'Gagal memeriksa video terbaru: ' + r.status + ' ' + t }) }
-  const j = await r.json()
-  const item = (j.items || [])[0]
-  if (!item) return res.status(404).json({ error: 'Tidak ada video ditemukan' })
-  const published = Date.parse(item.snippet.publishedAt)
-  if (Date.now() - published > 15 * 60 * 1000) return res.status(404).json({ error: 'Video terbaru terlalu lama' })
-  return res.status(200).json({ videoId: item.id.videoId })
+  const kredensial = daftarKredensial()
+  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
+  let terakhir = ''
+  for (const kred of kredensial) {
+    let access
+    try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
+    const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&order=date&maxResults=5', { headers: { Authorization: 'Bearer ' + access } })
+    if (!r.ok) { terakhir = 'project ' + kred.n + ' status ' + r.status; continue }
+    const j = await r.json()
+    const items = j.items || []
+    const batas = Date.now() - 15 * 60 * 1000
+    const cocok = items.find(function (it) {
+      const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
+      return isNaN(t) ? false : t >= batas
+    })
+    if (!cocok) return res.status(404).json({ error: 'Video terbaru tidak ditemukan' })
+    return res.status(200).json({ videoId: cocok.id && cocok.id.videoId, project: kred.n })
+  }
+  return res.status(502).json({ error: 'Gagal memeriksa video terbaru: ' + terakhir })
 }
 ```
 
 ## File: api/youtube/quota.js
 ```javascript
 import { createClient } from '@supabase/supabase-js'
-const LIMIT = 5
+const LIMIT_PER_PROJECT = 5
 function ptToday() {
   const now = new Date()
   const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
@@ -153,21 +830,59 @@ function ptToday() {
   const d = String(pt.getDate()).padStart(2, '0')
   return y + '-' + m + '-' + d
 }
+function daftarKredensial() {
+  const list = []
+  for (let n = 1; n <= 6; n++) {
+    const id = process.env['YOUTUBE_CLIENT_ID_' + n]
+    const secret = process.env['YOUTUBE_CLIENT_SECRET_' + n]
+    const refresh = process.env['YOUTUBE_REFRESH_TOKEN_' + n]
+    if (id && secret && refresh) list.push({ n: n, id: id, secret: secret, refresh: refresh })
+  }
+  if (!list.length && process.env.YOUTUBE_CLIENT_ID && process.env.YOUTUBE_CLIENT_SECRET && process.env.YOUTUBE_REFRESH_TOKEN) {
+    list.push({ n: 1, id: process.env.YOUTUBE_CLIENT_ID, secret: process.env.YOUTUBE_CLIENT_SECRET, refresh: process.env.YOUTUBE_REFRESH_TOKEN })
+  }
+  return list
+}
+const cacheToken = {}
+async function getAccessToken(kred) {
+  const now = Date.now()
+  const c = cacheToken[kred.n]
+  if (c && c.expire > now + 60000) return c.token
+  const params = new URLSearchParams()
+  params.set('client_id', kred.id)
+  params.set('client_secret', kred.secret)
+  params.set('refresh_token', kred.refresh)
+  params.set('grant_type', 'refresh_token')
+  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
+  if (!r.ok) throw new Error('refresh token project ' + kred.n + ' gagal (status ' + r.status + ')')
+  const j = await r.json()
+  cacheToken[kred.n] = { token: j.access_token, expire: now + (j.expires_in || 3600) * 1000 }
+  return j.access_token
+}
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method tidak diizinkan' })
   const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
   const today = ptToday()
-  const { count, error } = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today)
-  const used = error ? 0 : (count || 0)
+  const kredensial = daftarKredensial()
+  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
+  let usedTotal = 0
+  const perProject = []
+  for (const kred of kredensial) {
+    const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
+    const used = hit.count || 0
+    usedTotal += used
+    perProject.push({ project: kred.n, used: used, remaining: Math.max(0, LIMIT_PER_PROJECT - used) })
+  }
+  const limit = kredensial.length * LIMIT_PER_PROJECT
   res.setHeader('Cache-Control', 'no-store')
-  return res.status(200).json({ limit: LIMIT, used: used, remaining: Math.max(0, LIMIT - used), ptDate: today })
+  return res.status(200).json({ limit: limit, used: usedTotal, remaining: Math.max(0, limit - usedTotal), perProject: perProject, ptDate: today })
 }
 ```
 
 ## File: api/youtube/session.js
 ```javascript
 import { createClient } from '@supabase/supabase-js'
-const LIMIT = 5
+const LIMIT_PER_PROJECT = 5
 function ptToday() {
   const now = new Date()
   const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
@@ -176,16 +891,33 @@ function ptToday() {
   const d = String(pt.getDate()).padStart(2, '0')
   return y + '-' + m + '-' + d
 }
-async function getAccessToken() {
+function daftarKredensial() {
+  const list = []
+  for (let n = 1; n <= 6; n++) {
+    const id = process.env['YOUTUBE_CLIENT_ID_' + n]
+    const secret = process.env['YOUTUBE_CLIENT_SECRET_' + n]
+    const refresh = process.env['YOUTUBE_REFRESH_TOKEN_' + n]
+    if (id && secret && refresh) list.push({ n: n, id: id, secret: secret, refresh: refresh })
+  }
+  if (!list.length && process.env.YOUTUBE_CLIENT_ID && process.env.YOUTUBE_CLIENT_SECRET && process.env.YOUTUBE_REFRESH_TOKEN) {
+    list.push({ n: 1, id: process.env.YOUTUBE_CLIENT_ID, secret: process.env.YOUTUBE_CLIENT_SECRET, refresh: process.env.YOUTUBE_REFRESH_TOKEN })
+  }
+  return list
+}
+const cacheToken = {}
+async function getAccessToken(kred) {
+  const now = Date.now()
+  const c = cacheToken[kred.n]
+  if (c && c.expire > now + 60000) return c.token
   const params = new URLSearchParams()
-  params.set('client_id', process.env.YOUTUBE_CLIENT_ID || '')
-  params.set('client_secret', process.env.YOUTUBE_CLIENT_SECRET || '')
-  params.set('refresh_token', process.env.YOUTUBE_REFRESH_TOKEN || '')
+  params.set('client_id', kred.id)
+  params.set('client_secret', kred.secret)
+  params.set('refresh_token', kred.refresh)
   params.set('grant_type', 'refresh_token')
   const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
-  if (!r.ok) throw new Error('Gagal refresh token YouTube')
+  if (!r.ok) throw new Error('refresh token project ' + kred.n + ' gagal (status ' + r.status + ')')
   const j = await r.json()
-  if (!j.access_token) throw new Error('Token akses YouTube tidak diterima')
+  cacheToken[kred.n] = { token: j.access_token, expire: now + (j.expires_in || 3600) * 1000 }
   return j.access_token
 }
 export default async function handler(req, res) {
@@ -197,27 +929,32 @@ export default async function handler(req, res) {
   if (chk.error || !chk.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
   const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
   const today = ptToday()
-  const { count } = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today)
-  const used = count || 0
-  if (used >= LIMIT) return res.status(429).json({ error: 'Kuota upload YouTube hari ini sudah habis. Gunakan link embed atau coba lagi setelah reset kuota.', remaining: 0 })
+  const kredensial = daftarKredensial()
+  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
   const body = req.body || {}
   if (!body.title) return res.status(400).json({ error: 'Judul video wajib diisi' })
-  let access
-  try { access = await getAccessToken() } catch (e) { return res.status(500).json({ error: e.message }) }
-  const meta = {
-    snippet: { title: String(body.title).slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
-    status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
+  let terakhir = ''
+  for (const kred of kredensial) {
+    const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
+    if ((hit.count || 0) >= LIMIT_PER_PROJECT) { terakhir = 'project ' + kred.n + ' sudah penuh'; continue }
+    let access
+    try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
+    const meta = {
+      snippet: { title: String(body.title).slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
+      status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
+    }
+    const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
+      body: JSON.stringify(meta)
+    })
+    if (!init.ok) { terakhir = 'project ' + kred.n + ' ditolak Google (status ' + init.status + ')'; continue }
+    const sessionUri = init.headers.get('location')
+    if (!sessionUri) { terakhir = 'project ' + kred.n + ' tanpa lokasi upload'; continue }
+    await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: chk.data.user.id, project_id: kred.n })
+    return res.status(200).json({ sessionUri: sessionUri, project: kred.n })
   }
-  const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
-    method: 'POST',
-    headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
-    body: JSON.stringify(meta)
-  })
-  if (!init.ok) { const t = await init.text(); return res.status(502).json({ error: 'Gagal memulai sesi YouTube: ' + t }) }
-  const sessionUri = init.headers.get('location')
-  if (!sessionUri) return res.status(502).json({ error: 'Sesi upload tidak mengembalikan lokasi' })
-  await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: chk.data.user.id })
-  return res.status(200).json({ sessionUri: sessionUri, remaining: Math.max(0, LIMIT - used - 1) })
+  return res.status(429).json({ error: 'Kuota harian semua project video sudah habis. Coba lagi besok atau gunakan link video eksternal.', detail: terakhir })
 }
 ```
 
@@ -254,6 +991,148 @@ export default async function handler(req, res) {
   }) || items[0]
   if (!cocok) return res.status(404).json({ error: 'Video tidak ditemukan di channel' })
   return res.status(200).json({ videoId: cocok.id && cocok.id.videoId })
+}
+```
+
+## File: src/components/Skeleton.jsx
+```javascript
+export function SkeletonStatCard() {
+  return (
+    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
+      <div className="skeleton h-4 w-28"></div>
+      <div className="skeleton h-9 w-16 mt-3"></div>
+      <div className="skeleton h-3 w-36 mt-2"></div>
+    </div>
+  )
+}
+
+export function SkeletonLogbookCard() {
+  return (
+    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 flex flex-col gap-4">
+      <div className="skeleton h-40 w-full rounded-2xl"></div>
+      <div className="flex gap-2">
+        <div className="skeleton h-6 w-24 rounded-full"></div>
+        <div className="skeleton h-6 w-20 rounded-full"></div>
+      </div>
+      <div className="skeleton h-4 w-32"></div>
+      <div className="skeleton h-6 w-3/4"></div>
+      <div className="skeleton h-4 w-full"></div>
+      <div className="skeleton h-4 w-2/3"></div>
+      <div className="flex items-center gap-3 pt-2">
+        <div className="skeleton h-11 w-11 rounded-2xl"></div>
+        <div className="flex-1 space-y-2">
+          <div className="skeleton h-4 w-32"></div>
+          <div className="skeleton h-3 w-24"></div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonGalleryCard() {
+  return (
+    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="skeleton aspect-video w-full rounded-none"></div>
+      <div className="p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="skeleton h-6 w-24 rounded-full"></div>
+          <div className="skeleton h-4 w-16"></div>
+        </div>
+        <div className="skeleton h-5 w-3/4"></div>
+        <div className="skeleton h-4 w-full"></div>
+        <div className="skeleton h-4 w-1/2"></div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonAttendanceCard() {
+  return (
+    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <div className="skeleton h-4 w-40"></div>
+          <div className="skeleton h-5 w-32"></div>
+        </div>
+        <div className="skeleton h-6 w-16 rounded-full"></div>
+      </div>
+      <div className="skeleton h-16 w-full rounded-2xl"></div>
+    </div>
+  )
+}
+
+export function SkeletonPersonCard() {
+  return (
+    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
+      <div className="flex items-center gap-4">
+        <div className="skeleton h-14 w-14 rounded-3xl"></div>
+        <div className="flex-1 space-y-2">
+          <div className="skeleton h-5 w-32"></div>
+          <div className="skeleton h-4 w-24"></div>
+          <div className="skeleton h-4 w-28 rounded-full"></div>
+        </div>
+      </div>
+      <div className="mt-5 grid grid-cols-2 gap-3">
+        <div className="skeleton h-20 rounded-2xl"></div>
+        <div className="skeleton h-20 rounded-2xl"></div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonChartRow() {
+  return (
+    <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5">
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <div className="skeleton h-4 w-32"></div>
+          <div className="skeleton h-3 w-24"></div>
+        </div>
+        <div className="skeleton h-4 w-40"></div>
+      </div>
+      <div className="skeleton h-4 w-full rounded-full mt-4"></div>
+    </div>
+  )
+}
+```
+
+## File: src/lib/supabase.js
+```javascript
+import { createClient } from '@supabase/supabase-js'
+
+export const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+)
+```
+
+## File: src/lib/theme.jsx
+```javascript
+import { createContext, useContext, useEffect, useState } from 'react'
+
+const ThemeContext = createContext(null)
+
+export function ThemeProvider(props) {
+  const [dark, setDark] = useState(function () {
+    const saved = localStorage.getItem('mbsi-theme')
+    if (saved) return saved === 'dark'
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  })
+
+  useEffect(function () {
+    document.documentElement.classList.toggle('dark', dark)
+    localStorage.setItem('mbsi-theme', dark ? 'dark' : 'light')
+  }, [dark])
+
+  return (
+    <ThemeContext.Provider value={{ dark: dark, toggle: function () { setDark(function (d) { return !d }) } }}>
+      {props.children}
+    </ThemeContext.Provider>
+  )
+}
+
+export function useTheme() {
+  return useContext(ThemeContext)
 }
 ```
 
@@ -368,6 +1247,31 @@ export async function ambilTokenSesi() {
     return ''
   }
 }
+```
+
+## File: src/main.jsx
+```javascript
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import App from './App.jsx'
+import './index.css'
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+)
+```
+
+## File: .env.example
+```
+VITE_SUPABASE_URL=
+VITE_SUPABASE_ANON_KEY=
+R2_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET_NAME=mbsi-media
+R2_PUBLIC_BASE_URL=
 ```
 
 ## File: apply-final-cleanup.cjs
@@ -3084,6 +3988,16 @@ console.log('[BERHASIL] src/pages/DashboardPage.jsx diperbaiki.');
 console.log('\nSelesai! Silakan jalankan ulang npm run dev.');
 ```
 
+## File: postcss.config.js
+```javascript
+export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {}
+  }
+}
+```
+
 ## File: setup-semua-fitur.cjs
 ```javascript
 // setup-semua-fitur.cjs
@@ -3273,384 +4187,6 @@ server.listen(PORT, function () {
     require('child_process').exec(process.platform === 'win32' ? 'start "" "' + url + '"' : 'xdg-open ' + url)
   } catch (e) {}
 })
-```
-
-## File: api/r2/delete.js
-```javascript
-import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3'
-import { createClient } from '@supabase/supabase-js'
-
-const s3 = new S3Client({
-  region: 'auto',
-  endpoint: 'https://' + process.env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
-  }
-})
-
-export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
-  const authHeader = req.headers.authorization || ''
-  const token = authHeader.replace('Bearer ', '')
-  if (!token) return res.status(401).json({ error: 'Belum login' })
-
-  const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: authHeader } }
-  })
-  const check = await supabase.auth.getUser(token)
-  if (check.error || !check.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
-
-  const { key } = req.body || {}
-  if (!key) return res.status(400).json({ error: 'Key tidak ada' })
-  await s3.send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key }))
-  return res.status(200).json({ ok: true })
-}
-```
-
-## File: api/r2/presign.js
-```javascript
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
-import { createClient } from '@supabase/supabase-js'
-
-const s3 = new S3Client({
-  region: 'auto',
-  endpoint: 'https://' + process.env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
-  }
-})
-
-export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
-  const authHeader = req.headers.authorization || ''
-  const token = authHeader.replace('Bearer ', '')
-  if (!token) return res.status(401).json({ error: 'Belum login' })
-
-  const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: authHeader } }
-  })
-  const check = await supabase.auth.getUser(token)
-  if (check.error || !check.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
-
-  const { filename, contentType, kind } = req.body || {}
-  if (!filename || !contentType || !kind) return res.status(400).json({ error: 'Payload tidak lengkap' })
-
-  const ext = (filename.split('.').pop() || 'bin').toLowerCase()
-  const key = kind + '/' + new Date().getFullYear() + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + ext
-
-  const uploadUrl = await getSignedUrl(
-    s3,
-    new PutObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key, ContentType: contentType }),
-    { expiresIn: 300 }
-  )
-  const publicUrl = process.env.R2_PUBLIC_BASE_URL + '/' + key
-  return res.status(200).json({ uploadUrl, publicUrl, key })
-}
-```
-
-## File: src/components/Skeleton.jsx
-```javascript
-export function SkeletonStatCard() {
-  return (
-    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
-      <div className="skeleton h-4 w-28"></div>
-      <div className="skeleton h-9 w-16 mt-3"></div>
-      <div className="skeleton h-3 w-36 mt-2"></div>
-    </div>
-  )
-}
-
-export function SkeletonLogbookCard() {
-  return (
-    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 flex flex-col gap-4">
-      <div className="skeleton h-40 w-full rounded-2xl"></div>
-      <div className="flex gap-2">
-        <div className="skeleton h-6 w-24 rounded-full"></div>
-        <div className="skeleton h-6 w-20 rounded-full"></div>
-      </div>
-      <div className="skeleton h-4 w-32"></div>
-      <div className="skeleton h-6 w-3/4"></div>
-      <div className="skeleton h-4 w-full"></div>
-      <div className="skeleton h-4 w-2/3"></div>
-      <div className="flex items-center gap-3 pt-2">
-        <div className="skeleton h-11 w-11 rounded-2xl"></div>
-        <div className="flex-1 space-y-2">
-          <div className="skeleton h-4 w-32"></div>
-          <div className="skeleton h-3 w-24"></div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonGalleryCard() {
-  return (
-    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-      <div className="skeleton aspect-video w-full rounded-none"></div>
-      <div className="p-5 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="skeleton h-6 w-24 rounded-full"></div>
-          <div className="skeleton h-4 w-16"></div>
-        </div>
-        <div className="skeleton h-5 w-3/4"></div>
-        <div className="skeleton h-4 w-full"></div>
-        <div className="skeleton h-4 w-1/2"></div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonAttendanceCard() {
-  return (
-    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="space-y-2">
-          <div className="skeleton h-4 w-40"></div>
-          <div className="skeleton h-5 w-32"></div>
-        </div>
-        <div className="skeleton h-6 w-16 rounded-full"></div>
-      </div>
-      <div className="skeleton h-16 w-full rounded-2xl"></div>
-    </div>
-  )
-}
-
-export function SkeletonPersonCard() {
-  return (
-    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
-      <div className="flex items-center gap-4">
-        <div className="skeleton h-14 w-14 rounded-3xl"></div>
-        <div className="flex-1 space-y-2">
-          <div className="skeleton h-5 w-32"></div>
-          <div className="skeleton h-4 w-24"></div>
-          <div className="skeleton h-4 w-28 rounded-full"></div>
-        </div>
-      </div>
-      <div className="mt-5 grid grid-cols-2 gap-3">
-        <div className="skeleton h-20 rounded-2xl"></div>
-        <div className="skeleton h-20 rounded-2xl"></div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonChartRow() {
-  return (
-    <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5">
-      <div className="flex items-center justify-between">
-        <div className="space-y-2">
-          <div className="skeleton h-4 w-32"></div>
-          <div className="skeleton h-3 w-24"></div>
-        </div>
-        <div className="skeleton h-4 w-40"></div>
-      </div>
-      <div className="skeleton h-4 w-full rounded-full mt-4"></div>
-    </div>
-  )
-}
-```
-
-## File: src/lib/konversi.js
-```javascript
-const MAKS_SISI_FULL = 2560
-const KUALITAS_FULL = 0.92
-const MAKS_SISI_THUMB = 1200
-const KUALITAS_THUMB = 0.9
-const EXT_VIDEO = ['mp4', 'mov', 'm4v', 'webm', 'ogg', 'mkv', 'avi']
-
-export function ekstensiFile(file) {
-  return String(file.name || '').split('.').pop().toLowerCase()
-}
-
-export function iniVideo(file) {
-  if (file.type && file.type.indexOf('video') === 0) return true
-  return EXT_VIDEO.indexOf(ekstensiFile(file)) !== -1
-}
-
-export function formatHeic(file) {
-  const e = ekstensiFile(file)
-  return e === 'heic' || e === 'heif'
-}
-
-async function heicKeJpeg(file) {
-  const mod = await import('heic2any')
-  const heic = mod.default || mod
-  const hasil = await heic({ blob: file, toType: 'image/jpeg', quality: 0.92 })
-  return Array.isArray(hasil) ? hasil[0] : hasil
-}
-
-async function bitmapDari(berkas) {
-  try {
-    return await createImageBitmap(berkas, { imageOrientation: 'from-image' })
-  } catch (e) {
-    return await createImageBitmap(berkas)
-  }
-}
-
-async function keWebP(berkas, maksSisi, kualitas) {
-  const bitmap = await bitmapDari(berkas)
-  const skala = Math.min(1, maksSisi / Math.max(bitmap.width, bitmap.height))
-  const w = Math.max(1, Math.round(bitmap.width * skala))
-  const h = Math.max(1, Math.round(bitmap.height * skala))
-  const canvas = document.createElement('canvas')
-  canvas.width = w
-  canvas.height = h
-  const ctx = canvas.getContext('2d')
-  ctx.imageSmoothingEnabled = true
-  ctx.imageSmoothingQuality = 'high'
-  ctx.drawImage(bitmap, 0, 0, w, h)
-  bitmap.close()
-  const blob = await new Promise(function (resolve) {
-    canvas.toBlob(resolve, 'image/webp', kualitas)
-  })
-  canvas.width = 0
-  canvas.height = 0
-  if (!blob || blob.type !== 'image/webp') return null
-  return blob
-}
-
-export async function siapkanFoto(file, onInfo) {
-  let sumber = file
-  if (formatHeic(file)) {
-    if (onInfo) onInfo('Mengonversi HEIC ke JPG')
-    const jpeg = await heicKeJpeg(file)
-    if (!jpeg) throw new Error('File HEIC tidak bisa dibaca')
-    sumber = new File([jpeg], 'sumber.jpg', { type: 'image/jpeg' })
-  }
-  if (onInfo) onInfo('Menyiapkan WebP')
-  let fullBlob = null
-  try {
-    fullBlob = await keWebP(sumber, MAKS_SISI_FULL, KUALITAS_FULL)
-  } catch (e) {
-    fullBlob = null
-  }
-  const pakaiWebp = !!fullBlob && (sumber.type !== 'image/jpeg' || fullBlob.size < sumber.size)
-  const fullFinal = pakaiWebp ? fullBlob : sumber
-  const fullType = pakaiWebp ? 'image/webp' : sumber.type
-  let thumbBlob = null
-  try {
-    thumbBlob = await keWebP(fullFinal, MAKS_SISI_THUMB, KUALITAS_THUMB)
-  } catch (e) {
-    thumbBlob = null
-  }
-  return { fullBlob: fullFinal, fullType: fullType, thumbBlob: thumbBlob }
-}
-
-
-export async function pratinjauHeic(file) {
-  if (!formatHeic(file)) return null
-  try {
-    const jpeg = await heicKeJpeg(file)
-    return jpeg || null
-  } catch (e) {
-    return null
-  }
-}
-```
-
-## File: src/lib/supabase.js
-```javascript
-import { createClient } from '@supabase/supabase-js'
-
-export const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-)
-```
-
-## File: src/lib/theme.jsx
-```javascript
-import { createContext, useContext, useEffect, useState } from 'react'
-
-const ThemeContext = createContext(null)
-
-export function ThemeProvider(props) {
-  const [dark, setDark] = useState(function () {
-    const saved = localStorage.getItem('mbsi-theme')
-    if (saved) return saved === 'dark'
-    return window.matchMedia('(prefers-color-scheme: dark)').matches
-  })
-
-  useEffect(function () {
-    document.documentElement.classList.toggle('dark', dark)
-    localStorage.setItem('mbsi-theme', dark ? 'dark' : 'light')
-  }, [dark])
-
-  return (
-    <ThemeContext.Provider value={{ dark: dark, toggle: function () { setDark(function (d) { return !d }) } }}>
-      {props.children}
-    </ThemeContext.Provider>
-  )
-}
-
-export function useTheme() {
-  return useContext(ThemeContext)
-}
-```
-
-## File: src/main.jsx
-```javascript
-import React from 'react'
-import ReactDOM from 'react-dom/client'
-import App from './App.jsx'
-import './index.css'
-
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-)
-```
-
-## File: .env.example
-```
-VITE_SUPABASE_URL=
-VITE_SUPABASE_ANON_KEY=
-R2_ACCOUNT_ID=
-R2_ACCESS_KEY_ID=
-R2_SECRET_ACCESS_KEY=
-R2_BUCKET_NAME=mbsi-media
-R2_PUBLIC_BASE_URL=
-```
-
-## File: .gitignore
-```
-node_modules
-dist
-.env.local
-.env
-*.log
-```
-
-## File: index.html
-```html
-<!DOCTYPE html>
-<html lang="id">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="robots" content="noindex" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='14'%20fill='%2316623c'/%3E%3Ctext%20x='32'%20y='44'%20font-size='34'%20font-weight='700'%20text-anchor='middle'%20fill='%23ffffff'%20font-family='Arial,%20sans-serif'%3EB%3C/text%3E%3C/svg%3E" />
-    <title>Logbook Magang BSI</title>
-  </head>
-  <body class="bg-slate-50 text-slate-800 min-h-screen antialiased">
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
-</html>
-```
-
-## File: postcss.config.js
-```javascript
-export default {
-  plugins: {
-    tailwindcss: {},
-    autoprefixer: {}
-  }
-}
 ```
 
 ## File: tailwind.config.js
@@ -4010,48 +4546,101 @@ export const GALERI_KEGIATAN = [
 ]
 ```
 
-## File: src/App.jsx
+## File: src/lib/konversi.js
 ```javascript
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { ThemeProvider } from './lib/theme.jsx'
-import { useAuth } from './lib/auth.js'
-import Layout from './components/Layout.jsx'
-import HomePage from './pages/HomePage.jsx'
-import LogbookPage from './pages/LogbookPage.jsx'
-import GalleryPage from './pages/GalleryPage.jsx'
-import AttendancePage from './pages/AttendancePage.jsx'
-import DospemPage from './pages/DospemPage.jsx'
-import TimPage from './pages/TimPage.jsx'
-import LoginPage from './pages/LoginPage.jsx'
-import DashboardPage from './pages/DashboardPage.jsx'
+const MAKS_SISI_FULL = 2560
+const KUALITAS_FULL = 0.92
+const MAKS_SISI_THUMB = 1200
+const KUALITAS_THUMB = 0.9
+const EXT_VIDEO = ['mp4', 'mov', 'm4v', 'webm', 'ogg', 'mkv', 'avi']
 
-function RequireAuth(props) {
-  const { mahasiswa, loading } = useAuth()
-  if (loading) return <div className="p-10 text-center text-slate-500">Memuat sesi...</div>
-  if (!mahasiswa) return <Navigate to="/login" replace />
-  return props.children
+export function ekstensiFile(file) {
+  return String(file.name || '').split('.').pop().toLowerCase()
 }
 
-export default function App() {
-  return (
-    <ThemeProvider>
-      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <Routes>
-          <Route element={<Layout />}>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/logbook" element={<LogbookPage />} />
-            <Route path="/galeri" element={<GalleryPage />} />
-            <Route path="/absen" element={<AttendancePage />} />
-            <Route path="/dospem" element={<DospemPage />} />
-            <Route path="/tim" element={<TimPage />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-    </ThemeProvider>
-  )
+export function iniVideo(file) {
+  if (file.type && file.type.indexOf('video') === 0) return true
+  return EXT_VIDEO.indexOf(ekstensiFile(file)) !== -1
+}
+
+export function formatHeic(file) {
+  const e = ekstensiFile(file)
+  return e === 'heic' || e === 'heif'
+}
+
+async function heicKeJpeg(file) {
+  const mod = await import('heic2any')
+  const heic = mod.default || mod
+  const hasil = await heic({ blob: file, toType: 'image/jpeg', quality: 0.92 })
+  return Array.isArray(hasil) ? hasil[0] : hasil
+}
+
+async function bitmapDari(berkas) {
+  try {
+    return await createImageBitmap(berkas, { imageOrientation: 'from-image' })
+  } catch (e) {
+    return await createImageBitmap(berkas)
+  }
+}
+
+async function keWebP(berkas, maksSisi, kualitas) {
+  const bitmap = await bitmapDari(berkas)
+  const skala = Math.min(1, maksSisi / Math.max(bitmap.width, bitmap.height))
+  const w = Math.max(1, Math.round(bitmap.width * skala))
+  const h = Math.max(1, Math.round(bitmap.height * skala))
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d')
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(bitmap, 0, 0, w, h)
+  bitmap.close()
+  const blob = await new Promise(function (resolve) {
+    canvas.toBlob(resolve, 'image/webp', kualitas)
+  })
+  canvas.width = 0
+  canvas.height = 0
+  if (!blob || blob.type !== 'image/webp') return null
+  return blob
+}
+
+export async function siapkanFoto(file, onInfo) {
+  let sumber = file
+  if (formatHeic(file)) {
+    if (onInfo) onInfo('Mengonversi HEIC ke JPG')
+    const jpeg = await heicKeJpeg(file)
+    if (!jpeg) throw new Error('File HEIC tidak bisa dibaca')
+    sumber = new File([jpeg], 'sumber.jpg', { type: 'image/jpeg' })
+  }
+  if (onInfo) onInfo('Menyiapkan WebP')
+  let fullBlob = null
+  try {
+    fullBlob = await keWebP(sumber, MAKS_SISI_FULL, KUALITAS_FULL)
+  } catch (e) {
+    fullBlob = null
+  }
+  const pakaiWebp = !!fullBlob && (sumber.type !== 'image/jpeg' || fullBlob.size < sumber.size)
+  const fullFinal = pakaiWebp ? fullBlob : sumber
+  const fullType = pakaiWebp ? 'image/webp' : sumber.type
+  let thumbBlob = null
+  try {
+    thumbBlob = await keWebP(fullFinal, MAKS_SISI_THUMB, KUALITAS_THUMB)
+  } catch (e) {
+    thumbBlob = null
+  }
+  return { fullBlob: fullFinal, fullType: fullType, thumbBlob: thumbBlob }
+}
+
+
+export async function pratinjauHeic(file) {
+  if (!formatHeic(file)) return null
+  try {
+    const jpeg = await heicKeJpeg(file)
+    return jpeg || null
+  } catch (e) {
+    return null
+  }
 }
 ```
 
@@ -4180,6 +4769,184 @@ create policy "hadir_delete_self" on public.daftar_hadir for delete using (
 );
 ```
 
+## File: .gitignore
+```
+node_modules
+dist
+.env.local
+.env
+*.log
+.env.youtube-*
+```
+
+## File: index.html
+```html
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='14'%20fill='%2316623c'/%3E%3Ctext%20x='32'%20y='44'%20font-size='34'%20font-weight='700'%20text-anchor='middle'%20fill='%23ffffff'%20font-family='Arial,%20sans-serif'%3EB%3C/text%3E%3C/svg%3E" />
+    <title>Logbook Magang BSI</title>
+  </head>
+  <body class="bg-slate-50 text-slate-800 min-h-screen antialiased">
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
+```
+
+## File: src/lib/format.js
+```javascript
+export function formatTanggal(s) {
+  if (!s) return 'Tanggal belum diisi'
+  const d = new Date(s + 'T00:00:00')
+  if (Number.isNaN(d.getTime())) return s
+  return d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+export function formatTanggalShort(s) {
+  if (!s) return ''
+  const d = new Date(s + 'T00:00:00')
+  if (Number.isNaN(d.getTime())) return s
+  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+export function todayInput() {
+  const d = new Date()
+  const m = ('0' + (d.getMonth() + 1)).slice(-2)
+  const day = ('0' + d.getDate()).slice(-2)
+  return d.getFullYear() + '-' + m + '-' + day
+}
+
+export function detectMediaType(u) {
+  const ext = String(u || '').split('?')[0].split('.').pop().toLowerCase()
+  return ['mp4', 'webm', 'ogg', 'mov', 'm4v'].indexOf(ext) !== -1 ? 'video' : 'foto'
+}
+
+export function matchesDateFilters(dateString, f) {
+  if (!dateString) return false
+  if (f.timeMode === 'bulan') {
+    if (f.bulan) {
+      if (f.bulan.length === 7) return dateString.slice(0, 7) === f.bulan
+      const p = dateString.split('-')
+      if (p.length < 2 || p[1] !== f.bulan) return false
+    }
+  } else if (f.timeMode === 'rentang') {
+    if (f.dari && dateString < f.dari) return false
+    if (f.sampai && dateString > f.sampai) return false
+  }
+  return true
+}
+export function urutkanTanggal(rows, mode) {
+  const salin = (rows || []).slice()
+  salin.sort(function (a, b) {
+    const da = a.tanggal || ''
+    const db = b.tanggal || ''
+    if (da === db) return 0
+    if (mode === 'terlama') return da < db ? -1 : 1
+    return da < db ? 1 : -1
+  })
+  return salin
+}
+```
+
+## File: src/App.jsx
+```javascript
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { ThemeProvider } from './lib/theme.jsx'
+import { useAuth } from './lib/auth.js'
+import Layout from './components/Layout.jsx'
+import HomePage from './pages/HomePage.jsx'
+import LogbookPage from './pages/LogbookPage.jsx'
+import GalleryPage from './pages/GalleryPage.jsx'
+import AttendancePage from './pages/AttendancePage.jsx'
+import DospemPage from './pages/DospemPage.jsx'
+import TimPage from './pages/TimPage.jsx'
+import LoginPage from './pages/LoginPage.jsx'
+import DashboardPage from './pages/DashboardPage.jsx'
+
+function RequireAuth(props) {
+  const { mahasiswa, loading } = useAuth()
+  if (loading) return <div className="p-10 text-center text-slate-500">Memuat sesi...</div>
+  if (!mahasiswa) return <Navigate to="/login" replace />
+  return props.children
+}
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <Routes>
+          <Route element={<Layout />}>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/logbook" element={<LogbookPage />} />
+            <Route path="/galeri" element={<GalleryPage />} />
+            <Route path="/absen" element={<AttendancePage />} />
+            <Route path="/dospem" element={<DospemPage />} />
+            <Route path="/tim" element={<TimPage />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </ThemeProvider>
+  )
+}
+```
+
+## File: package.json
+```json
+{
+  "name": "mbsi-logbook",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.600.0",
+    "@aws-sdk/s3-request-presigner": "^3.600.0",
+    "@supabase/supabase-js": "^2.45.0",
+    "heic2any": "^0.0.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.10",
+    "vite": "^5.4.0"
+  }
+}
+```
+
+## File: README.md
+```markdown
+# Logbook Magang BSI
+
+Portal logbook, galeri, dan daftar hadir magang Bank Syariah Indonesia.
+
+## Menjalankan lokal
+1. node setup project saat ini (sudah dilakukan saat setup)
+2. npm run dev
+3. Buka http://localhost:5173
+
+## Database
+Jalankan isi file supabase/schema.sql di Supabase SQL Editor.
+Buat user Auth dengan pola email NIM@mbsi.local dan isi tabel mahasiswa beserta auth_uid.
+
+## Deploy
+Push ke GitHub, import di Vercel, salin isi .env.local ke Environment Variables Vercel.
+```
+
 ## File: vite.config.js
 ```javascript
 import { defineConfig, loadEnv } from 'vite'
@@ -4273,6 +5040,7 @@ function pluginApiR2(env) {
 
 function pluginApiYoutube(env) {
   const admin = createClient(env.VITE_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY)
+  const LIMIT_PER_PROJECT = 5
   function ptToday() {
     const now = new Date()
     const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
@@ -4280,6 +5048,35 @@ function pluginApiYoutube(env) {
     const m = String(pt.getMonth() + 1).padStart(2, '0')
     const d = String(pt.getDate()).padStart(2, '0')
     return y + '-' + m + '-' + d
+  }
+  function daftarKredensial() {
+    const list = []
+    for (let n = 1; n <= 6; n++) {
+      const id = env['YOUTUBE_CLIENT_ID_' + n]
+      const secret = env['YOUTUBE_CLIENT_SECRET_' + n]
+      const refresh = env['YOUTUBE_REFRESH_TOKEN_' + n]
+      if (id && secret && refresh) list.push({ n: n, id: id, secret: secret, refresh: refresh })
+    }
+    if (!list.length && env.YOUTUBE_CLIENT_ID && env.YOUTUBE_CLIENT_SECRET && env.YOUTUBE_REFRESH_TOKEN) {
+      list.push({ n: 1, id: env.YOUTUBE_CLIENT_ID, secret: env.YOUTUBE_CLIENT_SECRET, refresh: env.YOUTUBE_REFRESH_TOKEN })
+    }
+    return list
+  }
+  const cacheToken = {}
+  async function getAccessToken(kred) {
+    const now = Date.now()
+    const c = cacheToken[kred.n]
+    if (c && c.expire > now + 60000) return c.token
+    const params = new URLSearchParams()
+    params.set('client_id', kred.id)
+    params.set('client_secret', kred.secret)
+    params.set('refresh_token', kred.refresh)
+    params.set('grant_type', 'refresh_token')
+    const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
+    if (!r.ok) throw new Error('refresh token project ' + kred.n + ' gagal (status ' + r.status + ')')
+    const j = await r.json()
+    cacheToken[kred.n] = { token: j.access_token, expire: now + (j.expires_in || 3600) * 1000 }
+    return j.access_token
   }
   async function cekSesi(req) {
     const authHeader = req.headers.authorization || ''
@@ -4289,336 +5086,98 @@ function pluginApiYoutube(env) {
     const r = await supabase.auth.getUser(token)
     return r.error ? null : r.data.user
   }
+  function kirim(res, code, obj) {
+    res.statusCode = code
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify(obj))
+  }
   return {
     name: 'api-youtube-dev',
     configureServer(server) {
       server.middlewares.use('/api/youtube/quota', async function (req, res) {
         const today = ptToday()
-        const { count } = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today)
-        const used = count || 0
-        res.setHeader('Content-Type', 'application/json')
+        const kredensial = daftarKredensial()
+        if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
+        let usedTotal = 0
+        const perProject = []
+        for (const kred of kredensial) {
+          const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
+          const used = hit.count || 0
+          usedTotal += used
+          perProject.push({ project: kred.n, used: used, remaining: Math.max(0, LIMIT_PER_PROJECT - used) })
+        }
+        const limit = kredensial.length * LIMIT_PER_PROJECT
         res.setHeader('Cache-Control', 'no-store')
-        res.end(JSON.stringify({ limit: 5, used: used, remaining: Math.max(0, 5 - used), ptDate: today }))
-      })
-      server.middlewares.use('/api/youtube/verify', async function (req, res) {
-        if (req.method !== 'POST') { res.statusCode = 405; res.end(JSON.stringify({ error: 'Method tidak diizinkan' })); return }
-        const user = await cekSesi(req)
-        if (!user) { res.statusCode = 401; res.end(JSON.stringify({ error: 'Sesi tidak valid' })); return }
-        const body = await bacaBody(req)
-        const ref = body.ref
-        if (!ref) { res.statusCode = 400; res.end(JSON.stringify({ error: 'Ref tidak ada' })); return }
-        const params = new URLSearchParams()
-        params.set('client_id', env.YOUTUBE_CLIENT_ID || '')
-        params.set('client_secret', env.YOUTUBE_CLIENT_SECRET || '')
-        params.set('refresh_token', env.YOUTUBE_REFRESH_TOKEN || '')
-        params.set('grant_type', 'refresh_token')
-        const tr = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
-        if (!tr.ok) { res.statusCode = 500; res.end(JSON.stringify({ error: 'Gagal refresh token YouTube' })); return }
-        const tok = await tr.json()
-        const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&forMine=true&order=date&maxResults=10&q=' + encodeURIComponent(ref), { headers: { Authorization: 'Bearer ' + tok.access_token } })
-        if (!r.ok) { res.statusCode = 502; res.end(JSON.stringify({ error: 'Gagal memeriksa video di YouTube' })); return }
-        const j = await r.json()
-        const items = j.items || []
-        const batas = Date.now() - 15 * 60 * 1000
-        const cocok = items.find(function (it) {
-          const desc = (it.snippet && it.snippet.description) || ''
-          const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
-          return desc.indexOf('REF ' + ref) === 0 && (isNaN(t) ? true : t >= batas)
-        }) || items[0]
-        if (!cocok) { res.statusCode = 404; res.end(JSON.stringify({ error: 'Video tidak ditemukan di channel' })); return }
-        res.setHeader('Content-Type', 'application/json')
-        res.end(JSON.stringify({ videoId: cocok.id && cocok.id.videoId }))
-      })
-      server.middlewares.use('/api/youtube/latest', async function (req, res) {
-        if (req.method !== 'POST') { res.statusCode = 405; res.end(JSON.stringify({ error: 'Method tidak diizinkan' })); return }
-        const user = await cekSesi(req)
-        if (!user) { res.statusCode = 401; res.end(JSON.stringify({ error: 'Sesi tidak valid' })); return }
-        const params = new URLSearchParams()
-        params.set('client_id', env.YOUTUBE_CLIENT_ID || '')
-        params.set('client_secret', env.YOUTUBE_CLIENT_SECRET || '')
-        params.set('refresh_token', env.YOUTUBE_REFRESH_TOKEN || '')
-        params.set('grant_type', 'refresh_token')
-        const tr = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
-        if (!tr.ok) { res.statusCode = 500; res.end(JSON.stringify({ error: 'Gagal refresh token YouTube' })); return }
-        const tok = await tr.json()
-        const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&forMine=true&order=date&maxResults=5', { headers: { Authorization: 'Bearer ' + tok.access_token } })
-        if (!r.ok) { const t = await r.text(); res.statusCode = 502; res.end(JSON.stringify({ error: 'Gagal memeriksa video terbaru: ' + r.status + ' ' + t })); return }
-        const j = await r.json()
-        const items = j.items || []
-        const batas = Date.now() - 15 * 60 * 1000
-        const cocok = items.find(function (it) {
-          const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
-          return isNaN(t) ? false : t >= batas
-        })
-        if (!cocok) { res.statusCode = 404; res.end(JSON.stringify({ error: 'Video terbaru tidak ditemukan' })); return }
-        res.setHeader('Content-Type', 'application/json')
-        res.end(JSON.stringify({ videoId: cocok.id && cocok.id.videoId }))
+        kirim(res, 200, { limit: limit, used: usedTotal, remaining: Math.max(0, limit - usedTotal), perProject: perProject, ptDate: today })
       })
       server.middlewares.use('/api/youtube/session', async function (req, res) {
-        if (req.method !== 'POST') { res.statusCode = 405; res.end(JSON.stringify({ error: 'Method tidak diizinkan' })); return }
+        if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
         const user = await cekSesi(req)
-        if (!user) { res.statusCode = 401; res.end(JSON.stringify({ error: 'Sesi tidak valid' })); return }
+        if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
         const today = ptToday()
-        const { count } = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today)
-        const used = count || 0
-        if (used >= 5) { res.statusCode = 429; res.end(JSON.stringify({ error: 'Kuota upload YouTube hari ini sudah habis. Gunakan link embed.', remaining: 0 })); return }
+        const kredensial = daftarKredensial()
+        if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
         const body = await bacaBody(req)
-        const params = new URLSearchParams()
-        params.set('client_id', env.YOUTUBE_CLIENT_ID || '')
-        params.set('client_secret', env.YOUTUBE_CLIENT_SECRET || '')
-        params.set('refresh_token', env.YOUTUBE_REFRESH_TOKEN || '')
-        params.set('grant_type', 'refresh_token')
-        const tr = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
-        if (!tr.ok) { res.statusCode = 500; res.end(JSON.stringify({ error: 'Gagal refresh token YouTube' })); return }
-        const tok = await tr.json()
-        const meta = {
-          snippet: { title: String(body.title || 'Dokumentasi Magang').slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
-          status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
+        if (!body.title) { kirim(res, 400, { error: 'Judul video wajib diisi' }); return }
+        let terakhir = ''
+        for (const kred of kredensial) {
+          const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
+          if ((hit.count || 0) >= LIMIT_PER_PROJECT) { terakhir = 'project ' + kred.n + ' sudah penuh'; continue }
+          let access
+          try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
+          const meta = {
+            snippet: { title: String(body.title).slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
+            status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
+          }
+          const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+            method: 'POST',
+            headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
+            body: JSON.stringify(meta)
+          })
+          if (!init.ok) { terakhir = 'project ' + kred.n + ' ditolak Google (status ' + init.status + ')'; continue }
+          const sessionUri = init.headers.get('location')
+          if (!sessionUri) { terakhir = 'project ' + kred.n + ' tanpa lokasi upload'; continue }
+          await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: user.id, project_id: kred.n })
+          kirim(res, 200, { sessionUri: sessionUri, project: kred.n })
+          return
         }
-        const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
-          method: 'POST',
-          headers: { Authorization: 'Bearer ' + tok.access_token, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
-          body: JSON.stringify(meta)
-        })
-        if (!init.ok) { const t = await init.text(); res.statusCode = 502; res.end(JSON.stringify({ error: 'Gagal memulai sesi YouTube: ' + t })); return }
-        const sessionUri = init.headers.get('location')
-        if (!sessionUri) { res.statusCode = 502; res.end(JSON.stringify({ error: 'Sesi upload tidak mengembalikan lokasi' })); return }
-        await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: user.id })
-        res.setHeader('Content-Type', 'application/json')
-        res.end(JSON.stringify({ sessionUri: sessionUri, remaining: Math.max(0, 5 - used - 1) }))
+        kirim(res, 429, { error: 'Kuota harian semua project video sudah habis. Coba lagi besok atau gunakan link video eksternal.', detail: terakhir })
+      })
+      server.middlewares.use('/api/youtube/latest', async function (req, res) {
+        if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
+        const user = await cekSesi(req)
+        if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
+        const kredensial = daftarKredensial()
+        if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
+        let terakhir = ''
+        for (const kred of kredensial) {
+          let access
+          try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
+          const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&order=date&maxResults=5', { headers: { Authorization: 'Bearer ' + access } })
+          if (!r.ok) { terakhir = 'project ' + kred.n + ' status ' + r.status; continue }
+          const j = await r.json()
+          const items = j.items || []
+          const batas = Date.now() - 15 * 60 * 1000
+          const cocok = items.find(function (it) {
+            const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
+            return isNaN(t) ? false : t >= batas
+          })
+          if (!cocok) { kirim(res, 404, { error: 'Video terbaru tidak ditemukan' }); return }
+          kirim(res, 200, { videoId: cocok.id && cocok.id.videoId, project: kred.n })
+          return
+        }
+        kirim(res, 502, { error: 'Gagal memeriksa video terbaru: ' + terakhir })
       })
     }
   }
 }
+
 export default defineConfig(function ({ mode }) {
   const env = loadEnv(mode, process.cwd(), '')
   return {
     plugins: [react(), pluginApiR2(env), pluginApiYoutube(env)]
   }
 })
-```
-
-## File: src/lib/format.js
-```javascript
-export function formatTanggal(s) {
-  if (!s) return 'Tanggal belum diisi'
-  const d = new Date(s + 'T00:00:00')
-  if (Number.isNaN(d.getTime())) return s
-  return d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-}
-
-export function formatTanggalShort(s) {
-  if (!s) return ''
-  const d = new Date(s + 'T00:00:00')
-  if (Number.isNaN(d.getTime())) return s
-  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
-}
-
-export function todayInput() {
-  const d = new Date()
-  const m = ('0' + (d.getMonth() + 1)).slice(-2)
-  const day = ('0' + d.getDate()).slice(-2)
-  return d.getFullYear() + '-' + m + '-' + day
-}
-
-export function detectMediaType(u) {
-  const ext = String(u || '').split('?')[0].split('.').pop().toLowerCase()
-  return ['mp4', 'webm', 'ogg', 'mov', 'm4v'].indexOf(ext) !== -1 ? 'video' : 'foto'
-}
-
-export function matchesDateFilters(dateString, f) {
-  if (!dateString) return false
-  if (f.timeMode === 'bulan') {
-    if (f.bulan) {
-      if (f.bulan.length === 7) return dateString.slice(0, 7) === f.bulan
-      const p = dateString.split('-')
-      if (p.length < 2 || p[1] !== f.bulan) return false
-    }
-  } else if (f.timeMode === 'rentang') {
-    if (f.dari && dateString < f.dari) return false
-    if (f.sampai && dateString > f.sampai) return false
-  }
-  return true
-}
-export function urutkanTanggal(rows, mode) {
-  const salin = (rows || []).slice()
-  salin.sort(function (a, b) {
-    const da = a.tanggal || ''
-    const db = b.tanggal || ''
-    if (da === db) return 0
-    if (mode === 'terlama') return da < db ? -1 : 1
-    return da < db ? 1 : -1
-  })
-  return salin
-}
-```
-
-## File: package.json
-```json
-{
-  "name": "mbsi-logbook",
-  "private": true,
-  "version": "1.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite --host",
-    "build": "vite build",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "@aws-sdk/client-s3": "^3.600.0",
-    "@aws-sdk/s3-request-presigner": "^3.600.0",
-    "@supabase/supabase-js": "^2.45.0",
-    "heic2any": "^0.0.4",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-router-dom": "^6.26.0"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.1",
-    "autoprefixer": "^10.4.19",
-    "postcss": "^8.4.38",
-    "tailwindcss": "^3.4.10",
-    "vite": "^5.4.0"
-  }
-}
-```
-
-## File: README.md
-```markdown
-# Logbook Magang BSI
-
-Portal logbook, galeri, dan daftar hadir magang Bank Syariah Indonesia.
-
-## Menjalankan lokal
-1. node setup project saat ini (sudah dilakukan saat setup)
-2. npm run dev
-3. Buka http://localhost:5173
-
-## Database
-Jalankan isi file supabase/schema.sql di Supabase SQL Editor.
-Buat user Auth dengan pola email NIM@mbsi.local dan isi tabel mahasiswa beserta auth_uid.
-
-## Deploy
-Push ke GitHub, import di Vercel, salin isi .env.local ke Environment Variables Vercel.
-```
-
-## File: src/components/Carousel.jsx
-```javascript
-import { useEffect, useRef, useState } from 'react'
-import { SizedIcon } from './icons.jsx'
-import { Lightbox, SmartFit } from './ui.jsx'
-
-export default function Carousel(props) {
-  const slides = props.slides || []
-  const autoMs = props.autoMs || 4000
-  const [idx, setIdx] = useState(0)
-  const [paused, setPaused] = useState(false)
-  const [zoom, setZoom] = useState(null)
-  const trackRef = useRef(null)
-  const touchX = useRef(0)
-  const moved = useRef(false)
-
-  useEffect(function () {
-    if (slides.length < 2 || paused) return undefined
-    const t = setInterval(function () {
-      setIdx(function (i) { return (i + 1) % slides.length })
-    }, autoMs)
-    return function () { clearInterval(t) }
-  }, [slides.length, paused, autoMs])
-
-  useEffect(function () {
-    if (trackRef.current) trackRef.current.style.transform = 'translateX(-' + (idx * 100) + '%)'
-  }, [idx])
-
-  if (!slides.length) return null
-
-  if (slides.length === 1) {
-    const s = slides[0]
-    return (
-      <>
-        <div className="relative group rounded-2xl overflow-hidden aspect-video bg-slate-900">
-          <SmartFit src={s.src} full={s.full} type={s.type} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} />
-          <button type="button" title="Perbesar media" onClick={function () { setZoom(s) }}
-            className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
-            <SizedIcon name="expand" size={15} />
-          </button>
-        </div>
-        {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} onClose={function () { setZoom(null) }} /> : null}
-      </>
-    )
-  }
-
-  return (
-    <>
-      <div
-        className="media-carousel group"
-        onMouseEnter={function () { setPaused(true) }}
-        onMouseLeave={function () { setPaused(false) }}
-        onTouchStart={function (e) { touchX.current = e.touches[0].clientX; moved.current = false }}
-        onTouchEnd={function (e) {
-          const dx = e.changedTouches[0].clientX - touchX.current
-          if (Math.abs(dx) > 40) {
-            moved.current = true
-            setIdx(function (i) { return (i + (dx < 0 ? 1 : -1) + slides.length) % slides.length })
-          }
-        }}
-      >
-        <div ref={trackRef} className="carousel-track">
-          {slides.map(function (s, i) {
-            return (
-              <div key={i} className="carousel-slide">
-                <SmartFit
-                  src={s.src}
-                  full={s.full}
-                   type={s.type}
-                  alt={s.title || 'Media'}
-                  onClick={function () {
-                    if (moved.current) { moved.current = false; return }
-                    setZoom(s)
-                  }}
-                />
-                <button type="button" title="Perbesar media" onClick={function (e) { e.stopPropagation(); setZoom(s) }}
-                  className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
-                  <SizedIcon name="expand" size={15} />
-                </button>
-                {s.title ? (
-                  <span className="absolute bottom-2 left-2 z-10 px-2 py-1 rounded-lg bg-black/60 text-white text-xs max-w-[85%] truncate">
-                    {s.title}
-                  </span>
-                ) : null}
-              </div>
-            )
-          })}
-        </div>
-        <button
-          onClick={function () { setIdx(function (i) { return (i - 1 + slides.length) % slides.length }) }}
-          className="absolute left-2 top-1/2 -translate-y-1/2 z-10 h-8 w-8 rounded-full bg-black/40 text-white grid place-items-center opacity-100 xl:opacity-0 xl:group-hover:opacity-100 hover:bg-black/60"
-        >
-          &#8249;
-        </button>
-        <button
-          onClick={function () { setIdx(function (i) { return (i + 1) % slides.length }) }}
-          className="absolute right-2 top-1/2 -translate-y-1/2 z-10 h-8 w-8 rounded-full bg-black/40 text-white grid place-items-center opacity-100 xl:opacity-0 xl:group-hover:opacity-100 hover:bg-black/60"
-        >
-          &#8250;
-        </button>
-        <div className="absolute bottom-2 right-2 z-10 flex gap-1.5">
-          {slides.map(function (s, i) {
-            return (
-              <button
-                key={i}
-                onClick={function () { setIdx(i) }}
-                className={'carousel-dot h-2 w-2 rounded-full transition-all ' + (i === idx ? 'bg-white' : 'bg-white/40')}
-              />
-            )
-          })}
-        </div>
-      </div>
-      {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} onClose={function () { setZoom(null) }} /> : null}
-    </>
-  )
-}
 ```
 
 ## File: src/components/FilterBar.jsx
@@ -4871,113 +5430,6 @@ export async function syncGaleriFromLogbook(mahasiswaId, items, meta) {
 }
 ```
 
-## File: src/lib/upload.js
-```javascript
-import { supabase } from './supabase.js'
-import { iniVideo, ekstensiFile, siapkanFoto } from './konversi.js'
-
-const MAKS_FOTO = 15 * 1024 * 1024
-const MAKS_VIDEO = 50 * 1024 * 1024
-
-async function getToken() {
-  const { data } = await supabase.auth.getSession()
-  return data.session ? data.session.access_token : ''
-}
-
-function namaDasar(nama) {
-  return String(nama || 'media').replace(/\.[^.]+$/, '')
-}
-
-function kirimDenganProgres(uploadUrl, blob, contentType, onProgres) {
-  return new Promise(function (resolve, reject) {
-    const xhr = new XMLHttpRequest()
-    xhr.open('PUT', uploadUrl)
-    xhr.setRequestHeader('Content-Type', contentType)
-    if (onProgres) {
-      xhr.upload.onprogress = function (e) {
-        if (e.lengthComputable) onProgres(e.loaded / e.total)
-      }
-    }
-    xhr.onload = function () {
-      if (xhr.status >= 200 && xhr.status < 300) resolve()
-      else reject(new Error('Gagal upload file ke R2 (status ' + xhr.status + ')'))
-    }
-    xhr.onerror = function () { reject(new Error('Gagal jaringan saat upload ke R2')) }
-    xhr.send(blob)
-  })
-}
-
-async function mintaIzin(token, filename, contentType, kind) {
-  const res = await fetch('/api/r2/presign', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify({ filename: filename, contentType: contentType, kind: kind })
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error('Gagal membuat izin upload (status ' + res.status + '): ' + text)
-  }
-  return res.json()
-}
-
-export async function uploadMedia(file, kind, onInfo) {
-  const video = iniVideo(file)
-  if (video && file.size > MAKS_VIDEO) {
-    throw new Error('Video melebihi 50 MB. Potong dulu durasinya supaya upload cepat dan kuota aman.')
-  }
-  if (!video && file.size > MAKS_FOTO) {
-    throw new Error('Foto melebihi 15 MB. Pilih file dengan ukuran lebih kecil.')
-  }
-  let fullBlob = file
-  let fullType = file.type
-  let thumbBlob = null
-  if (!video) {
-    try {
-      const hasil = await siapkanFoto(file, onInfo)
-      fullBlob = hasil.fullBlob
-      fullType = hasil.fullType
-      thumbBlob = hasil.thumbBlob
-    } catch (e) {
-      throw new Error('Foto format .' + ekstensiFile(file) + ' tidak bisa diproses browser. Ubah dulu ke JPG atau PNG. Di iPhone: Settings, Camera, Formats, pilih Most Compatible.')
-    }
-  }
-  if (onInfo) onInfo('')
-  const token = await getToken()
-  const extFull = fullType === 'image/webp' ? 'webp' : (fullType === 'image/jpeg' ? 'jpg' : ekstensiFile(file))
-  const infoFull = await mintaIzin(token, namaDasar(file.name) + '.' + extFull, fullType, kind)
-  await kirimDenganProgres(infoFull.uploadUrl, fullBlob, fullType, function (p) {
-    if (onInfo) onInfo('Mengunggah ' + Math.round(p * 100) + '%')
-  })
-  let thumbUrl = null
-  if (thumbBlob) {
-    try {
-      const namaThumb = namaDasar(infoFull.key.split('/').pop()) + '.webp'
-      const infoThumb = await mintaIzin(token, namaThumb, 'image/webp', 'thumb/' + kind)
-      await kirimDenganProgres(infoThumb.uploadUrl, thumbBlob, 'image/webp', null)
-      thumbUrl = infoThumb.publicUrl
-    } catch (e) {
-      thumbUrl = null
-    }
-  }
-  console.log('[UPLOAD] File penuh: ' + infoFull.key + ' | Thumbnail: ' + (thumbUrl || 'tidak dibuat'))
-  return { path: infoFull.key, publicUrl: infoFull.publicUrl, thumbUrl: thumbUrl }
-}
-
-export async function deleteMedia(key) {
-  const token = await getToken()
-  const res = await fetch('/api/r2/delete', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify({ key: key })
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error('Gagal hapus media di R2 (status ' + res.status + '): ' + text)
-  }
-  return res.json()
-}
-```
-
 ## File: src/pages/DospemPage.jsx
 ```javascript
 import { useEffect, useState } from 'react'
@@ -5175,6 +5627,231 @@ export default function HomePage() {
       </Modal>
     </div>
   )
+}
+```
+
+## File: src/components/Carousel.jsx
+```javascript
+import { useEffect, useRef, useState } from 'react'
+import { SizedIcon } from './icons.jsx'
+import { Lightbox, SmartFit } from './ui.jsx'
+
+export default function Carousel(props) {
+  const slides = props.slides || []
+  const autoMs = props.autoMs || 4000
+  const [idx, setIdx] = useState(0)
+  const [paused, setPaused] = useState(false)
+  const [zoom, setZoom] = useState(null)
+  const trackRef = useRef(null)
+  const touchX = useRef(0)
+  const moved = useRef(false)
+
+  useEffect(function () {
+    if (slides.length < 2 || paused) return undefined
+    const t = setInterval(function () {
+      setIdx(function (i) { return (i + 1) % slides.length })
+    }, autoMs)
+    return function () { clearInterval(t) }
+  }, [slides.length, paused, autoMs])
+
+  useEffect(function () {
+    if (trackRef.current) trackRef.current.style.transform = 'translateX(-' + (idx * 100) + '%)'
+  }, [idx])
+
+  if (!slides.length) return null
+
+  if (slides.length === 1) {
+    const s = slides[0]
+    return (
+      <>
+        <div className="relative group rounded-2xl overflow-hidden aspect-video bg-slate-900">
+          <SmartFit src={s.src} full={s.full} type={s.type} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} />
+          <button type="button" title="Perbesar media" onClick={function () { setZoom(s) }}
+            className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
+            <SizedIcon name="expand" size={15} />
+          </button>
+        </div>
+        {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} onClose={function () { setZoom(null) }} /> : null}
+      </>
+    )
+  }
+
+  return (
+    <>
+      <div
+        className="media-carousel group"
+        onMouseEnter={function () { setPaused(true) }}
+        onMouseLeave={function () { setPaused(false) }}
+        onTouchStart={function (e) { touchX.current = e.touches[0].clientX; moved.current = false }}
+        onTouchEnd={function (e) {
+          const dx = e.changedTouches[0].clientX - touchX.current
+          if (Math.abs(dx) > 40) {
+            moved.current = true
+            setIdx(function (i) { return (i + (dx < 0 ? 1 : -1) + slides.length) % slides.length })
+          }
+        }}
+      >
+        <div ref={trackRef} className="carousel-track">
+          {slides.map(function (s, i) {
+            return (
+              <div key={i} className="carousel-slide">
+                <SmartFit
+                  src={s.src}
+                  full={s.full}
+                   type={s.type}
+                  alt={s.title || 'Media'}
+                  onClick={function () {
+                    if (moved.current) { moved.current = false; return }
+                    setZoom(s)
+                  }}
+                />
+                <button type="button" title="Perbesar media" onClick={function (e) { e.stopPropagation(); setZoom(s) }}
+                  className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
+                  <SizedIcon name="expand" size={15} />
+                </button>
+                {s.title ? (
+                  <span className="absolute bottom-2 left-2 z-10 px-2 py-1 rounded-lg bg-black/60 text-white text-xs max-w-[85%] truncate">
+                    {s.title}
+                  </span>
+                ) : null}
+              </div>
+            )
+          })}
+        </div>
+        <button
+          onClick={function () { setIdx(function (i) { return (i - 1 + slides.length) % slides.length }) }}
+          className="absolute left-2 top-1/2 -translate-y-1/2 z-10 h-8 w-8 rounded-full bg-black/40 text-white grid place-items-center opacity-100 xl:opacity-0 xl:group-hover:opacity-100 hover:bg-black/60"
+        >
+          &#8249;
+        </button>
+        <button
+          onClick={function () { setIdx(function (i) { return (i + 1) % slides.length }) }}
+          className="absolute right-2 top-1/2 -translate-y-1/2 z-10 h-8 w-8 rounded-full bg-black/40 text-white grid place-items-center opacity-100 xl:opacity-0 xl:group-hover:opacity-100 hover:bg-black/60"
+        >
+          &#8250;
+        </button>
+        <div className="absolute bottom-2 right-2 z-10 flex gap-1.5">
+          {slides.map(function (s, i) {
+            return (
+              <button
+                key={i}
+                onClick={function () { setIdx(i) }}
+                className={'carousel-dot h-2 w-2 rounded-full transition-all ' + (i === idx ? 'bg-white' : 'bg-white/40')}
+              />
+            )
+          })}
+        </div>
+      </div>
+      {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} onClose={function () { setZoom(null) }} /> : null}
+    </>
+  )
+}
+```
+
+## File: src/lib/upload.js
+```javascript
+import { supabase } from './supabase.js'
+import { iniVideo, ekstensiFile, siapkanFoto } from './konversi.js'
+
+const MAKS_FOTO = 15 * 1024 * 1024
+const MAKS_VIDEO = 50 * 1024 * 1024
+
+async function getToken() {
+  const { data } = await supabase.auth.getSession()
+  return data.session ? data.session.access_token : ''
+}
+
+function namaDasar(nama) {
+  return String(nama || 'media').replace(/\.[^.]+$/, '')
+}
+
+function kirimDenganProgres(uploadUrl, blob, contentType, onProgres) {
+  return new Promise(function (resolve, reject) {
+    const xhr = new XMLHttpRequest()
+    xhr.open('PUT', uploadUrl)
+    xhr.setRequestHeader('Content-Type', contentType)
+    if (onProgres) {
+      xhr.upload.onprogress = function (e) {
+        if (e.lengthComputable) onProgres(e.loaded / e.total)
+      }
+    }
+    xhr.onload = function () {
+      if (xhr.status >= 200 && xhr.status < 300) resolve()
+      else reject(new Error('Gagal upload file ke R2 (status ' + xhr.status + ')'))
+    }
+    xhr.onerror = function () { reject(new Error('Gagal jaringan saat upload ke R2')) }
+    xhr.send(blob)
+  })
+}
+
+async function mintaIzin(token, filename, contentType, kind) {
+  const res = await fetch('/api/r2/presign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ filename: filename, contentType: contentType, kind: kind })
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error('Gagal membuat izin upload (status ' + res.status + '): ' + text)
+  }
+  return res.json()
+}
+
+export async function uploadMedia(file, kind, onInfo) {
+  const video = iniVideo(file)
+  if (video && file.size > MAKS_VIDEO) {
+    throw new Error('Video melebihi 50 MB. Potong dulu durasinya supaya upload cepat dan kuota aman.')
+  }
+  if (!video && file.size > MAKS_FOTO) {
+    throw new Error('Foto melebihi 15 MB. Pilih file dengan ukuran lebih kecil.')
+  }
+  let fullBlob = file
+  let fullType = file.type
+  let thumbBlob = null
+  if (!video) {
+    try {
+      const hasil = await siapkanFoto(file, onInfo)
+      fullBlob = hasil.fullBlob
+      fullType = hasil.fullType
+      thumbBlob = hasil.thumbBlob
+    } catch (e) {
+      throw new Error('Foto format .' + ekstensiFile(file) + ' tidak bisa diproses browser. Ubah dulu ke JPG atau PNG. Di iPhone: Settings, Camera, Formats, pilih Most Compatible.')
+    }
+  }
+  if (onInfo) onInfo('')
+  const token = await getToken()
+  const extFull = fullType === 'image/webp' ? 'webp' : (fullType === 'image/jpeg' ? 'jpg' : ekstensiFile(file))
+  const infoFull = await mintaIzin(token, namaDasar(file.name) + '.' + extFull, fullType, kind)
+  await kirimDenganProgres(infoFull.uploadUrl, fullBlob, fullType, function (p) {
+    if (onInfo) onInfo('Mengunggah ' + Math.round(p * 100) + '%')
+  })
+  let thumbUrl = null
+  if (thumbBlob) {
+    try {
+      const namaThumb = namaDasar(infoFull.key.split('/').pop()) + '.webp'
+      const infoThumb = await mintaIzin(token, namaThumb, 'image/webp', 'thumb/' + kind)
+      await kirimDenganProgres(infoThumb.uploadUrl, thumbBlob, 'image/webp', null)
+      thumbUrl = infoThumb.publicUrl
+    } catch (e) {
+      thumbUrl = null
+    }
+  }
+  console.log('[UPLOAD] File penuh: ' + infoFull.key + ' | Thumbnail: ' + (thumbUrl || 'tidak dibuat'))
+  return { path: infoFull.key, publicUrl: infoFull.publicUrl, thumbUrl: thumbUrl }
+}
+
+export async function deleteMedia(key) {
+  const token = await getToken()
+  const res = await fetch('/api/r2/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ key: key })
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error('Gagal hapus media di R2 (status ' + res.status + '): ' + text)
+  }
+  return res.json()
 }
 ```
 
@@ -5537,6 +6214,85 @@ export default function AttendancePage() {
 }
 ```
 
+## File: src/pages/GalleryPage.jsx
+```javascript
+import { useEffect, useState } from 'react'
+import { supabase } from '../lib/supabase.js'
+import { useAuth } from '../lib/auth.js'
+import { EmptyState, Modal } from '../components/ui.jsx'
+import { GalleryCard, GalleryDetail } from '../components/cards.jsx'
+import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
+import { ICONS } from '../components/icons.jsx'
+import { matchesDateFilters, urutkanTanggal } from '../lib/format.js'
+import { GALERI_KEGIATAN } from '../lib/constants.js'
+import { SkeletonGalleryCard } from '../components/Skeleton.jsx'
+
+const INITIAL = { kegiatan: '', tipe: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
+
+export default function GalleryPage() {
+  const { mahasiswa } = useAuth()
+  const [all, setAll] = useState([])
+  const [filter, setFilter] = useState(INITIAL)
+  const [sort, setSort] = useState('terbaru')
+  const [open, setOpen] = useState(false)
+  const [detail, setDetail] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(function () {
+    async function load() {
+      const g = await supabase.from('galeri').select('*, mahasiswa(nim, nama, prodi)').order('tanggal', { ascending: false })
+      setAll(g.data || [])
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  const items = all.filter(function (i) {
+    if (filter.kegiatan && (i.kegiatan || 'Lainnya') !== filter.kegiatan) return false
+    if (filter.tipe && i.media_type !== filter.tipe) return false
+    return matchesDateFilters(i.tanggal, filter)
+  })
+  const active = countActiveFilters(filter)
+  const sortedItems = urutkanTanggal(items, sort)
+
+  return (
+    <div>
+      <section className="rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Galeri dokumentasi</p>
+        <h1 className="mt-2 text-3xl lg:text-4xl font-black text-slate-900">Foto dan video kegiatan magang</h1>
+        <p className="mt-3 text-slate-600 max-w-2xl">Setiap kartu mewakili satu kegiatan. Klik media untuk melihat detail.</p>
+      </section>
+
+      <section className="mt-6">
+        <FilterBar open={open} onToggle={function () { setOpen(function (o) { return !o }) }} activeCount={active}
+          onReset={function () { setFilter(INITIAL) }}>
+          <FilterSelect icon={ICONS.tag} value={filter.kegiatan} onChange={function (v) { setFilter(Object.assign({}, filter, { kegiatan: v })) }}
+            options={[{ value: '', label: 'Semua kegiatan' }].concat(GALERI_KEGIATAN.map(function (k) { return { value: k, label: k } }))} />
+          <FilterSelect icon={ICONS.image} value={filter.tipe} onChange={function (v) { setFilter(Object.assign({}, filter, { tipe: v })) }}
+            options={[{ value: '', label: 'Semua media' }, { value: 'foto', label: 'Foto' }, { value: 'video', label: 'Video' }]} />
+          <TimeFilter filter={filter} set={setFilter} />
+          <SortSelect value={sort} onChange={setSort} />
+        </FilterBar>
+      </section>
+
+      <section className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        {loading
+          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <SkeletonGalleryCard key={i} /> })
+          : sortedItems.map(function (i) {
+              return <GalleryCard key={i.id} item={i} isOwner={mahasiswa && mahasiswa.id === i.mahasiswa_id}
+                onDetail={function () { setDetail(i) }} />
+            })}
+        {!loading && !items.length ? <EmptyState icon="camera" title="Belum ada media galeri" desc="Media galeri yang diunggah mahasiswa akan tampil di sini." /> : null}
+      </section>
+
+      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
+        {detail ? <GalleryDetail item={detail} /> : null}
+      </Modal>
+    </div>
+  )
+}
+```
+
 ## File: src/components/icons.jsx
 ```javascript
 function svg(inner, size) {
@@ -5745,85 +6501,6 @@ export function EyeToggle(props) {
       <circle cx="12" cy="12" r="3" className="eye-pupil" />
       <line x1="2" y1="2" x2="22" y2="22" className="eye-slash" />
     </svg>
-  )
-}
-```
-
-## File: src/pages/GalleryPage.jsx
-```javascript
-import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase.js'
-import { useAuth } from '../lib/auth.js'
-import { EmptyState, Modal } from '../components/ui.jsx'
-import { GalleryCard, GalleryDetail } from '../components/cards.jsx'
-import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
-import { ICONS } from '../components/icons.jsx'
-import { matchesDateFilters, urutkanTanggal } from '../lib/format.js'
-import { GALERI_KEGIATAN } from '../lib/constants.js'
-import { SkeletonGalleryCard } from '../components/Skeleton.jsx'
-
-const INITIAL = { kegiatan: '', tipe: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
-
-export default function GalleryPage() {
-  const { mahasiswa } = useAuth()
-  const [all, setAll] = useState([])
-  const [filter, setFilter] = useState(INITIAL)
-  const [sort, setSort] = useState('terbaru')
-  const [open, setOpen] = useState(false)
-  const [detail, setDetail] = useState(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(function () {
-    async function load() {
-      const g = await supabase.from('galeri').select('*, mahasiswa(nim, nama, prodi)').order('tanggal', { ascending: false })
-      setAll(g.data || [])
-      setLoading(false)
-    }
-    load()
-  }, [])
-
-  const items = all.filter(function (i) {
-    if (filter.kegiatan && (i.kegiatan || 'Lainnya') !== filter.kegiatan) return false
-    if (filter.tipe && i.media_type !== filter.tipe) return false
-    return matchesDateFilters(i.tanggal, filter)
-  })
-  const active = countActiveFilters(filter)
-  const sortedItems = urutkanTanggal(items, sort)
-
-  return (
-    <div>
-      <section className="rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Galeri dokumentasi</p>
-        <h1 className="mt-2 text-3xl lg:text-4xl font-black text-slate-900">Foto dan video kegiatan magang</h1>
-        <p className="mt-3 text-slate-600 max-w-2xl">Setiap kartu mewakili satu kegiatan. Klik media untuk melihat detail.</p>
-      </section>
-
-      <section className="mt-6">
-        <FilterBar open={open} onToggle={function () { setOpen(function (o) { return !o }) }} activeCount={active}
-          onReset={function () { setFilter(INITIAL) }}>
-          <FilterSelect icon={ICONS.tag} value={filter.kegiatan} onChange={function (v) { setFilter(Object.assign({}, filter, { kegiatan: v })) }}
-            options={[{ value: '', label: 'Semua kegiatan' }].concat(GALERI_KEGIATAN.map(function (k) { return { value: k, label: k } }))} />
-          <FilterSelect icon={ICONS.image} value={filter.tipe} onChange={function (v) { setFilter(Object.assign({}, filter, { tipe: v })) }}
-            options={[{ value: '', label: 'Semua media' }, { value: 'foto', label: 'Foto' }, { value: 'video', label: 'Video' }]} />
-          <TimeFilter filter={filter} set={setFilter} />
-          <SortSelect value={sort} onChange={setSort} />
-        </FilterBar>
-      </section>
-
-      <section className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-        {loading
-          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <SkeletonGalleryCard key={i} /> })
-          : sortedItems.map(function (i) {
-              return <GalleryCard key={i.id} item={i} isOwner={mahasiswa && mahasiswa.id === i.mahasiswa_id}
-                onDetail={function () { setDetail(i) }} />
-            })}
-        {!loading && !items.length ? <EmptyState icon="camera" title="Belum ada media galeri" desc="Media galeri yang diunggah mahasiswa akan tampil di sini." /> : null}
-      </section>
-
-      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
-        {detail ? <GalleryDetail item={detail} /> : null}
-      </Modal>
-    </div>
   )
 }
 ```
@@ -6694,6 +7371,7 @@ export default function DashboardPage() {
   const [busy, setBusy] = useState(false)
   const [infoProses, setInfoProses] = useState('')
   const [ytQuota, setYtQuota] = useState({ limit: 6, used: 0, remaining: 6 })
+  const [ytQuotaLoading, setYtQuotaLoading] = useState(true)
   const [galMode, setGalMode] = useState('foto')
   const [galYtLink, setGalYtLink] = useState('')
   const [galOldYt, setGalOldYt] = useState(null)
@@ -6723,8 +7401,12 @@ export default function DashboardPage() {
 
   useEffect(function () {
     if (mahasiswa) refresh()
-    fetchYouTubeQuota().then(setYtQuota)
-    const iv = setInterval(function () { fetchYouTubeQuota().then(setYtQuota) }, 30000)
+    setYtQuotaLoading(true)
+    fetchYouTubeQuota().then(function (data) {
+      setYtQuota(data)
+      setYtQuotaLoading(false)
+    })
+    const iv = setInterval(function () { fetchYouTubeQuota().then(function (data) { setYtQuota(data); setYtQuotaLoading(false) }) }, 30000)
     return function () { clearInterval(iv) }
   }, [mahasiswa])
 
@@ -7234,7 +7916,7 @@ export default function DashboardPage() {
                       </div>
                       {it.mode === 'video' ? (
                         <div className="space-y-2">
-                          <p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuota.remaining} dari {ytQuota.limit}</p>
+                          <p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuotaLoading ? <span className="inline-block w-3 h-3 ml-1 border-2 border-slate-400 border-t-transparent rounded-full animate-spin align-middle"></span> : <>{ytQuota.remaining} dari {ytQuota.limit}</>}</p>
                           <div className={ytQuota.remaining <= 0 && !it.file ? 'opacity-50 pointer-events-none' : ''}>
                             <FileInput accept="video/*" fileName={it.file ? it.file.name : ''}
                               onChange={function (e) { onItemFile(i, e.target.files[0]) }} />
@@ -7305,7 +7987,7 @@ export default function DashboardPage() {
                 <div className="mt-1.5">
                   {galMode === 'video' ? (
                     <div className="space-y-2">
-                      <p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuota.remaining} dari {ytQuota.limit}</p>
+                      <p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuotaLoading ? <span className="inline-block w-3 h-3 ml-1 border-2 border-slate-400 border-t-transparent rounded-full animate-spin align-middle"></span> : <>{ytQuota.remaining} dari {ytQuota.limit}</>}</p>
                       <div className={ytQuota.remaining <= 0 && !galForm.file ? 'opacity-50 pointer-events-none' : ''}>
                         <FileInput accept="video/*" fileName={galForm.file ? galForm.file.name : ''}
                           onChange={function (e) {

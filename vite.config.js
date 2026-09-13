@@ -89,6 +89,7 @@ function pluginApiR2(env) {
 
 function pluginApiYoutube(env) {
   const admin = createClient(env.VITE_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY)
+  const LIMIT_PER_PROJECT = 5
   function ptToday() {
     const now = new Date()
     const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
@@ -96,6 +97,35 @@ function pluginApiYoutube(env) {
     const m = String(pt.getMonth() + 1).padStart(2, '0')
     const d = String(pt.getDate()).padStart(2, '0')
     return y + '-' + m + '-' + d
+  }
+  function daftarKredensial() {
+    const list = []
+    for (let n = 1; n <= 6; n++) {
+      const id = env['YOUTUBE_CLIENT_ID_' + n]
+      const secret = env['YOUTUBE_CLIENT_SECRET_' + n]
+      const refresh = env['YOUTUBE_REFRESH_TOKEN_' + n]
+      if (id && secret && refresh) list.push({ n: n, id: id, secret: secret, refresh: refresh })
+    }
+    if (!list.length && env.YOUTUBE_CLIENT_ID && env.YOUTUBE_CLIENT_SECRET && env.YOUTUBE_REFRESH_TOKEN) {
+      list.push({ n: 1, id: env.YOUTUBE_CLIENT_ID, secret: env.YOUTUBE_CLIENT_SECRET, refresh: env.YOUTUBE_REFRESH_TOKEN })
+    }
+    return list
+  }
+  const cacheToken = {}
+  async function getAccessToken(kred) {
+    const now = Date.now()
+    const c = cacheToken[kred.n]
+    if (c && c.expire > now + 60000) return c.token
+    const params = new URLSearchParams()
+    params.set('client_id', kred.id)
+    params.set('client_secret', kred.secret)
+    params.set('refresh_token', kred.refresh)
+    params.set('grant_type', 'refresh_token')
+    const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
+    if (!r.ok) throw new Error('refresh token project ' + kred.n + ' gagal (status ' + r.status + ')')
+    const j = await r.json()
+    cacheToken[kred.n] = { token: j.access_token, expire: now + (j.expires_in || 3600) * 1000 }
+    return j.access_token
   }
   async function cekSesi(req) {
     const authHeader = req.headers.authorization || ''
@@ -105,107 +135,92 @@ function pluginApiYoutube(env) {
     const r = await supabase.auth.getUser(token)
     return r.error ? null : r.data.user
   }
+  function kirim(res, code, obj) {
+    res.statusCode = code
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify(obj))
+  }
   return {
     name: 'api-youtube-dev',
     configureServer(server) {
       server.middlewares.use('/api/youtube/quota', async function (req, res) {
         const today = ptToday()
-        const { count } = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today)
-        const used = count || 0
-        res.setHeader('Content-Type', 'application/json')
+        const kredensial = daftarKredensial()
+        if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
+        let usedTotal = 0
+        const perProject = []
+        for (const kred of kredensial) {
+          const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
+          const used = hit.count || 0
+          usedTotal += used
+          perProject.push({ project: kred.n, used: used, remaining: Math.max(0, LIMIT_PER_PROJECT - used) })
+        }
+        const limit = kredensial.length * LIMIT_PER_PROJECT
         res.setHeader('Cache-Control', 'no-store')
-        res.end(JSON.stringify({ limit: 5, used: used, remaining: Math.max(0, 5 - used), ptDate: today }))
-      })
-      server.middlewares.use('/api/youtube/verify', async function (req, res) {
-        if (req.method !== 'POST') { res.statusCode = 405; res.end(JSON.stringify({ error: 'Method tidak diizinkan' })); return }
-        const user = await cekSesi(req)
-        if (!user) { res.statusCode = 401; res.end(JSON.stringify({ error: 'Sesi tidak valid' })); return }
-        const body = await bacaBody(req)
-        const ref = body.ref
-        if (!ref) { res.statusCode = 400; res.end(JSON.stringify({ error: 'Ref tidak ada' })); return }
-        const params = new URLSearchParams()
-        params.set('client_id', env.YOUTUBE_CLIENT_ID || '')
-        params.set('client_secret', env.YOUTUBE_CLIENT_SECRET || '')
-        params.set('refresh_token', env.YOUTUBE_REFRESH_TOKEN || '')
-        params.set('grant_type', 'refresh_token')
-        const tr = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
-        if (!tr.ok) { res.statusCode = 500; res.end(JSON.stringify({ error: 'Gagal refresh token YouTube' })); return }
-        const tok = await tr.json()
-        const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&forMine=true&order=date&maxResults=10&q=' + encodeURIComponent(ref), { headers: { Authorization: 'Bearer ' + tok.access_token } })
-        if (!r.ok) { res.statusCode = 502; res.end(JSON.stringify({ error: 'Gagal memeriksa video di YouTube' })); return }
-        const j = await r.json()
-        const items = j.items || []
-        const batas = Date.now() - 15 * 60 * 1000
-        const cocok = items.find(function (it) {
-          const desc = (it.snippet && it.snippet.description) || ''
-          const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
-          return desc.indexOf('REF ' + ref) === 0 && (isNaN(t) ? true : t >= batas)
-        }) || items[0]
-        if (!cocok) { res.statusCode = 404; res.end(JSON.stringify({ error: 'Video tidak ditemukan di channel' })); return }
-        res.setHeader('Content-Type', 'application/json')
-        res.end(JSON.stringify({ videoId: cocok.id && cocok.id.videoId }))
-      })
-      server.middlewares.use('/api/youtube/latest', async function (req, res) {
-        if (req.method !== 'POST') { res.statusCode = 405; res.end(JSON.stringify({ error: 'Method tidak diizinkan' })); return }
-        const user = await cekSesi(req)
-        if (!user) { res.statusCode = 401; res.end(JSON.stringify({ error: 'Sesi tidak valid' })); return }
-        const params = new URLSearchParams()
-        params.set('client_id', env.YOUTUBE_CLIENT_ID || '')
-        params.set('client_secret', env.YOUTUBE_CLIENT_SECRET || '')
-        params.set('refresh_token', env.YOUTUBE_REFRESH_TOKEN || '')
-        params.set('grant_type', 'refresh_token')
-        const tr = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
-        if (!tr.ok) { res.statusCode = 500; res.end(JSON.stringify({ error: 'Gagal refresh token YouTube' })); return }
-        const tok = await tr.json()
-        const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&forMine=true&order=date&maxResults=5', { headers: { Authorization: 'Bearer ' + tok.access_token } })
-        if (!r.ok) { const t = await r.text(); res.statusCode = 502; res.end(JSON.stringify({ error: 'Gagal memeriksa video terbaru: ' + r.status + ' ' + t })); return }
-        const j = await r.json()
-        const items = j.items || []
-        const batas = Date.now() - 15 * 60 * 1000
-        const cocok = items.find(function (it) {
-          const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
-          return isNaN(t) ? false : t >= batas
-        })
-        if (!cocok) { res.statusCode = 404; res.end(JSON.stringify({ error: 'Video terbaru tidak ditemukan' })); return }
-        res.setHeader('Content-Type', 'application/json')
-        res.end(JSON.stringify({ videoId: cocok.id && cocok.id.videoId }))
+        kirim(res, 200, { limit: limit, used: usedTotal, remaining: Math.max(0, limit - usedTotal), perProject: perProject, ptDate: today })
       })
       server.middlewares.use('/api/youtube/session', async function (req, res) {
-        if (req.method !== 'POST') { res.statusCode = 405; res.end(JSON.stringify({ error: 'Method tidak diizinkan' })); return }
+        if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
         const user = await cekSesi(req)
-        if (!user) { res.statusCode = 401; res.end(JSON.stringify({ error: 'Sesi tidak valid' })); return }
+        if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
         const today = ptToday()
-        const { count } = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today)
-        const used = count || 0
-        if (used >= 5) { res.statusCode = 429; res.end(JSON.stringify({ error: 'Kuota upload YouTube hari ini sudah habis. Gunakan link embed.', remaining: 0 })); return }
+        const kredensial = daftarKredensial()
+        if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
         const body = await bacaBody(req)
-        const params = new URLSearchParams()
-        params.set('client_id', env.YOUTUBE_CLIENT_ID || '')
-        params.set('client_secret', env.YOUTUBE_CLIENT_SECRET || '')
-        params.set('refresh_token', env.YOUTUBE_REFRESH_TOKEN || '')
-        params.set('grant_type', 'refresh_token')
-        const tr = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
-        if (!tr.ok) { res.statusCode = 500; res.end(JSON.stringify({ error: 'Gagal refresh token YouTube' })); return }
-        const tok = await tr.json()
-        const meta = {
-          snippet: { title: String(body.title || 'Dokumentasi Magang').slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
-          status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
+        if (!body.title) { kirim(res, 400, { error: 'Judul video wajib diisi' }); return }
+        let terakhir = ''
+        for (const kred of kredensial) {
+          const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
+          if ((hit.count || 0) >= LIMIT_PER_PROJECT) { terakhir = 'project ' + kred.n + ' sudah penuh'; continue }
+          let access
+          try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
+          const meta = {
+            snippet: { title: String(body.title).slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
+            status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
+          }
+          const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+            method: 'POST',
+            headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
+            body: JSON.stringify(meta)
+          })
+          if (!init.ok) { terakhir = 'project ' + kred.n + ' ditolak Google (status ' + init.status + ')'; continue }
+          const sessionUri = init.headers.get('location')
+          if (!sessionUri) { terakhir = 'project ' + kred.n + ' tanpa lokasi upload'; continue }
+          await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: user.id, project_id: kred.n })
+          kirim(res, 200, { sessionUri: sessionUri, project: kred.n })
+          return
         }
-        const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
-          method: 'POST',
-          headers: { Authorization: 'Bearer ' + tok.access_token, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
-          body: JSON.stringify(meta)
-        })
-        if (!init.ok) { const t = await init.text(); res.statusCode = 502; res.end(JSON.stringify({ error: 'Gagal memulai sesi YouTube: ' + t })); return }
-        const sessionUri = init.headers.get('location')
-        if (!sessionUri) { res.statusCode = 502; res.end(JSON.stringify({ error: 'Sesi upload tidak mengembalikan lokasi' })); return }
-        await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: user.id })
-        res.setHeader('Content-Type', 'application/json')
-        res.end(JSON.stringify({ sessionUri: sessionUri, remaining: Math.max(0, 5 - used - 1) }))
+        kirim(res, 429, { error: 'Kuota harian semua project video sudah habis. Coba lagi besok atau gunakan link video eksternal.', detail: terakhir })
+      })
+      server.middlewares.use('/api/youtube/latest', async function (req, res) {
+        if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
+        const user = await cekSesi(req)
+        if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
+        const kredensial = daftarKredensial()
+        if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
+        let terakhir = ''
+        for (const kred of kredensial) {
+          let access
+          try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
+          const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&order=date&maxResults=5', { headers: { Authorization: 'Bearer ' + access } })
+          if (!r.ok) { terakhir = 'project ' + kred.n + ' status ' + r.status; continue }
+          const j = await r.json()
+          const items = j.items || []
+          const batas = Date.now() - 15 * 60 * 1000
+          const cocok = items.find(function (it) {
+            const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
+            return isNaN(t) ? false : t >= batas
+          })
+          if (!cocok) { kirim(res, 404, { error: 'Video terbaru tidak ditemukan' }); return }
+          kirim(res, 200, { videoId: cocok.id && cocok.id.videoId, project: kred.n })
+          return
+        }
+        kirim(res, 502, { error: 'Gagal memeriksa video terbaru: ' + terakhir })
       })
     }
   }
 }
+
 export default defineConfig(function ({ mode }) {
   const env = loadEnv(mode, process.cwd(), '')
   return {
