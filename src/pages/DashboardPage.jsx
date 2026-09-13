@@ -190,6 +190,12 @@ export default function DashboardPage() {
           mediaThumb = up.thumbUrl || null
           mediaSource = 'r2'
           youtubeId = null
+        } else if (it.mode === 'video' && !it.file && !it.ytLink && it.oldYtId) {
+          mediaSource = 'youtube'
+          youtubeId = it.oldYtId
+          mediaPath = ytThumb(it.oldYtId)
+          mediaThumb = ytThumb(it.oldYtId)
+          mediaType = 'video'
         } else if (it.oldPath) {
           mediaPath = it.oldPath
           mediaType = detectMediaType(it.oldPath)
@@ -258,7 +264,7 @@ export default function DashboardPage() {
       kendala: log.kendala || '', solusi: log.solusi || '', pembelajaran: log.pembelajaran || '', status: log.status
     })
     const mapped = (log.logbook_items || []).map(function (it) {
-      return { key: it.id, judul: it.judul, deskripsi: it.deskripsi || '', hasil: it.hasil || '', file: null, preview: it.media_path || '', oldPath: it.media_source === 'youtube' ? '' : (it.media_path || ''), oldThumb: it.media_source === 'youtube' ? '' : (it.media_thumb || ''), previewLoading: false, show: it.show_in_gallery, mode: it.media_source === 'youtube' ? 'video' : (it.media_type === 'video' ? 'video' : 'foto'), ytLink: '', oldYtId: it.youtube_id || null, oldSource: it.media_source || 'r2' }
+      return { key: it.id, judul: it.judul, deskripsi: it.deskripsi || '', hasil: it.hasil || '', file: null, preview: it.media_path || '', oldPath: it.media_source === 'youtube' ? '' : (it.media_path || ''), oldThumb: it.media_source === 'youtube' ? '' : (it.media_thumb || ''), previewLoading: false, show: it.show_in_gallery, mode: it.media_source === 'youtube' ? 'video' : (it.media_type === 'video' ? 'video' : 'foto'), ytLink: it.media_source === 'youtube' && it.youtube_id ? 'https://youtu.be/' + it.youtube_id : '', oldYtId: it.youtube_id || null, oldSource: it.media_source || 'r2' }
     })
     setItems(mapped.length ? mapped : [newItem()])
     setTab('logbook')
@@ -275,7 +281,7 @@ export default function DashboardPage() {
     setEditGalId(g.id)
     setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_path || '', oldPath: g.media_source === 'youtube' ? '' : (g.media_path || ''), oldThumb: g.media_source === 'youtube' ? '' : (g.media_thumb || ''), previewLoading: false })
     setGalMode(g.media_source === 'youtube' ? 'video' : (g.media_type === 'video' ? 'video' : 'foto'))
-    setGalYtLink('')
+    setGalYtLink(g.media_source === 'youtube' && g.youtube_id ? 'https://youtu.be/' + g.youtube_id : '')
     setGalOldYt(g.youtube_id || null)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -337,6 +343,12 @@ export default function DashboardPage() {
         mediaThumb = up.thumbUrl || null
         mediaSource = 'r2'
         youtubeId = null
+      } else if (galMode === 'video' && !galForm.file && !galYtLink && galOldYt) {
+        mediaSource = 'youtube'
+        youtubeId = galOldYt
+        mediaPath = ytThumb(galOldYt)
+        mediaThumb = ytThumb(galOldYt)
+        mediaType = 'video'
       } else if (galForm.oldPath) {
         mediaPath = galForm.oldPath
         mediaType = detectMediaType(galForm.oldPath)

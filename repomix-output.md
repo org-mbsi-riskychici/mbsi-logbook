@@ -51,6 +51,7 @@ src/
     FilterBar.jsx
     icons.jsx
     Layout.jsx
+    PemutarVideo.jsx
     Skeleton.jsx
     ui.jsx
   lib/
@@ -85,11 +86,18 @@ apply-fix-export-unggah.cjs
 apply-fix-sisa-netral.cjs
 apply-fix-state-loading.cjs
 apply-fix-token-aman.cjs
+apply-fix-video-galeri.cjs
 apply-fix-youtube-scope.cjs
 apply-galeri-picker.cjs
 apply-loading-kuota.cjs
 apply-netral-final.cjs
 apply-netral-youtube-dan-titik.cjs
+apply-pemutar-crop-v4.cjs
+apply-pemutar-custom.cjs
+apply-pemutar-full-custom.cjs
+apply-pemutar-pas-tengah.cjs
+apply-pemutar-referensi.cjs
+apply-pemutar-tutup-merek.cjs
 apply-preview-video-controls.cjs
 apply-thumb-youtube-fallback.cjs
 apply-youtube-backend.cjs
@@ -109,13 +117,2169 @@ setup-youtube-token-multi.cjs
 setup-youtube-token.cjs
 siapkan-env-youtube-lokal.cjs
 tailwind.config.js
+tesss-iframeeee.html
 vercel.json
 vite.config.js
 ```
 
 # Files
 
-## File: apply-auto-rotate-youtube.cjs
+## File: src/components/PemutarVideo.jsx
+```javascript
+import { useEffect, useRef, useState } from 'react'
+
+let janjiApi = null
+function muatApiYouTube() {
+  if (janjiApi) return janjiApi
+  janjiApi = new Promise(function (resolve) {
+    if (window.YT && window.YT.Player) { resolve(window.YT); return }
+    const lama = window.onYouTubeIframeAPIReady
+    window.onYouTubeIframeAPIReady = function () {
+      if (lama) lama()
+      resolve(window.YT)
+    }
+    const tag = document.createElement('script')
+    tag.src = 'https://www.youtube.com/iframe_api'
+    tag.async = true
+    document.head.appendChild(tag)
+  })
+  return janjiApi
+}
+
+function formatWaktu(detik) {
+  const d = isFinite(detik) && detik > 0 ? detik : 0
+  const m = Math.floor(d / 60)
+  const s = Math.floor(d % 60)
+  return m + ':' + (s < 10 ? '0' : '') + s
+}
+
+function paksaKualitas(p) {
+  try { if (p && typeof p.setPlaybackQualityRange === 'function') p.setPlaybackQualityRange('720', '1080') } catch (e) {}
+}
+function matikanSubtitel(p) {
+  try { if (p && typeof p.unloadModule === 'function') p.unloadModule('captions') } catch (e) {}
+  try { if (p && typeof p.setOption === 'function') p.setOption('captions', 'track', {}) } catch (e) {}
+}
+
+function IkonPlay({ className }) { return <svg viewBox="0 0 24 24" fill="currentColor" className={className || 'h-5 w-5'}><path d="M8 5v14l11-7z" /></svg> }
+function IkonPause({ className }) { return <svg viewBox="0 0 24 24" fill="currentColor" className={className || 'h-5 w-5'}><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg> }
+function IkonSuara() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+      <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
+    </svg>
+  )
+}
+function IkonBisu() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+      <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
+    </svg>
+  )
+}
+function IkonPenuh() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg> }
+function IkonKecil() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" /></svg> }
+function IkonUlang() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></svg> }
+
+export default function PemutarVideo(props) {
+  const youtubeId = props.youtubeId
+  const [dimulai, setDimulai] = useState(false)
+  const [memutar, setMemutar] = useState(false)
+  const [buffer, setBuffer] = useState(false)
+  const [selesai, setSelesai] = useState(false)
+  const [gagal, setGagal] = useState(false)
+  const [waktu, setWaktu] = useState(0)
+  const [durasi, setDurasi] = useState(0)
+  const [volume, setVolume] = useState(100)
+  const [bisu, setBisu] = useState(false)
+  const [penuh, setPenuh] = useState(false)
+  const [sembunyi, setSembunyi] = useState(false)
+  const [thumbPakaiHq, setThumbPakaiHq] = useState(false)
+  const kotakRef = useRef(null)
+  const wadahRef = useRef(null)
+  const playerRef = useRef(null)
+  const timerSembunyi = useRef(null)
+
+  useEffect(function () {
+    const iv = setInterval(function () {
+      const p = playerRef.current
+      if (p && p.getCurrentTime) {
+        setWaktu(p.getCurrentTime() || 0)
+        const d = p.getDuration ? p.getDuration() : 0
+        if (d) setDurasi(d)
+      }
+    }, 250)
+    return function () { clearInterval(iv) }
+  }, [])
+
+  useEffect(function () {
+    function saatPenuh() { setPenuh(Boolean(document.fullscreenElement)) }
+    document.addEventListener('fullscreenchange', saatPenuh)
+    return function () {
+      document.removeEventListener('fullscreenchange', saatPenuh)
+      if (timerSembunyi.current) clearTimeout(timerSembunyi.current)
+      if (playerRef.current && playerRef.current.destroy) {
+        try { playerRef.current.destroy() } catch (e) {}
+        playerRef.current = null
+      }
+    }
+  }, [])
+
+  function sedangMain() {
+    const p = playerRef.current
+    return Boolean(p && p.getPlayerState && window.YT && p.getPlayerState() === window.YT.PlayerState.PLAYING)
+  }
+
+  function resetTimerSembunyi() {
+    if (!dimulai) return
+    if (timerSembunyi.current) clearTimeout(timerSembunyi.current)
+    setSembunyi(false)
+    if (sedangMain()) {
+      timerSembunyi.current = setTimeout(function () { setSembunyi(true) }, 2500)
+    }
+  }
+
+  async function mulai() {
+    setDimulai(true)
+    setGagal(false)
+    try {
+      const YT = await muatApiYouTube()
+      if (!wadahRef.current) return
+      playerRef.current = new YT.Player(wadahRef.current, {
+        videoId: youtubeId,
+        playerVars: {
+          autoplay: 1, controls: 0, modestbranding: 1, rel: 0, fs: 0,
+          disablekb: 1, iv_load_policy: 3, playsinline: 1, autohide: 1,
+          showinfo: 0, cc_load_policy: 0, origin: window.location.origin
+        },
+        events: {
+          onReady: function (e) {
+            setDurasi(e.target.getDuration() || 0)
+            paksaKualitas(e.target)
+            matikanSubtitel(e.target)
+            e.target.playVideo()
+          },
+          onStateChange: function (e) {
+            const S = window.YT.PlayerState
+            if (e.data === S.PLAYING) {
+              setMemutar(true); setBuffer(false); setSelesai(false)
+              paksaKualitas(e.target); matikanSubtitel(e.target)
+              resetTimerSembunyi()
+            } else if (e.data === S.PAUSED) {
+              setMemutar(false); setBuffer(false); setSembunyi(false)
+            } else if (e.data === S.BUFFERING) {
+              setBuffer(true)
+            } else if (e.data === S.ENDED) {
+              setMemutar(false); setSelesai(true); setSembunyi(false)
+            }
+          },
+          onError: function () { setGagal(true); setBuffer(false); setMemutar(false) }
+        }
+      })
+    } catch (e) {
+      setGagal(true)
+    }
+  }
+
+  function jungkir() {
+    const p = playerRef.current
+    if (!p) return
+    if (sedangMain()) p.pauseVideo()
+    else p.playVideo()
+  }
+
+  function geser(ev) {
+    const p = playerRef.current
+    if (!p || !durasi) return
+    const nilai = Number(ev.target.value)
+    p.seekTo((nilai / 100) * durasi, true)
+    setWaktu((nilai / 100) * durasi)
+  }
+
+  function aturVolume(ev) {
+    const p = playerRef.current
+    const nilai = Number(ev.target.value)
+    setVolume(nilai)
+    if (!p) return
+    p.setVolume(nilai)
+    if (nilai === 0) { p.mute(); setBisu(true) }
+    else if (bisu) { p.unMute(); setBisu(false) }
+  }
+
+  function aturBisu() {
+    const p = playerRef.current
+    if (!p) return
+    if (bisu) { p.unMute(); p.setVolume(volume || 100); setBisu(false) }
+    else { p.mute(); setBisu(true) }
+  }
+
+  function aturPenuh() {
+    const el = kotakRef.current
+    if (!el) return
+    if (document.fullscreenElement) document.exitFullscreen()
+    else if (el.requestFullscreen) el.requestFullscreen()
+  }
+
+  const thumb = thumbPakaiHq
+    ? 'https://i.ytimg.com/vi/' + youtubeId + '/hqdefault.jpg'
+    : 'https://img.youtube.com/vi/' + youtubeId + '/maxresdefault.jpg'
+  const persen = durasi ? Math.min(100, (waktu / durasi) * 100) : 0
+  const kontrolSembunyi = dimulai && !gagal && sembunyi
+
+  return (
+    <div
+      ref={kotakRef}
+      className={'pemutar-referensi group relative overflow-hidden rounded-2xl bg-black shadow-xl ' + (props.className || 'aspect-video w-full')}
+      style={{ cursor: kontrolSembunyi ? 'none' : 'default' }}
+      onMouseMove={resetTimerSembunyi}
+      onMouseLeave={function () { if (sedangMain()) { if (timerSembunyi.current) clearTimeout(timerSembunyi.current); setSembunyi(true) } }}
+    >
+      {/* Wadah player: setelah diisi YouTube, iframe diposisikan CSS dengan margin crop 70px */}
+      <div ref={wadahRef} className="h-full w-full" />
+
+      {/* Perisai penangkap klik */}
+      {dimulai && !selesai && !gagal ? (
+        <button type="button" aria-label="Putar atau jeda video" onClick={jungkir}
+          className="absolute inset-0 z-10 h-full w-full bg-transparent" style={{ cursor: kontrolSembunyi ? 'none' : 'default' }} />
+      ) : null}
+
+      {/* Ikon putar besar milik kita saat dijeda, menutup ikon bawaan YouTube */}
+      {dimulai && !memutar && !buffer && !selesai && !gagal ? (
+        <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center">
+          <span className="grid h-20 w-20 place-items-center rounded-full bg-black/60 text-white backdrop-blur-sm">
+            <IkonPlay className="ml-1 h-8 w-8" />
+          </span>
+        </div>
+      ) : null}
+
+      {/* Poster awal dengan tombol putar minimalis */}
+      {!dimulai ? (
+        <div className="absolute inset-0 z-20">
+          <img src={thumb} alt={props.title || 'Pratinjau video'} onError={function () { setThumbPakaiHq(true) }}
+            className="absolute inset-0 h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+          <div className="absolute inset-0 grid place-items-center">
+            <button type="button" onClick={mulai} title="Putar video"
+              className="grid h-12 w-12 place-items-center rounded-full border border-white/20 bg-black/50 text-white backdrop-blur-md transition hover:scale-110 hover:border-bsi-500 hover:bg-bsi-600">
+              <IkonPlay className="ml-0.5 h-5 w-5" />
+            </button>
+          </div>
+          {props.title ? <p className="absolute bottom-3 left-4 right-4 truncate text-sm font-semibold text-white drop-shadow-md">{props.title}</p> : null}
+        </div>
+      ) : null}
+
+      {/* Layar akhir dengan putar ulang */}
+      {selesai ? (
+        <div className="absolute inset-0 z-20 grid place-items-center bg-black/85 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-3">
+            <button type="button" title="Putar ulang"
+              onClick={function () { const p = playerRef.current; if (p) { p.seekTo(0, true); p.playVideo() } setSelesai(false) }}
+              className="grid h-14 w-14 place-items-center rounded-full bg-gold-500 text-slate-900 shadow-lg transition hover:scale-105">
+              <IkonUlang />
+            </button>
+            <p className="text-xs font-semibold text-slate-200">Putar ulang</p>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Layar gagal */}
+      {gagal ? (
+        <div className="absolute inset-0 z-30 grid place-items-center bg-black/90">
+          <div className="flex flex-col items-center gap-2 px-6 text-center">
+            <p className="text-sm font-semibold text-slate-200">Video tidak dapat dimuat</p>
+            <p className="text-xs text-slate-400">Periksa koneksi atau ketersediaan video di saluran.</p>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Panel kontrol overlay di atas video */}
+      {dimulai && !gagal ? (
+        <div className={'absolute inset-x-0 bottom-0 z-30 flex items-center gap-3 bg-gradient-to-t from-black/90 via-black/60 to-transparent px-4 pb-3 pt-10 transition-opacity duration-300 ' + (kontrolSembunyi ? 'pointer-events-none opacity-0' : 'opacity-100')}>
+          <button type="button" onClick={jungkir} title={memutar ? 'Jeda' : 'Putar'}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-bsi-700 text-white transition hover:bg-bsi-600">
+            {memutar ? <IkonPause className="h-4 w-4" /> : <IkonPlay className="ml-0.5 h-4 w-4" />}
+          </button>
+          <input type="range" min="0" max="100" step="0.1" value={persen} onChange={geser} title="Geser durasi"
+            className="pemutar-progress h-1.5 w-full cursor-pointer appearance-none rounded-full outline-none"
+            style={{ background: 'linear-gradient(to right, #166534 0%, #166534 ' + persen + '%, rgba(255,255,255,0.25) ' + persen + '%, rgba(255,255,255,0.25) 100%)' }} />
+          <span className="min-w-[84px] shrink-0 text-center text-[11px] font-semibold tabular-nums text-slate-200">{formatWaktu(waktu)} / {formatWaktu(durasi)}</span>
+          <button type="button" onClick={aturBisu} title={bisu ? 'Nyalakan suara' : 'Bisukan'}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/10 text-white transition hover:bg-white/20">
+            {bisu ? <IkonBisu /> : <IkonSuara />}
+          </button>
+          <input type="range" min="0" max="100" value={bisu ? 0 : volume} onChange={aturVolume} title="Volume"
+            className="pemutar-volume h-1 w-16 shrink-0 cursor-pointer appearance-none rounded-full outline-none"
+            style={{ background: 'linear-gradient(to right, #eab308 0%, #eab308 ' + (bisu ? 0 : volume) + '%, rgba(255,255,255,0.25) ' + (bisu ? 0 : volume) + '%, rgba(255,255,255,0.25) 100%)' }} />
+          {buffer ? <span className="inline-block h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-gold-500 border-t-transparent" /> : null}
+          <button type="button" onClick={aturPenuh} title={penuh ? 'Keluar layar penuh' : 'Layar penuh'}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/10 text-white transition hover:bg-white/20">
+            {penuh ? <IkonKecil /> : <IkonPenuh />}
+          </button>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+```
+
+## File: apply-fix-video-galeri.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+function gantiStr(rel, cari, ganti, label) {
+  if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan'); return }
+  let isi = baca(rel)
+  if (isi.includes(ganti)) { console.log('[SUDAH ADA] ' + label); return }
+  if (!isi.includes(cari)) { console.log('[TIDAK KETEMU] ' + label); return }
+  isi = isi.replace(cari, ganti)
+  simpan(rel, isi)
+  console.log('[BERHASIL] ' + label)
+}
+
+function gantiRegex(rel, re, ganti, label) {
+  if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan'); return }
+  let isi = baca(rel)
+  if (!re.test(isi)) { console.log('[TIDAK KETEMU] ' + label); return }
+  isi = isi.replace(re, ganti)
+  simpan(rel, isi)
+  console.log('[BERHASIL] ' + label)
+}
+
+console.log('Mulai memperbaiki penyimpanan video YouTube pada logbook dan galeri...')
+console.log('')
+
+/* ===== 1. submitLogbook: pertahankan video YouTube lama saat simpan ulang ===== */
+gantiStr('src/pages/DashboardPage.jsx',
+  `} else if (it.oldPath) {`,
+  `} else if (it.mode === 'video' && !it.file && !it.ytLink && it.oldYtId) {
+          mediaSource = 'youtube'
+          youtubeId = it.oldYtId
+          mediaPath = ytThumb(it.oldYtId)
+          mediaThumb = ytThumb(it.oldYtId)
+          mediaType = 'video'
+        } else if (it.oldPath) {`,
+  'Cabang pertahankan video YouTube lama di submitLogbook')
+
+/* ===== 2. startEditLog: tampilkan thumbnail video YouTube di form ===== */
+gantiRegex('src/pages/DashboardPage.jsx',
+  /preview: it\.media_source === 'youtube' \? '' : \(it\.media_path \|\| ''\)/,
+  `preview: it.media_path || ''`,
+  'Pratinjau edit logbook menampilkan thumbnail YouTube')
+
+/* ===== 3. startEditLog: isi otomatis kolom link dengan link video tersimpan ===== */
+gantiRegex('src/pages/DashboardPage.jsx',
+  /ytLink: '', oldYtId: it\.youtube_id \|\| null/,
+  `ytLink: it.media_source === 'youtube' && it.youtube_id ? 'https://youtu.be/' + it.youtube_id : '', oldYtId: it.youtube_id || null`,
+  'Kolom link terisi otomatis saat edit logbook YouTube')
+
+/* ===== 4. submitGaleri: pertahankan video YouTube lama saat simpan ulang ===== */
+gantiStr('src/pages/DashboardPage.jsx',
+  `} else if (galForm.oldPath) {`,
+  `} else if (galMode === 'video' && !galForm.file && !galYtLink && galOldYt) {
+        mediaSource = 'youtube'
+        youtubeId = galOldYt
+        mediaPath = ytThumb(galOldYt)
+        mediaThumb = ytThumb(galOldYt)
+        mediaType = 'video'
+      } else if (galForm.oldPath) {`,
+  'Cabang pertahankan video YouTube lama di submitGaleri')
+
+/* ===== 5. startEditGal: isi otomatis kolom link dengan link video tersimpan ===== */
+gantiRegex('src/pages/DashboardPage.jsx',
+  /setGalYtLink\(''\)([\s\S]{0,60}?)setGalOldYt\(g\.youtube_id/,
+  `setGalYtLink(g.media_source === 'youtube' && g.youtube_id ? 'https://youtu.be/' + g.youtube_id : '')$1setGalOldYt(g.youtube_id`,
+  'Kolom link terisi otomatis saat edit galeri YouTube')
+
+/* ===== 6. startEditGal: tampilkan thumbnail video YouTube di form ===== */
+gantiRegex('src/pages/DashboardPage.jsx',
+  /preview: g\.media_source === 'youtube' \? '' : \(g\.media_path \|\| ''\)/,
+  `preview: g.media_path || ''`,
+  'Pratinjau edit galeri menampilkan thumbnail YouTube')
+
+/* ===== 7. logbook.js: sync galeri membawa media_source dan youtube_id ===== */
+const FILE_L = 'src/lib/logbook.js'
+if (!fs.existsSync(path.join(root, FILE_L))) {
+  console.log('[LEWATI] logbook.js tidak ditemukan')
+} else {
+  let l = baca(FILE_L)
+  let berubahL = false
+  l = l.replace(/from\('galeri'\)\.update\(\{([\s\S]*?)\}\)\.eq\(/, function (m, isi) {
+    if (isi.includes('media_source')) return m
+    berubahL = true
+    return "from('galeri').update({" + isi + "media_source: item.media_source || 'r2', youtube_id: item.youtube_id || null }).eq("
+  })
+  l = l.replace(/from\('galeri'\)\.insert\(\{([\s\S]*?)\}\)/, function (m, isi) {
+    if (isi.includes('media_source')) return m
+    berubahL = true
+    return "from('galeri').insert({" + isi + "media_source: item.media_source || 'r2', youtube_id: item.youtube_id || null })"
+  })
+  if (berubahL) {
+    simpan(FILE_L, l)
+    console.log('[BERHASIL] syncGaleri kini membawa media_source dan youtube_id')
+  } else {
+    console.log('[SUDAH ADA] syncGaleri sudah membawa kolom YouTube')
+  }
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('PERBAIKAN DATA LAMA (opsional tetapi disarankan).')
+console.log('Jalankan dua SQL berikut di Supabase SQL Editor untuk menyembuhkan baris yang telanjur rusak:')
+console.log('')
+console.log("update public.logbook_items")
+console.log("set media_path = 'https://i.ytimg.com/vi/' || youtube_id || '/hqdefault.jpg',")
+console.log("    media_thumb = 'https://i.ytimg.com/vi/' || youtube_id || '/hqdefault.jpg',")
+console.log("    media_type = 'video'")
+console.log("where media_source = 'youtube' and youtube_id is not null and (media_path is null or media_path = '');")
+console.log('')
+console.log("update public.galeri")
+console.log("set media_source = 'youtube',")
+console.log("    youtube_id = substring(media_path from 'vi/([A-Za-z0-9_-]{11})')")
+console.log("where media_path like '%i.ytimg.com/vi/%' and (media_source = 'r2' or media_source is null);")
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Edit logbook berisi video YouTube, centang tampilkan di galeri, lalu simpan.')
+console.log('2. Media tidak hilang lagi di logbook dan thumbnail beserta link terlihat di form edit.')
+console.log('3. Buka tab Galeri: video muncul sebagai kartu dengan pemutar kustom, bukan media rusak.')
+console.log('4. Edit lagi tanpa mengubah apa pun dan simpan: tidak ada permintaan upload ulang.')
+```
+
+## File: apply-pemutar-crop-v4.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai memasang cropping margin 70px plus kontrol overlay...')
+console.log('')
+
+/* ===== 1. PemutarVideo.jsx: cropping via CSS, kontrol overlay, tanpa poster penutup ===== */
+simpan('src/components/PemutarVideo.jsx', `import { useEffect, useRef, useState } from 'react'
+
+let janjiApi = null
+function muatApiYouTube() {
+  if (janjiApi) return janjiApi
+  janjiApi = new Promise(function (resolve) {
+    if (window.YT && window.YT.Player) { resolve(window.YT); return }
+    const lama = window.onYouTubeIframeAPIReady
+    window.onYouTubeIframeAPIReady = function () {
+      if (lama) lama()
+      resolve(window.YT)
+    }
+    const tag = document.createElement('script')
+    tag.src = 'https://www.youtube.com/iframe_api'
+    tag.async = true
+    document.head.appendChild(tag)
+  })
+  return janjiApi
+}
+
+function formatWaktu(detik) {
+  const d = isFinite(detik) && detik > 0 ? detik : 0
+  const m = Math.floor(d / 60)
+  const s = Math.floor(d % 60)
+  return m + ':' + (s < 10 ? '0' : '') + s
+}
+
+function paksaKualitas(p) {
+  try { if (p && typeof p.setPlaybackQualityRange === 'function') p.setPlaybackQualityRange('720', '1080') } catch (e) {}
+}
+function matikanSubtitel(p) {
+  try { if (p && typeof p.unloadModule === 'function') p.unloadModule('captions') } catch (e) {}
+  try { if (p && typeof p.setOption === 'function') p.setOption('captions', 'track', {}) } catch (e) {}
+}
+
+function IkonPlay({ className }) { return <svg viewBox="0 0 24 24" fill="currentColor" className={className || 'h-5 w-5'}><path d="M8 5v14l11-7z" /></svg> }
+function IkonPause({ className }) { return <svg viewBox="0 0 24 24" fill="currentColor" className={className || 'h-5 w-5'}><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg> }
+function IkonSuara() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+      <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
+    </svg>
+  )
+}
+function IkonBisu() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+      <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
+    </svg>
+  )
+}
+function IkonPenuh() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg> }
+function IkonKecil() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" /></svg> }
+function IkonUlang() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></svg> }
+
+export default function PemutarVideo(props) {
+  const youtubeId = props.youtubeId
+  const [dimulai, setDimulai] = useState(false)
+  const [memutar, setMemutar] = useState(false)
+  const [buffer, setBuffer] = useState(false)
+  const [selesai, setSelesai] = useState(false)
+  const [gagal, setGagal] = useState(false)
+  const [waktu, setWaktu] = useState(0)
+  const [durasi, setDurasi] = useState(0)
+  const [volume, setVolume] = useState(100)
+  const [bisu, setBisu] = useState(false)
+  const [penuh, setPenuh] = useState(false)
+  const [sembunyi, setSembunyi] = useState(false)
+  const [thumbPakaiHq, setThumbPakaiHq] = useState(false)
+  const kotakRef = useRef(null)
+  const wadahRef = useRef(null)
+  const playerRef = useRef(null)
+  const timerSembunyi = useRef(null)
+
+  useEffect(function () {
+    const iv = setInterval(function () {
+      const p = playerRef.current
+      if (p && p.getCurrentTime) {
+        setWaktu(p.getCurrentTime() || 0)
+        const d = p.getDuration ? p.getDuration() : 0
+        if (d) setDurasi(d)
+      }
+    }, 250)
+    return function () { clearInterval(iv) }
+  }, [])
+
+  useEffect(function () {
+    function saatPenuh() { setPenuh(Boolean(document.fullscreenElement)) }
+    document.addEventListener('fullscreenchange', saatPenuh)
+    return function () {
+      document.removeEventListener('fullscreenchange', saatPenuh)
+      if (timerSembunyi.current) clearTimeout(timerSembunyi.current)
+      if (playerRef.current && playerRef.current.destroy) {
+        try { playerRef.current.destroy() } catch (e) {}
+        playerRef.current = null
+      }
+    }
+  }, [])
+
+  function sedangMain() {
+    const p = playerRef.current
+    return Boolean(p && p.getPlayerState && window.YT && p.getPlayerState() === window.YT.PlayerState.PLAYING)
+  }
+
+  function resetTimerSembunyi() {
+    if (!dimulai) return
+    if (timerSembunyi.current) clearTimeout(timerSembunyi.current)
+    setSembunyi(false)
+    if (sedangMain()) {
+      timerSembunyi.current = setTimeout(function () { setSembunyi(true) }, 2500)
+    }
+  }
+
+  async function mulai() {
+    setDimulai(true)
+    setGagal(false)
+    try {
+      const YT = await muatApiYouTube()
+      if (!wadahRef.current) return
+      playerRef.current = new YT.Player(wadahRef.current, {
+        videoId: youtubeId,
+        playerVars: {
+          autoplay: 1, controls: 0, modestbranding: 1, rel: 0, fs: 0,
+          disablekb: 1, iv_load_policy: 3, playsinline: 1, autohide: 1,
+          showinfo: 0, cc_load_policy: 0, origin: window.location.origin
+        },
+        events: {
+          onReady: function (e) {
+            setDurasi(e.target.getDuration() || 0)
+            paksaKualitas(e.target)
+            matikanSubtitel(e.target)
+            e.target.playVideo()
+          },
+          onStateChange: function (e) {
+            const S = window.YT.PlayerState
+            if (e.data === S.PLAYING) {
+              setMemutar(true); setBuffer(false); setSelesai(false)
+              paksaKualitas(e.target); matikanSubtitel(e.target)
+              resetTimerSembunyi()
+            } else if (e.data === S.PAUSED) {
+              setMemutar(false); setBuffer(false); setSembunyi(false)
+            } else if (e.data === S.BUFFERING) {
+              setBuffer(true)
+            } else if (e.data === S.ENDED) {
+              setMemutar(false); setSelesai(true); setSembunyi(false)
+            }
+          },
+          onError: function () { setGagal(true); setBuffer(false); setMemutar(false) }
+        }
+      })
+    } catch (e) {
+      setGagal(true)
+    }
+  }
+
+  function jungkir() {
+    const p = playerRef.current
+    if (!p) return
+    if (sedangMain()) p.pauseVideo()
+    else p.playVideo()
+  }
+
+  function geser(ev) {
+    const p = playerRef.current
+    if (!p || !durasi) return
+    const nilai = Number(ev.target.value)
+    p.seekTo((nilai / 100) * durasi, true)
+    setWaktu((nilai / 100) * durasi)
+  }
+
+  function aturVolume(ev) {
+    const p = playerRef.current
+    const nilai = Number(ev.target.value)
+    setVolume(nilai)
+    if (!p) return
+    p.setVolume(nilai)
+    if (nilai === 0) { p.mute(); setBisu(true) }
+    else if (bisu) { p.unMute(); setBisu(false) }
+  }
+
+  function aturBisu() {
+    const p = playerRef.current
+    if (!p) return
+    if (bisu) { p.unMute(); p.setVolume(volume || 100); setBisu(false) }
+    else { p.mute(); setBisu(true) }
+  }
+
+  function aturPenuh() {
+    const el = kotakRef.current
+    if (!el) return
+    if (document.fullscreenElement) document.exitFullscreen()
+    else if (el.requestFullscreen) el.requestFullscreen()
+  }
+
+  const thumb = thumbPakaiHq
+    ? 'https://i.ytimg.com/vi/' + youtubeId + '/hqdefault.jpg'
+    : 'https://img.youtube.com/vi/' + youtubeId + '/maxresdefault.jpg'
+  const persen = durasi ? Math.min(100, (waktu / durasi) * 100) : 0
+  const kontrolSembunyi = dimulai && !gagal && sembunyi
+
+  return (
+    <div
+      ref={kotakRef}
+      className={'pemutar-referensi group relative overflow-hidden rounded-2xl bg-black shadow-xl ' + (props.className || 'aspect-video w-full')}
+      style={{ cursor: kontrolSembunyi ? 'none' : 'default' }}
+      onMouseMove={resetTimerSembunyi}
+      onMouseLeave={function () { if (sedangMain()) { if (timerSembunyi.current) clearTimeout(timerSembunyi.current); setSembunyi(true) } }}
+    >
+      {/* Wadah player: setelah diisi YouTube, iframe diposisikan CSS dengan margin crop 70px */}
+      <div ref={wadahRef} className="h-full w-full" />
+
+      {/* Perisai penangkap klik */}
+      {dimulai && !selesai && !gagal ? (
+        <button type="button" aria-label="Putar atau jeda video" onClick={jungkir}
+          className="absolute inset-0 z-10 h-full w-full bg-transparent" style={{ cursor: kontrolSembunyi ? 'none' : 'default' }} />
+      ) : null}
+
+      {/* Ikon putar besar milik kita saat dijeda, menutup ikon bawaan YouTube */}
+      {dimulai && !memutar && !buffer && !selesai && !gagal ? (
+        <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center">
+          <span className="grid h-20 w-20 place-items-center rounded-full bg-black/60 text-white backdrop-blur-sm">
+            <IkonPlay className="ml-1 h-8 w-8" />
+          </span>
+        </div>
+      ) : null}
+
+      {/* Poster awal dengan tombol putar minimalis */}
+      {!dimulai ? (
+        <div className="absolute inset-0 z-20">
+          <img src={thumb} alt={props.title || 'Pratinjau video'} onError={function () { setThumbPakaiHq(true) }}
+            className="absolute inset-0 h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+          <div className="absolute inset-0 grid place-items-center">
+            <button type="button" onClick={mulai} title="Putar video"
+              className="grid h-12 w-12 place-items-center rounded-full border border-white/20 bg-black/50 text-white backdrop-blur-md transition hover:scale-110 hover:border-bsi-500 hover:bg-bsi-600">
+              <IkonPlay className="ml-0.5 h-5 w-5" />
+            </button>
+          </div>
+          {props.title ? <p className="absolute bottom-3 left-4 right-4 truncate text-sm font-semibold text-white drop-shadow-md">{props.title}</p> : null}
+        </div>
+      ) : null}
+
+      {/* Layar akhir dengan putar ulang */}
+      {selesai ? (
+        <div className="absolute inset-0 z-20 grid place-items-center bg-black/85 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-3">
+            <button type="button" title="Putar ulang"
+              onClick={function () { const p = playerRef.current; if (p) { p.seekTo(0, true); p.playVideo() } setSelesai(false) }}
+              className="grid h-14 w-14 place-items-center rounded-full bg-gold-500 text-slate-900 shadow-lg transition hover:scale-105">
+              <IkonUlang />
+            </button>
+            <p className="text-xs font-semibold text-slate-200">Putar ulang</p>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Layar gagal */}
+      {gagal ? (
+        <div className="absolute inset-0 z-30 grid place-items-center bg-black/90">
+          <div className="flex flex-col items-center gap-2 px-6 text-center">
+            <p className="text-sm font-semibold text-slate-200">Video tidak dapat dimuat</p>
+            <p className="text-xs text-slate-400">Periksa koneksi atau ketersediaan video di saluran.</p>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Panel kontrol overlay di atas video */}
+      {dimulai && !gagal ? (
+        <div className={'absolute inset-x-0 bottom-0 z-30 flex items-center gap-3 bg-gradient-to-t from-black/90 via-black/60 to-transparent px-4 pb-3 pt-10 transition-opacity duration-300 ' + (kontrolSembunyi ? 'pointer-events-none opacity-0' : 'opacity-100')}>
+          <button type="button" onClick={jungkir} title={memutar ? 'Jeda' : 'Putar'}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-bsi-700 text-white transition hover:bg-bsi-600">
+            {memutar ? <IkonPause className="h-4 w-4" /> : <IkonPlay className="ml-0.5 h-4 w-4" />}
+          </button>
+          <input type="range" min="0" max="100" step="0.1" value={persen} onChange={geser} title="Geser durasi"
+            className="pemutar-progress h-1.5 w-full cursor-pointer appearance-none rounded-full outline-none"
+            style={{ background: 'linear-gradient(to right, #166534 0%, #166534 ' + persen + '%, rgba(255,255,255,0.25) ' + persen + '%, rgba(255,255,255,0.25) 100%)' }} />
+          <span className="min-w-[84px] shrink-0 text-center text-[11px] font-semibold tabular-nums text-slate-200">{formatWaktu(waktu)} / {formatWaktu(durasi)}</span>
+          <button type="button" onClick={aturBisu} title={bisu ? 'Nyalakan suara' : 'Bisukan'}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/10 text-white transition hover:bg-white/20">
+            {bisu ? <IkonBisu /> : <IkonSuara />}
+          </button>
+          <input type="range" min="0" max="100" value={bisu ? 0 : volume} onChange={aturVolume} title="Volume"
+            className="pemutar-volume h-1 w-16 shrink-0 cursor-pointer appearance-none rounded-full outline-none"
+            style={{ background: 'linear-gradient(to right, #eab308 0%, #eab308 ' + (bisu ? 0 : volume) + '%, rgba(255,255,255,0.25) ' + (bisu ? 0 : volume) + '%, rgba(255,255,255,0.25) 100%)' }} />
+          {buffer ? <span className="inline-block h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-gold-500 border-t-transparent" /> : null}
+          <button type="button" onClick={aturPenuh} title={penuh ? 'Keluar layar penuh' : 'Layar penuh'}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/10 text-white transition hover:bg-white/20">
+            {penuh ? <IkonKecil /> : <IkonPenuh />}
+          </button>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+`)
+console.log('[BERHASIL] src/components/PemutarVideo.jsx ditulis ulang dengan cropping margin')
+
+/* ===== 2. CSS v4: paksa posisi crop iframe dan aturan layar penuh ===== */
+const FILE_CSS = 'src/index.css'
+if (fs.existsSync(path.join(root, FILE_CSS))) {
+  let css = baca(FILE_CSS)
+  if (css.includes('/* pusat-pemutar-v4 */')) {
+    console.log('[SUDAH ADA] Aturan CSS pusat-pemutar-v4')
+  } else {
+    css = css.trimEnd() + '\n\n' + `/* pusat-pemutar-v4: margin crop 70px menyembunyikan seluruh chrome bawaan YouTube */
+.pemutar-referensi iframe {
+  position: absolute !important;
+  top: -70px !important;
+  left: -2px !important;
+  width: calc(100% + 4px) !important;
+  height: calc(100% + 140px) !important;
+  pointer-events: none !important;
+  border: 0 !important;
+  background: #000 !important;
+}
+.pemutar-referensi:fullscreen {
+  aspect-ratio: auto !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: none !important;
+  border-radius: 0 !important;
+  background: #000 !important;
+}
+`
+    simpan(FILE_CSS, css)
+    console.log('[BERHASIL] Aturan CSS pusat-pemutar-v4 ditambahkan')
+  }
+} else {
+  console.log('[LEWATI] index.css tidak ditemukan')
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Cara kerja gabungan ini:')
+console.log('1. Iframe dibuat 140 piksel lebih tinggi dan digeser naik 70 piksel lewat CSS.')
+console.log('2. Seluruh chrome bawaan (chip channel, tombol share dan jam, logo YouTube) jatuh ke margin 70 piksel yang terpotong overflow hidden, sehingga tidak pernah terlihat.')
+console.log('3. Video tetap mengisi viewport persis di kartu 16:9 karena pita letterbox internal YouTube tepat sama dengan margin crop.')
+console.log('4. Di layar penuh video otomatis tengah dengan pita hitam atas bawah yang simetris.')
+console.log('5. Kontrol custom melayang di atas video, jadi tidak ada lagi pita hitam bekas panel kontrol.')
+console.log('6. Saat dijeda, ikon putar besar milik kita menutup ikon bawaan YouTube di tengah.')
+```
+
+## File: apply-pemutar-custom.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai memasang pemutar video kustom bertema BSI...')
+console.log('')
+
+/* ===== 1. Komponen PemutarVideo.jsx ===== */
+simpan('src/components/PemutarVideo.jsx', `import { useEffect, useRef, useState } from 'react'
+
+let janjiApi = null
+function muatApiYouTube() {
+  if (janjiApi) return janjiApi
+  janjiApi = new Promise(function (resolve) {
+    if (window.YT && window.YT.Player) { resolve(window.YT); return }
+    const lama = window.onYouTubeIframeAPIReady
+    window.onYouTubeIframeAPIReady = function () {
+      if (lama) lama()
+      resolve(window.YT)
+    }
+    const tag = document.createElement('script')
+    tag.src = 'https://www.youtube.com/iframe_api'
+    tag.async = true
+    document.head.appendChild(tag)
+  })
+  return janjiApi
+}
+
+function formatWaktu(detik) {
+  const d = isFinite(detik) && detik > 0 ? detik : 0
+  const m = Math.floor(d / 60)
+  const s = Math.floor(d % 60)
+  return m + ':' + (s < 10 ? '0' : '') + s
+}
+
+function IkonPlay() { return <svg viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6"><path d="M8 5v14l11-7z" /></svg> }
+function IkonPause() { return <svg viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6"><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg> }
+function IkonSuara() { return <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5"><path d="M3 10v4h4l5 5V5L7 10H3z" /><path d="M16 8.5a4 4 0 0 1 0 7M18.5 6a7 7 0 0 1 0 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg> }
+function IkonBisu() { return <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5"><path d="M3 10v4h4l5 5V5L7 10H3z" /><path d="M16 9l6 6M22 9l-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg> }
+function IkonPenuh() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-5 w-5"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg> }
+function IkonKecil() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-5 w-5"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" /></svg> }
+function IkonUlang() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></svg> }
+
+export default function PemutarVideo(props) {
+  const youtubeId = props.youtubeId
+  const [dimulai, setDimulai] = useState(false)
+  const [memutar, setMemutar] = useState(false)
+  const [buffer, setBuffer] = useState(false)
+  const [selesai, setSelesai] = useState(false)
+  const [gagal, setGagal] = useState(false)
+  const [waktu, setWaktu] = useState(0)
+  const [durasi, setDurasi] = useState(0)
+  const [bisu, setBisu] = useState(false)
+  const [penuh, setPenuh] = useState(false)
+  const kotakRef = useRef(null)
+  const wadahRef = useRef(null)
+  const playerRef = useRef(null)
+
+  useEffect(function () {
+    const iv = setInterval(function () {
+      const p = playerRef.current
+      if (p && p.getCurrentTime) {
+        setWaktu(p.getCurrentTime() || 0)
+        const d = p.getDuration ? p.getDuration() : 0
+        if (d) setDurasi(d)
+      }
+    }, 400)
+    return function () { clearInterval(iv) }
+  }, [])
+
+  useEffect(function () {
+    function saatPenuh() { setPenuh(Boolean(document.fullscreenElement)) }
+    document.addEventListener('fullscreenchange', saatPenuh)
+    return function () {
+      document.removeEventListener('fullscreenchange', saatPenuh)
+      if (playerRef.current && playerRef.current.destroy) {
+        try { playerRef.current.destroy() } catch (e) {}
+        playerRef.current = null
+      }
+    }
+  }, [])
+
+  async function mulai() {
+    setDimulai(true)
+    setGagal(false)
+    try {
+      const YT = await muatApiYouTube()
+      if (!wadahRef.current) return
+      playerRef.current = new YT.Player(wadahRef.current, {
+        videoId: youtubeId,
+        playerVars: { autoplay: 1, controls: 0, modestbranding: 1, rel: 0, fs: 0, disablekb: 1, iv_load_policy: 3, playsinline: 1, origin: window.location.origin },
+        events: {
+          onReady: function (e) {
+            setDurasi(e.target.getDuration() || 0)
+            e.target.playVideo()
+          },
+          onStateChange: function (e) {
+            const S = window.YT.PlayerState
+            if (e.data === S.PLAYING) { setMemutar(true); setBuffer(false); setSelesai(false) }
+            else if (e.data === S.PAUSED) { setMemutar(false); setBuffer(false) }
+            else if (e.data === S.BUFFERING) { setBuffer(true) }
+            else if (e.data === S.ENDED) { setMemutar(false); setSelesai(true) }
+          },
+          onError: function () { setGagal(true); setBuffer(false); setMemutar(false) }
+        }
+      })
+    } catch (e) {
+      setGagal(true)
+    }
+  }
+
+  function jungkir() {
+    const p = playerRef.current
+    if (!p) return
+    if (memutar) p.pauseVideo()
+    else p.playVideo()
+  }
+
+  function cari(ev) {
+    const p = playerRef.current
+    if (!p || !durasi) return
+    const kotak = ev.currentTarget.getBoundingClientRect()
+    const rasio = Math.min(1, Math.max(0, (ev.clientX - kotak.left) / kotak.width))
+    p.seekTo(rasio * durasi, true)
+    setWaktu(rasio * durasi)
+  }
+
+  function aturBisu() {
+    const p = playerRef.current
+    if (!p) return
+    if (bisu) { p.unMute(); setBisu(false) } else { p.mute(); setBisu(true) }
+  }
+
+  function aturPenuh() {
+    const el = kotakRef.current
+    if (!el) return
+    if (document.fullscreenElement) document.exitFullscreen()
+    else if (el.requestFullscreen) el.requestFullscreen()
+  }
+
+  const thumb = 'https://i.ytimg.com/vi/' + youtubeId + '/hqdefault.jpg'
+  const persen = durasi ? Math.min(100, (waktu / durasi) * 100) : 0
+
+  return (
+    <div ref={kotakRef} className={'group relative overflow-hidden bg-slate-950 ' + (props.className || 'aspect-video w-full')}>
+      <div className="absolute inset-0">
+        <div ref={wadahRef} className="h-full w-full" />
+      </div>
+
+      {dimulai && !selesai && !gagal ? (
+        <button type="button" aria-label="Putar atau jeda video" onClick={jungkir} className="absolute inset-0 z-10 h-full w-full cursor-pointer bg-transparent" />
+      ) : null}
+
+      {!dimulai ? (
+        <div className="absolute inset-0 z-20">
+          <img src={thumb} alt={props.title || 'Pratinjau video'} className="absolute inset-0 h-full w-full object-cover opacity-85" />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/25 to-slate-950/10" />
+          <div className="absolute inset-0 grid place-items-center">
+            <button type="button" onClick={mulai} title="Putar video"
+              className="grid h-16 w-16 place-items-center rounded-full bg-bsi-700 text-white shadow-xl shadow-bsi-900/50 ring-4 ring-white/20 transition hover:scale-105 hover:bg-bsi-600">
+              <IkonPlay />
+            </button>
+          </div>
+          {props.title ? <p className="absolute bottom-3 left-4 right-4 truncate text-sm font-semibold text-white drop-shadow-md">{props.title}</p> : null}
+        </div>
+      ) : null}
+
+      {selesai ? (
+        <div className="absolute inset-0 z-20 grid place-items-center bg-slate-950/85 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-3">
+            <button type="button" title="Putar ulang"
+              onClick={function () { const p = playerRef.current; if (p) { p.seekTo(0, true); p.playVideo() } setSelesai(false) }}
+              className="grid h-14 w-14 place-items-center rounded-full bg-gold-500 text-slate-900 shadow-lg transition hover:scale-105">
+              <IkonUlang />
+            </button>
+            <p className="text-xs font-semibold text-slate-200">Putar ulang</p>
+          </div>
+        </div>
+      ) : null}
+
+      {gagal ? (
+        <div className="absolute inset-0 z-30 grid place-items-center bg-slate-950/90">
+          <div className="flex flex-col items-center gap-2 px-6 text-center">
+            <p className="text-sm font-semibold text-slate-200">Video tidak dapat dimuat</p>
+            <p className="text-xs text-slate-400">Periksa koneksi atau ketersediaan video di saluran.</p>
+          </div>
+        </div>
+      ) : null}
+
+      {dimulai && !gagal ? (
+        <div className={'absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-slate-950/95 via-slate-950/70 to-transparent px-3 pb-2.5 pt-10 transition-opacity duration-300 ' + (memutar ? 'opacity-0 group-hover:opacity-100 focus-within:opacity-100' : 'opacity-100')}>
+          <div className="mb-2 cursor-pointer py-1" onClick={cari} title="Geser durasi">
+            <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-white/20">
+              <div className="absolute inset-y-0 left-0 rounded-full bg-gold-500" style={{ width: persen + '%' }} />
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-white">
+            <button type="button" onClick={jungkir} title={memutar ? 'Jeda' : 'Putar'} className="grid h-9 w-9 place-items-center rounded-full bg-bsi-700 transition hover:bg-bsi-600">
+              {memutar ? <IkonPause /> : <IkonPlay />}
+            </button>
+            <button type="button" onClick={aturBisu} title={bisu ? 'Nyalakan suara' : 'Bisukan'} className="grid h-9 w-9 place-items-center rounded-full bg-white/10 transition hover:bg-white/20">
+              {bisu ? <IkonBisu /> : <IkonSuara />}
+            </button>
+            <span className="ml-1 text-[11px] font-semibold tabular-nums text-slate-200">{formatWaktu(waktu)} / {formatWaktu(durasi)}</span>
+            <span className="flex-1" />
+            {buffer ? <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-gold-500 border-t-transparent" /> : null}
+            <button type="button" onClick={aturPenuh} title={penuh ? 'Keluar layar penuh' : 'Layar penuh'} className="grid h-9 w-9 place-items-center rounded-full bg-white/10 transition hover:bg-white/20">
+              {penuh ? <IkonKecil /> : <IkonPenuh />}
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+`)
+console.log('[BERHASIL] src/components/PemutarVideo.jsx ditulis')
+
+/* ===== 2. cards.jsx: pakai pemutar kustom ===== */
+const FILE_C = 'src/components/cards.jsx'
+let c = baca(FILE_C)
+if (!c.includes("PemutarVideo.jsx")) {
+  c = "import PemutarVideo from './PemutarVideo.jsx'\n" + c
+  console.log('[BERHASIL] Import PemutarVideo ditambahkan di cards.jsx')
+}
+const regexIt = /<iframe src=\{'https:\/\/www\.youtube-nocookie\.com\/embed\/' \+ it\.youtube_id[^>]*?\/>/
+const regexItem = /<iframe src=\{'https:\/\/www\.youtube-nocookie\.com\/embed\/' \+ item\.youtube_id[^>]*?\/>/
+if (regexIt.test(c)) {
+  c = c.replace(regexIt, `<PemutarVideo key={it.youtube_id} youtubeId={it.youtube_id} title={it.judul} className="aspect-video w-full rounded-2xl mb-3" />`)
+  console.log('[BERHASIL] Iframe detail logbook diganti pemutar kustom')
+} else {
+  console.log('[TIDAK KETEMU] Iframe detail logbook')
+}
+if (regexItem.test(c)) {
+  c = c.replace(regexItem, `<PemutarVideo key={item.youtube_id} youtubeId={item.youtube_id} title={item.judul} className="aspect-video w-full rounded-2xl" />`)
+  console.log('[BERHASIL] Iframe detail galeri diganti pemutar kustom')
+} else {
+  console.log('[TIDAK KETEMU] Iframe detail galeri')
+}
+simpan(FILE_C, c)
+
+/* ===== 3. ui.jsx: lightbox pakai pemutar kustom ===== */
+const FILE_U = 'src/components/ui.jsx'
+let u = baca(FILE_U)
+if (!u.includes("PemutarVideo.jsx")) {
+  u = "import PemutarVideo from './PemutarVideo.jsx'\n" + u
+  console.log('[BERHASIL] Import PemutarVideo ditambahkan di ui.jsx')
+}
+const regexProps = /<iframe src=\{'https:\/\/www\.youtube-nocookie\.com\/embed\/' \+ props\.youtubeId[^>]*?\/>/
+if (regexProps.test(u)) {
+  u = u.replace(regexProps, `<PemutarVideo key={props.youtubeId} youtubeId={props.youtubeId} title={props.title || 'Video'} className="mx-auto aspect-video w-full rounded-2xl" />`)
+  console.log('[BERHASIL] Iframe lightbox diganti pemutar kustom')
+} else {
+  console.log('[TIDAK KETEMU] Iframe lightbox')
+}
+simpan(FILE_U, u)
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Yang akan terlihat:')
+console.log('1. Poster thumbnail dengan tombol putar hijau BSI dan judul video.')
+console.log('2. Saat diputar, tidak ada kontrol maupun logo bawaan YouTube.')
+console.log('3. Kontrol bar kaca muncul saat kursor diarahkan: putar, bisu, waktu, layar penuh.')
+console.log('4. Garis progres emas bisa diklik untuk menggeser durasi.')
+console.log('5. Akhir video menampilkan tombol putar ulang emas, bukan video terkait YouTube.')
+```
+
+## File: apply-pemutar-full-custom.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai memasang pemutar full custom dan membuang semua bawaan YouTube...')
+console.log('')
+
+/* ===== 1. PemutarVideo.jsx versi keras ===== */
+simpan('src/components/PemutarVideo.jsx', `import { useEffect, useRef, useState } from 'react'
+
+let janjiApi = null
+function muatApiYouTube() {
+  if (janjiApi) return janjiApi
+  janjiApi = new Promise(function (resolve) {
+    if (window.YT && window.YT.Player) { resolve(window.YT); return }
+    const lama = window.onYouTubeIframeAPIReady
+    window.onYouTubeIframeAPIReady = function () {
+      if (lama) lama()
+      resolve(window.YT)
+    }
+    const tag = document.createElement('script')
+    tag.src = 'https://www.youtube.com/iframe_api'
+    tag.async = true
+    document.head.appendChild(tag)
+  })
+  return janjiApi
+}
+
+function formatWaktu(detik) {
+  const d = isFinite(detik) && detik > 0 ? detik : 0
+  const m = Math.floor(d / 60)
+  const s = Math.floor(d % 60)
+  return m + ':' + (s < 10 ? '0' : '') + s
+}
+
+function IkonPlay() { return <svg viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6"><path d="M8 5v14l11-7z" /></svg> }
+function IkonPause() { return <svg viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6"><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg> }
+function IkonSuara() { return <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5"><path d="M3 10v4h4l5 5V5L7 10H3z" /><path d="M16 8.5a4 4 0 0 1 0 7M18.5 6a7 7 0 0 1 0 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg> }
+function IkonBisu() { return <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5"><path d="M3 10v4h4l5 5V5L7 10H3z" /><path d="M16 9l6 6M22 9l-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg> }
+function IkonPenuh() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-5 w-5"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg> }
+function IkonKecil() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-5 w-5"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" /></svg> }
+function IkonUlang() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></svg> }
+
+export default function PemutarVideo(props) {
+  const youtubeId = props.youtubeId
+  const [dimulai, setDimulai] = useState(false)
+  const [memutar, setMemutar] = useState(false)
+  const [buffer, setBuffer] = useState(false)
+  const [selesai, setSelesai] = useState(false)
+  const [gagal, setGagal] = useState(false)
+  const [waktu, setWaktu] = useState(0)
+  const [durasi, setDurasi] = useState(0)
+  const [bisu, setBisu] = useState(false)
+  const [penuh, setPenuh] = useState(false)
+  const kotakRef = useRef(null)
+  const wadahRef = useRef(null)
+  const playerRef = useRef(null)
+
+  useEffect(function () {
+    const iv = setInterval(function () {
+      const p = playerRef.current
+      if (p && p.getCurrentTime) {
+        setWaktu(p.getCurrentTime() || 0)
+        const d = p.getDuration ? p.getDuration() : 0
+        if (d) setDurasi(d)
+      }
+    }, 400)
+    return function () { clearInterval(iv) }
+  }, [])
+
+  useEffect(function () {
+    function saatPenuh() { setPenuh(Boolean(document.fullscreenElement)) }
+    document.addEventListener('fullscreenchange', saatPenuh)
+    return function () {
+      document.removeEventListener('fullscreenchange', saatPenuh)
+      if (playerRef.current && playerRef.current.destroy) {
+        try { playerRef.current.destroy() } catch (e) {}
+        playerRef.current = null
+      }
+    }
+  }, [])
+
+  async function mulai() {
+    setDimulai(true)
+    setGagal(false)
+    try {
+      const YT = await muatApiYouTube()
+      if (!wadahRef.current) return
+      playerRef.current = new YT.Player(wadahRef.current, {
+        videoId: youtubeId,
+        playerVars: {
+          autoplay: 1,
+          controls: 0,
+          modestbranding: 1,
+          rel: 0,
+          fs: 0,
+          disablekb: 1,
+          iv_load_policy: 3,
+          playsinline: 1,
+          autohide: 1,
+          showinfo: 0,
+          origin: window.location.origin
+        },
+        events: {
+          onReady: function (e) {
+            setDurasi(e.target.getDuration() || 0)
+            e.target.playVideo()
+          },
+          onStateChange: function (e) {
+            const S = window.YT.PlayerState
+            if (e.data === S.PLAYING) { setMemutar(true); setBuffer(false); setSelesai(false) }
+            else if (e.data === S.PAUSED) { setMemutar(false); setBuffer(false) }
+            else if (e.data === S.BUFFERING) { setBuffer(true) }
+            else if (e.data === S.ENDED) { setMemutar(false); setSelesai(true) }
+          },
+          onError: function () { setGagal(true); setBuffer(false); setMemutar(false) }
+        }
+      })
+    } catch (e) {
+      setGagal(true)
+    }
+  }
+
+  function jungkir() {
+    const p = playerRef.current
+    if (!p) return
+    if (memutar) p.pauseVideo()
+    else p.playVideo()
+  }
+
+  function cari(ev) {
+    const p = playerRef.current
+    if (!p || !durasi) return
+    const kotak = ev.currentTarget.getBoundingClientRect()
+    const rasio = Math.min(1, Math.max(0, (ev.clientX - kotak.left) / kotak.width))
+    p.seekTo(rasio * durasi, true)
+    setWaktu(rasio * durasi)
+  }
+
+  function aturBisu() {
+    const p = playerRef.current
+    if (!p) return
+    if (bisu) { p.unMute(); setBisu(false) } else { p.mute(); setBisu(true) }
+  }
+
+  function aturPenuh() {
+    const el = kotakRef.current
+    if (!el) return
+    if (document.fullscreenElement) document.exitFullscreen()
+    else if (el.requestFullscreen) el.requestFullscreen()
+  }
+
+  const thumb = 'https://i.ytimg.com/vi/' + youtubeId + '/hqdefault.jpg'
+  const persen = durasi ? Math.min(100, (waktu / durasi) * 100) : 0
+
+  return (
+    <div ref={kotakRef} className={'pemutar-bungkus group relative overflow-hidden bg-slate-950 ' + (props.className || 'aspect-video w-full')}>
+      <div className="absolute inset-0 z-0">
+        <div ref={wadahRef} className="h-full w-full" />
+      </div>
+
+      {dimulai && !selesai && !gagal ? (
+        <button type="button" aria-label="Putar atau jeda video" onClick={jungkir} className="absolute inset-0 z-10 h-full w-full cursor-pointer bg-transparent" />
+      ) : null}
+
+      {dimulai && !memutar && !buffer && !selesai && !gagal ? (
+        <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center">
+          <span className="grid h-14 w-14 place-items-center rounded-full bg-slate-950/60 text-white ring-1 ring-white/20 backdrop-blur-sm">
+            <IkonPlay />
+          </span>
+        </div>
+      ) : null}
+
+      {!dimulai ? (
+        <div className="absolute inset-0 z-20">
+          <img src={thumb} alt={props.title || 'Pratinjau video'} className="absolute inset-0 h-full w-full object-cover opacity-85" />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/25 to-slate-950/10" />
+          <div className="absolute inset-0 grid place-items-center">
+            <button type="button" onClick={mulai} title="Putar video"
+              className="grid h-16 w-16 place-items-center rounded-full bg-bsi-700 text-white shadow-xl shadow-bsi-900/50 ring-4 ring-white/20 transition hover:scale-105 hover:bg-bsi-600">
+              <IkonPlay />
+            </button>
+          </div>
+          {props.title ? <p className="absolute bottom-3 left-4 right-4 truncate text-sm font-semibold text-white drop-shadow-md">{props.title}</p> : null}
+        </div>
+      ) : null}
+
+      {selesai ? (
+        <div className="absolute inset-0 z-20 grid place-items-center bg-slate-950/85 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-3">
+            <button type="button" title="Putar ulang"
+              onClick={function () { const p = playerRef.current; if (p) { p.seekTo(0, true); p.playVideo() } setSelesai(false) }}
+              className="grid h-14 w-14 place-items-center rounded-full bg-gold-500 text-slate-900 shadow-lg transition hover:scale-105">
+              <IkonUlang />
+            </button>
+            <p className="text-xs font-semibold text-slate-200">Putar ulang</p>
+          </div>
+        </div>
+      ) : null}
+
+      {gagal ? (
+        <div className="absolute inset-0 z-30 grid place-items-center bg-slate-950/90">
+          <div className="flex flex-col items-center gap-2 px-6 text-center">
+            <p className="text-sm font-semibold text-slate-200">Video tidak dapat dimuat</p>
+            <p className="text-xs text-slate-400">Periksa koneksi atau ketersediaan video di saluran.</p>
+          </div>
+        </div>
+      ) : null}
+
+      {dimulai && !gagal ? (
+        <div className={'absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-slate-950/95 via-slate-950/70 to-transparent px-3 pb-2.5 pt-10 transition-opacity duration-300 ' + (memutar ? 'opacity-0 group-hover:opacity-100 focus-within:opacity-100' : 'opacity-100')}>
+          <div className="mb-2 cursor-pointer py-1" onClick={cari} title="Geser durasi">
+            <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-white/20">
+              <div className="absolute inset-y-0 left-0 rounded-full bg-gold-500" style={{ width: persen + '%' }} />
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-white">
+            <button type="button" onClick={jungkir} title={memutar ? 'Jeda' : 'Putar'} className="grid h-9 w-9 place-items-center rounded-full bg-bsi-700 transition hover:bg-bsi-600">
+              {memutar ? <IkonPause /> : <IkonPlay />}
+            </button>
+            <button type="button" onClick={aturBisu} title={bisu ? 'Nyalakan suara' : 'Bisukan'} className="grid h-9 w-9 place-items-center rounded-full bg-white/10 transition hover:bg-white/20">
+              {bisu ? <IkonBisu /> : <IkonSuara />}
+            </button>
+            <span className="ml-1 text-[11px] font-semibold tabular-nums text-slate-200">{formatWaktu(waktu)} / {formatWaktu(durasi)}</span>
+            <span className="flex-1" />
+            {buffer ? <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-gold-500 border-t-transparent" /> : null}
+            <button type="button" onClick={aturPenuh} title={penuh ? 'Keluar layar penuh' : 'Layar penuh'} className="grid h-9 w-9 place-items-center rounded-full bg-white/10 transition hover:bg-white/20">
+              {penuh ? <IkonKecil /> : <IkonPenuh />}
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+`)
+console.log('[BERHASIL] src/components/PemutarVideo.jsx ditulis ulang versi full custom')
+
+/* ===== 2. Buang semua iframe bawaan YouTube di cards.jsx dan ui.jsx ===== */
+const regexIframe = /<iframe[^>]*?youtube-nocookie\.com\/embed\/[^>]*?\/>/g
+;['src/components/cards.jsx', 'src/components/ui.jsx'].forEach(function (rel) {
+  if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan'); return }
+  let isi = baca(rel)
+  let jumlah = 0
+  const hasil = isi.replace(regexIframe, function (m) {
+    jumlah++
+    if (m.includes('it.youtube_id')) return `<PemutarVideo key={it.youtube_id} youtubeId={it.youtube_id} title={it.judul} className="aspect-video w-full rounded-2xl mb-3" />`
+    if (m.includes('item.youtube_id')) return `<PemutarVideo key={item.youtube_id} youtubeId={item.youtube_id} title={item.judul} className="aspect-video w-full rounded-2xl" />`
+    if (m.includes('props.youtubeId')) return `<PemutarVideo key={props.youtubeId} youtubeId={props.youtubeId} title={props.title || 'Video'} className="mx-auto aspect-video w-full rounded-2xl" />`
+    return m
+  })
+  if (jumlah > 0) {
+    let akhir = hasil
+    if (!/from '\.\/PemutarVideo\.jsx'/.test(akhir)) {
+      akhir = "import PemutarVideo from './PemutarVideo.jsx'\n" + akhir
+    }
+    simpan(rel, akhir)
+    console.log('[BERHASIL] ' + jumlah + ' iframe bawaan diganti pemutar custom di ' + rel)
+  } else {
+    console.log('[SUDAH BERSIH] Tidak ada iframe bawaan tersisa di ' + rel)
+  }
+})
+
+/* ===== 3. CSS: matikan pointer dan border iframe ===== */
+const FILE_CSS = 'src/index.css'
+if (fs.existsSync(path.join(root, FILE_CSS))) {
+  let css = baca(FILE_CSS)
+  const aturan = `.pemutar-bungkus iframe {
+  pointer-events: none;
+  border: 0;
+  background: transparent;
+}`
+  if (css.includes('.pemutar-bungkus iframe')) {
+    console.log('[SUDAH ADA] Aturan CSS pemutar-bungkus')
+  } else {
+    css = css.trimEnd() + '\n\n' + aturan + '\n'
+    simpan(FILE_CSS, css)
+    console.log('[BERHASIL] Aturan CSS pemutar-bungkus ditambahkan')
+  }
+} else {
+  console.log('[LEWATI] index.css tidak ditemukan')
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Yang kini berlaku:')
+console.log('1. Tidak ada lagi elemen iframe bawaan YouTube di detail logbook, detail galeri, maupun lightbox.')
+console.log('2. Iframe player dimuat tanpa kontrol bawaan (controls 0) dan pointer-nya dimatikan lewat CSS.')
+console.log('3. Lapisan penutup transparan menangkap semua klik dan hover, sehingga UI bawaan YouTube tidak pernah terpicu.')
+console.log('4. Saat jeda, ikon putar milik kita yang muncul di tengah, bukan ikon bawaan YouTube.')
+console.log('5. Akhir video menampilkan tombol putar ulang emas milik kita, bukan layar akhir YouTube.')
+```
+
+## File: apply-pemutar-pas-tengah.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai memperbaiki ukuran video dan posisi tengah layar penuh...')
+console.log('')
+
+/* ===== 1. PemutarVideo.jsx: iframe mengisi wadah persis, kontrol jadi overlay ===== */
+simpan('src/components/PemutarVideo.jsx', `import { useEffect, useRef, useState } from 'react'
+
+let janjiApi = null
+function muatApiYouTube() {
+  if (janjiApi) return janjiApi
+  janjiApi = new Promise(function (resolve) {
+    if (window.YT && window.YT.Player) { resolve(window.YT); return }
+    const lama = window.onYouTubeIframeAPIReady
+    window.onYouTubeIframeAPIReady = function () {
+      if (lama) lama()
+      resolve(window.YT)
+    }
+    const tag = document.createElement('script')
+    tag.src = 'https://www.youtube.com/iframe_api'
+    tag.async = true
+    document.head.appendChild(tag)
+  })
+  return janjiApi
+}
+
+function formatWaktu(detik) {
+  const d = isFinite(detik) && detik > 0 ? detik : 0
+  const m = Math.floor(d / 60)
+  const s = Math.floor(d % 60)
+  return m + ':' + (s < 10 ? '0' : '') + s
+}
+
+function paksaKualitas(p) {
+  try { if (p && typeof p.setPlaybackQualityRange === 'function') p.setPlaybackQualityRange('720', '1080') } catch (e) {}
+}
+function matikanSubtitel(p) {
+  try { if (p && typeof p.unloadModule === 'function') p.unloadModule('captions') } catch (e) {}
+  try { if (p && typeof p.setOption === 'function') p.setOption('captions', 'track', {}) } catch (e) {}
+}
+
+function IkonPlay({ className }) { return <svg viewBox="0 0 24 24" fill="currentColor" className={className || 'h-5 w-5'}><path d="M8 5v14l11-7z" /></svg> }
+function IkonPause({ className }) { return <svg viewBox="0 0 24 24" fill="currentColor" className={className || 'h-5 w-5'}><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg> }
+function IkonSuara() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+      <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
+    </svg>
+  )
+}
+function IkonBisu() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+      <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
+    </svg>
+  )
+}
+function IkonPenuh() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg> }
+function IkonKecil() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" /></svg> }
+function IkonUlang() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></svg> }
+
+export default function PemutarVideo(props) {
+  const youtubeId = props.youtubeId
+  const [dimulai, setDimulai] = useState(false)
+  const [memutar, setMemutar] = useState(false)
+  const [buffer, setBuffer] = useState(false)
+  const [selesai, setSelesai] = useState(false)
+  const [gagal, setGagal] = useState(false)
+  const [waktu, setWaktu] = useState(0)
+  const [durasi, setDurasi] = useState(0)
+  const [volume, setVolume] = useState(100)
+  const [bisu, setBisu] = useState(false)
+  const [penuh, setPenuh] = useState(false)
+  const [sembunyi, setSembunyi] = useState(false)
+  const [tutup, setTutup] = useState(false)
+  const [thumbPakaiHq, setThumbPakaiHq] = useState(false)
+  const kotakRef = useRef(null)
+  const wadahRef = useRef(null)
+  const playerRef = useRef(null)
+  const timerSembunyi = useRef(null)
+  const timerTutup = useRef(null)
+  const putarPertama = useRef(false)
+
+  useEffect(function () {
+    const iv = setInterval(function () {
+      const p = playerRef.current
+      if (p && p.getCurrentTime) {
+        setWaktu(p.getCurrentTime() || 0)
+        const d = p.getDuration ? p.getDuration() : 0
+        if (d) setDurasi(d)
+      }
+    }, 250)
+    return function () { clearInterval(iv) }
+  }, [])
+
+  useEffect(function () {
+    function saatPenuh() { setPenuh(Boolean(document.fullscreenElement)) }
+    document.addEventListener('fullscreenchange', saatPenuh)
+    return function () {
+      document.removeEventListener('fullscreenchange', saatPenuh)
+      if (timerSembunyi.current) clearTimeout(timerSembunyi.current)
+      if (timerTutup.current) clearTimeout(timerTutup.current)
+      if (playerRef.current && playerRef.current.destroy) {
+        try { playerRef.current.destroy() } catch (e) {}
+        playerRef.current = null
+      }
+    }
+  }, [])
+
+  function sedangMain() {
+    const p = playerRef.current
+    return Boolean(p && p.getPlayerState && window.YT && p.getPlayerState() === window.YT.PlayerState.PLAYING)
+  }
+
+  function resetTimerSembunyi() {
+    if (!dimulai) return
+    if (timerSembunyi.current) clearTimeout(timerSembunyi.current)
+    setSembunyi(false)
+    if (sedangMain()) {
+      timerSembunyi.current = setTimeout(function () { setSembunyi(true) }, 2500)
+    }
+  }
+
+  async function mulai() {
+    setDimulai(true)
+    setGagal(false)
+    setTutup(true)
+    try {
+      const YT = await muatApiYouTube()
+      if (!wadahRef.current) return
+      playerRef.current = new YT.Player(wadahRef.current, {
+        videoId: youtubeId,
+        playerVars: {
+          autoplay: 1, controls: 0, modestbranding: 1, rel: 0, fs: 0,
+          disablekb: 1, iv_load_policy: 3, playsinline: 1, autohide: 1,
+          showinfo: 0, cc_load_policy: 0, origin: window.location.origin
+        },
+        events: {
+          onReady: function (e) {
+            setDurasi(e.target.getDuration() || 0)
+            paksaKualitas(e.target)
+            matikanSubtitel(e.target)
+            e.target.playVideo()
+          },
+          onStateChange: function (e) {
+            const S = window.YT.PlayerState
+            if (e.data === S.PLAYING) {
+              setMemutar(true); setBuffer(false); setSelesai(false)
+              paksaKualitas(e.target); matikanSubtitel(e.target)
+              if (!putarPertama.current) {
+                putarPertama.current = true
+                timerTutup.current = setTimeout(function () { setTutup(false) }, 2600)
+              }
+              resetTimerSembunyi()
+            } else if (e.data === S.PAUSED) {
+              setMemutar(false); setBuffer(false); setSembunyi(false)
+            } else if (e.data === S.BUFFERING) {
+              setBuffer(true)
+            } else if (e.data === S.ENDED) {
+              setMemutar(false); setSelesai(true); setSembunyi(false); setTutup(false)
+            }
+          },
+          onError: function () { setGagal(true); setBuffer(false); setMemutar(false); setTutup(false) }
+        }
+      })
+    } catch (e) {
+      setGagal(true)
+      setTutup(false)
+    }
+  }
+
+  function jungkir() {
+    const p = playerRef.current
+    if (!p) return
+    if (sedangMain()) p.pauseVideo()
+    else p.playVideo()
+  }
+
+  function geser(ev) {
+    const p = playerRef.current
+    if (!p || !durasi) return
+    const nilai = Number(ev.target.value)
+    p.seekTo((nilai / 100) * durasi, true)
+    setWaktu((nilai / 100) * durasi)
+  }
+
+  function aturVolume(ev) {
+    const p = playerRef.current
+    const nilai = Number(ev.target.value)
+    setVolume(nilai)
+    if (!p) return
+    p.setVolume(nilai)
+    if (nilai === 0) { p.mute(); setBisu(true) }
+    else if (bisu) { p.unMute(); setBisu(false) }
+  }
+
+  function aturBisu() {
+    const p = playerRef.current
+    if (!p) return
+    if (bisu) { p.unMute(); p.setVolume(volume || 100); setBisu(false) }
+    else { p.mute(); setBisu(true) }
+  }
+
+  function aturPenuh() {
+    const el = kotakRef.current
+    if (!el) return
+    if (document.fullscreenElement) document.exitFullscreen()
+    else if (el.requestFullscreen) el.requestFullscreen()
+  }
+
+  const thumb = thumbPakaiHq
+    ? 'https://i.ytimg.com/vi/' + youtubeId + '/hqdefault.jpg'
+    : 'https://img.youtube.com/vi/' + youtubeId + '/maxresdefault.jpg'
+  const persen = durasi ? Math.min(100, (waktu / durasi) * 100) : 0
+  const kontrolSembunyi = dimulai && !gagal && sembunyi
+
+  return (
+    <div
+      ref={kotakRef}
+      className={'pemutar-referensi group relative overflow-hidden rounded-2xl bg-black shadow-xl ' + (props.className || 'aspect-video w-full')}
+      style={{ cursor: kontrolSembunyi ? 'none' : 'default' }}
+      onMouseMove={resetTimerSembunyi}
+      onMouseLeave={function () { if (sedangMain()) { if (timerSembunyi.current) clearTimeout(timerSembunyi.current); setSembunyi(true) } }}
+    >
+      {/* Iframe mengisi wadah persis: video pas di tampilan normal, otomatis tengah di layar penuh */}
+      <div className="absolute inset-0 z-0">
+        <div ref={wadahRef} className="h-full w-full" />
+      </div>
+
+      {/* Perisai penangkap klik */}
+      {dimulai && !selesai && !gagal ? (
+        <button type="button" aria-label="Putar atau jeda video" onClick={jungkir}
+          className="absolute inset-0 z-10 h-full w-full bg-transparent" style={{ cursor: kontrolSembunyi ? 'none' : 'default' }} />
+      ) : null}
+
+      {/* Poster penutup lapisan awal YouTube, memudar setelah 2,6 detik */}
+      {dimulai && !gagal ? (
+        <div className={'pointer-events-none absolute inset-0 z-10 bg-black transition-opacity duration-700 ' + (tutup ? 'opacity-100' : 'opacity-0')}>
+          <img src={thumb} alt="" className="h-full w-full object-cover" />
+        </div>
+      ) : null}
+
+      {/* Ikon putar tengah saat dijeda */}
+      {dimulai && !memutar && !buffer && !selesai && !gagal && !tutup ? (
+        <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center">
+          <span className="grid h-14 w-14 place-items-center rounded-full border border-white/20 bg-black/50 text-white backdrop-blur-md">
+            <IkonPlay className="ml-0.5 h-6 w-6" />
+          </span>
+        </div>
+      ) : null}
+
+      {/* Poster awal dengan tombol putar minimalis */}
+      {!dimulai ? (
+        <div className="absolute inset-0 z-20">
+          <img src={thumb} alt={props.title || 'Pratinjau video'} onError={function () { setThumbPakaiHq(true) }}
+            className="absolute inset-0 h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+          <div className="absolute inset-0 grid place-items-center">
+            <button type="button" onClick={mulai} title="Putar video"
+              className="grid h-12 w-12 place-items-center rounded-full border border-white/20 bg-black/50 text-white backdrop-blur-md transition hover:scale-110 hover:border-bsi-500 hover:bg-bsi-600">
+              <IkonPlay className="ml-0.5 h-5 w-5" />
+            </button>
+          </div>
+          {props.title ? <p className="absolute bottom-3 left-4 right-4 truncate text-sm font-semibold text-white drop-shadow-md">{props.title}</p> : null}
+        </div>
+      ) : null}
+
+      {/* Layar akhir dengan putar ulang */}
+      {selesai ? (
+        <div className="absolute inset-0 z-20 grid place-items-center bg-black/85 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-3">
+            <button type="button" title="Putar ulang"
+              onClick={function () { const p = playerRef.current; if (p) { p.seekTo(0, true); p.playVideo() } setSelesai(false) }}
+              className="grid h-14 w-14 place-items-center rounded-full bg-gold-500 text-slate-900 shadow-lg transition hover:scale-105">
+              <IkonUlang />
+            </button>
+            <p className="text-xs font-semibold text-slate-200">Putar ulang</p>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Layar gagal */}
+      {gagal ? (
+        <div className="absolute inset-0 z-30 grid place-items-center bg-black/90">
+          <div className="flex flex-col items-center gap-2 px-6 text-center">
+            <p className="text-sm font-semibold text-slate-200">Video tidak dapat dimuat</p>
+            <p className="text-xs text-slate-400">Periksa koneksi atau ketersediaan video di saluran.</p>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Panel kontrol sebagai overlay di atas video, tidak memakan ruang tata letak */}
+      {dimulai && !gagal ? (
+        <div className={'absolute inset-x-0 bottom-0 z-30 flex items-center gap-3 bg-gradient-to-t from-black/90 via-black/60 to-transparent px-4 pb-3 pt-10 transition-opacity duration-300 ' + (kontrolSembunyi ? 'pointer-events-none opacity-0' : 'opacity-100')}>
+          <button type="button" onClick={jungkir} title={memutar ? 'Jeda' : 'Putar'}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-bsi-700 text-white transition hover:bg-bsi-600">
+            {memutar ? <IkonPause className="h-4 w-4" /> : <IkonPlay className="ml-0.5 h-4 w-4" />}
+          </button>
+          <input type="range" min="0" max="100" step="0.1" value={persen} onChange={geser} title="Geser durasi"
+            className="pemutar-progress h-1.5 w-full cursor-pointer appearance-none rounded-full outline-none"
+            style={{ background: 'linear-gradient(to right, #166534 0%, #166534 ' + persen + '%, rgba(255,255,255,0.25) ' + persen + '%, rgba(255,255,255,0.25) 100%)' }} />
+          <span className="min-w-[84px] shrink-0 text-center text-[11px] font-semibold tabular-nums text-slate-200">{formatWaktu(waktu)} / {formatWaktu(durasi)}</span>
+          <button type="button" onClick={aturBisu} title={bisu ? 'Nyalakan suara' : 'Bisukan'}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/10 text-white transition hover:bg-white/20">
+            {bisu ? <IkonBisu /> : <IkonSuara />}
+          </button>
+          <input type="range" min="0" max="100" value={bisu ? 0 : volume} onChange={aturVolume} title="Volume"
+            className="pemutar-volume h-1 w-16 shrink-0 cursor-pointer appearance-none rounded-full outline-none"
+            style={{ background: 'linear-gradient(to right, #eab308 0%, #eab308 ' + (bisu ? 0 : volume) + '%, rgba(255,255,255,0.25) ' + (bisu ? 0 : volume) + '%, rgba(255,255,255,0.25) 100%)' }} />
+          {buffer ? <span className="inline-block h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-gold-500 border-t-transparent" /> : null}
+          <button type="button" onClick={aturPenuh} title={penuh ? 'Keluar layar penuh' : 'Layar penuh'}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/10 text-white transition hover:bg-white/20">
+            {penuh ? <IkonKecil /> : <IkonPenuh />}
+          </button>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+`)
+console.log('[BERHASIL] src/components/PemutarVideo.jsx ditulis ulang tanpa cropping')
+
+/* ===== 2. CSS: iframe paksa mengisi wadah dan aturan layar penuh ===== */
+const FILE_CSS = 'src/index.css'
+if (fs.existsSync(path.join(root, FILE_CSS))) {
+  let css = baca(FILE_CSS)
+  if (css.includes('/* pusat-pemutar-v3 */')) {
+    console.log('[SUDAH ADA] Aturan CSS pusat-pemutar-v3')
+  } else {
+    css = css.trimEnd() + '\n\n' + `/* pusat-pemutar-v3: iframe mengisi wadah persis, layar penuh menengahkan video */
+.pemutar-referensi iframe {
+  pointer-events: none;
+  border: 0;
+  background: transparent;
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100% !important;
+  height: 100% !important;
+}
+.pemutar-referensi:fullscreen {
+  aspect-ratio: auto !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: none !important;
+  border-radius: 0 !important;
+  background: #000;
+}
+`
+    simpan(FILE_CSS, css)
+    console.log('[BERHASIL] Aturan CSS pusat-pemutar-v3 ditambahkan')
+  }
+} else {
+  console.log('[LEWATI] index.css tidak ditemukan')
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Hasil yang akan terlihat:')
+console.log('1. Tampilan normal: video mengisi kartu persis tanpa pita hitam, karena kontrol kini melayang di atas video.')
+console.log('2. Layar penuh: video otomatis berada tepat di tengah dengan pita hitam sama besar di atas dan bawah.')
+console.log('3. Kontrol tetap muncul saat kursor bergerak dan menyembunyi sendiri setelah 2,5 detik saat video berjalan.')
+console.log('4. Poster penutup tetap menyembunyikan lapisan awal bawaan YouTube selama 2,6 detik pertama.')
+```
+
+## File: apply-pemutar-referensi.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai menulis ulang PemutarVideo mengikuti referensi cropping YouTube...')
+console.log('')
+
+/* ===== 1. PemutarVideo.jsx: full rewrite dengan trik cropping ===== */
+simpan('src/components/PemutarVideo.jsx', `import { useEffect, useRef, useState } from 'react'
+
+let janjiApi = null
+function muatApiYouTube() {
+  if (janjiApi) return janjiApi
+  janjiApi = new Promise(function (resolve) {
+    if (window.YT && window.YT.Player) { resolve(window.YT); return }
+    const lama = window.onYouTubeIframeAPIReady
+    window.onYouTubeIframeAPIReady = function () {
+      if (lama) lama()
+      resolve(window.YT)
+    }
+    const tag = document.createElement('script')
+    tag.src = 'https://www.youtube.com/iframe_api'
+    tag.async = true
+    document.head.appendChild(tag)
+  })
+  return janjiApi
+}
+
+function formatWaktu(detik) {
+  const d = isFinite(detik) && detik > 0 ? detik : 0
+  const m = Math.floor(d / 60)
+  const s = Math.floor(d % 60)
+  return m + ':' + (s < 10 ? '0' : '') + s
+}
+
+function paksaKualitas(p) {
+  try { if (p && typeof p.setPlaybackQualityRange === 'function') p.setPlaybackQualityRange('720', '1080') } catch (e) {}
+}
+function matikanSubtitel(p) {
+  try { if (p && typeof p.unloadModule === 'function') p.unloadModule('captions') } catch (e) {}
+  try { if (p && typeof p.setOption === 'function') p.setOption('captions', 'track', {}) } catch (e) {}
+}
+
+function IkonPlay({ className }) { return <svg viewBox="0 0 24 24" fill="currentColor" className={className || 'h-5 w-5'}><path d="M8 5v14l11-7z" /></svg> }
+function IkonPause({ className }) { return <svg viewBox="0 0 24 24" fill="currentColor" className={className || 'h-5 w-5'}><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg> }
+function IkonSuara({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className || 'h-4 w-4'}>
+      <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
+    </svg>
+  )
+}
+function IkonBisu({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className || 'h-4 w-4'}>
+      <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
+    </svg>
+  )
+}
+function IkonPenuh() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg> }
+function IkonKecil() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" /></svg> }
+
+export default function PemutarVideo(props) {
+  const youtubeId = props.youtubeId
+  const [dimulai, setDimulai] = useState(false)
+  const [memutar, setMemutar] = useState(false)
+  const [buffer, setBuffer] = useState(false)
+  const [selesai, setSelesai] = useState(false)
+  const [gagal, setGagal] = useState(false)
+  const [waktu, setWaktu] = useState(0)
+  const [durasi, setDurasi] = useState(0)
+  const [volume, setVolume] = useState(100)
+  const [bisu, setBisu] = useState(false)
+  const [penuh, setPenuh] = useState(false)
+  const [sembunyi, setSembunyi] = useState(false)
+  const kotakRef = useRef(null)
+  const wadahRef = useRef(null)
+  const playerRef = useRef(null)
+  const timerSembunyi = useRef(null)
+
+  useEffect(function () {
+    const iv = setInterval(function () {
+      const p = playerRef.current
+      if (p && p.getCurrentTime) {
+        setWaktu(p.getCurrentTime() || 0)
+        const d = p.getDuration ? p.getDuration() : 0
+        if (d) setDurasi(d)
+      }
+    }, 250)
+    return function () { clearInterval(iv) }
+  }, [])
+
+  useEffect(function () {
+    function saatPenuh() { setPenuh(Boolean(document.fullscreenElement)) }
+    document.addEventListener('fullscreenchange', saatPenuh)
+    return function () {
+      document.removeEventListener('fullscreenchange', saatPenuh)
+      if (timerSembunyi.current) clearTimeout(timerSembunyi.current)
+      if (playerRef.current && playerRef.current.destroy) {
+        try { playerRef.current.destroy() } catch (e) {}
+        playerRef.current = null
+      }
+    }
+  }, [])
+
+  function resetTimerSembunyi() {
+    if (timerSembunyi.current) clearTimeout(timerSembunyi.current)
+    setSembunyi(false)
+    if (memutar) {
+      timerSembunyi.current = setTimeout(function () { setSembunyi(true) }, 2500)
+    }
+  }
+
+  async function mulai() {
+    setDimulai(true)
+    setGagal(false)
+    try {
+      const YT = await muatApiYouTube()
+      if (!wadahRef.current) return
+      playerRef.current = new YT.Player(wadahRef.current, {
+        videoId: youtubeId,
+        playerVars: {
+          autoplay: 1, controls: 0, modestbranding: 1, rel: 0, fs: 0,
+          disablekb: 1, iv_load_policy: 3, playsinline: 1, autohide: 1,
+          showinfo: 0, cc_load_policy: 0, origin: window.location.origin
+        },
+        events: {
+          onReady: function (e) {
+            setDurasi(e.target.getDuration() || 0)
+            paksaKualitas(e.target)
+            matikanSubtitel(e.target)
+            e.target.playVideo()
+          },
+          onStateChange: function (e) {
+            const S = window.YT.PlayerState
+            if (e.data === S.PLAYING) {
+              setMemutar(true); setBuffer(false); setSelesai(false)
+              paksaKualitas(e.target); matikanSubtitel(e.target)
+              resetTimerSembunyi()
+            } else if (e.data === S.PAUSED) {
+              setMemutar(false); setBuffer(false); setSembunyi(false)
+            } else if (e.data === S.BUFFERING) {
+              setBuffer(true)
+            } else if (e.data === S.ENDED) {
+              setMemutar(false); setSelesai(true); setSembunyi(false)
+            }
+          },
+          onError: function () { setGagal(true); setBuffer(false); setMemutar(false) }
+        }
+      })
+    } catch (e) {
+      setGagal(true)
+    }
+  }
+
+  function jungkir() {
+    const p = playerRef.current
+    if (!p) return
+    if (memutar) p.pauseVideo()
+    else p.playVideo()
+  }
+
+  function geser(ev) {
+    const p = playerRef.current
+    if (!p || !durasi) return
+    const nilai = Number(ev.target.value)
+    p.seekTo((nilai / 100) * durasi, true)
+    setWaktu((nilai / 100) * durasi)
+  }
+
+  function aturVolume(ev) {
+    const p = playerRef.current
+    const nilai = Number(ev.target.value)
+    setVolume(nilai)
+    if (!p) return
+    p.setVolume(nilai)
+    if (nilai === 0) { p.mute(); setBisu(true) }
+    else { if (bisu) { p.unMute(); setBisu(false) } }
+  }
+
+  function aturBisu() {
+    const p = playerRef.current
+    if (!p) return
+    if (bisu) { p.unMute(); setBisu(false); p.setVolume(volume || 100) }
+    else { p.mute(); setBisu(true) }
+  }
+
+  function aturPenuh() {
+    const el = kotakRef.current
+    if (!el) return
+    if (document.fullscreenElement) document.exitFullscreen()
+    else if (el.requestFullscreen) el.requestFullscreen()
+  }
+
+  const thumb = 'https://img.youtube.com/vi/' + youtubeId + '/maxresdefault.jpg'
+  const thumbCadangan = 'https://i.ytimg.com/vi/' + youtubeId + '/hqdefault.jpg'
+  const persen = durasi ? Math.min(100, (waktu / durasi) * 100) : 0
+  const sembunyikanKontrol = dimulai && !gagal && memutar && sembunyi
+
+  return (
+    <div
+      ref={kotakRef}
+      className={'pemutar-referensi group relative overflow-hidden rounded-2xl bg-black shadow-xl ' + (props.className || 'aspect-video w-full')}
+      style={{ maxWidth: penuh ? 'none' : undefined }}
+      onMouseMove={dimulai ? resetTimerSembunyi : undefined}
+      onMouseLeave={function () { if (memutar) { if (timerSembunyi.current) clearTimeout(timerSembunyi.current); setSembunyi(true) } }}
+    >
+      <div className="flex h-full flex-col">
+        {/* Viewport video: area yang di-crop */}
+        <div className="relative flex-1 overflow-hidden">
+          <div ref={wadahRef} className="absolute" style={{ top: -60, left: -2, width: 'calc(100% + 4px)', height: 'calc(100% + 120px)', pointerEvents: 'none' }} />
+
+          {/* Poster awal dengan tombol play tengah minimalis */}
+          {!dimulai ? (
+            <button
+              type="button"
+              onClick={mulai}
+              className="absolute inset-0 z-20 flex items-center justify-center"
+              style={{
+                backgroundImage: 'url(' + thumb + ')',
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                cursor: 'default'
+              }}
+            >
+              <div className="grid h-12 w-12 place-items-center rounded-full border border-white/20 bg-black/50 text-white backdrop-blur-md transition hover:scale-110 hover:border-bsi-500 hover:bg-bsi-600">
+                <IkonPlay className="ml-0.5 h-5 w-5" />
+              </div>
+              {props.title ? <p className="absolute bottom-3 left-4 right-4 truncate text-left text-sm font-semibold text-white drop-shadow-md">{props.title}</p> : null}
+            </button>
+          ) : null}
+
+          {/* Overlay transparan penangkap klik saat video jalan */}
+          {dimulai && !selesai && !gagal ? (
+            <button
+              type="button"
+              aria-label="Putar atau jeda video"
+              onClick={jungkir}
+              className="absolute inset-0 z-10 h-full w-full bg-transparent"
+              style={{ cursor: sembunyikanKontrol ? 'none' : 'default' }}
+            />
+          ) : null}
+
+          {/* Ikon jeda besar di tengah saat dijeda manual */}
+          {dimulai && !memutar && !buffer && !selesai && !gagal ? (
+            <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center">
+              <span className="grid h-14 w-14 place-items-center rounded-full border border-white/20 bg-black/50 text-white backdrop-blur-md">
+                <IkonPlay className="ml-0.5 h-6 w-6" />
+              </span>
+            </div>
+          ) : null}
+
+          {/* Layar akhir */}
+          {selesai ? (
+            <div className="absolute inset-0 z-20 grid place-items-center bg-black/85 backdrop-blur-sm">
+              <div className="flex flex-col items-center gap-3">
+                <button type="button" title="Putar ulang"
+                  onClick={function () { const p = playerRef.current; if (p) { p.seekTo(0, true); p.playVideo() } setSelesai(false) }}
+                  className="grid h-14 w-14 place-items-center rounded-full bg-gold-500 text-slate-900 shadow-lg transition hover:scale-105">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></svg>
+                </button>
+                <p className="text-xs font-semibold text-slate-200">Putar ulang</p>
+              </div>
+            </div>
+          ) : null}
+
+          {/* Layar gagal */}
+          {gagal ? (
+            <div className="absolute inset-0 z-30 grid place-items-center bg-black/90">
+              <div className="flex flex-col items-center gap-2 px-6 text-center">
+                <p className="text-sm font-semibold text-slate-200">Video tidak dapat dimuat</p>
+                <p className="text-xs text-slate-400">Periksa koneksi atau ketersediaan video di saluran.</p>
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        {/* Panel kontrol kustom (di luar viewport, jadi tidak ikut ter-crop) */}
+        {dimulai && !gagal ? (
+          <div
+            className={'relative z-30 flex items-center gap-3 bg-slate-900/95 px-4 py-2.5 transition-opacity duration-400 ' + (sembunyikanKontrol ? 'opacity-0' : 'opacity-100')}
+          >
+            {/* Tombol play/pause */}
+            <button type="button" onClick={jungkir} title={memutar ? 'Jeda' : 'Putar'}
+              className="grid h-8 w-8 place-items-center rounded-full bg-bsi-700 text-white transition hover:bg-bsi-600">
+              {memutar ? <IkonPause className="h-4 w-4" /> : <IkonPlay className="ml-0.5 h-4 w-4" />}
+            </button>
+
+            {/* Progress bar */}
+            <div className="flex flex-1 items-center">
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="0.1"
+                value={persen}
+                onChange={geser}
+                className="pemutar-progress h-1.5 w-full cursor-pointer appearance-none rounded-full bg-slate-700 outline-none"
+                style={{
+                  background: 'linear-gradient(to right, #166534 0%, #166534 ' + persen + '%, #475569 ' + persen + '%, #475569 100%)'
+                }}
+              />
+            </div>
+
+            {/* Waktu */}
+            <span className="min-w-[84px] text-center text-[11px] font-semibold tabular-nums text-slate-300">
+              {formatWaktu(waktu)} / {formatWaktu(durasi)}
+            </span>
+
+            {/* Tombol bisu */}
+            <button type="button" onClick={aturBisu} title={bisu ? 'Nyalakan suara' : 'Bisukan'}
+              className="grid h-8 w-8 place-items-center rounded-full bg-white/10 text-white transition hover:bg-white/20">
+              {bisu ? <IkonBisu /> : <IkonSuara />}
+            </button>
+
+            {/* Slider volume */}
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={bisu ? 0 : volume}
+              onChange={aturVolume}
+              className="pemutar-volume h-1 w-16 cursor-pointer appearance-none rounded-full bg-slate-700 outline-none"
+              style={{
+                background: 'linear-gradient(to right, #eab308 0%, #eab308 ' + (bisu ? 0 : volume) + '%, #475569 ' + (bisu ? 0 : volume) + '%, #475569 100%)'
+              }}
+            />
+
+            {/* Buffer indikator */}
+            {buffer ? <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-gold-500 border-t-transparent" /> : null}
+
+            {/* Layar penuh */}
+            <button type="button" onClick={aturPenuh} title={penuh ? 'Keluar layar penuh' : 'Layar penuh'}
+              className="grid h-8 w-8 place-items-center rounded-full bg-white/10 text-white transition hover:bg-white/20">
+              {penuh ? <IkonKecil /> : <IkonPenuh />}
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+`)
+console.log('[BERHASIL] src/components/PemutarVideo.jsx ditulis ulang mengikuti referensi')
+
+/* ===== 2. CSS khusus untuk slider dan cropping ===== */
+const FILE_CSS = 'src/index.css'
+if (fs.existsSync(path.join(root, FILE_CSS))) {
+  let css = baca(FILE_CSS)
+  const aturan = `/* Pemutar video referensi: iframe cropping & slider custom */
+.pemutar-referensi iframe {
+  pointer-events: none;
+  border: 0;
+  background: transparent;
+}
+.pemutar-referensi:fullscreen {
+  border-radius: 0;
+  max-width: none;
+  width: 100vw;
+  height: 100vh;
+}
+.pemutar-progress::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #166534;
+  cursor: pointer;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+}
+.pemutar-progress::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #166534;
+  cursor: pointer;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+}
+.pemutar-volume::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #eab308;
+  cursor: pointer;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+}
+.pemutar-volume::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #eab308;
+  cursor: pointer;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+}`
+  if (css.includes('.pemutar-referensi iframe')) {
+    console.log('[SUDAH ADA] Aturan CSS pemutar-referensi')
+  } else {
+    css = css.trimEnd() + '\n\n' + aturan + '\n'
+    simpan(FILE_CSS, css)
+    console.log('[BERHASIL] Aturan CSS pemutar-referensi ditambahkan')
+  }
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Perubahan yang mengikuti referensimu:')
+console.log('1. Trik cropping: iframe diposisikan top -60px, tinggi +120px sehingga chip channel, logo YouTube, dan judul bawaan terpotong keluar dari viewport.')
+console.log('2. Poster memakai gambar maxresdefault resolusi tinggi dengan tombol play bulat minimalis ala referensimu, hover berubah jadi hijau BSI.')
+console.log('3. Kontrol berada di luar viewport (di bawahnya), jadi tidak ikut ter-crop dan tetap terlihat jelas.')
+console.log('4. Auto-hide kontrol setelah 2,5 detik tanpa aktivitas mouse saat video berjalan; kursor jadi none saat sembunyi.')
+console.log('5. Slider volume terpisah dari tombol bisu, persis seperti di referensimu, dengan aksen emas BSI.')
+console.log('6. Progress bar dengan thumb bulat putih berpinggiran hijau BSI.')
+console.log('7. Fullscreen pada container, bukan iframe, sehingga cropping dan kontrol tetap aktif.')
+```
+
+## File: apply-pemutar-tutup-merek.cjs
 ```javascript
 const fs = require('fs')
 const path = require('path')
@@ -125,551 +2289,1202 @@ function simpan(rel, isi) {
   const full = path.join(root, rel)
   fs.mkdirSync(path.dirname(full), { recursive: true })
   fs.writeFileSync(full, isi, 'utf8')
-  console.log('[BERHASIL] ' + rel + ' ditulis')
+  console.log('[BERHASIL] ' + rel + ' ditulis ulang')
 }
 
-const KEPALA = `import { createClient } from '@supabase/supabase-js'
-const LIMIT_PER_PROJECT = 5
-function ptToday() {
-  const now = new Date()
-  const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
-  const y = pt.getFullYear()
-  const m = String(pt.getMonth() + 1).padStart(2, '0')
-  const d = String(pt.getDate()).padStart(2, '0')
-  return y + '-' + m + '-' + d
-}
-function daftarKredensial() {
-  const list = []
-  for (let n = 1; n <= 6; n++) {
-    const id = process.env['YOUTUBE_CLIENT_ID_' + n]
-    const secret = process.env['YOUTUBE_CLIENT_SECRET_' + n]
-    const refresh = process.env['YOUTUBE_REFRESH_TOKEN_' + n]
-    if (id && secret && refresh) list.push({ n: n, id: id, secret: secret, refresh: refresh })
-  }
-  if (!list.length && process.env.YOUTUBE_CLIENT_ID && process.env.YOUTUBE_CLIENT_SECRET && process.env.YOUTUBE_REFRESH_TOKEN) {
-    list.push({ n: 1, id: process.env.YOUTUBE_CLIENT_ID, secret: process.env.YOUTUBE_CLIENT_SECRET, refresh: process.env.YOUTUBE_REFRESH_TOKEN })
-  }
-  return list
-}
-const cacheToken = {}
-async function getAccessToken(kred) {
-  const now = Date.now()
-  const c = cacheToken[kred.n]
-  if (c && c.expire > now + 60000) return c.token
-  const params = new URLSearchParams()
-  params.set('client_id', kred.id)
-  params.set('client_secret', kred.secret)
-  params.set('refresh_token', kred.refresh)
-  params.set('grant_type', 'refresh_token')
-  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
-  if (!r.ok) throw new Error('refresh token project ' + kred.n + ' gagal (status ' + r.status + ')')
-  const j = await r.json()
-  cacheToken[kred.n] = { token: j.access_token, expire: now + (j.expires_in || 3600) * 1000 }
-  return j.access_token
-}
-`
+simpan('src/components/PemutarVideo.jsx', `import { useEffect, useRef, useState } from 'react'
 
-/* ===== 1. api/youtube/quota.js ===== */
-simpan('api/youtube/quota.js', KEPALA + `export default async function handler(req, res) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method tidak diizinkan' })
-  const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
-  const today = ptToday()
-  const kredensial = daftarKredensial()
-  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
-  let usedTotal = 0
-  const perProject = []
-  for (const kred of kredensial) {
-    const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
-    const used = hit.count || 0
-    usedTotal += used
-    perProject.push({ project: kred.n, used: used, remaining: Math.max(0, LIMIT_PER_PROJECT - used) })
-  }
-  const limit = kredensial.length * LIMIT_PER_PROJECT
-  res.setHeader('Cache-Control', 'no-store')
-  return res.status(200).json({ limit: limit, used: usedTotal, remaining: Math.max(0, limit - usedTotal), perProject: perProject, ptDate: today })
-}
-`)
-
-/* ===== 2. api/youtube/session.js ===== */
-simpan('api/youtube/session.js', KEPALA + `export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
-  const authHeader = req.headers.authorization || ''
-  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
-  const authClient = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
-  const chk = await authClient.auth.getUser()
-  if (chk.error || !chk.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
-  const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
-  const today = ptToday()
-  const kredensial = daftarKredensial()
-  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
-  const body = req.body || {}
-  if (!body.title) return res.status(400).json({ error: 'Judul video wajib diisi' })
-  let terakhir = ''
-  for (const kred of kredensial) {
-    const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
-    if ((hit.count || 0) >= LIMIT_PER_PROJECT) { terakhir = 'project ' + kred.n + ' sudah penuh'; continue }
-    let access
-    try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
-    const meta = {
-      snippet: { title: String(body.title).slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
-      status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
+let janjiApi = null
+function muatApiYouTube() {
+  if (janjiApi) return janjiApi
+  janjiApi = new Promise(function (resolve) {
+    if (window.YT && window.YT.Player) { resolve(window.YT); return }
+    const lama = window.onYouTubeIframeAPIReady
+    window.onYouTubeIframeAPIReady = function () {
+      if (lama) lama()
+      resolve(window.YT)
     }
-    const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
-      body: JSON.stringify(meta)
-    })
-    if (!init.ok) { terakhir = 'project ' + kred.n + ' ditolak Google (status ' + init.status + ')'; continue }
-    const sessionUri = init.headers.get('location')
-    if (!sessionUri) { terakhir = 'project ' + kred.n + ' tanpa lokasi upload'; continue }
-    await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: chk.data.user.id, project_id: kred.n })
-    return res.status(200).json({ sessionUri: sessionUri, project: kred.n })
-  }
-  return res.status(429).json({ error: 'Kuota harian semua project video sudah habis. Coba lagi besok atau gunakan link video eksternal.', detail: terakhir })
-}
-`)
-
-/* ===== 3. api/youtube/latest.js ===== */
-simpan('api/youtube/latest.js', KEPALA + `export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
-  const authHeader = req.headers.authorization || ''
-  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
-  const authClient = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
-  const chk = await authClient.auth.getUser()
-  if (chk.error || !chk.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
-  const kredensial = daftarKredensial()
-  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
-  let terakhir = ''
-  for (const kred of kredensial) {
-    let access
-    try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
-    const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&order=date&maxResults=5', { headers: { Authorization: 'Bearer ' + access } })
-    if (!r.ok) { terakhir = 'project ' + kred.n + ' status ' + r.status; continue }
-    const j = await r.json()
-    const items = j.items || []
-    const batas = Date.now() - 15 * 60 * 1000
-    const cocok = items.find(function (it) {
-      const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
-      return isNaN(t) ? false : t >= batas
-    })
-    if (!cocok) return res.status(404).json({ error: 'Video terbaru tidak ditemukan' })
-    return res.status(200).json({ videoId: cocok.id && cocok.id.videoId, project: kred.n })
-  }
-  return res.status(502).json({ error: 'Gagal memeriksa video terbaru: ' + terakhir })
-}
-`)
-
-/* ===== 4. vite.config.js: ganti seluruh plugin YouTube ===== */
-const FILE_V = 'vite.config.js'
-let v = fs.readFileSync(path.join(root, FILE_V), 'utf8').replace(/\r\n/g, '\n')
-const mulai = v.indexOf('function pluginApiYoutube(env) {')
-const akhir = v.indexOf('export default defineConfig')
-if (mulai === -1 || akhir === -1) {
-  console.log('[TIDAK KETEMU] Blok pluginApiYoutube di vite.config.js')
-} else if (v.includes('LIMIT_PER_PROJECT')) {
-  console.log('[SUDAH ADA] Plugin YouTube multi-project di vite.config.js')
-} else {
-  const pluginBaru = `function pluginApiYoutube(env) {
-  const admin = createClient(env.VITE_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY)
-  const LIMIT_PER_PROJECT = 5
-  function ptToday() {
-    const now = new Date()
-    const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
-    const y = pt.getFullYear()
-    const m = String(pt.getMonth() + 1).padStart(2, '0')
-    const d = String(pt.getDate()).padStart(2, '0')
-    return y + '-' + m + '-' + d
-  }
-  function daftarKredensial() {
-    const list = []
-    for (let n = 1; n <= 6; n++) {
-      const id = env['YOUTUBE_CLIENT_ID_' + n]
-      const secret = env['YOUTUBE_CLIENT_SECRET_' + n]
-      const refresh = env['YOUTUBE_REFRESH_TOKEN_' + n]
-      if (id && secret && refresh) list.push({ n: n, id: id, secret: secret, refresh: refresh })
-    }
-    if (!list.length && env.YOUTUBE_CLIENT_ID && env.YOUTUBE_CLIENT_SECRET && env.YOUTUBE_REFRESH_TOKEN) {
-      list.push({ n: 1, id: env.YOUTUBE_CLIENT_ID, secret: env.YOUTUBE_CLIENT_SECRET, refresh: env.YOUTUBE_REFRESH_TOKEN })
-    }
-    return list
-  }
-  const cacheToken = {}
-  async function getAccessToken(kred) {
-    const now = Date.now()
-    const c = cacheToken[kred.n]
-    if (c && c.expire > now + 60000) return c.token
-    const params = new URLSearchParams()
-    params.set('client_id', kred.id)
-    params.set('client_secret', kred.secret)
-    params.set('refresh_token', kred.refresh)
-    params.set('grant_type', 'refresh_token')
-    const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
-    if (!r.ok) throw new Error('refresh token project ' + kred.n + ' gagal (status ' + r.status + ')')
-    const j = await r.json()
-    cacheToken[kred.n] = { token: j.access_token, expire: now + (j.expires_in || 3600) * 1000 }
-    return j.access_token
-  }
-  async function cekSesi(req) {
-    const authHeader = req.headers.authorization || ''
-    const token = authHeader.replace('Bearer ', '')
-    if (!token) return null
-    const supabase = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
-    const r = await supabase.auth.getUser(token)
-    return r.error ? null : r.data.user
-  }
-  function kirim(res, code, obj) {
-    res.statusCode = code
-    res.setHeader('Content-Type', 'application/json')
-    res.end(JSON.stringify(obj))
-  }
-  return {
-    name: 'api-youtube-dev',
-    configureServer(server) {
-      server.middlewares.use('/api/youtube/quota', async function (req, res) {
-        const today = ptToday()
-        const kredensial = daftarKredensial()
-        if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
-        let usedTotal = 0
-        const perProject = []
-        for (const kred of kredensial) {
-          const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
-          const used = hit.count || 0
-          usedTotal += used
-          perProject.push({ project: kred.n, used: used, remaining: Math.max(0, LIMIT_PER_PROJECT - used) })
-        }
-        const limit = kredensial.length * LIMIT_PER_PROJECT
-        res.setHeader('Cache-Control', 'no-store')
-        kirim(res, 200, { limit: limit, used: usedTotal, remaining: Math.max(0, limit - usedTotal), perProject: perProject, ptDate: today })
-      })
-      server.middlewares.use('/api/youtube/session', async function (req, res) {
-        if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
-        const user = await cekSesi(req)
-        if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
-        const today = ptToday()
-        const kredensial = daftarKredensial()
-        if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
-        const body = await bacaBody(req)
-        if (!body.title) { kirim(res, 400, { error: 'Judul video wajib diisi' }); return }
-        let terakhir = ''
-        for (const kred of kredensial) {
-          const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
-          if ((hit.count || 0) >= LIMIT_PER_PROJECT) { terakhir = 'project ' + kred.n + ' sudah penuh'; continue }
-          let access
-          try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
-          const meta = {
-            snippet: { title: String(body.title).slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
-            status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
-          }
-          const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
-            method: 'POST',
-            headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
-            body: JSON.stringify(meta)
-          })
-          if (!init.ok) { terakhir = 'project ' + kred.n + ' ditolak Google (status ' + init.status + ')'; continue }
-          const sessionUri = init.headers.get('location')
-          if (!sessionUri) { terakhir = 'project ' + kred.n + ' tanpa lokasi upload'; continue }
-          await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: user.id, project_id: kred.n })
-          kirim(res, 200, { sessionUri: sessionUri, project: kred.n })
-          return
-        }
-        kirim(res, 429, { error: 'Kuota harian semua project video sudah habis. Coba lagi besok atau gunakan link video eksternal.', detail: terakhir })
-      })
-      server.middlewares.use('/api/youtube/latest', async function (req, res) {
-        if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
-        const user = await cekSesi(req)
-        if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
-        const kredensial = daftarKredensial()
-        if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
-        let terakhir = ''
-        for (const kred of kredensial) {
-          let access
-          try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
-          const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&order=date&maxResults=5', { headers: { Authorization: 'Bearer ' + access } })
-          if (!r.ok) { terakhir = 'project ' + kred.n + ' status ' + r.status; continue }
-          const j = await r.json()
-          const items = j.items || []
-          const batas = Date.now() - 15 * 60 * 1000
-          const cocok = items.find(function (it) {
-            const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
-            return isNaN(t) ? false : t >= batas
-          })
-          if (!cocok) { kirim(res, 404, { error: 'Video terbaru tidak ditemukan' }); return }
-          kirim(res, 200, { videoId: cocok.id && cocok.id.videoId, project: kred.n })
-          return
-        }
-        kirim(res, 502, { error: 'Gagal memeriksa video terbaru: ' + terakhir })
-      })
-    }
-  }
-}
-
-`
-  v = v.slice(0, mulai) + pluginBaru + v.slice(akhir)
-  fs.writeFileSync(path.join(root, FILE_V), v, 'utf8')
-  console.log('[BERHASIL] Plugin YouTube multi-project dipasang di vite.config.js')
-}
-
-console.log('')
-console.log('Selesai. Restart dev server sekali: Ctrl+C lalu npm run dev -- --host')
-console.log('Setelah itu rotasi project berjalan otomatis tanpa restart lagi.')
-```
-
-## File: apply-fix-state-loading.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-const FILE_D = 'src/pages/DashboardPage.jsx'
-
-if (!fs.existsSync(path.join(root, FILE_D))) {
-  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
-  process.exit(1)
-}
-let d = fs.readFileSync(path.join(root, FILE_D), 'utf8').replace(/\r\n/g, '\n')
-
-if (d.includes('const [ytQuotaLoading, setYtQuotaLoading]')) {
-  console.log('[SUDAH ADA] State ytQuotaLoading, tidak ada yang perlu ditambah')
-} else {
-  const regex = /([ \t]*)const \[ytQuota, setYtQuota\] = useState\([^\n]*\)\n/
-  if (regex.test(d)) {
-    d = d.replace(regex, function (m, indent) {
-      return m + indent + 'const [ytQuotaLoading, setYtQuotaLoading] = useState(true)\n'
-    })
-    fs.writeFileSync(path.join(root, FILE_D), d, 'utf8')
-    console.log('[BERHASIL] State ytQuotaLoading ditambahkan tepat di bawah state ytQuota')
-  } else {
-    console.log('[TIDAK KETEMU] Baris state ytQuota. Tambahkan manual baris berikut tepat di bawahnya:')
-    console.log('  const [ytQuotaLoading, setYtQuotaLoading] = useState(true)')
-  }
-}
-
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('Error ytQuotaLoading is not defined akan hilang setelah perbaikan ini.')
-```
-
-## File: apply-loading-kuota.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-
-console.log('Mulai menambahkan indikator loading pada kuota...')
-console.log('')
-
-const FILE_D = 'src/pages/DashboardPage.jsx'
-let d = baca(FILE_D)
-let berubah = false
-
-/* ===== 1. Tambah state ytQuotaLoading ===== */
-const cariState = `  const [ytQuota, setYtQuota] = useState({ limit: 5, used: 0, remaining: 5 })`
-const gantiState = `  const [ytQuota, setYtQuota] = useState({ limit: 5, used: 0, remaining: 5 })
-  const [ytQuotaLoading, setYtQuotaLoading] = useState(true)`
-if (d.includes('ytQuotaLoading')) {
-  console.log('[SUDAH ADA] State ytQuotaLoading')
-} else if (d.includes(cariState)) {
-  d = d.replace(cariState, gantiState)
-  berubah = true
-  console.log('[BERHASIL] State ytQuotaLoading ditambahkan')
-} else {
-  console.log('[TIDAK KETEMU] State ytQuota')
-}
-
-/* ===== 2. Set loading saat fetch kuota ===== */
-const cariFetch = `  useEffect(function () {
-    if (mahasiswa) refresh()
-    fetchYouTubeQuota().then(setYtQuota)`
-const gantiFetch = `  useEffect(function () {
-    if (mahasiswa) refresh()
-    setYtQuotaLoading(true)
-    fetchYouTubeQuota().then(function (data) {
-      setYtQuota(data)
-      setYtQuotaLoading(false)
-    })`
-if (d.includes('setYtQuotaLoading(true)')) {
-  console.log('[SUDAH ADA] Loading state pada fetch kuota')
-} else if (d.includes(cariFetch)) {
-  d = d.replace(cariFetch, gantiFetch)
-  berubah = true
-  console.log('[BERHASIL] Loading state dipasang pada fetch kuota')
-} else {
-  console.log('[TIDAK KETEMU] Blok fetch kuota di useEffect')
-}
-
-/* ===== 3. Set loading false juga di interval ===== */
-const cariInterval = `    const iv = setInterval(function () { fetchYouTubeQuota().then(setYtQuota) }, 30000)`
-const gantiInterval = `    const iv = setInterval(function () { fetchYouTubeQuota().then(function (data) { setYtQuota(data); setYtQuotaLoading(false) }) }, 30000)`
-if (d.includes(gantiInterval)) {
-  console.log('[SUDAH ADA] Loading state pada interval')
-} else if (d.includes(cariInterval)) {
-  d = d.replace(cariInterval, gantiInterval)
-  berubah = true
-  console.log('[BERHASIL] Loading state dipasang pada interval')
-} else {
-  console.log('[TIDAK KETEMU] Blok interval kuota')
-}
-
-/* ===== 4. Update tampilan kuota di form logbook ===== */
-const cariLogbook = `<p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuota.remaining} dari {ytQuota.limit}</p>`
-const gantiLogbook = `<p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuotaLoading ? <span className="inline-block w-3 h-3 ml-1 border-2 border-slate-400 border-t-transparent rounded-full animate-spin align-middle"></span> : <>{ytQuota.remaining} dari {ytQuota.limit}</>}</p>`
-if (d.includes('border-t-transparent rounded-full animate-spin')) {
-  console.log('[SUDAH ADA] Indikator loading di form logbook')
-} else if (d.includes(cariLogbook)) {
-  d = d.split(cariLogbook).join(gantiLogbook)
-  berubah = true
-  console.log('[BERHASIL] Indikator loading dipasang di form logbook')
-} else {
-  console.log('[TIDAK KETEMU] Teks kuota di form logbook')
-}
-
-/* ===== 5. Update tampilan kuota di form galeri ===== */
-const cariGaleri = `<p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuota.remaining} dari {ytQuota.limit}</p>`
-if (d.includes(cariGaleri) && d.includes('galMode === \'video\'')) {
-  d = d.split(cariGaleri).join(gantiLogbook)
-  berubah = true
-  console.log('[BERHASIL] Indikator loading dipasang di form galeri')
-}
-
-/* ===== 6. Update tampilan kuota di form rincian kegiatan ===== */
-const cariRincian = `<p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuota.remaining} dari {ytQuota.limit}</p>`
-if (d.includes(cariRincian) && d.includes('it.mode === \'video\'')) {
-  d = d.split(cariRincian).join(gantiLogbook)
-  berubah = true
-  console.log('[BERHASIL] Indikator loading dipasang di form rincian kegiatan')
-}
-
-if (berubah) {
-  simpan(FILE_D, d)
-}
-
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Perilaku baru:')
-console.log('1. Saat halaman dibuka, tulisan kuota menampilkan spinner kecil berputar.')
-console.log('2. Begitu data dari server datang (biasanya < 1 detik), spinner hilang dan angka muncul.')
-console.log('3. Tidak ada lagi kedipan angka dari 6 ke 26, karena loading state menahan tampilan.')
-```
-
-## File: setup-youtube-token-multi.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const http = require('http')
-const crypto = require('crypto')
-
-const n = String(process.argv[2] || '1')
-const envPath = path.join(process.cwd(), '.env.local')
-if (!fs.existsSync(envPath)) {
-  console.log('[GAGAL] .env.local belum ada')
-  process.exit(1)
-}
-const env = {}
-fs.readFileSync(envPath, 'utf8').split('\n').forEach(function (line) {
-  const m = line.match(/^\s*([A-Za-z0-9_]+)\s*=\s*(.*)\s*$/)
-  if (m) env[m[1]] = m[2].replace(/^["']|["']$/g, '')
-})
-const clientId = env['YOUTUBE_CLIENT_ID_' + n]
-const clientSecret = env['YOUTUBE_CLIENT_SECRET_' + n]
-if (!clientId || !clientSecret) {
-  console.log('[GAGAL] Isi dulu YOUTUBE_CLIENT_ID_' + n + ' dan YOUTUBE_CLIENT_SECRET_' + n + ' di .env.local')
-  process.exit(1)
-}
-
-const PORT = 8790
-const redirect = 'http://localhost:' + PORT + '/callback'
-const state = crypto.randomBytes(8).toString('hex')
-const scope = 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly'
-const url = 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({
-  client_id: clientId, redirect_uri: redirect, response_type: 'code',
-  scope: scope, access_type: 'offline', prompt: 'consent', state: state
-})
-
-function simpanToken(token) {
-  let isi = fs.readFileSync(envPath, 'utf8')
-  const key = 'YOUTUBE_REFRESH_TOKEN_' + n
-  const re = new RegExp('^' + key + '=.*$', 'm')
-  if (re.test(isi)) isi = isi.replace(re, key + '=' + token)
-  else isi = isi.trimEnd() + '\n' + key + '=' + token + '\n'
-  fs.writeFileSync(envPath, isi, 'utf8')
-}
-
-const server = http.createServer(async function (req, res) {
-  const u = new URL(req.url, 'http://localhost')
-  if (u.pathname !== '/callback') { res.end('ok'); return }
-  const code = u.searchParams.get('code')
-  const st = u.searchParams.get('state')
-  if (st !== state) { res.end('State tidak cocok'); return }
-  const body = new URLSearchParams({
-    code: code, client_id: clientId, client_secret: clientSecret,
-    redirect_uri: redirect, grant_type: 'authorization_code'
+    const tag = document.createElement('script')
+    tag.src = 'https://www.youtube.com/iframe_api'
+    tag.async = true
+    document.head.appendChild(tag)
   })
-  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: body })
-  const j = await r.json()
-  res.setHeader('Content-Type', 'text/html; charset=utf-8')
-  if (j.refresh_token) {
-    simpanToken(j.refresh_token)
-    res.end('<h2>Berhasil untuk project ' + n + '</h2><p>Refresh token tersimpan otomatis ke YOUTUBE_REFRESH_TOKEN_' + n + ' di .env.local</p>')
-    console.log('[BERHASIL] Refresh token project ' + n + ' disimpan ke .env.local')
-  } else {
-    res.end('<h2>Gagal</h2><pre>' + JSON.stringify(j, null, 2) + '</pre>')
-    console.log('[GAGAL] ' + JSON.stringify(j))
-  }
-  setTimeout(function () { server.close(); process.exit(0) }, 1500)
-})
+  return janjiApi
+}
 
-server.listen(PORT, function () {
-  console.log('Project ' + n + ': membuka browser untuk otorisasi...')
-  console.log('Jika tidak terbuka otomatis, buka manual URL ini:')
-  console.log(url)
+function formatWaktu(detik) {
+  const d = isFinite(detik) && detik > 0 ? detik : 0
+  const m = Math.floor(d / 60)
+  const s = Math.floor(d % 60)
+  return m + ':' + (s < 10 ? '0' : '') + s
+}
+
+function paksaKualitas(p) {
   try {
-    require('child_process').exec(process.platform === 'win32' ? 'start "" "' + url + '"' : 'xdg-open ' + url)
+    if (p && typeof p.setPlaybackQualityRange === 'function') p.setPlaybackQualityRange('720', '1080')
   } catch (e) {}
-})
+}
+function matikanSubtitel(p) {
+  try {
+    if (p && typeof p.unloadModule === 'function') p.unloadModule('captions')
+  } catch (e) {}
+  try {
+    if (p && typeof p.setOption === 'function') p.setOption('captions', 'track', {})
+  } catch (e) {}
+}
+
+function IkonPlay() { return <svg viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6"><path d="M8 5v14l11-7z" /></svg> }
+function IkonPause() { return <svg viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6"><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg> }
+function IkonSuara() { return <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5"><path d="M3 10v4h4l5 5V5L7 10H3z" /><path d="M16 8.5a4 4 0 0 1 0 7M18.5 6a7 7 0 0 1 0 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg> }
+function IkonBisu() { return <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5"><path d="M3 10v4h4l5 5V5L7 10H3z" /><path d="M16 9l6 6M22 9l-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg> }
+function IkonPenuh() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-5 w-5"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg> }
+function IkonKecil() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-5 w-5"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" /></svg> }
+function IkonUlang() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></svg> }
+
+export default function PemutarVideo(props) {
+  const youtubeId = props.youtubeId
+  const [dimulai, setDimulai] = useState(false)
+  const [memutar, setMemutar] = useState(false)
+  const [buffer, setBuffer] = useState(false)
+  const [selesai, setSelesai] = useState(false)
+  const [gagal, setGagal] = useState(false)
+  const [waktu, setWaktu] = useState(0)
+  const [durasi, setDurasi] = useState(0)
+  const [bisu, setBisu] = useState(false)
+  const [penuh, setPenuh] = useState(false)
+  const [tutup, setTutup] = useState(false)
+  const kotakRef = useRef(null)
+  const wadahRef = useRef(null)
+  const playerRef = useRef(null)
+  const putarPertama = useRef(false)
+  const timerTutup = useRef(null)
+
+  useEffect(function () {
+    const iv = setInterval(function () {
+      const p = playerRef.current
+      if (p && p.getCurrentTime) {
+        setWaktu(p.getCurrentTime() || 0)
+        const d = p.getDuration ? p.getDuration() : 0
+        if (d) setDurasi(d)
+      }
+    }, 400)
+    return function () { clearInterval(iv) }
+  }, [])
+
+  useEffect(function () {
+    function saatPenuh() { setPenuh(Boolean(document.fullscreenElement)) }
+    document.addEventListener('fullscreenchange', saatPenuh)
+    return function () {
+      document.removeEventListener('fullscreenchange', saatPenuh)
+      if (timerTutup.current) clearTimeout(timerTutup.current)
+      if (playerRef.current && playerRef.current.destroy) {
+        try { playerRef.current.destroy() } catch (e) {}
+        playerRef.current = null
+      }
+    }
+  }, [])
+
+  async function mulai() {
+    setDimulai(true)
+    setGagal(false)
+    setTutup(true)
+    try {
+      const YT = await muatApiYouTube()
+      if (!wadahRef.current) return
+      playerRef.current = new YT.Player(wadahRef.current, {
+        videoId: youtubeId,
+        playerVars: {
+          autoplay: 1,
+          controls: 0,
+          modestbranding: 1,
+          rel: 0,
+          fs: 0,
+          disablekb: 1,
+          iv_load_policy: 3,
+          playsinline: 1,
+          autohide: 1,
+          showinfo: 0,
+          cc_load_policy: 0,
+          origin: window.location.origin
+        },
+        events: {
+          onReady: function (e) {
+            setDurasi(e.target.getDuration() || 0)
+            paksaKualitas(e.target)
+            matikanSubtitel(e.target)
+            e.target.playVideo()
+          },
+          onStateChange: function (e) {
+            const S = window.YT.PlayerState
+            if (e.data === S.PLAYING) {
+              setMemutar(true)
+              setBuffer(false)
+              setSelesai(false)
+              paksaKualitas(e.target)
+              matikanSubtitel(e.target)
+              if (!putarPertama.current) {
+                putarPertama.current = true
+                timerTutup.current = setTimeout(function () { setTutup(false) }, 2600)
+              }
+            } else if (e.data === S.PAUSED) {
+              setMemutar(false)
+              setBuffer(false)
+            } else if (e.data === S.BUFFERING) {
+              setBuffer(true)
+            } else if (e.data === S.ENDED) {
+              setMemutar(false)
+              setSelesai(true)
+              setTutup(false)
+            }
+          },
+          onError: function () {
+            setGagal(true)
+            setBuffer(false)
+            setMemutar(false)
+            setTutup(false)
+          }
+        }
+      })
+    } catch (e) {
+      setGagal(true)
+      setTutup(false)
+    }
+  }
+
+  function jungkir() {
+    const p = playerRef.current
+    if (!p) return
+    if (memutar) p.pauseVideo()
+    else p.playVideo()
+  }
+
+  function cari(ev) {
+    const p = playerRef.current
+    if (!p || !durasi) return
+    const kotak = ev.currentTarget.getBoundingClientRect()
+    const rasio = Math.min(1, Math.max(0, (ev.clientX - kotak.left) / kotak.width))
+    p.seekTo(rasio * durasi, true)
+    setWaktu(rasio * durasi)
+  }
+
+  function aturBisu() {
+    const p = playerRef.current
+    if (!p) return
+    if (bisu) { p.unMute(); setBisu(false) } else { p.mute(); setBisu(true) }
+  }
+
+  function aturPenuh() {
+    const el = kotakRef.current
+    if (!el) return
+    if (document.fullscreenElement) document.exitFullscreen()
+    else if (el.requestFullscreen) el.requestFullscreen()
+  }
+
+  const thumb = 'https://i.ytimg.com/vi/' + youtubeId + '/hqdefault.jpg'
+  const persen = durasi ? Math.min(100, (waktu / durasi) * 100) : 0
+
+  return (
+    <div ref={kotakRef} className={'pemutar-bungkus group relative overflow-hidden bg-slate-950 ' + (props.className || 'aspect-video w-full')}>
+      <div className="absolute inset-0 z-0">
+        <div ref={wadahRef} className="h-full w-full" />
+      </div>
+
+      {dimulai && !selesai && !gagal ? (
+        <button type="button" aria-label="Putar atau jeda video" onClick={jungkir} className="absolute inset-0 z-10 h-full w-full cursor-pointer bg-transparent" />
+      ) : null}
+
+      {dimulai && !gagal ? (
+        <div className={'pointer-events-none absolute inset-0 z-10 bg-slate-950 transition-opacity duration-700 ' + (tutup ? 'opacity-100' : 'opacity-0')}>
+          <img src={thumb} alt="" className="h-full w-full object-cover" />
+        </div>
+      ) : null}
+
+      {dimulai && !memutar && !buffer && !selesai && !gagal && !tutup ? (
+        <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center">
+          <span className="grid h-14 w-14 place-items-center rounded-full bg-slate-950/60 text-white ring-1 ring-white/20 backdrop-blur-sm">
+            <IkonPlay />
+          </span>
+        </div>
+      ) : null}
+
+      {!dimulai ? (
+        <div className="absolute inset-0 z-20">
+          <img src={thumb} alt={props.title || 'Pratinjau video'} className="absolute inset-0 h-full w-full object-cover opacity-85" />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/25 to-slate-950/10" />
+          <div className="absolute inset-0 grid place-items-center">
+            <button type="button" onClick={mulai} title="Putar video"
+              className="grid h-16 w-16 place-items-center rounded-full bg-bsi-700 text-white shadow-xl shadow-bsi-900/50 ring-4 ring-white/20 transition hover:scale-105 hover:bg-bsi-600">
+              <IkonPlay />
+            </button>
+          </div>
+          {props.title ? <p className="absolute bottom-3 left-4 right-4 truncate text-sm font-semibold text-white drop-shadow-md">{props.title}</p> : null}
+        </div>
+      ) : null}
+
+      {selesai ? (
+        <div className="absolute inset-0 z-20 grid place-items-center bg-slate-950/85 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-3">
+            <button type="button" title="Putar ulang"
+              onClick={function () { const p = playerRef.current; if (p) { p.seekTo(0, true); p.playVideo() } setSelesai(false) }}
+              className="grid h-14 w-14 place-items-center rounded-full bg-gold-500 text-slate-900 shadow-lg transition hover:scale-105">
+              <IkonUlang />
+            </button>
+            <p className="text-xs font-semibold text-slate-200">Putar ulang</p>
+          </div>
+        </div>
+      ) : null}
+
+      {gagal ? (
+        <div className="absolute inset-0 z-30 grid place-items-center bg-slate-950/90">
+          <div className="flex flex-col items-center gap-2 px-6 text-center">
+            <p className="text-sm font-semibold text-slate-200">Video tidak dapat dimuat</p>
+            <p className="text-xs text-slate-400">Periksa koneksi atau ketersediaan video di saluran.</p>
+          </div>
+        </div>
+      ) : null}
+
+      {dimulai && !gagal ? (
+        <div className={'absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-slate-950/95 via-slate-950/70 to-transparent px-3 pb-2.5 pt-10 transition-opacity duration-300 ' + (memutar ? 'opacity-0 group-hover:opacity-100 focus-within:opacity-100' : 'opacity-100')}>
+          <div className="mb-2 cursor-pointer py-1" onClick={cari} title="Geser durasi">
+            <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-white/20">
+              <div className="absolute inset-y-0 left-0 rounded-full bg-gold-500" style={{ width: persen + '%' }} />
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-white">
+            <button type="button" onClick={jungkir} title={memutar ? 'Jeda' : 'Putar'} className="grid h-9 w-9 place-items-center rounded-full bg-bsi-700 transition hover:bg-bsi-600">
+              {memutar ? <IkonPause /> : <IkonPlay />}
+            </button>
+            <button type="button" onClick={aturBisu} title={bisu ? 'Nyalakan suara' : 'Bisukan'} className="grid h-9 w-9 place-items-center rounded-full bg-white/10 transition hover:bg-white/20">
+              {bisu ? <IkonBisu /> : <IkonSuara />}
+            </button>
+            <span className="ml-1 text-[11px] font-semibold tabular-nums text-slate-200">{formatWaktu(waktu)} / {formatWaktu(durasi)}</span>
+            <span className="flex-1" />
+            {buffer ? <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-gold-500 border-t-transparent" /> : null}
+            <button type="button" onClick={aturPenuh} title={penuh ? 'Keluar layar penuh' : 'Layar penuh'} className="grid h-9 w-9 place-items-center rounded-full bg-white/10 transition hover:bg-white/20">
+              {penuh ? <IkonKecil /> : <IkonPenuh />}
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+`)
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Perilaku baru yang berlaku:')
+console.log('1. Saat tombol putar ditekan, poster menutup seluruh area selama 2,6 detik pertama.')
+console.log('2. Chip channel kiri atas, logo YouTube kanan bawah, dan kilau awal bawaan tertutup poster.')
+console.log('3. Poster memudar halus setelah jendela lapisan awal lewat, video lanjut tanpa merek.')
+console.log('4. Subtitel dipaksa nonaktif lewat cc_load_policy 0 plus perintah API saat siap dan saat bermain.')
+console.log('5. Kualitas putar dikunci di rentang 720p sampai 1080p lewat setPlaybackQualityRange.')
 ```
 
-## File: siapkan-env-youtube-lokal.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-const envPath = path.join(root, '.env.local')
+## File: tesss-iframeeee.html
+```html
+<!DOCTYPE html>
 
-if (!fs.existsSync(envPath)) {
-  console.log('[GAGAL] .env.local belum ada. Buat dulu dari .env.example lalu isi nilai Supabase dan R2.')
-  process.exit(1)
-}
-let isi = fs.readFileSync(envPath, 'utf8')
-if (isi.includes('YOUTUBE_CLIENT_ID_1=')) {
-  console.log('[SUDAH ADA] Blok variabel YouTube bernomor di .env.local')
-} else {
-  const blok = [
-    '',
-    '# -----------------------------------------------------',
-    '# 4) YOUTUBE API MULTI-PROJECT (auto-rotate kuota)',
-    '# Enam set kredensial untuk enam project Google Cloud.',
-    '# Sistem otomatis memilih project yang masih punya kuota.',
-    '# Isi CLIENT_ID dan CLIENT_SECRET per nomor setelah membuat',
-    '# OAuth Client ID di Console. REFRESH_TOKEN terisi otomatis',
-    '# oleh setup-youtube-token-multi.cjs <nomor>.',
-    '# -----------------------------------------------------'
-  ]
-  for (let n = 1; n <= 6; n++) {
-    blok.push('YOUTUBE_CLIENT_ID_' + n + '=')
-    blok.push('YOUTUBE_CLIENT_SECRET_' + n + '=')
-    blok.push('YOUTUBE_REFRESH_TOKEN_' + n + '=')
-  }
-  isi = isi.trimEnd() + '\n' + blok.join('\n') + '\n'
-  fs.writeFileSync(envPath, isi, 'utf8')
-  console.log('[BERHASIL] Blok variabel YouTube bernomor ditambahkan ke .env.local')
-}
-console.log('')
-console.log('Lanjut: buat 6 project di Console, tempel Client ID dan Secret')
-console.log('ke variabel bernomor di .env.local, lalu jalankan')
-console.log('node setup-youtube-token-multi.cjs 1 sampai 6')
+<html lang="id">
+
+<head>
+
+  <meta charset="UTF-8">
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Centered Fullscreen Custom YouTube Player</title>
+
+  <style>
+
+    * {
+
+      box-sizing: border-box;
+
+      margin: 0;
+
+      padding: 0;
+
+      font-family: Arial, sans-serif;
+
+    }
+
+
+
+    body {
+
+      background-color: #121212;
+
+      color: #fff;
+
+      display: flex;
+
+      justify-content: center;
+
+      align-items: center;
+
+      min-height: 100vh;
+
+      flex-direction: column;
+
+    }
+
+
+
+    /* Container Pemutar Video Utama */
+
+    .player-container {
+
+      position: relative;
+
+      width: 720px;
+
+      max-width: 95vw;
+
+      background: #000;
+
+      border-radius: 12px;
+
+      overflow: hidden;
+
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+
+    }
+
+
+
+    /* Fullscreen Center */
+
+    .player-container:fullscreen {
+
+      width: 100vw;
+
+      height: 100vh;
+
+      max-width: none;
+
+      border-radius: 0;
+
+      display: flex;
+
+      flex-direction: column;
+
+      justify-content: center;
+
+      align-items: center;
+
+      background-color: #000;
+
+    }
+
+
+
+    .player-container.hide-controls {
+
+      cursor: none;
+
+    }
+
+
+
+    /* TRIK CROPPING Header YouTube */
+
+    .video-viewport {
+
+      position: relative;
+
+      width: 100%;
+
+      padding-top: 56.25%; /* Ratio 16:9 */
+
+      overflow: hidden;
+
+    }
+
+
+
+    .player-container:fullscreen .video-viewport {
+
+      width: 100%;
+
+      max-height: 100vh;
+
+    }
+
+
+
+    #player {
+
+      position: absolute;
+
+      top: -60px; /* Potong top bar YouTube */
+
+      left: -2px;
+
+      width: calc(100% + 4px);
+
+      height: calc(100% + 120px);
+
+      pointer-events: none;
+
+    }
+
+
+
+    /* Layer Poster & Tombol Play Kustom */
+
+    .custom-poster {
+
+      position: absolute;
+
+      top: 0;
+
+      left: 0;
+
+      width: 100%;
+
+      height: 100%;
+
+      z-index: 2;
+
+      background-size: cover;
+
+      background-position: center;
+
+      display: flex;
+
+      justify-content: center;
+
+      align-items: center;
+
+      cursor: default; /* Diubah menjadi panah biasa */
+
+      transition: opacity 0.3s ease, visibility 0.3s ease;
+
+    }
+
+
+
+    .custom-poster.is-hidden {
+
+      opacity: 0;
+
+      visibility: hidden;
+
+      pointer-events: none;
+
+    }
+
+
+
+    /* Ikon Play Tengah Minimalis & Kecil */
+
+    .center-play-btn {
+
+      width: 48px;
+
+      height: 48px;
+
+      background: rgba(0, 0, 0, 0.5);
+
+      border: 1px solid rgba(255, 255, 255, 0.2);
+
+      border-radius: 50%;
+
+      display: flex;
+
+      justify-content: center;
+
+      align-items: center;
+
+      backdrop-filter: blur(8px);
+
+      cursor: pointer; /* Tombol play tengah tetap jari agar jelas bisa diklik */
+
+      transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+
+    }
+
+
+
+    .custom-poster:hover .center-play-btn {
+
+      transform: scale(1.08);
+
+      background: rgba(255, 0, 0, 0.85);
+
+      border-color: rgba(255, 0, 0, 0.85);
+
+    }
+
+
+
+    .center-play-btn svg {
+
+      width: 20px;
+
+      height: 20px;
+
+      fill: #fff;
+
+      margin-left: 3px;
+
+    }
+
+
+
+    /* Overlay Transparan (Aktif setelah video diputar) */
+
+    .overlay-shield {
+
+      position: absolute;
+
+      top: 0;
+
+      left: 0;
+
+      width: 100%;
+
+      height: 100%;
+
+      z-index: 1;
+
+      background: transparent;
+
+      cursor: default; /* Diubah menjadi panah biasa */
+
+    }
+
+
+
+    /* Panel Kontrol Kustom */
+
+    .custom-controls {
+
+      display: flex;
+
+      align-items: center;
+
+      gap: 12px;
+
+      padding: 12px 16px;
+
+      background: rgba(30, 30, 30, 0.95);
+
+      z-index: 3;
+
+      position: absolute;
+
+      bottom: 0;
+
+      left: 0;
+
+      width: 100%;
+
+      opacity: 1;
+
+      visibility: visible;
+
+      transition: opacity 0.4s ease, visibility 0.4s ease;
+
+    }
+
+
+
+    .player-container.hide-controls .custom-controls {
+
+      opacity: 0;
+
+      visibility: hidden;
+
+    }
+
+
+
+    button {
+
+      background: #333;
+
+      color: #fff;
+
+      border: none;
+
+      padding: 8px 12px;
+
+      border-radius: 6px;
+
+      cursor: pointer;
+
+      font-weight: bold;
+
+      transition: background 0.2s;
+
+      display: flex;
+
+      align-items: center;
+
+      justify-content: center;
+
+    }
+
+
+
+    button:hover {
+
+      background: #555;
+
+    }
+
+
+
+    button svg {
+
+      width: 18px;
+
+      height: 18px;
+
+      fill: #fff;
+
+    }
+
+
+
+    /* Progress Bar */
+
+    .progress-container {
+
+      flex-grow: 1;
+
+      display: flex;
+
+      align-items: center;
+
+    }
+
+
+
+    .progress-bar {
+
+      width: 100%;
+
+      height: 6px;
+
+      -webkit-appearance: none;
+
+      appearance: none;
+
+      background: linear-gradient(to right, #ff0000 0%, #444 0%);
+
+      border-radius: 3px;
+
+      outline: none;
+
+      cursor: pointer;
+
+    }
+
+
+
+    .progress-bar::-webkit-slider-thumb {
+
+      -webkit-appearance: none;
+
+      appearance: none;
+
+      width: 14px;
+
+      height: 14px;
+
+      border-radius: 50%;
+
+      background: #ff0000;
+
+      cursor: pointer;
+
+    }
+
+
+
+    /* Text & Slider Volume */
+
+    .time-display {
+
+      font-size: 13px;
+
+      color: #bbb;
+
+      min-width: 80px;
+
+      text-align: center;
+
+    }
+
+
+
+    .volume-slider {
+
+      width: 70px;
+
+      cursor: pointer;
+
+    }
+
+  </style>
+
+</head>
+
+<body>
+
+
+
+  <div class="player-container" id="playerContainer">
+
+    <div class="video-viewport">
+
+      <div id="player"></div>
+
+      
+
+      <!-- Poster Kustom + Tombol Play Tengah Minimalis -->
+
+      <div class="custom-poster" id="customPoster" onclick="togglePlay()">
+
+        <div class="center-play-btn">
+
+          <svg viewBox="0 0 24 24">
+
+            <path d="M8 5v14l11-7z"/>
+
+          </svg>
+
+        </div>
+
+      </div>
+
+
+
+      <div class="overlay-shield" id="overlayShield"></div>
+
+    </div>
+
+
+
+    <!-- Panel Kontrol Kustom -->
+
+    <div class="custom-controls" id="customControls">
+
+      <button id="playPauseBtn" onclick="togglePlay()" aria-label="Play/Pause">
+
+        <svg id="playIcon" viewBox="0 0 24 24">
+
+          <path d="M8 5v14l11-7z"/>
+
+        </svg>
+
+        <svg id="pauseIcon" viewBox="0 0 24 24" style="display: none;">
+
+          <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+
+        </svg>
+
+      </button>
+
+      
+
+      <div class="progress-container">
+
+        <input type="range" id="progressBar" class="progress-bar" value="0" min="0" max="100" step="0.1" oninput="seekVideo(this.value)">
+
+      </div>
+
+
+
+      <span class="time-display" id="timeDisplay">0:00 / 0:00</span>
+
+
+
+      <button id="muteBtn" onclick="toggleMute()" aria-label="Mute/Unmute">
+
+        <svg id="volumeIcon" viewBox="0 0 24 24">
+
+          <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+
+        </svg>
+
+        <svg id="muteIcon" viewBox="0 0 24 24" style="display: none;">
+
+          <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
+
+        </svg>
+
+      </button>
+
+      <input type="range" id="volumeSlider" class="volume-slider" min="0" max="100" value="100" oninput="changeVolume(this.value)">
+
+
+
+      <button onclick="toggleFullscreen()">&#x26F6;</button>
+
+    </div>
+
+  </div>
+
+
+
+  <script>
+
+    var videoId = 'ypqq9quWfkM'; // ID Video
+
+    var tag = document.createElement('script');
+
+    tag.src = "https://www.youtube.com/iframe_api";
+
+    var firstScriptTag = document.getElementsByTagName('script')[0];
+
+    firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+
+
+    var player;
+
+    var updateInterval;
+
+    var hideControlsTimeout;
+
+
+
+    var playerContainer = document.getElementById('playerContainer');
+
+    var customPoster = document.getElementById('customPoster');
+
+
+
+    customPoster.style.backgroundImage = `url('https://img.youtube.com/vi/${videoId}/maxresdefault.jpg')`;
+
+
+
+    function onYouTubeIframeAPIReady() {
+
+      player = new YT.Player('player', {
+
+        videoId: videoId,
+
+        playerVars: {
+
+          'controls': 0,
+
+          'rel': 0,
+
+          'modestbranding': 1,
+
+          'playsinline': 1,
+
+          'disablekb': 1
+
+        },
+
+        events: {
+
+          'onReady': onPlayerReady,
+
+          'onStateChange': onPlayerStateChange
+
+        }
+
+      });
+
+    }
+
+
+
+    function onPlayerReady(event) {
+
+      document.getElementById('overlayShield').addEventListener('click', togglePlay);
+
+      setupAutoHideControls();
+
+    }
+
+
+
+    function onPlayerStateChange(event) {
+
+      var playIcon = document.getElementById('playIcon');
+
+      var pauseIcon = document.getElementById('pauseIcon');
+
+      
+
+      if (event.data == YT.PlayerState.PLAYING) {
+
+        customPoster.classList.add('is-hidden');
+
+        playIcon.style.display = 'none';
+
+        pauseIcon.style.display = 'block';
+
+        updateInterval = setInterval(updateProgress, 250);
+
+        resetAutoHideTimer();
+
+      } else {
+
+        playIcon.style.display = 'block';
+
+        pauseIcon.style.display = 'none';
+
+        clearInterval(updateInterval);
+
+        showControls();
+
+        clearTimeout(hideControlsTimeout);
+
+      }
+
+    }
+
+
+
+    function setupAutoHideControls() {
+
+      playerContainer.addEventListener('mousemove', function() {
+
+        showControls();
+
+        resetAutoHideTimer();
+
+      });
+
+
+
+      playerContainer.addEventListener('mouseleave', function() {
+
+        if (player && player.getPlayerState() == YT.PlayerState.PLAYING) {
+
+          hideControls();
+
+        }
+
+      });
+
+    }
+
+
+
+    function showControls() {
+
+      playerContainer.classList.remove('hide-controls');
+
+    }
+
+
+
+    function hideControls() {
+
+      playerContainer.classList.add('hide-controls');
+
+    }
+
+
+
+    function resetAutoHideTimer() {
+
+      clearTimeout(hideControlsTimeout);
+
+      if (player && player.getPlayerState() == YT.PlayerState.PLAYING) {
+
+        hideControlsTimeout = setTimeout(function() {
+
+          hideControls();
+
+        }, 2500);
+
+      }
+
+    }
+
+
+
+    function togglePlay() {
+
+      var state = player.getPlayerState();
+
+      if (state == YT.PlayerState.PLAYING) {
+
+        player.pauseVideo();
+
+      } else {
+
+        player.playVideo();
+
+      }
+
+    }
+
+
+
+    function updateProgress() {
+
+      if (!player || !player.getCurrentTime) return;
+
+      var currentTime = player.getCurrentTime();
+
+      var duration = player.getDuration();
+
+      
+
+      if (duration > 0) {
+
+        var percentage = (currentTime / duration) * 100;
+
+        var progressBar = document.getElementById('progressBar');
+
+        
+
+        progressBar.value = percentage;
+
+        updateProgressBarFill(progressBar, percentage);
+
+
+
+        document.getElementById('timeDisplay').innerText = 
+
+          formatTime(currentTime) + ' / ' + formatTime(duration);
+
+      }
+
+    }
+
+
+
+    function updateProgressBarFill(element, percentage) {
+
+      element.style.background = `linear-gradient(to right, #ff0000 ${percentage}%, #444 ${percentage}%)`;
+
+    }
+
+
+
+    function seekVideo(value) {
+
+      var duration = player.getDuration();
+
+      var seekToTime = (value / 100) * duration;
+
+      updateProgressBarFill(document.getElementById('progressBar'), value);
+
+      player.seekTo(seekToTime, true);
+
+    }
+
+
+
+    function toggleMute() {
+
+      if (player.isMuted()) {
+
+        player.unMute();
+
+        updateVolumeUI(player.getVolume(), false);
+
+      } else {
+
+        player.mute();
+
+        updateVolumeUI(0, true);
+
+      }
+
+    }
+
+
+
+    function changeVolume(value) {
+
+      player.setVolume(value);
+
+      if (value == 0) {
+
+        player.mute();
+
+        updateVolumeUI(0, true);
+
+      } else {
+
+        if (player.isMuted()) player.unMute();
+
+        updateVolumeUI(value, false);
+
+      }
+
+    }
+
+
+
+    function updateVolumeUI(volumeValue, isMuted) {
+
+      var volumeIcon = document.getElementById('volumeIcon');
+
+      var muteIcon = document.getElementById('muteIcon');
+
+      var volumeSlider = document.getElementById('volumeSlider');
+
+
+
+      if (isMuted || volumeValue == 0) {
+
+        volumeIcon.style.display = 'none';
+
+        muteIcon.style.display = 'block';
+
+      } else {
+
+        volumeIcon.style.display = 'block';
+
+        muteIcon.style.display = 'none';
+
+        volumeSlider.value = volumeValue;
+
+      }
+
+    }
+
+
+
+    function toggleFullscreen() {
+
+      if (!document.fullscreenElement) {
+
+        playerContainer.requestFullscreen().catch(err => alert(err.message));
+
+      } else {
+
+        document.exitFullscreen();
+
+      }
+
+    }
+
+
+
+    function formatTime(seconds) {
+
+      var mins = Math.floor(seconds / 60);
+
+      var secs = Math.floor(seconds % 60);
+
+      if (secs < 10) secs = '0' + secs;
+
+      return mins + ':' + secs;
+
+    }
+
+  </script>
+
+</body>
+
+</html>
 ```
 
 ## File: api/r2/delete.js
@@ -745,216 +3560,6 @@ export default async function handler(req, res) {
   )
   const publicUrl = process.env.R2_PUBLIC_BASE_URL + '/' + key
   return res.status(200).json({ uploadUrl, publicUrl, key })
-}
-```
-
-## File: api/youtube/latest.js
-```javascript
-import { createClient } from '@supabase/supabase-js'
-const LIMIT_PER_PROJECT = 5
-function ptToday() {
-  const now = new Date()
-  const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
-  const y = pt.getFullYear()
-  const m = String(pt.getMonth() + 1).padStart(2, '0')
-  const d = String(pt.getDate()).padStart(2, '0')
-  return y + '-' + m + '-' + d
-}
-function daftarKredensial() {
-  const list = []
-  for (let n = 1; n <= 6; n++) {
-    const id = process.env['YOUTUBE_CLIENT_ID_' + n]
-    const secret = process.env['YOUTUBE_CLIENT_SECRET_' + n]
-    const refresh = process.env['YOUTUBE_REFRESH_TOKEN_' + n]
-    if (id && secret && refresh) list.push({ n: n, id: id, secret: secret, refresh: refresh })
-  }
-  if (!list.length && process.env.YOUTUBE_CLIENT_ID && process.env.YOUTUBE_CLIENT_SECRET && process.env.YOUTUBE_REFRESH_TOKEN) {
-    list.push({ n: 1, id: process.env.YOUTUBE_CLIENT_ID, secret: process.env.YOUTUBE_CLIENT_SECRET, refresh: process.env.YOUTUBE_REFRESH_TOKEN })
-  }
-  return list
-}
-const cacheToken = {}
-async function getAccessToken(kred) {
-  const now = Date.now()
-  const c = cacheToken[kred.n]
-  if (c && c.expire > now + 60000) return c.token
-  const params = new URLSearchParams()
-  params.set('client_id', kred.id)
-  params.set('client_secret', kred.secret)
-  params.set('refresh_token', kred.refresh)
-  params.set('grant_type', 'refresh_token')
-  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
-  if (!r.ok) throw new Error('refresh token project ' + kred.n + ' gagal (status ' + r.status + ')')
-  const j = await r.json()
-  cacheToken[kred.n] = { token: j.access_token, expire: now + (j.expires_in || 3600) * 1000 }
-  return j.access_token
-}
-export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
-  const authHeader = req.headers.authorization || ''
-  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
-  const authClient = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
-  const chk = await authClient.auth.getUser()
-  if (chk.error || !chk.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
-  const kredensial = daftarKredensial()
-  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
-  let terakhir = ''
-  for (const kred of kredensial) {
-    let access
-    try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
-    const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&order=date&maxResults=5', { headers: { Authorization: 'Bearer ' + access } })
-    if (!r.ok) { terakhir = 'project ' + kred.n + ' status ' + r.status; continue }
-    const j = await r.json()
-    const items = j.items || []
-    const batas = Date.now() - 15 * 60 * 1000
-    const cocok = items.find(function (it) {
-      const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
-      return isNaN(t) ? false : t >= batas
-    })
-    if (!cocok) return res.status(404).json({ error: 'Video terbaru tidak ditemukan' })
-    return res.status(200).json({ videoId: cocok.id && cocok.id.videoId, project: kred.n })
-  }
-  return res.status(502).json({ error: 'Gagal memeriksa video terbaru: ' + terakhir })
-}
-```
-
-## File: api/youtube/quota.js
-```javascript
-import { createClient } from '@supabase/supabase-js'
-const LIMIT_PER_PROJECT = 5
-function ptToday() {
-  const now = new Date()
-  const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
-  const y = pt.getFullYear()
-  const m = String(pt.getMonth() + 1).padStart(2, '0')
-  const d = String(pt.getDate()).padStart(2, '0')
-  return y + '-' + m + '-' + d
-}
-function daftarKredensial() {
-  const list = []
-  for (let n = 1; n <= 6; n++) {
-    const id = process.env['YOUTUBE_CLIENT_ID_' + n]
-    const secret = process.env['YOUTUBE_CLIENT_SECRET_' + n]
-    const refresh = process.env['YOUTUBE_REFRESH_TOKEN_' + n]
-    if (id && secret && refresh) list.push({ n: n, id: id, secret: secret, refresh: refresh })
-  }
-  if (!list.length && process.env.YOUTUBE_CLIENT_ID && process.env.YOUTUBE_CLIENT_SECRET && process.env.YOUTUBE_REFRESH_TOKEN) {
-    list.push({ n: 1, id: process.env.YOUTUBE_CLIENT_ID, secret: process.env.YOUTUBE_CLIENT_SECRET, refresh: process.env.YOUTUBE_REFRESH_TOKEN })
-  }
-  return list
-}
-const cacheToken = {}
-async function getAccessToken(kred) {
-  const now = Date.now()
-  const c = cacheToken[kred.n]
-  if (c && c.expire > now + 60000) return c.token
-  const params = new URLSearchParams()
-  params.set('client_id', kred.id)
-  params.set('client_secret', kred.secret)
-  params.set('refresh_token', kred.refresh)
-  params.set('grant_type', 'refresh_token')
-  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
-  if (!r.ok) throw new Error('refresh token project ' + kred.n + ' gagal (status ' + r.status + ')')
-  const j = await r.json()
-  cacheToken[kred.n] = { token: j.access_token, expire: now + (j.expires_in || 3600) * 1000 }
-  return j.access_token
-}
-export default async function handler(req, res) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method tidak diizinkan' })
-  const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
-  const today = ptToday()
-  const kredensial = daftarKredensial()
-  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
-  let usedTotal = 0
-  const perProject = []
-  for (const kred of kredensial) {
-    const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
-    const used = hit.count || 0
-    usedTotal += used
-    perProject.push({ project: kred.n, used: used, remaining: Math.max(0, LIMIT_PER_PROJECT - used) })
-  }
-  const limit = kredensial.length * LIMIT_PER_PROJECT
-  res.setHeader('Cache-Control', 'no-store')
-  return res.status(200).json({ limit: limit, used: usedTotal, remaining: Math.max(0, limit - usedTotal), perProject: perProject, ptDate: today })
-}
-```
-
-## File: api/youtube/session.js
-```javascript
-import { createClient } from '@supabase/supabase-js'
-const LIMIT_PER_PROJECT = 5
-function ptToday() {
-  const now = new Date()
-  const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
-  const y = pt.getFullYear()
-  const m = String(pt.getMonth() + 1).padStart(2, '0')
-  const d = String(pt.getDate()).padStart(2, '0')
-  return y + '-' + m + '-' + d
-}
-function daftarKredensial() {
-  const list = []
-  for (let n = 1; n <= 6; n++) {
-    const id = process.env['YOUTUBE_CLIENT_ID_' + n]
-    const secret = process.env['YOUTUBE_CLIENT_SECRET_' + n]
-    const refresh = process.env['YOUTUBE_REFRESH_TOKEN_' + n]
-    if (id && secret && refresh) list.push({ n: n, id: id, secret: secret, refresh: refresh })
-  }
-  if (!list.length && process.env.YOUTUBE_CLIENT_ID && process.env.YOUTUBE_CLIENT_SECRET && process.env.YOUTUBE_REFRESH_TOKEN) {
-    list.push({ n: 1, id: process.env.YOUTUBE_CLIENT_ID, secret: process.env.YOUTUBE_CLIENT_SECRET, refresh: process.env.YOUTUBE_REFRESH_TOKEN })
-  }
-  return list
-}
-const cacheToken = {}
-async function getAccessToken(kred) {
-  const now = Date.now()
-  const c = cacheToken[kred.n]
-  if (c && c.expire > now + 60000) return c.token
-  const params = new URLSearchParams()
-  params.set('client_id', kred.id)
-  params.set('client_secret', kred.secret)
-  params.set('refresh_token', kred.refresh)
-  params.set('grant_type', 'refresh_token')
-  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
-  if (!r.ok) throw new Error('refresh token project ' + kred.n + ' gagal (status ' + r.status + ')')
-  const j = await r.json()
-  cacheToken[kred.n] = { token: j.access_token, expire: now + (j.expires_in || 3600) * 1000 }
-  return j.access_token
-}
-export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
-  const authHeader = req.headers.authorization || ''
-  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
-  const authClient = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
-  const chk = await authClient.auth.getUser()
-  if (chk.error || !chk.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
-  const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
-  const today = ptToday()
-  const kredensial = daftarKredensial()
-  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
-  const body = req.body || {}
-  if (!body.title) return res.status(400).json({ error: 'Judul video wajib diisi' })
-  let terakhir = ''
-  for (const kred of kredensial) {
-    const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
-    if ((hit.count || 0) >= LIMIT_PER_PROJECT) { terakhir = 'project ' + kred.n + ' sudah penuh'; continue }
-    let access
-    try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
-    const meta = {
-      snippet: { title: String(body.title).slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
-      status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
-    }
-    const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
-      body: JSON.stringify(meta)
-    })
-    if (!init.ok) { terakhir = 'project ' + kred.n + ' ditolak Google (status ' + init.status + ')'; continue }
-    const sessionUri = init.headers.get('location')
-    if (!sessionUri) { terakhir = 'project ' + kred.n + ' tanpa lokasi upload'; continue }
-    await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: chk.data.user.id, project_id: kred.n })
-    return res.status(200).json({ sessionUri: sessionUri, project: kred.n })
-  }
-  return res.status(429).json({ error: 'Kuota harian semua project video sudah habis. Coba lagi besok atau gunakan link video eksternal.', detail: terakhir })
 }
 ```
 
@@ -1274,6 +3879,305 @@ R2_BUCKET_NAME=mbsi-media
 R2_PUBLIC_BASE_URL=
 ```
 
+## File: apply-auto-rotate-youtube.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function simpan(rel, isi) {
+  const full = path.join(root, rel)
+  fs.mkdirSync(path.dirname(full), { recursive: true })
+  fs.writeFileSync(full, isi, 'utf8')
+  console.log('[BERHASIL] ' + rel + ' ditulis')
+}
+
+const KEPALA = `import { createClient } from '@supabase/supabase-js'
+const LIMIT_PER_PROJECT = 5
+function ptToday() {
+  const now = new Date()
+  const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
+  const y = pt.getFullYear()
+  const m = String(pt.getMonth() + 1).padStart(2, '0')
+  const d = String(pt.getDate()).padStart(2, '0')
+  return y + '-' + m + '-' + d
+}
+function daftarKredensial() {
+  const list = []
+  for (let n = 1; n <= 6; n++) {
+    const id = process.env['YOUTUBE_CLIENT_ID_' + n]
+    const secret = process.env['YOUTUBE_CLIENT_SECRET_' + n]
+    const refresh = process.env['YOUTUBE_REFRESH_TOKEN_' + n]
+    if (id && secret && refresh) list.push({ n: n, id: id, secret: secret, refresh: refresh })
+  }
+  if (!list.length && process.env.YOUTUBE_CLIENT_ID && process.env.YOUTUBE_CLIENT_SECRET && process.env.YOUTUBE_REFRESH_TOKEN) {
+    list.push({ n: 1, id: process.env.YOUTUBE_CLIENT_ID, secret: process.env.YOUTUBE_CLIENT_SECRET, refresh: process.env.YOUTUBE_REFRESH_TOKEN })
+  }
+  return list
+}
+const cacheToken = {}
+async function getAccessToken(kred) {
+  const now = Date.now()
+  const c = cacheToken[kred.n]
+  if (c && c.expire > now + 60000) return c.token
+  const params = new URLSearchParams()
+  params.set('client_id', kred.id)
+  params.set('client_secret', kred.secret)
+  params.set('refresh_token', kred.refresh)
+  params.set('grant_type', 'refresh_token')
+  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
+  if (!r.ok) throw new Error('refresh token project ' + kred.n + ' gagal (status ' + r.status + ')')
+  const j = await r.json()
+  cacheToken[kred.n] = { token: j.access_token, expire: now + (j.expires_in || 3600) * 1000 }
+  return j.access_token
+}
+`
+
+/* ===== 1. api/youtube/quota.js ===== */
+simpan('api/youtube/quota.js', KEPALA + `export default async function handler(req, res) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+  const today = ptToday()
+  const kredensial = daftarKredensial()
+  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
+  let usedTotal = 0
+  const perProject = []
+  for (const kred of kredensial) {
+    const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
+    const used = hit.count || 0
+    usedTotal += used
+    perProject.push({ project: kred.n, used: used, remaining: Math.max(0, LIMIT_PER_PROJECT - used) })
+  }
+  const limit = kredensial.length * LIMIT_PER_PROJECT
+  res.setHeader('Cache-Control', 'no-store')
+  return res.status(200).json({ limit: limit, used: usedTotal, remaining: Math.max(0, limit - usedTotal), perProject: perProject, ptDate: today })
+}
+`)
+
+/* ===== 2. api/youtube/session.js ===== */
+simpan('api/youtube/session.js', KEPALA + `export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const authHeader = req.headers.authorization || ''
+  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
+  const authClient = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
+  const chk = await authClient.auth.getUser()
+  if (chk.error || !chk.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
+  const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+  const today = ptToday()
+  const kredensial = daftarKredensial()
+  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
+  const body = req.body || {}
+  if (!body.title) return res.status(400).json({ error: 'Judul video wajib diisi' })
+  let terakhir = ''
+  for (const kred of kredensial) {
+    const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
+    if ((hit.count || 0) >= LIMIT_PER_PROJECT) { terakhir = 'project ' + kred.n + ' sudah penuh'; continue }
+    let access
+    try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
+    const meta = {
+      snippet: { title: String(body.title).slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
+      status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
+    }
+    const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
+      body: JSON.stringify(meta)
+    })
+    if (!init.ok) { terakhir = 'project ' + kred.n + ' ditolak Google (status ' + init.status + ')'; continue }
+    const sessionUri = init.headers.get('location')
+    if (!sessionUri) { terakhir = 'project ' + kred.n + ' tanpa lokasi upload'; continue }
+    await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: chk.data.user.id, project_id: kred.n })
+    return res.status(200).json({ sessionUri: sessionUri, project: kred.n })
+  }
+  return res.status(429).json({ error: 'Kuota harian semua project video sudah habis. Coba lagi besok atau gunakan link video eksternal.', detail: terakhir })
+}
+`)
+
+/* ===== 3. api/youtube/latest.js ===== */
+simpan('api/youtube/latest.js', KEPALA + `export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const authHeader = req.headers.authorization || ''
+  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
+  const authClient = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
+  const chk = await authClient.auth.getUser()
+  if (chk.error || !chk.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
+  const kredensial = daftarKredensial()
+  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
+  let terakhir = ''
+  for (const kred of kredensial) {
+    let access
+    try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
+    const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&order=date&maxResults=5', { headers: { Authorization: 'Bearer ' + access } })
+    if (!r.ok) { terakhir = 'project ' + kred.n + ' status ' + r.status; continue }
+    const j = await r.json()
+    const items = j.items || []
+    const batas = Date.now() - 15 * 60 * 1000
+    const cocok = items.find(function (it) {
+      const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
+      return isNaN(t) ? false : t >= batas
+    })
+    if (!cocok) return res.status(404).json({ error: 'Video terbaru tidak ditemukan' })
+    return res.status(200).json({ videoId: cocok.id && cocok.id.videoId, project: kred.n })
+  }
+  return res.status(502).json({ error: 'Gagal memeriksa video terbaru: ' + terakhir })
+}
+`)
+
+/* ===== 4. vite.config.js: ganti seluruh plugin YouTube ===== */
+const FILE_V = 'vite.config.js'
+let v = fs.readFileSync(path.join(root, FILE_V), 'utf8').replace(/\r\n/g, '\n')
+const mulai = v.indexOf('function pluginApiYoutube(env) {')
+const akhir = v.indexOf('export default defineConfig')
+if (mulai === -1 || akhir === -1) {
+  console.log('[TIDAK KETEMU] Blok pluginApiYoutube di vite.config.js')
+} else if (v.includes('LIMIT_PER_PROJECT')) {
+  console.log('[SUDAH ADA] Plugin YouTube multi-project di vite.config.js')
+} else {
+  const pluginBaru = `function pluginApiYoutube(env) {
+  const admin = createClient(env.VITE_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY)
+  const LIMIT_PER_PROJECT = 5
+  function ptToday() {
+    const now = new Date()
+    const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
+    const y = pt.getFullYear()
+    const m = String(pt.getMonth() + 1).padStart(2, '0')
+    const d = String(pt.getDate()).padStart(2, '0')
+    return y + '-' + m + '-' + d
+  }
+  function daftarKredensial() {
+    const list = []
+    for (let n = 1; n <= 6; n++) {
+      const id = env['YOUTUBE_CLIENT_ID_' + n]
+      const secret = env['YOUTUBE_CLIENT_SECRET_' + n]
+      const refresh = env['YOUTUBE_REFRESH_TOKEN_' + n]
+      if (id && secret && refresh) list.push({ n: n, id: id, secret: secret, refresh: refresh })
+    }
+    if (!list.length && env.YOUTUBE_CLIENT_ID && env.YOUTUBE_CLIENT_SECRET && env.YOUTUBE_REFRESH_TOKEN) {
+      list.push({ n: 1, id: env.YOUTUBE_CLIENT_ID, secret: env.YOUTUBE_CLIENT_SECRET, refresh: env.YOUTUBE_REFRESH_TOKEN })
+    }
+    return list
+  }
+  const cacheToken = {}
+  async function getAccessToken(kred) {
+    const now = Date.now()
+    const c = cacheToken[kred.n]
+    if (c && c.expire > now + 60000) return c.token
+    const params = new URLSearchParams()
+    params.set('client_id', kred.id)
+    params.set('client_secret', kred.secret)
+    params.set('refresh_token', kred.refresh)
+    params.set('grant_type', 'refresh_token')
+    const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
+    if (!r.ok) throw new Error('refresh token project ' + kred.n + ' gagal (status ' + r.status + ')')
+    const j = await r.json()
+    cacheToken[kred.n] = { token: j.access_token, expire: now + (j.expires_in || 3600) * 1000 }
+    return j.access_token
+  }
+  async function cekSesi(req) {
+    const authHeader = req.headers.authorization || ''
+    const token = authHeader.replace('Bearer ', '')
+    if (!token) return null
+    const supabase = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
+    const r = await supabase.auth.getUser(token)
+    return r.error ? null : r.data.user
+  }
+  function kirim(res, code, obj) {
+    res.statusCode = code
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify(obj))
+  }
+  return {
+    name: 'api-youtube-dev',
+    configureServer(server) {
+      server.middlewares.use('/api/youtube/quota', async function (req, res) {
+        const today = ptToday()
+        const kredensial = daftarKredensial()
+        if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
+        let usedTotal = 0
+        const perProject = []
+        for (const kred of kredensial) {
+          const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
+          const used = hit.count || 0
+          usedTotal += used
+          perProject.push({ project: kred.n, used: used, remaining: Math.max(0, LIMIT_PER_PROJECT - used) })
+        }
+        const limit = kredensial.length * LIMIT_PER_PROJECT
+        res.setHeader('Cache-Control', 'no-store')
+        kirim(res, 200, { limit: limit, used: usedTotal, remaining: Math.max(0, limit - usedTotal), perProject: perProject, ptDate: today })
+      })
+      server.middlewares.use('/api/youtube/session', async function (req, res) {
+        if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
+        const user = await cekSesi(req)
+        if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
+        const today = ptToday()
+        const kredensial = daftarKredensial()
+        if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
+        const body = await bacaBody(req)
+        if (!body.title) { kirim(res, 400, { error: 'Judul video wajib diisi' }); return }
+        let terakhir = ''
+        for (const kred of kredensial) {
+          const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
+          if ((hit.count || 0) >= LIMIT_PER_PROJECT) { terakhir = 'project ' + kred.n + ' sudah penuh'; continue }
+          let access
+          try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
+          const meta = {
+            snippet: { title: String(body.title).slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
+            status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
+          }
+          const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+            method: 'POST',
+            headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
+            body: JSON.stringify(meta)
+          })
+          if (!init.ok) { terakhir = 'project ' + kred.n + ' ditolak Google (status ' + init.status + ')'; continue }
+          const sessionUri = init.headers.get('location')
+          if (!sessionUri) { terakhir = 'project ' + kred.n + ' tanpa lokasi upload'; continue }
+          await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: user.id, project_id: kred.n })
+          kirim(res, 200, { sessionUri: sessionUri, project: kred.n })
+          return
+        }
+        kirim(res, 429, { error: 'Kuota harian semua project video sudah habis. Coba lagi besok atau gunakan link video eksternal.', detail: terakhir })
+      })
+      server.middlewares.use('/api/youtube/latest', async function (req, res) {
+        if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
+        const user = await cekSesi(req)
+        if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
+        const kredensial = daftarKredensial()
+        if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
+        let terakhir = ''
+        for (const kred of kredensial) {
+          let access
+          try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
+          const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&order=date&maxResults=5', { headers: { Authorization: 'Bearer ' + access } })
+          if (!r.ok) { terakhir = 'project ' + kred.n + ' status ' + r.status; continue }
+          const j = await r.json()
+          const items = j.items || []
+          const batas = Date.now() - 15 * 60 * 1000
+          const cocok = items.find(function (it) {
+            const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
+            return isNaN(t) ? false : t >= batas
+          })
+          if (!cocok) { kirim(res, 404, { error: 'Video terbaru tidak ditemukan' }); return }
+          kirim(res, 200, { videoId: cocok.id && cocok.id.videoId, project: kred.n })
+          return
+        }
+        kirim(res, 502, { error: 'Gagal memeriksa video terbaru: ' + terakhir })
+      })
+    }
+  }
+}
+
+`
+  v = v.slice(0, mulai) + pluginBaru + v.slice(akhir)
+  fs.writeFileSync(path.join(root, FILE_V), v, 'utf8')
+  console.log('[BERHASIL] Plugin YouTube multi-project dipasang di vite.config.js')
+}
+
+console.log('')
+console.log('Selesai. Restart dev server sekali: Ctrl+C lalu npm run dev -- --host')
+console.log('Setelah itu rotasi project berjalan otomatis tanpa restart lagi.')
+```
+
 ## File: apply-final-cleanup.cjs
 ```javascript
 const fs = require('fs')
@@ -1442,6 +4346,40 @@ cariGanti('src/lib/upload.js',
 
 console.log('')
 console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+```
+
+## File: apply-fix-state-loading.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+const FILE_D = 'src/pages/DashboardPage.jsx'
+
+if (!fs.existsSync(path.join(root, FILE_D))) {
+  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
+  process.exit(1)
+}
+let d = fs.readFileSync(path.join(root, FILE_D), 'utf8').replace(/\r\n/g, '\n')
+
+if (d.includes('const [ytQuotaLoading, setYtQuotaLoading]')) {
+  console.log('[SUDAH ADA] State ytQuotaLoading, tidak ada yang perlu ditambah')
+} else {
+  const regex = /([ \t]*)const \[ytQuota, setYtQuota\] = useState\([^\n]*\)\n/
+  if (regex.test(d)) {
+    d = d.replace(regex, function (m, indent) {
+      return m + indent + 'const [ytQuotaLoading, setYtQuotaLoading] = useState(true)\n'
+    })
+    fs.writeFileSync(path.join(root, FILE_D), d, 'utf8')
+    console.log('[BERHASIL] State ytQuotaLoading ditambahkan tepat di bawah state ytQuota')
+  } else {
+    console.log('[TIDAK KETEMU] Baris state ytQuota. Tambahkan manual baris berikut tepat di bawahnya:')
+    console.log('  const [ytQuotaLoading, setYtQuotaLoading] = useState(true)')
+  }
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('Error ytQuotaLoading is not defined akan hilang setelah perbaikan ini.')
 ```
 
 ## File: apply-fix-token-aman.cjs
@@ -1884,6 +4822,112 @@ console.log('4. Saat kuota habis, FileInput video mengabu dan hanya kolom link y
 console.log('5. Simpan media YouTube: kartu galeri menampilkan thumbnail YouTube, dan modal detail memutar embed.')
 console.log('6. Edit media YouTube: mode otomatis terpilih Video dan tombol simpan mempertahankan sumber lama.')
 console.log('7. Hapus media YouTube: tidak ada percobaan hapus ke R2 karena penjaga URL sudah aktif.')
+```
+
+## File: apply-loading-kuota.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai menambahkan indikator loading pada kuota...')
+console.log('')
+
+const FILE_D = 'src/pages/DashboardPage.jsx'
+let d = baca(FILE_D)
+let berubah = false
+
+/* ===== 1. Tambah state ytQuotaLoading ===== */
+const cariState = `  const [ytQuota, setYtQuota] = useState({ limit: 5, used: 0, remaining: 5 })`
+const gantiState = `  const [ytQuota, setYtQuota] = useState({ limit: 5, used: 0, remaining: 5 })
+  const [ytQuotaLoading, setYtQuotaLoading] = useState(true)`
+if (d.includes('ytQuotaLoading')) {
+  console.log('[SUDAH ADA] State ytQuotaLoading')
+} else if (d.includes(cariState)) {
+  d = d.replace(cariState, gantiState)
+  berubah = true
+  console.log('[BERHASIL] State ytQuotaLoading ditambahkan')
+} else {
+  console.log('[TIDAK KETEMU] State ytQuota')
+}
+
+/* ===== 2. Set loading saat fetch kuota ===== */
+const cariFetch = `  useEffect(function () {
+    if (mahasiswa) refresh()
+    fetchYouTubeQuota().then(setYtQuota)`
+const gantiFetch = `  useEffect(function () {
+    if (mahasiswa) refresh()
+    setYtQuotaLoading(true)
+    fetchYouTubeQuota().then(function (data) {
+      setYtQuota(data)
+      setYtQuotaLoading(false)
+    })`
+if (d.includes('setYtQuotaLoading(true)')) {
+  console.log('[SUDAH ADA] Loading state pada fetch kuota')
+} else if (d.includes(cariFetch)) {
+  d = d.replace(cariFetch, gantiFetch)
+  berubah = true
+  console.log('[BERHASIL] Loading state dipasang pada fetch kuota')
+} else {
+  console.log('[TIDAK KETEMU] Blok fetch kuota di useEffect')
+}
+
+/* ===== 3. Set loading false juga di interval ===== */
+const cariInterval = `    const iv = setInterval(function () { fetchYouTubeQuota().then(setYtQuota) }, 30000)`
+const gantiInterval = `    const iv = setInterval(function () { fetchYouTubeQuota().then(function (data) { setYtQuota(data); setYtQuotaLoading(false) }) }, 30000)`
+if (d.includes(gantiInterval)) {
+  console.log('[SUDAH ADA] Loading state pada interval')
+} else if (d.includes(cariInterval)) {
+  d = d.replace(cariInterval, gantiInterval)
+  berubah = true
+  console.log('[BERHASIL] Loading state dipasang pada interval')
+} else {
+  console.log('[TIDAK KETEMU] Blok interval kuota')
+}
+
+/* ===== 4. Update tampilan kuota di form logbook ===== */
+const cariLogbook = `<p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuota.remaining} dari {ytQuota.limit}</p>`
+const gantiLogbook = `<p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuotaLoading ? <span className="inline-block w-3 h-3 ml-1 border-2 border-slate-400 border-t-transparent rounded-full animate-spin align-middle"></span> : <>{ytQuota.remaining} dari {ytQuota.limit}</>}</p>`
+if (d.includes('border-t-transparent rounded-full animate-spin')) {
+  console.log('[SUDAH ADA] Indikator loading di form logbook')
+} else if (d.includes(cariLogbook)) {
+  d = d.split(cariLogbook).join(gantiLogbook)
+  berubah = true
+  console.log('[BERHASIL] Indikator loading dipasang di form logbook')
+} else {
+  console.log('[TIDAK KETEMU] Teks kuota di form logbook')
+}
+
+/* ===== 5. Update tampilan kuota di form galeri ===== */
+const cariGaleri = `<p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuota.remaining} dari {ytQuota.limit}</p>`
+if (d.includes(cariGaleri) && d.includes('galMode === \'video\'')) {
+  d = d.split(cariGaleri).join(gantiLogbook)
+  berubah = true
+  console.log('[BERHASIL] Indikator loading dipasang di form galeri')
+}
+
+/* ===== 6. Update tampilan kuota di form rincian kegiatan ===== */
+const cariRincian = `<p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuota.remaining} dari {ytQuota.limit}</p>`
+if (d.includes(cariRincian) && d.includes('it.mode === \'video\'')) {
+  d = d.split(cariRincian).join(gantiLogbook)
+  berubah = true
+  console.log('[BERHASIL] Indikator loading dipasang di form rincian kegiatan')
+}
+
+if (berubah) {
+  simpan(FILE_D, d)
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Perilaku baru:')
+console.log('1. Saat halaman dibuka, tulisan kuota menampilkan spinner kecil berputar.')
+console.log('2. Begitu data dari server datang (biasanya < 1 detik), spinner hilang dan angka muncul.')
+console.log('3. Tidak ada lagi kedipan angka dari 6 ke 26, karena loading state menahan tampilan.')
 ```
 
 ## File: apply-netral-final.cjs
@@ -4125,6 +7169,83 @@ console.log('       - Import proyek di Vercel')
 console.log('       - Salin semua isi .env.local ke Environment Variables Vercel')
 ```
 
+## File: setup-youtube-token-multi.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const http = require('http')
+const crypto = require('crypto')
+
+const n = String(process.argv[2] || '1')
+const envPath = path.join(process.cwd(), '.env.local')
+if (!fs.existsSync(envPath)) {
+  console.log('[GAGAL] .env.local belum ada')
+  process.exit(1)
+}
+const env = {}
+fs.readFileSync(envPath, 'utf8').split('\n').forEach(function (line) {
+  const m = line.match(/^\s*([A-Za-z0-9_]+)\s*=\s*(.*)\s*$/)
+  if (m) env[m[1]] = m[2].replace(/^["']|["']$/g, '')
+})
+const clientId = env['YOUTUBE_CLIENT_ID_' + n]
+const clientSecret = env['YOUTUBE_CLIENT_SECRET_' + n]
+if (!clientId || !clientSecret) {
+  console.log('[GAGAL] Isi dulu YOUTUBE_CLIENT_ID_' + n + ' dan YOUTUBE_CLIENT_SECRET_' + n + ' di .env.local')
+  process.exit(1)
+}
+
+const PORT = 8790
+const redirect = 'http://localhost:' + PORT + '/callback'
+const state = crypto.randomBytes(8).toString('hex')
+const scope = 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly'
+const url = 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({
+  client_id: clientId, redirect_uri: redirect, response_type: 'code',
+  scope: scope, access_type: 'offline', prompt: 'consent', state: state
+})
+
+function simpanToken(token) {
+  let isi = fs.readFileSync(envPath, 'utf8')
+  const key = 'YOUTUBE_REFRESH_TOKEN_' + n
+  const re = new RegExp('^' + key + '=.*$', 'm')
+  if (re.test(isi)) isi = isi.replace(re, key + '=' + token)
+  else isi = isi.trimEnd() + '\n' + key + '=' + token + '\n'
+  fs.writeFileSync(envPath, isi, 'utf8')
+}
+
+const server = http.createServer(async function (req, res) {
+  const u = new URL(req.url, 'http://localhost')
+  if (u.pathname !== '/callback') { res.end('ok'); return }
+  const code = u.searchParams.get('code')
+  const st = u.searchParams.get('state')
+  if (st !== state) { res.end('State tidak cocok'); return }
+  const body = new URLSearchParams({
+    code: code, client_id: clientId, client_secret: clientSecret,
+    redirect_uri: redirect, grant_type: 'authorization_code'
+  })
+  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: body })
+  const j = await r.json()
+  res.setHeader('Content-Type', 'text/html; charset=utf-8')
+  if (j.refresh_token) {
+    simpanToken(j.refresh_token)
+    res.end('<h2>Berhasil untuk project ' + n + '</h2><p>Refresh token tersimpan otomatis ke YOUTUBE_REFRESH_TOKEN_' + n + ' di .env.local</p>')
+    console.log('[BERHASIL] Refresh token project ' + n + ' disimpan ke .env.local')
+  } else {
+    res.end('<h2>Gagal</h2><pre>' + JSON.stringify(j, null, 2) + '</pre>')
+    console.log('[GAGAL] ' + JSON.stringify(j))
+  }
+  setTimeout(function () { server.close(); process.exit(0) }, 1500)
+})
+
+server.listen(PORT, function () {
+  console.log('Project ' + n + ': membuka browser untuk otorisasi...')
+  console.log('Jika tidak terbuka otomatis, buka manual URL ini:')
+  console.log(url)
+  try {
+    require('child_process').exec(process.platform === 'win32' ? 'start "" "' + url + '"' : 'xdg-open ' + url)
+  } catch (e) {}
+})
+```
+
 ## File: setup-youtube-token.cjs
 ```javascript
 const fs = require('fs')
@@ -4189,6 +7310,47 @@ server.listen(PORT, function () {
 })
 ```
 
+## File: siapkan-env-youtube-lokal.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+const envPath = path.join(root, '.env.local')
+
+if (!fs.existsSync(envPath)) {
+  console.log('[GAGAL] .env.local belum ada. Buat dulu dari .env.example lalu isi nilai Supabase dan R2.')
+  process.exit(1)
+}
+let isi = fs.readFileSync(envPath, 'utf8')
+if (isi.includes('YOUTUBE_CLIENT_ID_1=')) {
+  console.log('[SUDAH ADA] Blok variabel YouTube bernomor di .env.local')
+} else {
+  const blok = [
+    '',
+    '# -----------------------------------------------------',
+    '# 4) YOUTUBE API MULTI-PROJECT (auto-rotate kuota)',
+    '# Enam set kredensial untuk enam project Google Cloud.',
+    '# Sistem otomatis memilih project yang masih punya kuota.',
+    '# Isi CLIENT_ID dan CLIENT_SECRET per nomor setelah membuat',
+    '# OAuth Client ID di Console. REFRESH_TOKEN terisi otomatis',
+    '# oleh setup-youtube-token-multi.cjs <nomor>.',
+    '# -----------------------------------------------------'
+  ]
+  for (let n = 1; n <= 6; n++) {
+    blok.push('YOUTUBE_CLIENT_ID_' + n + '=')
+    blok.push('YOUTUBE_CLIENT_SECRET_' + n + '=')
+    blok.push('YOUTUBE_REFRESH_TOKEN_' + n + '=')
+  }
+  isi = isi.trimEnd() + '\n' + blok.join('\n') + '\n'
+  fs.writeFileSync(envPath, isi, 'utf8')
+  console.log('[BERHASIL] Blok variabel YouTube bernomor ditambahkan ke .env.local')
+}
+console.log('')
+console.log('Lanjut: buat 6 project di Console, tempel Client ID dan Secret')
+console.log('ke variabel bernomor di .env.local, lalu jalankan')
+console.log('node setup-youtube-token-multi.cjs 1 sampai 6')
+```
+
 ## File: tailwind.config.js
 ```javascript
 export default {
@@ -4214,6 +7376,216 @@ export default {
 ```json
 {
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}
+```
+
+## File: api/youtube/latest.js
+```javascript
+import { createClient } from '@supabase/supabase-js'
+const LIMIT_PER_PROJECT = 5
+function ptToday() {
+  const now = new Date()
+  const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
+  const y = pt.getFullYear()
+  const m = String(pt.getMonth() + 1).padStart(2, '0')
+  const d = String(pt.getDate()).padStart(2, '0')
+  return y + '-' + m + '-' + d
+}
+function daftarKredensial() {
+  const list = []
+  for (let n = 1; n <= 6; n++) {
+    const id = process.env['YOUTUBE_CLIENT_ID_' + n]
+    const secret = process.env['YOUTUBE_CLIENT_SECRET_' + n]
+    const refresh = process.env['YOUTUBE_REFRESH_TOKEN_' + n]
+    if (id && secret && refresh) list.push({ n: n, id: id, secret: secret, refresh: refresh })
+  }
+  if (!list.length && process.env.YOUTUBE_CLIENT_ID && process.env.YOUTUBE_CLIENT_SECRET && process.env.YOUTUBE_REFRESH_TOKEN) {
+    list.push({ n: 1, id: process.env.YOUTUBE_CLIENT_ID, secret: process.env.YOUTUBE_CLIENT_SECRET, refresh: process.env.YOUTUBE_REFRESH_TOKEN })
+  }
+  return list
+}
+const cacheToken = {}
+async function getAccessToken(kred) {
+  const now = Date.now()
+  const c = cacheToken[kred.n]
+  if (c && c.expire > now + 60000) return c.token
+  const params = new URLSearchParams()
+  params.set('client_id', kred.id)
+  params.set('client_secret', kred.secret)
+  params.set('refresh_token', kred.refresh)
+  params.set('grant_type', 'refresh_token')
+  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
+  if (!r.ok) throw new Error('refresh token project ' + kred.n + ' gagal (status ' + r.status + ')')
+  const j = await r.json()
+  cacheToken[kred.n] = { token: j.access_token, expire: now + (j.expires_in || 3600) * 1000 }
+  return j.access_token
+}
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const authHeader = req.headers.authorization || ''
+  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
+  const authClient = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
+  const chk = await authClient.auth.getUser()
+  if (chk.error || !chk.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
+  const kredensial = daftarKredensial()
+  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
+  let terakhir = ''
+  for (const kred of kredensial) {
+    let access
+    try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
+    const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&order=date&maxResults=5', { headers: { Authorization: 'Bearer ' + access } })
+    if (!r.ok) { terakhir = 'project ' + kred.n + ' status ' + r.status; continue }
+    const j = await r.json()
+    const items = j.items || []
+    const batas = Date.now() - 15 * 60 * 1000
+    const cocok = items.find(function (it) {
+      const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
+      return isNaN(t) ? false : t >= batas
+    })
+    if (!cocok) return res.status(404).json({ error: 'Video terbaru tidak ditemukan' })
+    return res.status(200).json({ videoId: cocok.id && cocok.id.videoId, project: kred.n })
+  }
+  return res.status(502).json({ error: 'Gagal memeriksa video terbaru: ' + terakhir })
+}
+```
+
+## File: api/youtube/quota.js
+```javascript
+import { createClient } from '@supabase/supabase-js'
+const LIMIT_PER_PROJECT = 5
+function ptToday() {
+  const now = new Date()
+  const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
+  const y = pt.getFullYear()
+  const m = String(pt.getMonth() + 1).padStart(2, '0')
+  const d = String(pt.getDate()).padStart(2, '0')
+  return y + '-' + m + '-' + d
+}
+function daftarKredensial() {
+  const list = []
+  for (let n = 1; n <= 6; n++) {
+    const id = process.env['YOUTUBE_CLIENT_ID_' + n]
+    const secret = process.env['YOUTUBE_CLIENT_SECRET_' + n]
+    const refresh = process.env['YOUTUBE_REFRESH_TOKEN_' + n]
+    if (id && secret && refresh) list.push({ n: n, id: id, secret: secret, refresh: refresh })
+  }
+  if (!list.length && process.env.YOUTUBE_CLIENT_ID && process.env.YOUTUBE_CLIENT_SECRET && process.env.YOUTUBE_REFRESH_TOKEN) {
+    list.push({ n: 1, id: process.env.YOUTUBE_CLIENT_ID, secret: process.env.YOUTUBE_CLIENT_SECRET, refresh: process.env.YOUTUBE_REFRESH_TOKEN })
+  }
+  return list
+}
+const cacheToken = {}
+async function getAccessToken(kred) {
+  const now = Date.now()
+  const c = cacheToken[kred.n]
+  if (c && c.expire > now + 60000) return c.token
+  const params = new URLSearchParams()
+  params.set('client_id', kred.id)
+  params.set('client_secret', kred.secret)
+  params.set('refresh_token', kred.refresh)
+  params.set('grant_type', 'refresh_token')
+  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
+  if (!r.ok) throw new Error('refresh token project ' + kred.n + ' gagal (status ' + r.status + ')')
+  const j = await r.json()
+  cacheToken[kred.n] = { token: j.access_token, expire: now + (j.expires_in || 3600) * 1000 }
+  return j.access_token
+}
+export default async function handler(req, res) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+  const today = ptToday()
+  const kredensial = daftarKredensial()
+  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
+  let usedTotal = 0
+  const perProject = []
+  for (const kred of kredensial) {
+    const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
+    const used = hit.count || 0
+    usedTotal += used
+    perProject.push({ project: kred.n, used: used, remaining: Math.max(0, LIMIT_PER_PROJECT - used) })
+  }
+  const limit = kredensial.length * LIMIT_PER_PROJECT
+  res.setHeader('Cache-Control', 'no-store')
+  return res.status(200).json({ limit: limit, used: usedTotal, remaining: Math.max(0, limit - usedTotal), perProject: perProject, ptDate: today })
+}
+```
+
+## File: api/youtube/session.js
+```javascript
+import { createClient } from '@supabase/supabase-js'
+const LIMIT_PER_PROJECT = 5
+function ptToday() {
+  const now = new Date()
+  const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
+  const y = pt.getFullYear()
+  const m = String(pt.getMonth() + 1).padStart(2, '0')
+  const d = String(pt.getDate()).padStart(2, '0')
+  return y + '-' + m + '-' + d
+}
+function daftarKredensial() {
+  const list = []
+  for (let n = 1; n <= 6; n++) {
+    const id = process.env['YOUTUBE_CLIENT_ID_' + n]
+    const secret = process.env['YOUTUBE_CLIENT_SECRET_' + n]
+    const refresh = process.env['YOUTUBE_REFRESH_TOKEN_' + n]
+    if (id && secret && refresh) list.push({ n: n, id: id, secret: secret, refresh: refresh })
+  }
+  if (!list.length && process.env.YOUTUBE_CLIENT_ID && process.env.YOUTUBE_CLIENT_SECRET && process.env.YOUTUBE_REFRESH_TOKEN) {
+    list.push({ n: 1, id: process.env.YOUTUBE_CLIENT_ID, secret: process.env.YOUTUBE_CLIENT_SECRET, refresh: process.env.YOUTUBE_REFRESH_TOKEN })
+  }
+  return list
+}
+const cacheToken = {}
+async function getAccessToken(kred) {
+  const now = Date.now()
+  const c = cacheToken[kred.n]
+  if (c && c.expire > now + 60000) return c.token
+  const params = new URLSearchParams()
+  params.set('client_id', kred.id)
+  params.set('client_secret', kred.secret)
+  params.set('refresh_token', kred.refresh)
+  params.set('grant_type', 'refresh_token')
+  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
+  if (!r.ok) throw new Error('refresh token project ' + kred.n + ' gagal (status ' + r.status + ')')
+  const j = await r.json()
+  cacheToken[kred.n] = { token: j.access_token, expire: now + (j.expires_in || 3600) * 1000 }
+  return j.access_token
+}
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const authHeader = req.headers.authorization || ''
+  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
+  const authClient = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
+  const chk = await authClient.auth.getUser()
+  if (chk.error || !chk.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
+  const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+  const today = ptToday()
+  const kredensial = daftarKredensial()
+  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
+  const body = req.body || {}
+  if (!body.title) return res.status(400).json({ error: 'Judul video wajib diisi' })
+  let terakhir = ''
+  for (const kred of kredensial) {
+    const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
+    if ((hit.count || 0) >= LIMIT_PER_PROJECT) { terakhir = 'project ' + kred.n + ' sudah penuh'; continue }
+    let access
+    try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
+    const meta = {
+      snippet: { title: String(body.title).slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
+      status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
+    }
+    const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
+      body: JSON.stringify(meta)
+    })
+    if (!init.ok) { terakhir = 'project ' + kred.n + ' ditolak Google (status ' + init.status + ')'; continue }
+    const sessionUri = init.headers.get('location')
+    if (!sessionUri) { terakhir = 'project ' + kred.n + ' tanpa lokasi upload'; continue }
+    await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: chk.data.user.id, project_id: kred.n })
+    return res.status(200).json({ sessionUri: sessionUri, project: kred.n })
+  }
+  return res.status(429).json({ error: 'Kuota harian semua project video sudah habis. Coba lagi besok atau gunakan link video eksternal.', detail: terakhir })
 }
 ```
 
@@ -4947,6 +8319,456 @@ Buat user Auth dengan pola email NIM@mbsi.local dan isi tabel mahasiswa beserta 
 Push ke GitHub, import di Vercel, salin isi .env.local ke Environment Variables Vercel.
 ```
 
+## File: src/components/FilterBar.jsx
+```javascript
+import { ICONS } from './icons.jsx'
+import { CustomSelect, CustomDateInput } from './controls.jsx'
+
+export function FilterSelect(props) {
+  return (
+    <CustomSelect
+      icon={props.icon}
+      value={props.value}
+      onChange={props.onChange}
+      options={props.options}
+      className="min-w-[190px]"
+      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+    />
+  )
+}
+
+export function FilterDate(props) {
+  return (
+    <CustomDateInput
+      mode={props.mode || 'date'}
+      value={props.value}
+      onChange={props.onChange}
+      className="min-w-[170px]"
+      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+    />
+  )
+}
+
+export function TimeFilter(props) {
+  const f = props.filter
+  const set = props.set
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <div className="time-toggle">
+        <button type="button" className={f.timeMode === 'bulan' ? 'active' : ''}
+          onClick={function () { set(Object.assign({}, f, { timeMode: 'bulan', bulan: '', dari: '', sampai: '' })) }}>Bulan</button>
+        <button type="button" className={f.timeMode === 'rentang' ? 'active' : ''}
+          onClick={function () { set(Object.assign({}, f, { timeMode: 'rentang', bulan: '', dari: '', sampai: '' })) }}>Rentang Waktu</button>
+      </div>
+      {f.timeMode === 'bulan'
+        ? <FilterDate mode="month" value={f.bulan} onChange={function (v) { set(Object.assign({}, f, { bulan: v })) }} />
+        : <div className="flex flex-wrap items-center gap-2">
+            <FilterDate value={f.dari} onChange={function (v) { set(Object.assign({}, f, { dari: v })) }} />
+            <span className="text-slate-400 text-sm">sampai</span>
+            <FilterDate value={f.sampai} onChange={function (v) { set(Object.assign({}, f, { sampai: v })) }} />
+          </div>}
+    </div>
+  )
+}
+
+export function FilterBar(props) {
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-4 lg:p-5 shadow-sm">
+      <div className="flex items-center justify-between gap-3">
+        <button onClick={props.onToggle}
+          className="xl:hidden flex items-center gap-2 px-4 py-2.5 rounded-2xl border border-slate-200 bg-slate-50 text-sm font-semibold text-slate-700 hover:bg-slate-100">
+          <span className="text-bsi-700">{ICONS.funnel}</span>
+          <span>Filter</span>
+          {props.activeCount > 0 ? (
+            <span className="inline-flex items-center justify-center h-6 min-w-6 px-2 rounded-full bg-bsi-800 text-white text-xs font-bold">{props.activeCount}</span>
+          ) : null}
+          <span className={'transition-transform duration-200 text-slate-400 ' + (props.open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
+        </button>
+        <div className="hidden xl:block text-sm text-slate-500">
+          {props.activeCount > 0
+            ? <span className="inline-flex items-center gap-2"><span className="text-bsi-700">{ICONS.funnel}</span><span><strong className="text-slate-900">{props.activeCount}</strong> filter aktif</span></span>
+            : <span className="inline-flex items-center gap-2"><span className="text-slate-400">{ICONS.funnel}</span><span>Belum ada filter aktif</span></span>}
+        </div>
+      </div>
+      <div className={props.open ? 'anim-page mt-4' : 'hidden xl:block xl:mt-4'}>
+        <div className="flex flex-wrap items-center gap-3">
+          {props.children}
+          {props.activeCount > 0 ? (
+            <button onClick={props.onReset}
+              className="inline-flex items-center gap-2 rounded-2xl bg-red-50 border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100">
+              {ICONS.close}<span>Reset</span>
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function SortSelect(props) {
+  return (
+    <CustomSelect
+      icon={ICONS.sort}
+      value={props.value}
+      onChange={props.onChange}
+      options={[{ value: 'terbaru', label: 'Terbaru' }, { value: 'terlama', label: 'Terlama' }]}
+      className="min-w-[150px]"
+      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+    />
+  )
+}
+export function countActiveFilters(o) {
+  let c = 0
+  for (const k in o) {
+    if (k === 'timeMode') continue
+    if (o[k]) c++
+  }
+  return c
+}
+```
+
+## File: src/components/Layout.jsx
+```javascript
+import { Outlet, Link, NavLink } from 'react-router-dom'
+import { useTheme } from '../lib/theme.jsx'
+import { useAuth, logoutMahasiswa } from '../lib/auth.js'
+import { SizedIcon } from './icons.jsx'
+import { useState } from 'react'
+
+const LINKS = [
+  { to: '/', label: 'Beranda' },
+  { to: '/logbook', label: 'Logbook' },
+  { to: '/galeri', label: 'Galeri' },
+  { to: '/absen', label: 'Daftar Hadir' },
+  { to: '/dospem', label: 'Dospem' },
+  { to: '/tim', label: 'Tim' }
+]
+
+export default function Layout() {
+  const theme = useTheme()
+  const { mahasiswa } = useAuth()
+  const [open, setOpen] = useState(false)
+
+  const linkCls = function (active) {
+    return 'px-3 py-2 rounded-xl text-sm font-semibold ' + (active ? 'bg-bsi-900 text-white' : 'text-slate-600 hover:bg-slate-100')
+  }
+
+  const themeBtn = function (extra) {
+    return (
+      <button onClick={theme.toggle} className={'rounded-xl border border-slate-300 grid place-items-center hover:bg-slate-100 text-slate-700 ' + (extra || 'h-10 w-10')} title="Ganti tema">
+        <SizedIcon name={theme.dark ? 'sun' : 'moon'} size={18} />
+      </button>
+    )
+  }
+
+  return (
+    <div className="flex flex-col min-h-screen">
+      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="h-16 flex items-center justify-between gap-4">
+            <Link to="/" className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-2xl bg-gradient-to-tr from-bsi-800 to-gold-500 text-white grid place-items-center font-black">BSI</div>
+              <div>
+                <p className="font-bold leading-none text-slate-900">Logbook Magang</p>
+                <p className="text-xs text-slate-500 mt-1">Bank Syariah Indonesia</p>
+              </div>
+            </Link>
+            <nav className="hidden xl:flex items-center gap-1">
+              {LINKS.map(function (l) {
+                return <NavLink key={l.to} to={l.to} className={function (s) { return linkCls(s.isActive) }}>{l.label}</NavLink>
+              })}
+            </nav>
+            <div className="hidden xl:flex items-center gap-3">
+              {themeBtn()}
+              {mahasiswa ? (
+                <>
+                  <Link to="/dashboard" className="px-4 py-2 rounded-xl bg-bsi-800 text-white text-sm font-semibold hover:bg-bsi-900">Dashboard</Link>
+                  <Link to="/" onClick={function () { logoutMahasiswa() }} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-100">Keluar</Link>
+                </>
+              ) : (
+                <Link to="/login" className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-700">Masuk Intern</Link>
+              )}
+            </div>
+            <div className="flex xl:hidden items-center gap-2">
+              {themeBtn()}
+              <button onClick={function () { setOpen(function (o) { return !o }) }} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700">Menu</button>
+            </div>
+          </div>
+        </div>
+        {open ? (
+          <div className="xl:hidden border-t border-slate-200 bg-white px-4 py-4 space-y-2">
+            {LINKS.map(function (l) {
+              return <Link key={l.to} to={l.to} onClick={function () { setOpen(false) }} className="block px-4 py-3 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100">{l.label}</Link>
+            })}
+            {mahasiswa ? (
+              <>
+                <Link to="/dashboard" onClick={function () { setOpen(false) }} className="block px-4 py-3 rounded-xl bg-bsi-800 text-white text-sm font-semibold">Dashboard</Link>
+                <Link to="/" onClick={function () { setOpen(false); logoutMahasiswa() }} className="block px-4 py-3 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700">Keluar</Link>
+              </>
+            ) : (
+              <Link to="/login" onClick={function () { setOpen(false) }} className="block px-4 py-3 rounded-xl bg-slate-900 text-white text-sm font-semibold">Masuk Intern</Link>
+            )}
+          </div>
+        ) : null}
+      </header>
+
+      <main className="anim-page max-w-7xl mx-auto px-4 py-8 lg:py-10 flex-1 w-full">
+        <Outlet />
+      </main>
+
+      <footer className="mt-auto border-t border-slate-200 bg-white">
+        <div className="max-w-7xl mx-auto px-4 py-4 text-center text-xs text-slate-500">
+          &copy; {new Date().getFullYear()} Tim Magang BSI
+        </div>
+      </footer>
+    </div>
+  )
+}
+```
+
+## File: src/lib/logbook.js
+```javascript
+import { supabase } from './supabase.js'
+
+const EMPTY = '00000000-0000-0000-0000-000000000000'
+
+export async function syncGaleriFromLogbook(mahasiswaId, items, meta) {
+  const itemIds = items.map(function (i) { return i.id }).filter(Boolean)
+  const all = await supabase
+    .from('galeri')
+    .select('id, logbook_item_id')
+    .in('logbook_item_id', itemIds.length ? itemIds : [EMPTY])
+  const existing = new Map((all.data || []).map(function (g) { return [g.logbook_item_id, g.id] }))
+
+  for (const item of items) {
+    if (!item.id) continue
+    if (item.show_in_gallery && item.media_path) {
+      if (existing.has(item.id)) {
+        await supabase.from('galeri').update({
+          media_path: item.media_path,
+          media_type: item.media_type || 'foto',
+          media_thumb: item.media_thumb || null
+        media_source: item.media_source || 'r2', youtube_id: item.youtube_id || null }).eq('id', existing.get(item.id))
+      } else {
+        await supabase.from('galeri').insert({
+          mahasiswa_id: mahasiswaId,
+          logbook_item_id: item.id,
+          judul: item.judul,
+          deskripsi: item.deskripsi || 'Dokumentasi kegiatan dari logbook harian.',
+          tanggal: meta.tanggal,
+          kegiatan: meta.kategori,
+          media_path: item.media_path,
+          media_type: item.media_type || 'foto',
+          media_thumb: item.media_thumb || null
+        media_source: item.media_source || 'r2', youtube_id: item.youtube_id || null })
+      }
+    } else if (existing.has(item.id)) {
+      await supabase.from('galeri').delete().eq('id', existing.get(item.id))
+    }
+  }
+}
+```
+
+## File: src/pages/DospemPage.jsx
+```javascript
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { supabase } from '../lib/supabase.js'
+import { EmptyState, Modal } from '../components/ui.jsx'
+import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
+import { SkeletonLogbookCard, SkeletonPersonCard } from '../components/Skeleton.jsx'
+
+export default function DospemPage() {
+  const [logs, setLogs] = useState([])
+  const [people, setPeople] = useState([])
+  const [galCount, setGalCount] = useState(0)
+  const [hadirCount, setHadirCount] = useState(0)
+  const [detail, setDetail] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(function () {
+    async function load() {
+      const l = await supabase
+        .from('logbooks')
+        .select('*, mahasiswa(nim, nama, prodi), logbook_items(*)')
+        .eq('status', 'publik')
+        .order('tanggal', { ascending: false })
+        .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
+      const p = await supabase.from('mahasiswa').select('id, nama, nim, prodi').order('nama')
+      const g = await supabase.from('galeri').select('id')
+      const h = await supabase.from('daftar_hadir').select('id')
+      setLogs(l.data || [])
+      setPeople(p.data || [])
+      setGalCount((g.data || []).length)
+      setHadirCount((h.data || []).length)
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  return (
+    <div>
+      <section className="card-hover rounded-[2rem] bg-bsi-900 text-white p-8 lg:p-12">
+        <span className="inline-flex px-4 py-2 rounded-full bg-white/10 text-xs font-semibold uppercase tracking-wide">Monitoring Dospem dan Kaprodi</span>
+        <h1 className="mt-6 text-3xl lg:text-5xl font-black max-w-3xl leading-tight">Ringkasan kegiatan magang tim di Bank BSI</h1>
+        <p className="mt-4 max-w-3xl text-white/80 leading-relaxed">Halaman ini dapat diakses tanpa login.</p>
+        <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {loading
+            ? [0, 1, 2, 3].map(function (i) {
+                return (
+                  <div key={i} className="rounded-[1.5rem] bg-white/10 p-5">
+                    <div className="skeleton skeleton-on-dark h-4 w-24"></div>
+                    <div className="skeleton skeleton-on-dark h-9 w-14 mt-2"></div>
+                  </div>
+                )
+              })
+            : [
+                <div key="mahasiswa" className="card-hover rounded-[1.5rem] bg-white/10 p-5"><p className="text-sm text-white/70">Total mahasiswa</p><p className="mt-1 text-3xl font-black">{people.length}</p></div>,
+                <div key="logbook" className="card-hover rounded-[1.5rem] bg-white/10 p-5"><p className="text-sm text-white/70">Logbook publik</p><p className="mt-1 text-3xl font-black">{logs.length}</p></div>,
+                <div key="galeri" className="card-hover rounded-[1.5rem] bg-white/10 p-5"><p className="text-sm text-white/70">Media galeri</p><p className="mt-1 text-3xl font-black">{galCount}</p></div>,
+                <div key="hadir" className="card-hover rounded-[1.5rem] bg-white/10 p-5"><p className="text-sm text-white/70">Catatan hadir</p><p className="mt-1 text-3xl font-black">{hadirCount}</p></div>
+              ]}
+        </div>
+        <div className="mt-8 flex flex-wrap gap-3">
+          <Link to="/logbook" className="px-5 py-3 rounded-2xl bg-gold-500 text-slate-900 text-sm font-bold hover:bg-gold-400">Lihat logbook</Link>
+          <Link to="/galeri" className="px-5 py-3 rounded-2xl bg-white/10 text-white text-sm font-bold hover:bg-white/20">Lihat galeri</Link>
+          <Link to="/absen" className="px-5 py-3 rounded-2xl bg-white/10 text-white text-sm font-bold hover:bg-white/20">Lihat daftar hadir</Link>
+        </div>
+      </section>
+
+      <section className="mt-10">
+        <h2 className="text-2xl lg:text-3xl font-black text-slate-900">Ringkasan logbook per mahasiswa</h2>
+        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {loading
+            ? [0, 1, 2].map(function (i) { return <SkeletonPersonCard key={i} /> })
+            : people.map(function (p) {
+                const total = logs.filter(function (l) { return l.mahasiswa_id === p.id }).length
+                return (
+                  <div key={p.id} className="card-hover bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
+                    <p className="font-bold text-slate-900">{p.nama}</p>
+                    <p className="text-xs text-slate-500">NIM {p.nim}</p>
+                    {p.prodi ? <p className="text-xs text-slate-400">{p.prodi}</p> : null}
+                    <div className="mt-5 rounded-2xl bg-slate-50 p-4">
+                      <p className="text-xs text-slate-500">Logbook publik</p>
+                      <p className="mt-1 text-2xl font-black text-bsi-900">{total}</p>
+                    </div>
+                  </div>
+                )
+              })}
+        </div>
+      </section>
+
+      <section className="mt-10">
+        <h2 className="text-2xl lg:text-3xl font-black text-slate-900">Aktivitas yang sudah dipublikasikan</h2>
+        <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          {loading
+            ? [0, 1, 2].map(function (i) { return <SkeletonLogbookCard key={i} /> })
+            : logs.map(function (l) {
+                return <LogbookCard key={l.id} log={l} onDetail={function () { setDetail(l) }} />
+              })}
+          {!loading && !logs.length ? <EmptyState title="Belum ada logbook publik" desc="Logbook akan tampil setelah mahasiswa mengatur status siap dilihat." /> : null}
+        </div>
+      </section>
+
+      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
+        {detail ? <LogbookDetail log={detail} /> : null}
+      </Modal>
+    </div>
+  )
+}
+```
+
+## File: src/pages/HomePage.jsx
+```javascript
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { supabase } from '../lib/supabase.js'
+import { useAuth } from '../lib/auth.js'
+import { StatCard, EmptyState, Modal } from '../components/ui.jsx'
+import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
+import { SkeletonLogbookCard, SkeletonStatCard } from '../components/Skeleton.jsx'
+
+export default function HomePage() {
+  const { mahasiswa } = useAuth()
+  const [logs, setLogs] = useState([])
+  const [stats, setStats] = useState({ logbook: 0, galeri: 0, mahasiswa: 0 })
+  const [detail, setDetail] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(function () {
+    async function load() {
+      const l = await supabase
+        .from('logbooks')
+        .select('*, mahasiswa(nim, nama, prodi), logbook_items(*)')
+        .eq('status', 'publik')
+        .order('tanggal', { ascending: false })
+        .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
+      const g = await supabase.from('galeri').select('id')
+      const p = await supabase.from('mahasiswa').select('id')
+      setLogs(l.data || [])
+      setStats({ logbook: (l.data || []).length, galeri: (g.data || []).length, mahasiswa: (p.data || []).length })
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  return (
+    <div>
+      <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr] items-stretch">
+        <div className="card-hover relative overflow-hidden rounded-[2rem] bg-bsi-900 text-white p-8 lg:p-12">
+          <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-gold-500/20 blur-2xl" />
+          <div className="absolute -left-10 bottom-0 h-40 w-40 rounded-full bg-emerald-300/10 blur-2xl" />
+          <div className="relative z-10">
+            <span className="inline-flex px-4 py-2 rounded-full bg-white/10 text-xs font-semibold uppercase tracking-wide">Magang Bank BSI</span>
+            <h1 className="mt-6 text-3xl lg:text-5xl font-black leading-tight max-w-2xl">Logbook, Galeri, dan Daftar Hadir Magang dalam Satu Portal</h1>
+            <p className="mt-5 max-w-2xl text-white/80 leading-relaxed">Portal ini mencatat kegiatan harian, dokumentasi media, dan kehadiran tim magang selama membantu operasional Bank BSI.</p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link to="/logbook" className="px-6 py-3 rounded-2xl bg-gold-500 text-slate-900 font-bold hover:bg-gold-400">Lihat Logbook</Link>
+              <Link to="/galeri" className="px-6 py-3 rounded-2xl bg-white/10 text-white font-bold hover:bg-white/20">Lihat Galeri</Link>
+              <Link to="/absen" className="px-6 py-3 rounded-2xl bg-white/10 text-white font-bold hover:bg-white/20">Daftar Hadir</Link>
+              {mahasiswa
+                ? <Link to="/dashboard" className="px-6 py-3 rounded-2xl bg-white text-bsi-900 font-bold hover:bg-slate-100">Buka Dashboard</Link>
+                : <Link to="/login" className="px-6 py-3 rounded-2xl bg-white text-bsi-900 font-bold hover:bg-slate-100">Masuk Intern</Link>}
+            </div>
+          </div>
+        </div>
+        <div className="grid gap-4">
+          {loading
+            ? [0, 1, 2].map(function (i) { return <SkeletonStatCard key={i} /> })
+            : [
+                <StatCard key="mahasiswa" label="Total mahasiswa magang" value={stats.mahasiswa} sub="Mahasiswa terdaftar dalam tim" />,
+                <StatCard key="logbook" label="Total logbook publik" value={stats.logbook} sub="Catatan kegiatan harian" />,
+                <StatCard key="galeri" label="Total media galeri" value={stats.galeri} sub="Foto dan video dokumentasi" />
+              ]}
+        </div>
+      </section>
+
+      <section className="mt-10">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Kegiatan terbaru</p>
+            <h2 className="mt-2 text-2xl lg:text-3xl font-black text-slate-900">Logbook terbaru tim</h2>
+          </div>
+          <Link to="/logbook" className="text-sm font-semibold text-bsi-800 hover:text-bsi-950">Lihat semua logbook</Link>
+        </div>
+        <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          {loading
+            ? [0, 1, 2].map(function (i) { return <SkeletonLogbookCard key={i} /> })
+            : logs.slice(0, 3).map(function (l) {
+                return <LogbookCard key={l.id} log={l} onDetail={function () { setDetail(l) }} />
+              })}
+          {!loading && !logs.length ? <EmptyState title="Belum ada logbook publik" desc="Logbook yang sudah diatur sebagai siap dilihat akan tampil di sini." /> : null}
+        </div>
+      </section>
+
+      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
+        {detail ? <LogbookDetail log={detail} /> : null}
+      </Modal>
+    </div>
+  )
+}
+```
+
 ## File: vite.config.js
 ```javascript
 import { defineConfig, loadEnv } from 'vite'
@@ -5178,456 +9000,6 @@ export default defineConfig(function ({ mode }) {
     plugins: [react(), pluginApiR2(env), pluginApiYoutube(env)]
   }
 })
-```
-
-## File: src/components/FilterBar.jsx
-```javascript
-import { ICONS } from './icons.jsx'
-import { CustomSelect, CustomDateInput } from './controls.jsx'
-
-export function FilterSelect(props) {
-  return (
-    <CustomSelect
-      icon={props.icon}
-      value={props.value}
-      onChange={props.onChange}
-      options={props.options}
-      className="min-w-[190px]"
-      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
-    />
-  )
-}
-
-export function FilterDate(props) {
-  return (
-    <CustomDateInput
-      mode={props.mode || 'date'}
-      value={props.value}
-      onChange={props.onChange}
-      className="min-w-[170px]"
-      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
-    />
-  )
-}
-
-export function TimeFilter(props) {
-  const f = props.filter
-  const set = props.set
-  return (
-    <div className="flex flex-wrap items-center gap-3">
-      <div className="time-toggle">
-        <button type="button" className={f.timeMode === 'bulan' ? 'active' : ''}
-          onClick={function () { set(Object.assign({}, f, { timeMode: 'bulan', bulan: '', dari: '', sampai: '' })) }}>Bulan</button>
-        <button type="button" className={f.timeMode === 'rentang' ? 'active' : ''}
-          onClick={function () { set(Object.assign({}, f, { timeMode: 'rentang', bulan: '', dari: '', sampai: '' })) }}>Rentang Waktu</button>
-      </div>
-      {f.timeMode === 'bulan'
-        ? <FilterDate mode="month" value={f.bulan} onChange={function (v) { set(Object.assign({}, f, { bulan: v })) }} />
-        : <div className="flex flex-wrap items-center gap-2">
-            <FilterDate value={f.dari} onChange={function (v) { set(Object.assign({}, f, { dari: v })) }} />
-            <span className="text-slate-400 text-sm">sampai</span>
-            <FilterDate value={f.sampai} onChange={function (v) { set(Object.assign({}, f, { sampai: v })) }} />
-          </div>}
-    </div>
-  )
-}
-
-export function FilterBar(props) {
-  return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-4 lg:p-5 shadow-sm">
-      <div className="flex items-center justify-between gap-3">
-        <button onClick={props.onToggle}
-          className="xl:hidden flex items-center gap-2 px-4 py-2.5 rounded-2xl border border-slate-200 bg-slate-50 text-sm font-semibold text-slate-700 hover:bg-slate-100">
-          <span className="text-bsi-700">{ICONS.funnel}</span>
-          <span>Filter</span>
-          {props.activeCount > 0 ? (
-            <span className="inline-flex items-center justify-center h-6 min-w-6 px-2 rounded-full bg-bsi-800 text-white text-xs font-bold">{props.activeCount}</span>
-          ) : null}
-          <span className={'transition-transform duration-200 text-slate-400 ' + (props.open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
-        </button>
-        <div className="hidden xl:block text-sm text-slate-500">
-          {props.activeCount > 0
-            ? <span className="inline-flex items-center gap-2"><span className="text-bsi-700">{ICONS.funnel}</span><span><strong className="text-slate-900">{props.activeCount}</strong> filter aktif</span></span>
-            : <span className="inline-flex items-center gap-2"><span className="text-slate-400">{ICONS.funnel}</span><span>Belum ada filter aktif</span></span>}
-        </div>
-      </div>
-      <div className={props.open ? 'anim-page mt-4' : 'hidden xl:block xl:mt-4'}>
-        <div className="flex flex-wrap items-center gap-3">
-          {props.children}
-          {props.activeCount > 0 ? (
-            <button onClick={props.onReset}
-              className="inline-flex items-center gap-2 rounded-2xl bg-red-50 border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100">
-              {ICONS.close}<span>Reset</span>
-            </button>
-          ) : null}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export function SortSelect(props) {
-  return (
-    <CustomSelect
-      icon={ICONS.sort}
-      value={props.value}
-      onChange={props.onChange}
-      options={[{ value: 'terbaru', label: 'Terbaru' }, { value: 'terlama', label: 'Terlama' }]}
-      className="min-w-[150px]"
-      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
-    />
-  )
-}
-export function countActiveFilters(o) {
-  let c = 0
-  for (const k in o) {
-    if (k === 'timeMode') continue
-    if (o[k]) c++
-  }
-  return c
-}
-```
-
-## File: src/components/Layout.jsx
-```javascript
-import { Outlet, Link, NavLink } from 'react-router-dom'
-import { useTheme } from '../lib/theme.jsx'
-import { useAuth, logoutMahasiswa } from '../lib/auth.js'
-import { SizedIcon } from './icons.jsx'
-import { useState } from 'react'
-
-const LINKS = [
-  { to: '/', label: 'Beranda' },
-  { to: '/logbook', label: 'Logbook' },
-  { to: '/galeri', label: 'Galeri' },
-  { to: '/absen', label: 'Daftar Hadir' },
-  { to: '/dospem', label: 'Dospem' },
-  { to: '/tim', label: 'Tim' }
-]
-
-export default function Layout() {
-  const theme = useTheme()
-  const { mahasiswa } = useAuth()
-  const [open, setOpen] = useState(false)
-
-  const linkCls = function (active) {
-    return 'px-3 py-2 rounded-xl text-sm font-semibold ' + (active ? 'bg-bsi-900 text-white' : 'text-slate-600 hover:bg-slate-100')
-  }
-
-  const themeBtn = function (extra) {
-    return (
-      <button onClick={theme.toggle} className={'rounded-xl border border-slate-300 grid place-items-center hover:bg-slate-100 text-slate-700 ' + (extra || 'h-10 w-10')} title="Ganti tema">
-        <SizedIcon name={theme.dark ? 'sun' : 'moon'} size={18} />
-      </button>
-    )
-  }
-
-  return (
-    <div className="flex flex-col min-h-screen">
-      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="h-16 flex items-center justify-between gap-4">
-            <Link to="/" className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-gradient-to-tr from-bsi-800 to-gold-500 text-white grid place-items-center font-black">BSI</div>
-              <div>
-                <p className="font-bold leading-none text-slate-900">Logbook Magang</p>
-                <p className="text-xs text-slate-500 mt-1">Bank Syariah Indonesia</p>
-              </div>
-            </Link>
-            <nav className="hidden xl:flex items-center gap-1">
-              {LINKS.map(function (l) {
-                return <NavLink key={l.to} to={l.to} className={function (s) { return linkCls(s.isActive) }}>{l.label}</NavLink>
-              })}
-            </nav>
-            <div className="hidden xl:flex items-center gap-3">
-              {themeBtn()}
-              {mahasiswa ? (
-                <>
-                  <Link to="/dashboard" className="px-4 py-2 rounded-xl bg-bsi-800 text-white text-sm font-semibold hover:bg-bsi-900">Dashboard</Link>
-                  <Link to="/" onClick={function () { logoutMahasiswa() }} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-100">Keluar</Link>
-                </>
-              ) : (
-                <Link to="/login" className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-700">Masuk Intern</Link>
-              )}
-            </div>
-            <div className="flex xl:hidden items-center gap-2">
-              {themeBtn()}
-              <button onClick={function () { setOpen(function (o) { return !o }) }} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700">Menu</button>
-            </div>
-          </div>
-        </div>
-        {open ? (
-          <div className="xl:hidden border-t border-slate-200 bg-white px-4 py-4 space-y-2">
-            {LINKS.map(function (l) {
-              return <Link key={l.to} to={l.to} onClick={function () { setOpen(false) }} className="block px-4 py-3 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100">{l.label}</Link>
-            })}
-            {mahasiswa ? (
-              <>
-                <Link to="/dashboard" onClick={function () { setOpen(false) }} className="block px-4 py-3 rounded-xl bg-bsi-800 text-white text-sm font-semibold">Dashboard</Link>
-                <Link to="/" onClick={function () { setOpen(false); logoutMahasiswa() }} className="block px-4 py-3 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700">Keluar</Link>
-              </>
-            ) : (
-              <Link to="/login" onClick={function () { setOpen(false) }} className="block px-4 py-3 rounded-xl bg-slate-900 text-white text-sm font-semibold">Masuk Intern</Link>
-            )}
-          </div>
-        ) : null}
-      </header>
-
-      <main className="anim-page max-w-7xl mx-auto px-4 py-8 lg:py-10 flex-1 w-full">
-        <Outlet />
-      </main>
-
-      <footer className="mt-auto border-t border-slate-200 bg-white">
-        <div className="max-w-7xl mx-auto px-4 py-4 text-center text-xs text-slate-500">
-          &copy; {new Date().getFullYear()} Tim Magang BSI
-        </div>
-      </footer>
-    </div>
-  )
-}
-```
-
-## File: src/lib/logbook.js
-```javascript
-import { supabase } from './supabase.js'
-
-const EMPTY = '00000000-0000-0000-0000-000000000000'
-
-export async function syncGaleriFromLogbook(mahasiswaId, items, meta) {
-  const itemIds = items.map(function (i) { return i.id }).filter(Boolean)
-  const all = await supabase
-    .from('galeri')
-    .select('id, logbook_item_id')
-    .in('logbook_item_id', itemIds.length ? itemIds : [EMPTY])
-  const existing = new Map((all.data || []).map(function (g) { return [g.logbook_item_id, g.id] }))
-
-  for (const item of items) {
-    if (!item.id) continue
-    if (item.show_in_gallery && item.media_path) {
-      if (existing.has(item.id)) {
-        await supabase.from('galeri').update({
-          media_path: item.media_path,
-          media_type: item.media_type || 'foto',
-          media_thumb: item.media_thumb || null
-        }).eq('id', existing.get(item.id))
-      } else {
-        await supabase.from('galeri').insert({
-          mahasiswa_id: mahasiswaId,
-          logbook_item_id: item.id,
-          judul: item.judul,
-          deskripsi: item.deskripsi || 'Dokumentasi kegiatan dari logbook harian.',
-          tanggal: meta.tanggal,
-          kegiatan: meta.kategori,
-          media_path: item.media_path,
-          media_type: item.media_type || 'foto',
-          media_thumb: item.media_thumb || null
-        })
-      }
-    } else if (existing.has(item.id)) {
-      await supabase.from('galeri').delete().eq('id', existing.get(item.id))
-    }
-  }
-}
-```
-
-## File: src/pages/DospemPage.jsx
-```javascript
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { supabase } from '../lib/supabase.js'
-import { EmptyState, Modal } from '../components/ui.jsx'
-import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
-import { SkeletonLogbookCard, SkeletonPersonCard } from '../components/Skeleton.jsx'
-
-export default function DospemPage() {
-  const [logs, setLogs] = useState([])
-  const [people, setPeople] = useState([])
-  const [galCount, setGalCount] = useState(0)
-  const [hadirCount, setHadirCount] = useState(0)
-  const [detail, setDetail] = useState(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(function () {
-    async function load() {
-      const l = await supabase
-        .from('logbooks')
-        .select('*, mahasiswa(nim, nama, prodi), logbook_items(*)')
-        .eq('status', 'publik')
-        .order('tanggal', { ascending: false })
-        .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
-      const p = await supabase.from('mahasiswa').select('id, nama, nim, prodi').order('nama')
-      const g = await supabase.from('galeri').select('id')
-      const h = await supabase.from('daftar_hadir').select('id')
-      setLogs(l.data || [])
-      setPeople(p.data || [])
-      setGalCount((g.data || []).length)
-      setHadirCount((h.data || []).length)
-      setLoading(false)
-    }
-    load()
-  }, [])
-
-  return (
-    <div>
-      <section className="card-hover rounded-[2rem] bg-bsi-900 text-white p-8 lg:p-12">
-        <span className="inline-flex px-4 py-2 rounded-full bg-white/10 text-xs font-semibold uppercase tracking-wide">Monitoring Dospem dan Kaprodi</span>
-        <h1 className="mt-6 text-3xl lg:text-5xl font-black max-w-3xl leading-tight">Ringkasan kegiatan magang tim di Bank BSI</h1>
-        <p className="mt-4 max-w-3xl text-white/80 leading-relaxed">Halaman ini dapat diakses tanpa login.</p>
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {loading
-            ? [0, 1, 2, 3].map(function (i) {
-                return (
-                  <div key={i} className="rounded-[1.5rem] bg-white/10 p-5">
-                    <div className="skeleton skeleton-on-dark h-4 w-24"></div>
-                    <div className="skeleton skeleton-on-dark h-9 w-14 mt-2"></div>
-                  </div>
-                )
-              })
-            : [
-                <div key="mahasiswa" className="card-hover rounded-[1.5rem] bg-white/10 p-5"><p className="text-sm text-white/70">Total mahasiswa</p><p className="mt-1 text-3xl font-black">{people.length}</p></div>,
-                <div key="logbook" className="card-hover rounded-[1.5rem] bg-white/10 p-5"><p className="text-sm text-white/70">Logbook publik</p><p className="mt-1 text-3xl font-black">{logs.length}</p></div>,
-                <div key="galeri" className="card-hover rounded-[1.5rem] bg-white/10 p-5"><p className="text-sm text-white/70">Media galeri</p><p className="mt-1 text-3xl font-black">{galCount}</p></div>,
-                <div key="hadir" className="card-hover rounded-[1.5rem] bg-white/10 p-5"><p className="text-sm text-white/70">Catatan hadir</p><p className="mt-1 text-3xl font-black">{hadirCount}</p></div>
-              ]}
-        </div>
-        <div className="mt-8 flex flex-wrap gap-3">
-          <Link to="/logbook" className="px-5 py-3 rounded-2xl bg-gold-500 text-slate-900 text-sm font-bold hover:bg-gold-400">Lihat logbook</Link>
-          <Link to="/galeri" className="px-5 py-3 rounded-2xl bg-white/10 text-white text-sm font-bold hover:bg-white/20">Lihat galeri</Link>
-          <Link to="/absen" className="px-5 py-3 rounded-2xl bg-white/10 text-white text-sm font-bold hover:bg-white/20">Lihat daftar hadir</Link>
-        </div>
-      </section>
-
-      <section className="mt-10">
-        <h2 className="text-2xl lg:text-3xl font-black text-slate-900">Ringkasan logbook per mahasiswa</h2>
-        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {loading
-            ? [0, 1, 2].map(function (i) { return <SkeletonPersonCard key={i} /> })
-            : people.map(function (p) {
-                const total = logs.filter(function (l) { return l.mahasiswa_id === p.id }).length
-                return (
-                  <div key={p.id} className="card-hover bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
-                    <p className="font-bold text-slate-900">{p.nama}</p>
-                    <p className="text-xs text-slate-500">NIM {p.nim}</p>
-                    {p.prodi ? <p className="text-xs text-slate-400">{p.prodi}</p> : null}
-                    <div className="mt-5 rounded-2xl bg-slate-50 p-4">
-                      <p className="text-xs text-slate-500">Logbook publik</p>
-                      <p className="mt-1 text-2xl font-black text-bsi-900">{total}</p>
-                    </div>
-                  </div>
-                )
-              })}
-        </div>
-      </section>
-
-      <section className="mt-10">
-        <h2 className="text-2xl lg:text-3xl font-black text-slate-900">Aktivitas yang sudah dipublikasikan</h2>
-        <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {loading
-            ? [0, 1, 2].map(function (i) { return <SkeletonLogbookCard key={i} /> })
-            : logs.map(function (l) {
-                return <LogbookCard key={l.id} log={l} onDetail={function () { setDetail(l) }} />
-              })}
-          {!loading && !logs.length ? <EmptyState title="Belum ada logbook publik" desc="Logbook akan tampil setelah mahasiswa mengatur status siap dilihat." /> : null}
-        </div>
-      </section>
-
-      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
-        {detail ? <LogbookDetail log={detail} /> : null}
-      </Modal>
-    </div>
-  )
-}
-```
-
-## File: src/pages/HomePage.jsx
-```javascript
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { supabase } from '../lib/supabase.js'
-import { useAuth } from '../lib/auth.js'
-import { StatCard, EmptyState, Modal } from '../components/ui.jsx'
-import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
-import { SkeletonLogbookCard, SkeletonStatCard } from '../components/Skeleton.jsx'
-
-export default function HomePage() {
-  const { mahasiswa } = useAuth()
-  const [logs, setLogs] = useState([])
-  const [stats, setStats] = useState({ logbook: 0, galeri: 0, mahasiswa: 0 })
-  const [detail, setDetail] = useState(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(function () {
-    async function load() {
-      const l = await supabase
-        .from('logbooks')
-        .select('*, mahasiswa(nim, nama, prodi), logbook_items(*)')
-        .eq('status', 'publik')
-        .order('tanggal', { ascending: false })
-        .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
-      const g = await supabase.from('galeri').select('id')
-      const p = await supabase.from('mahasiswa').select('id')
-      setLogs(l.data || [])
-      setStats({ logbook: (l.data || []).length, galeri: (g.data || []).length, mahasiswa: (p.data || []).length })
-      setLoading(false)
-    }
-    load()
-  }, [])
-
-  return (
-    <div>
-      <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr] items-stretch">
-        <div className="card-hover relative overflow-hidden rounded-[2rem] bg-bsi-900 text-white p-8 lg:p-12">
-          <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-gold-500/20 blur-2xl" />
-          <div className="absolute -left-10 bottom-0 h-40 w-40 rounded-full bg-emerald-300/10 blur-2xl" />
-          <div className="relative z-10">
-            <span className="inline-flex px-4 py-2 rounded-full bg-white/10 text-xs font-semibold uppercase tracking-wide">Magang Bank BSI</span>
-            <h1 className="mt-6 text-3xl lg:text-5xl font-black leading-tight max-w-2xl">Logbook, Galeri, dan Daftar Hadir Magang dalam Satu Portal</h1>
-            <p className="mt-5 max-w-2xl text-white/80 leading-relaxed">Portal ini mencatat kegiatan harian, dokumentasi media, dan kehadiran tim magang selama membantu operasional Bank BSI.</p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link to="/logbook" className="px-6 py-3 rounded-2xl bg-gold-500 text-slate-900 font-bold hover:bg-gold-400">Lihat Logbook</Link>
-              <Link to="/galeri" className="px-6 py-3 rounded-2xl bg-white/10 text-white font-bold hover:bg-white/20">Lihat Galeri</Link>
-              <Link to="/absen" className="px-6 py-3 rounded-2xl bg-white/10 text-white font-bold hover:bg-white/20">Daftar Hadir</Link>
-              {mahasiswa
-                ? <Link to="/dashboard" className="px-6 py-3 rounded-2xl bg-white text-bsi-900 font-bold hover:bg-slate-100">Buka Dashboard</Link>
-                : <Link to="/login" className="px-6 py-3 rounded-2xl bg-white text-bsi-900 font-bold hover:bg-slate-100">Masuk Intern</Link>}
-            </div>
-          </div>
-        </div>
-        <div className="grid gap-4">
-          {loading
-            ? [0, 1, 2].map(function (i) { return <SkeletonStatCard key={i} /> })
-            : [
-                <StatCard key="mahasiswa" label="Total mahasiswa magang" value={stats.mahasiswa} sub="Mahasiswa terdaftar dalam tim" />,
-                <StatCard key="logbook" label="Total logbook publik" value={stats.logbook} sub="Catatan kegiatan harian" />,
-                <StatCard key="galeri" label="Total media galeri" value={stats.galeri} sub="Foto dan video dokumentasi" />
-              ]}
-        </div>
-      </section>
-
-      <section className="mt-10">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Kegiatan terbaru</p>
-            <h2 className="mt-2 text-2xl lg:text-3xl font-black text-slate-900">Logbook terbaru tim</h2>
-          </div>
-          <Link to="/logbook" className="text-sm font-semibold text-bsi-800 hover:text-bsi-950">Lihat semua logbook</Link>
-        </div>
-        <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {loading
-            ? [0, 1, 2].map(function (i) { return <SkeletonLogbookCard key={i} /> })
-            : logs.slice(0, 3).map(function (l) {
-                return <LogbookCard key={l.id} log={l} onDetail={function () { setDetail(l) }} />
-              })}
-          {!loading && !logs.length ? <EmptyState title="Belum ada logbook publik" desc="Logbook yang sudah diatur sebagai siap dilihat akan tampil di sini." /> : null}
-        </div>
-      </section>
-
-      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
-        {detail ? <LogbookDetail log={detail} /> : null}
-      </Modal>
-    </div>
-  )
-}
 ```
 
 ## File: src/components/Carousel.jsx
@@ -6679,10 +10051,110 @@ textarea {
   0%, 60%, 100% { opacity: 0.2; transform: translateY(0) scale(0.9); }
   30% { opacity: 1; transform: translateY(-1px) scale(1); }
 }
+
+.pemutar-bungkus iframe {
+  pointer-events: none;
+  border: 0;
+  background: transparent;
+}
+
+/* Pemutar video referensi: iframe cropping & slider custom */
+.pemutar-referensi iframe {
+  pointer-events: none;
+  border: 0;
+  background: transparent;
+}
+.pemutar-referensi:fullscreen {
+  border-radius: 0;
+  max-width: none;
+  width: 100vw;
+  height: 100vh;
+}
+.pemutar-progress::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #166534;
+  cursor: pointer;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+}
+.pemutar-progress::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #166534;
+  cursor: pointer;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+}
+.pemutar-volume::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #eab308;
+  cursor: pointer;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+}
+.pemutar-volume::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #eab308;
+  cursor: pointer;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+}
+
+/* pusat-pemutar-v3: iframe mengisi wadah persis, layar penuh menengahkan video */
+.pemutar-referensi iframe {
+  pointer-events: none;
+  border: 0;
+  background: transparent;
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100% !important;
+  height: 100% !important;
+}
+.pemutar-referensi:fullscreen {
+  aspect-ratio: auto !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: none !important;
+  border-radius: 0 !important;
+  background: #000;
+}
+
+/* pusat-pemutar-v4: margin crop 70px menyembunyikan seluruh chrome bawaan YouTube */
+.pemutar-referensi iframe {
+  position: absolute !important;
+  top: -70px !important;
+  left: -2px !important;
+  width: calc(100% + 4px) !important;
+  height: calc(100% + 140px) !important;
+  pointer-events: none !important;
+  border: 0 !important;
+  background: #000 !important;
+}
+.pemutar-referensi:fullscreen {
+  aspect-ratio: auto !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: none !important;
+  border-radius: 0 !important;
+  background: #000 !important;
+}
 ```
 
 ## File: src/components/cards.jsx
 ```javascript
+import PemutarVideo from './PemutarVideo.jsx'
 import Carousel from './Carousel.jsx'
 import { StatusBadge, CategoryBadge, AttendanceBadge, btnSmall, ZoomableMedia, SmartFit , MediaYouTube } from './ui.jsx'
 import { formatTanggal, formatTanggalShort } from '../lib/format.js'
@@ -6786,7 +10258,7 @@ export function LogbookDetail(props) {
                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                    {it.media_path ? (
                      it.media_source === 'youtube' ? (
-                       <iframe src={'https://www.youtube-nocookie.com/embed/' + it.youtube_id + '?rel=0&modestbranding=1'} title={it.judul} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen className="rounded-2xl overflow-hidden aspect-video w-full bg-slate-900 mb-3" />
+                       <PemutarVideo key={it.youtube_id} youtubeId={it.youtube_id} title={it.judul} className="aspect-video w-full rounded-2xl mb-3" />
                      ) : (
                        <ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3" />
                      )
@@ -6861,7 +10333,7 @@ export function GalleryDetail(props) {
   return (
     <div className="space-y-4">
       {item.media_source === 'youtube' ? (
-        <iframe src={'https://www.youtube-nocookie.com/embed/' + item.youtube_id + '?rel=0&modestbranding=1'} title={item.judul} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen className="rounded-2xl overflow-hidden aspect-video w-full bg-slate-900" />
+        <PemutarVideo key={item.youtube_id} youtubeId={item.youtube_id} title={item.judul} className="aspect-video w-full rounded-2xl" />
       ) : (
         <ZoomableMedia src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} title={item.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900" />
       )}
@@ -6927,6 +10399,7 @@ export function AttendanceDetail(props) {
 
 ## File: src/components/ui.jsx
 ```javascript
+import PemutarVideo from './PemutarVideo.jsx'
 import { useEffect, useRef, useState } from 'react'
 import { SizedIcon } from './icons.jsx'
 function useBodyScrollLock(active) {
@@ -7115,7 +10588,7 @@ export function Lightbox(props) {
     <div className="anim-overlay fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/95 p-4" onClick={props.onClose}>
       <div className="relative w-full max-w-5xl" onClick={function (e) { e.stopPropagation() }}>
         {props.youtubeId ? (
-          <iframe src={'https://www.youtube-nocookie.com/embed/' + props.youtubeId + '?rel=0&modestbranding=1'} title={props.title || 'Video'} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen className="mx-auto aspect-video w-full rounded-2xl bg-slate-900" />
+          <PemutarVideo key={props.youtubeId} youtubeId={props.youtubeId} title={props.title || 'Video'} className="mx-auto aspect-video w-full rounded-2xl" />
         ) : props.type === 'video' ? (
           <video src={props.src} controls autoPlay className="mx-auto max-h-[85vh] w-full rounded-2xl bg-slate-900 object-contain" />
         ) : (
@@ -7499,6 +10972,12 @@ export default function DashboardPage() {
           mediaThumb = up.thumbUrl || null
           mediaSource = 'r2'
           youtubeId = null
+        } else if (it.mode === 'video' && !it.file && !it.ytLink && it.oldYtId) {
+          mediaSource = 'youtube'
+          youtubeId = it.oldYtId
+          mediaPath = ytThumb(it.oldYtId)
+          mediaThumb = ytThumb(it.oldYtId)
+          mediaType = 'video'
         } else if (it.oldPath) {
           mediaPath = it.oldPath
           mediaType = detectMediaType(it.oldPath)
@@ -7567,7 +11046,7 @@ export default function DashboardPage() {
       kendala: log.kendala || '', solusi: log.solusi || '', pembelajaran: log.pembelajaran || '', status: log.status
     })
     const mapped = (log.logbook_items || []).map(function (it) {
-      return { key: it.id, judul: it.judul, deskripsi: it.deskripsi || '', hasil: it.hasil || '', file: null, preview: it.media_path || '', oldPath: it.media_source === 'youtube' ? '' : (it.media_path || ''), oldThumb: it.media_source === 'youtube' ? '' : (it.media_thumb || ''), previewLoading: false, show: it.show_in_gallery, mode: it.media_source === 'youtube' ? 'video' : (it.media_type === 'video' ? 'video' : 'foto'), ytLink: '', oldYtId: it.youtube_id || null, oldSource: it.media_source || 'r2' }
+      return { key: it.id, judul: it.judul, deskripsi: it.deskripsi || '', hasil: it.hasil || '', file: null, preview: it.media_path || '', oldPath: it.media_source === 'youtube' ? '' : (it.media_path || ''), oldThumb: it.media_source === 'youtube' ? '' : (it.media_thumb || ''), previewLoading: false, show: it.show_in_gallery, mode: it.media_source === 'youtube' ? 'video' : (it.media_type === 'video' ? 'video' : 'foto'), ytLink: it.media_source === 'youtube' && it.youtube_id ? 'https://youtu.be/' + it.youtube_id : '', oldYtId: it.youtube_id || null, oldSource: it.media_source || 'r2' }
     })
     setItems(mapped.length ? mapped : [newItem()])
     setTab('logbook')
@@ -7584,7 +11063,7 @@ export default function DashboardPage() {
     setEditGalId(g.id)
     setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_path || '', oldPath: g.media_source === 'youtube' ? '' : (g.media_path || ''), oldThumb: g.media_source === 'youtube' ? '' : (g.media_thumb || ''), previewLoading: false })
     setGalMode(g.media_source === 'youtube' ? 'video' : (g.media_type === 'video' ? 'video' : 'foto'))
-    setGalYtLink('')
+    setGalYtLink(g.media_source === 'youtube' && g.youtube_id ? 'https://youtu.be/' + g.youtube_id : '')
     setGalOldYt(g.youtube_id || null)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -7646,6 +11125,12 @@ export default function DashboardPage() {
         mediaThumb = up.thumbUrl || null
         mediaSource = 'r2'
         youtubeId = null
+      } else if (galMode === 'video' && !galForm.file && !galYtLink && galOldYt) {
+        mediaSource = 'youtube'
+        youtubeId = galOldYt
+        mediaPath = ytThumb(galOldYt)
+        mediaThumb = ytThumb(galOldYt)
+        mediaType = 'video'
       } else if (galForm.oldPath) {
         mediaPath = galForm.oldPath
         mediaType = detectMediaType(galForm.oldPath)

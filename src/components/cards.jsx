@@ -1,3 +1,4 @@
+import PemutarVideo from './PemutarVideo.jsx'
 import Carousel from './Carousel.jsx'
 import { StatusBadge, CategoryBadge, AttendanceBadge, btnSmall, ZoomableMedia, SmartFit , MediaYouTube } from './ui.jsx'
 import { formatTanggal, formatTanggalShort } from '../lib/format.js'
@@ -101,7 +102,7 @@ export function LogbookDetail(props) {
                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                    {it.media_path ? (
                      it.media_source === 'youtube' ? (
-                       <iframe src={'https://www.youtube-nocookie.com/embed/' + it.youtube_id + '?rel=0&modestbranding=1'} title={it.judul} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen className="rounded-2xl overflow-hidden aspect-video w-full bg-slate-900 mb-3" />
+                       <PemutarVideo key={it.youtube_id} youtubeId={it.youtube_id} title={it.judul} className="aspect-video w-full rounded-2xl mb-3" />
                      ) : (
                        <ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3" />
                      )
@@ -176,7 +177,7 @@ export function GalleryDetail(props) {
   return (
     <div className="space-y-4">
       {item.media_source === 'youtube' ? (
-        <iframe src={'https://www.youtube-nocookie.com/embed/' + item.youtube_id + '?rel=0&modestbranding=1'} title={item.judul} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen className="rounded-2xl overflow-hidden aspect-video w-full bg-slate-900" />
+        <PemutarVideo key={item.youtube_id} youtubeId={item.youtube_id} title={item.judul} className="aspect-video w-full rounded-2xl" />
       ) : (
         <ZoomableMedia src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} title={item.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900" />
       )}

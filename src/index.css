@@ -170,3 +170,102 @@ textarea {
   0%, 60%, 100% { opacity: 0.2; transform: translateY(0) scale(0.9); }
   30% { opacity: 1; transform: translateY(-1px) scale(1); }
 }
+
+.pemutar-bungkus iframe {
+  pointer-events: none;
+  border: 0;
+  background: transparent;
+}
+
+/* Pemutar video referensi: iframe cropping & slider custom */
+.pemutar-referensi iframe {
+  pointer-events: none;
+  border: 0;
+  background: transparent;
+}
+.pemutar-referensi:fullscreen {
+  border-radius: 0;
+  max-width: none;
+  width: 100vw;
+  height: 100vh;
+}
+.pemutar-progress::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #166534;
+  cursor: pointer;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+}
+.pemutar-progress::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #166534;
+  cursor: pointer;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+}
+.pemutar-volume::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #eab308;
+  cursor: pointer;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+}
+.pemutar-volume::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #eab308;
+  cursor: pointer;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+}
+
+/* pusat-pemutar-v3: iframe mengisi wadah persis, layar penuh menengahkan video */
+.pemutar-referensi iframe {
+  pointer-events: none;
+  border: 0;
+  background: transparent;
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100% !important;
+  height: 100% !important;
+}
+.pemutar-referensi:fullscreen {
+  aspect-ratio: auto !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: none !important;
+  border-radius: 0 !important;
+  background: #000;
+}
+
+/* pusat-pemutar-v4: margin crop 70px menyembunyikan seluruh chrome bawaan YouTube */
+.pemutar-referensi iframe {
+  position: absolute !important;
+  top: -70px !important;
+  left: -2px !important;
+  width: calc(100% + 4px) !important;
+  height: calc(100% + 140px) !important;
+  pointer-events: none !important;
+  border: 0 !important;
+  background: #000 !important;
+}
+.pemutar-referensi:fullscreen {
+  aspect-ratio: auto !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: none !important;
+  border-radius: 0 !important;
+  background: #000 !important;
+}

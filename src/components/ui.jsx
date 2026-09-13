@@ -1,3 +1,4 @@
+import PemutarVideo from './PemutarVideo.jsx'
 import { useEffect, useRef, useState } from 'react'
 import { SizedIcon } from './icons.jsx'
 function useBodyScrollLock(active) {
@@ -186,7 +187,7 @@ export function Lightbox(props) {
     <div className="anim-overlay fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/95 p-4" onClick={props.onClose}>
       <div className="relative w-full max-w-5xl" onClick={function (e) { e.stopPropagation() }}>
         {props.youtubeId ? (
-          <iframe src={'https://www.youtube-nocookie.com/embed/' + props.youtubeId + '?rel=0&modestbranding=1'} title={props.title || 'Video'} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen className="mx-auto aspect-video w-full rounded-2xl bg-slate-900" />
+          <PemutarVideo key={props.youtubeId} youtubeId={props.youtubeId} title={props.title || 'Video'} className="mx-auto aspect-video w-full rounded-2xl" />
         ) : props.type === 'video' ? (
           <video src={props.src} controls autoPlay className="mx-auto max-h-[85vh] w-full rounded-2xl bg-slate-900 object-contain" />
         ) : (
