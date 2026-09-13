@@ -31,7 +31,7 @@ export default function Carousel(props) {
     return (
       <>
         <div className="relative group rounded-2xl overflow-hidden aspect-video bg-slate-900">
-          <SmartFit src={s.src} type={s.type} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} />
+          <SmartFit src={s.src} full={s.full} type={s.type} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} />
           <button type="button" title="Perbesar media" onClick={function () { setZoom(s) }}
             className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
             <SizedIcon name="expand" size={15} />
@@ -63,7 +63,8 @@ export default function Carousel(props) {
               <div key={i} className="carousel-slide">
                 <SmartFit
                   src={s.src}
-                  type={s.type}
+                  full={s.full}
+                   type={s.type}
                   alt={s.title || 'Media'}
                   onClick={function () {
                     if (moved.current) { moved.current = false; return }

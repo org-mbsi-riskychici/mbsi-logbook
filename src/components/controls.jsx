@@ -235,7 +235,7 @@ export function FileInput(props) {
           <span className={'block truncate text-sm font-semibold ' + (props.fileName ? 'text-slate-800' : 'text-slate-500')}>
             {props.fileName || 'Klik untuk pilih foto atau video'}
           </span>
-          <span className="block text-xs text-slate-400">{props.hint || 'Maksimal 2 MB'}</span>
+          <span className="block text-xs text-slate-400">{props.hint || 'Foto JPG, PNG, atau HEIC otomatis dikonversi. Video maks 50 MB.'}</span>
         </span>
         {props.fileName ? <span className="shrink-0 text-xs font-semibold text-bsi-700">Ganti</span> : null}
       </button>

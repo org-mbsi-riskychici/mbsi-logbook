@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../lib/auth.js'
 import { uploadMedia, deleteMedia } from '../lib/upload.js'
 import { syncGaleriFromLogbook } from '../lib/logbook.js'
+import { pratinjauHeic, formatHeic } from '../lib/konversi.js'
 import { todayInput, detectMediaType, matchesDateFilters } from '../lib/format.js'
 import { KATEGORI, UNIT, GALERI_KEGIATAN } from '../lib/constants.js'
 import { EmptyState, Modal, ConfirmModal, inputCls, labelCls, btnPrimary, btnSmall, AutoTextArea } from '../components/ui.jsx'
@@ -12,7 +13,7 @@ import { SizedIcon, ICONS } from '../components/icons.jsx'
 import { FilterBar, FilterSelect, TimeFilter, countActiveFilters } from '../components/FilterBar.jsx'
 
 function newItem() {
-  return { key: Math.random().toString(36).slice(2), judul: '', deskripsi: '', hasil: '', file: null, preview: '', oldPath: '', oldThumb: '', show: false }
+  return { key: Math.random().toString(36).slice(2), judul: '', deskripsi: '', hasil: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false, show: false }
 }
 
 const LOG_INITIAL = { kategori: '', status: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
@@ -49,13 +50,14 @@ export default function DashboardPage() {
   const [items, setItems] = useState([newItem()])
   const [editLogId, setEditLogId] = useState(null)
 
-  const [galForm, setGalForm] = useState({ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '', oldPath: '', oldThumb: '' })
+  const [galForm, setGalForm] = useState({ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false })
   const [editGalId, setEditGalId] = useState(null)
 
   const [hadirForm, setHadirForm] = useState({ tanggal: todayInput(), status: 'Masuk', alasan: '' })
   const [editHadirId, setEditHadirId] = useState(null)
 
   const [busy, setBusy] = useState(false)
+  const [infoProses, setInfoProses] = useState('')
   const [pendingDelete, setPendingDelete] = useState(null)
 
   const [logFilter, setLogFilter] = useState(LOG_INITIAL)
@@ -91,13 +93,20 @@ export default function DashboardPage() {
     })
   }
 
-  function onItemFile(i, file) {
+  async function onItemFile(i, file) {
     if (!file) return
-    patchItem(i, { file: file, preview: URL.createObjectURL(file) })
+    if (formatHeic(file)) {
+      patchItem(i, { file: file, preview: '', previewLoading: true })
+      const blob = await pratinjauHeic(file)
+      const preview = blob ? URL.createObjectURL(blob) : URL.createObjectURL(file)
+      patchItem(i, { preview: preview, previewLoading: false })
+    } else {
+      patchItem(i, { file: file, preview: URL.createObjectURL(file), previewLoading: false })
+    }
   }
 
   function removeItemFile(i) {
-    patchItem(i, { file: null, preview: '', oldPath: '', show: false })
+    patchItem(i, { file: null, preview: '', oldPath: '', previewLoading: false, show: false })
   }
 
   function keyDariUrl(url) {
@@ -134,7 +143,7 @@ export default function DashboardPage() {
         let mediaType = null
         let mediaThumb = null
         if (it.file) {
-          const up = await uploadMedia(it.file, 'logbook')
+          const up = await uploadMedia(it.file, 'logbook', function (pesan) { setInfoProses(pesan) })
           mediaPath = up.publicUrl
           mediaType = it.file.type.indexOf('video') === 0 ? 'video' : 'foto'
           mediaThumb = up.thumbUrl || null
@@ -191,6 +200,7 @@ export default function DashboardPage() {
     } catch (err) {
       alert('Gagal menyimpan logbook: ' + err.message)
     }
+    setInfoProses('')
     setBusy(false)
   }
 
@@ -201,7 +211,7 @@ export default function DashboardPage() {
       kendala: log.kendala || '', solusi: log.solusi || '', pembelajaran: log.pembelajaran || '', status: log.status
     })
     const mapped = (log.logbook_items || []).map(function (it) {
-      return { key: it.id, judul: it.judul, deskripsi: it.deskripsi || '', hasil: it.hasil || '', file: null, preview: it.media_path || '', oldPath: it.media_path || '', oldThumb: it.media_thumb || '', show: it.show_in_gallery }
+      return { key: it.id, judul: it.judul, deskripsi: it.deskripsi || '', hasil: it.hasil || '', file: null, preview: it.media_path || '', oldPath: it.media_path || '', oldThumb: it.media_thumb || '', previewLoading: false, show: it.show_in_gallery }
     })
     setItems(mapped.length ? mapped : [newItem()])
     setTab('logbook')
@@ -216,13 +226,13 @@ export default function DashboardPage() {
 
   function startEditGal(g) {
     setEditGalId(g.id)
-    setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_path, oldPath: g.media_path, oldThumb: g.media_thumb || '' })
+    setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_path, oldPath: g.media_path, oldThumb: g.media_thumb || '', previewLoading: false })
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   function cancelEditGal() {
     setEditGalId(null)
-    setGalForm({ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '', oldPath: '', oldThumb: '' })
+    setGalForm({ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false })
   }
 
   function startEditHadir(h) {
@@ -248,7 +258,7 @@ export default function DashboardPage() {
       let mediaType = ''
       let mediaThumb = null
       if (galForm.file) {
-        const up = await uploadMedia(galForm.file, 'galeri')
+        const up = await uploadMedia(galForm.file, 'galeri', function (pesan) { setInfoProses(pesan) })
         mediaPath = up.publicUrl
         mediaType = galForm.file.type.indexOf('video') === 0 ? 'video' : 'foto'
         mediaThumb = up.thumbUrl || null
@@ -280,11 +290,12 @@ export default function DashboardPage() {
       }
       for (const u of oldGalUrls) await hapusMediaR2(u)
       setEditGalId(null)
-      setGalForm({ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '', oldPath: '', oldThumb: '' })
+      setGalForm({ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false })
       await refresh()
     } catch (err) {
       alert('Gagal menyimpan galeri: ' + err.message)
     }
+    setInfoProses('')
     setBusy(false)
   }
 
@@ -305,6 +316,7 @@ export default function DashboardPage() {
     setEditHadirId(null)
     setHadirForm({ tanggal: todayInput(), status: 'Masuk', alasan: '' })
     await refresh()
+    setInfoProses('')
     setBusy(false)
   }
 
@@ -484,6 +496,14 @@ export default function DashboardPage() {
                       <input className={inputCls} value={it.judul} onChange={function (e) { patchItem(i, { judul: e.target.value }) }} placeholder="Judul kegiatan" />
                       <AutoTextArea className={inputCls} value={it.deskripsi} onChange={function (e) { patchItem(i, { deskripsi: e.target.value }) }} placeholder="Deskripsi singkat kegiatan" />
                       <input className={inputCls} value={it.hasil} onChange={function (e) { patchItem(i, { hasil: e.target.value }) }} placeholder="Hasil (opsional)" />
+                      {it.previewLoading ? (
+                        <div className="rounded-2xl border border-slate-200 bg-slate-100 aspect-video grid place-items-center">
+                          <div className="flex flex-col items-center gap-3">
+                            <div className="h-9 w-9 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div>
+                            <p className="text-xs font-semibold text-slate-500">Mengonversi pratinjau HEIC...</p>
+                          </div>
+                        </div>
+                      ) : null}
                       {it.preview ? (
                         <div className="relative rounded-2xl overflow-hidden aspect-video bg-slate-900">
                           {it.file && it.file.type.indexOf('video') === 0
@@ -512,7 +532,7 @@ export default function DashboardPage() {
                 <div><label className={labelCls}>Pembelajaran</label><AutoTextArea className={inputCls} value={form.pembelajaran} onChange={function (e) { setForm(Object.assign({}, form, { pembelajaran: e.target.value })) }} placeholder="Opsional" /></div>
               </div>
 
-              <button type="submit" disabled={busy} className={btnPrimary}>{busy ? 'Menyimpan...' : (editLogId ? 'Simpan perubahan' : 'Simpan logbook')}</button>
+              <button type="submit" disabled={busy} className={btnPrimary}>{busy ? (infoProses || 'Menyimpan...') : (editLogId ? 'Simpan perubahan' : 'Simpan logbook')}</button>
             </form>
           </div>
 
@@ -550,13 +570,28 @@ export default function DashboardPage() {
                 <label className={labelCls}>Pilih foto atau video {editGalId ? null : <span className="text-red-500">*</span>}</label>
                 <div className="mt-1.5">
                   <FileInput accept="image/*,video/*" fileName={galForm.file ? galForm.file.name : ''}
-                    onChange={function (e) {
-                      const f = e.target.files[0]
-                      if (!f) return
-                      setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: URL.createObjectURL(f) }) })
-                    }} />
+                    onChange={async function (e) {
+                       const f = e.target.files[0]
+                       if (!f) return
+                       if (formatHeic(f)) {
+                         setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: '', previewLoading: true }) })
+                         const blob = await pratinjauHeic(f)
+                         const preview = blob ? URL.createObjectURL(blob) : URL.createObjectURL(f)
+                         setGalForm(function (g) { return Object.assign({}, g, { preview: preview, previewLoading: false }) })
+                       } else {
+                         setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: URL.createObjectURL(f), previewLoading: false }) })
+                       }
+                     }} />
                 </div>
               </div>
+              {galForm.previewLoading ? (
+                <div className="rounded-2xl border border-slate-200 bg-slate-100 aspect-video grid place-items-center">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="h-9 w-9 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div>
+                    <p className="text-xs font-semibold text-slate-500">Mengonversi pratinjau HEIC...</p>
+                  </div>
+                </div>
+              ) : null}
               {galForm.preview ? (
                 <div className="relative rounded-2xl overflow-hidden aspect-video bg-slate-900">
                   {galForm.file && galForm.file.type.indexOf('video') === 0
@@ -587,7 +622,7 @@ export default function DashboardPage() {
                 {editGalDerived ? <p className="mt-1 text-xs text-slate-400">Media ini berasal dari logbook. Perubahan judul, deskripsi, kegiatan, dan tanggal hanya memengaruhi galeri dan tidak akan ditimpa saat logbook disimpan.</p> : null}
               </div>
               <div><label className={labelCls}>Deskripsi (opsional)</label><AutoTextArea className={inputCls} value={galForm.deskripsi} onChange={function (e) { setGalForm(Object.assign({}, galForm, { deskripsi: e.target.value })) }} placeholder="Tambahkan keterangan media." /></div>
-              <button type="submit" disabled={busy} className={btnPrimary}>{busy ? 'Menyimpan...' : (editGalId ? 'Simpan perubahan media' : 'Unggah media')}</button>
+              <button type="submit" disabled={busy} className={btnPrimary}>{busy ? (infoProses || 'Menyimpan...') : (editGalId ? 'Simpan perubahan media' : 'Unggah media')}</button>
             </form>
           </div>
 

@@ -135,7 +135,7 @@ export function GalleryCard(props) {
   return (
     <article onClick={props.onDetail} className="clickable cursor-pointer bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full">
       <div className="relative aspect-video w-full overflow-hidden bg-slate-900">
-        <SmartFit src={item.media_thumb || item.media_path} type={item.media_type} alt={item.judul} />
+        <SmartFit src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} alt={item.judul} />
       </div>
       <div className="p-5 space-y-3 flex-1 flex flex-col">
         <div className="flex flex-wrap items-center justify-between gap-2">

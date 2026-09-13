@@ -1,8 +1,35 @@
 import { supabase } from './supabase.js'
+import { iniVideo, ekstensiFile, siapkanFoto } from './konversi.js'
+
+const MAKS_FOTO = 15 * 1024 * 1024
+const MAKS_VIDEO = 50 * 1024 * 1024
 
 async function getToken() {
   const { data } = await supabase.auth.getSession()
   return data.session ? data.session.access_token : ''
+}
+
+function namaDasar(nama) {
+  return String(nama || 'media').replace(/\.[^.]+$/, '')
+}
+
+function kirimDenganProgres(uploadUrl, blob, contentType, onProgres) {
+  return new Promise(function (resolve, reject) {
+    const xhr = new XMLHttpRequest()
+    xhr.open('PUT', uploadUrl)
+    xhr.setRequestHeader('Content-Type', contentType)
+    if (onProgres) {
+      xhr.upload.onprogress = function (e) {
+        if (e.lengthComputable) onProgres(e.loaded / e.total)
+      }
+    }
+    xhr.onload = function () {
+      if (xhr.status >= 200 && xhr.status < 300) resolve()
+      else reject(new Error('Gagal upload file ke R2 (status ' + xhr.status + ')'))
+    }
+    xhr.onerror = function () { reject(new Error('Gagal jaringan saat upload ke R2')) }
+    xhr.send(blob)
+  })
 }
 
 async function mintaIzin(token, filename, contentType, kind) {
@@ -18,63 +45,47 @@ async function mintaIzin(token, filename, contentType, kind) {
   return res.json()
 }
 
-async function kirimFile(uploadUrl, blob, contentType) {
-  const put = await fetch(uploadUrl, {
-    method: 'PUT',
-    headers: { 'Content-Type': contentType },
-    body: blob
-  })
-  if (!put.ok) {
-    const text = await put.text()
-    throw new Error('Gagal upload file ke R2 (status ' + put.status + '): ' + text)
+export async function uploadMedia(file, kind, onInfo) {
+  const video = iniVideo(file)
+  if (video && file.size > MAKS_VIDEO) {
+    throw new Error('Video melebihi 50 MB. Potong dulu durasinya supaya upload cepat dan kuota aman.')
   }
-}
-
-async function buatThumbnail(file, maxSisi) {
-  if (!file.type.startsWith('image/')) return null
-  try {
-    const bitmap = await createImageBitmap(file)
-    const skala = Math.min(1, maxSisi / Math.max(bitmap.width, bitmap.height))
-    if (skala >= 1) {
-      bitmap.close()
-      return null
+  if (!video && file.size > MAKS_FOTO) {
+    throw new Error('Foto melebihi 15 MB. Pilih file dengan ukuran lebih kecil.')
+  }
+  let fullBlob = file
+  let fullType = file.type
+  let thumbBlob = null
+  if (!video) {
+    try {
+      const hasil = await siapkanFoto(file, onInfo)
+      fullBlob = hasil.fullBlob
+      fullType = hasil.fullType
+      thumbBlob = hasil.thumbBlob
+    } catch (e) {
+      throw new Error('Foto format .' + ekstensiFile(file) + ' tidak bisa diproses browser. Ubah dulu ke JPG atau PNG. Di iPhone: Settings, Camera, Formats, pilih Most Compatible.')
     }
-    const w = Math.max(1, Math.round(bitmap.width * skala))
-    const h = Math.max(1, Math.round(bitmap.height * skala))
-    const canvas = document.createElement('canvas')
-    canvas.width = w
-    canvas.height = h
-    const ctx = canvas.getContext('2d')
-    ctx.imageSmoothingEnabled = true
-    ctx.imageSmoothingQuality = 'high'
-    ctx.drawImage(bitmap, 0, 0, w, h)
-    bitmap.close()
-    const blob = await new Promise(function (resolve) {
-      canvas.toBlob(resolve, 'image/jpeg', 0.82)
-    })
-    return blob
-  } catch (e) {
-    return null
   }
-}
-
-export async function uploadMedia(file, kind) {
+  if (onInfo) onInfo('')
   const token = await getToken()
-  const info = await mintaIzin(token, file.name, file.type, kind)
-  await kirimFile(info.uploadUrl, file, file.type)
+  const extFull = fullType === 'image/webp' ? 'webp' : (fullType === 'image/jpeg' ? 'jpg' : ekstensiFile(file))
+  const infoFull = await mintaIzin(token, namaDasar(file.name) + '.' + extFull, fullType, kind)
+  await kirimDenganProgres(infoFull.uploadUrl, fullBlob, fullType, function (p) {
+    if (onInfo) onInfo('Mengunggah... ' + Math.round(p * 100) + '%')
+  })
   let thumbUrl = null
-  try {
-    const thumbBlob = await buatThumbnail(file, 900)
-    if (thumbBlob) {
-      const namaThumb = file.name.replace(/\.[^.]+$/, '') + '-thumb.jpg'
-      const t = await mintaIzin(token, namaThumb, 'image/jpeg', 'thumb/' + kind)
-      await kirimFile(t.uploadUrl, thumbBlob, 'image/jpeg')
-      thumbUrl = t.publicUrl
+  if (thumbBlob) {
+    try {
+      const namaThumb = namaDasar(infoFull.key.split('/').pop()) + '.webp'
+      const infoThumb = await mintaIzin(token, namaThumb, 'image/webp', 'thumb/' + kind)
+      await kirimDenganProgres(infoThumb.uploadUrl, thumbBlob, 'image/webp', null)
+      thumbUrl = infoThumb.publicUrl
+    } catch (e) {
+      thumbUrl = null
     }
-  } catch (e) {
-    thumbUrl = null
   }
-  return { path: info.key, publicUrl: info.publicUrl, thumbUrl: thumbUrl }
+  console.log('[UPLOAD] File penuh: ' + infoFull.key + ' | Thumbnail: ' + (thumbUrl || 'tidak dibuat'))
+  return { path: infoFull.key, publicUrl: infoFull.publicUrl, thumbUrl: thumbUrl }
 }
 
 export async function deleteMedia(key) {

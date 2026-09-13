@@ -230,7 +230,8 @@ export function ZoomableMedia(props) {
         src={props.src}
         type={props.type}
         alt={props.title || 'Media'}
-        controls={isVideo}
+        full={props.full || props.src}
+         controls={isVideo}
         onClick={isVideo ? null : function (e) { e.stopPropagation(); setOpen(true) }}
       />
       <button
@@ -256,12 +257,17 @@ export function SmartFit(props) {
     const h = isVideo ? el.videoHeight : el.naturalHeight
     if (w && h) setRatio(w / h)
   }
+   function cadangkan(e) {
+     const el = e.currentTarget
+     const cad = props.full && props.full !== props.src ? props.full : props.src
+     if (cad && el.src !== cad) el.src = cad
+   }
   const cover = ratio !== null && ratio > 1
   const potret = ratio !== null && ratio <= 1
   return (
     <>
       {potret && !isVideo ? (
-        <img src={props.src} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-xl" />
+        <img src={props.src} alt="" aria-hidden="true" onError={cadangkan} className="absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-xl" />
       ) : null}
       {isVideo ? (
         <video
@@ -277,7 +283,8 @@ export function SmartFit(props) {
           src={props.src}
           alt={props.alt || 'Media'}
           onLoad={bacaUkuran}
-          onClick={props.onClick || undefined}
+          onError={cadangkan}
+           onClick={props.onClick || undefined}
           className={'absolute inset-0 h-full w-full ' + (cover ? 'object-cover' : 'object-contain') + (props.onClick ? ' cursor-zoom-in' : '')}
         />
       )}
