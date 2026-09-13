@@ -3,9 +3,9 @@ import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../lib/auth.js'
 import { StatCard, EmptyState, Modal } from '../components/ui.jsx'
 import { AttendanceCard, AttendanceDetail } from '../components/cards.jsx'
-import { FilterBar, FilterSelect, TimeFilter, countActiveFilters } from '../components/FilterBar.jsx'
+import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
 import { ICONS } from '../components/icons.jsx'
-import { matchesDateFilters } from '../lib/format.js'
+import { matchesDateFilters, urutkanTanggal } from '../lib/format.js'
 import { SkeletonStatCard, SkeletonChartRow, SkeletonAttendanceCard } from '../components/Skeleton.jsx'
 
 const INITIAL = { mahasiswa: '', status: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
@@ -15,6 +15,7 @@ export default function AttendancePage() {
   const [all, setAll] = useState([])
   const [people, setPeople] = useState([])
   const [filter, setFilter] = useState(INITIAL)
+  const [sort, setSort] = useState('terbaru')
   const [open, setOpen] = useState(false)
   const [detail, setDetail] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -36,6 +37,7 @@ export default function AttendancePage() {
     return matchesDateFilters(r.tanggal, filter)
   })
   const active = countActiveFilters(filter)
+  const sortedRows = urutkanTanggal(rows, sort)
 
   const counts = rows.reduce(function (acc, r) {
     acc[r.status] = (acc[r.status] || 0) + 1
@@ -74,6 +76,7 @@ export default function AttendancePage() {
           <FilterSelect icon={ICONS.check} value={filter.status} onChange={function (v) { setFilter(Object.assign({}, filter, { status: v })) }}
             options={[{ value: '', label: 'Semua status' }, { value: 'Masuk', label: 'Masuk' }, { value: 'Izin', label: 'Izin' }, { value: 'Bolos', label: 'Bolos' }]} />
           <TimeFilter filter={filter} set={setFilter} />
+          <SortSelect value={sort} onChange={setSort} />
         </FilterBar>
       </section>
 
@@ -115,7 +118,7 @@ export default function AttendancePage() {
         <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {loading
             ? [0, 1, 2].map(function (i) { return <SkeletonAttendanceCard key={i} /> })
-            : rows.map(function (r) {
+            : sortedRows.map(function (r) {
                 return <AttendanceCard key={r.id} row={r} isOwner={mahasiswa && mahasiswa.id === r.mahasiswa_id}
                   onDetail={function () { setDetail(r) }} />
               })}

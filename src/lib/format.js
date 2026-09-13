@@ -38,3 +38,14 @@ export function matchesDateFilters(dateString, f) {
   }
   return true
 }
+export function urutkanTanggal(rows, mode) {
+  const salin = (rows || []).slice()
+  salin.sort(function (a, b) {
+    const da = a.tanggal || ''
+    const db = b.tanggal || ''
+    if (da === db) return 0
+    if (mode === 'terlama') return da < db ? -1 : 1
+    return da < db ? 1 : -1
+  })
+  return salin
+}

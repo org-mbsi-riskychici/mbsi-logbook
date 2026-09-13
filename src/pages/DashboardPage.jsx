@@ -4,13 +4,13 @@ import { useAuth } from '../lib/auth.js'
 import { uploadMedia, deleteMedia } from '../lib/upload.js'
 import { syncGaleriFromLogbook } from '../lib/logbook.js'
 import { pratinjauHeic, formatHeic } from '../lib/konversi.js'
-import { todayInput, detectMediaType, matchesDateFilters } from '../lib/format.js'
+import { todayInput, detectMediaType, matchesDateFilters, urutkanTanggal } from '../lib/format.js'
 import { KATEGORI, UNIT, GALERI_KEGIATAN } from '../lib/constants.js'
 import { EmptyState, Modal, ConfirmModal, inputCls, labelCls, btnPrimary, btnSmall, AutoTextArea } from '../components/ui.jsx'
 import { LogbookCard, LogbookDetail, GalleryCard, GalleryDetail, AttendanceCard, AttendanceDetail } from '../components/cards.jsx'
 import { CustomSelect, CustomDateInput, FileInput } from '../components/controls.jsx'
 import { SizedIcon, ICONS } from '../components/icons.jsx'
-import { FilterBar, FilterSelect, TimeFilter, countActiveFilters } from '../components/FilterBar.jsx'
+import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
 
 function newItem() {
   return { key: Math.random().toString(36).slice(2), judul: '', deskripsi: '', hasil: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false, show: false }
@@ -66,6 +66,7 @@ export default function DashboardPage() {
   const [galFilterOpen, setGalFilterOpen] = useState(false)
   const [hadirFilter, setHadirFilter] = useState(HADIR_INITIAL)
   const [hadirFilterOpen, setHadirFilterOpen] = useState(false)
+  const [sort, setSort] = useState('terbaru')
 
   async function refresh() {
     if (!mahasiswa) return
@@ -397,6 +398,7 @@ export default function DashboardPage() {
     if (logFilter.status && l.status !== logFilter.status) return false
     return matchesDateFilters(l.tanggal, logFilter)
   })
+  const sortedLogs = urutkanTanggal(filteredLogs, sort)
   const logFilterActive = countActiveFilters(logFilter)
 
   const filteredGaleri = galeri.filter(function (g) {
@@ -404,12 +406,14 @@ export default function DashboardPage() {
     if (galFilter.tipe && g.media_type !== galFilter.tipe) return false
     return matchesDateFilters(g.tanggal, galFilter)
   })
+  const sortedGaleri = urutkanTanggal(filteredGaleri, sort)
   const galFilterActive = countActiveFilters(galFilter)
 
   const filteredHadir = hadir.filter(function (h) {
     if (hadirFilter.status && h.status !== hadirFilter.status) return false
     return matchesDateFilters(h.tanggal, hadirFilter)
   })
+  const sortedHadir = urutkanTanggal(filteredHadir, sort)
   const hadirFilterActive = countActiveFilters(hadirFilter)
 
   const editGalDerived = editGalId ? ((galeri.find(function (g) { return g.id === editGalId }) || {}).logbook_item_id || null) : null
@@ -545,10 +549,11 @@ export default function DashboardPage() {
               <FilterSelect icon={ICONS.check} value={logFilter.status} onChange={function (v) { setLogFilter(Object.assign({}, logFilter, { status: v })) }}
                 options={[{ value: '', label: 'Semua status' }, { value: 'draft', label: 'Draft' }, { value: 'publik', label: 'Siap dilihat' }]} />
               <TimeFilter filter={logFilter} set={setLogFilter} />
+              <SortSelect value={sort} onChange={setSort} />
             </FilterBar>
             <p className="text-sm text-slate-500">Menampilkan {filteredLogs.length} dari {logs.length} logbook</p>
             <div className="grid gap-5 md:grid-cols-2">
-              {filteredLogs.map(function (l) {
+              {sortedLogs.map(function (l) {
                 return <LogbookCard key={l.id} log={l} isOwner
                   onDetail={function () { setDetail({ type: 'log', data: l }) }}
                   onEdit={function () { startEditLog(l) }}
@@ -635,10 +640,11 @@ export default function DashboardPage() {
               <FilterSelect icon={ICONS.image} value={galFilter.tipe} onChange={function (v) { setGalFilter(Object.assign({}, galFilter, { tipe: v })) }}
                 options={[{ value: '', label: 'Semua media' }, { value: 'foto', label: 'Foto' }, { value: 'video', label: 'Video' }]} />
               <TimeFilter filter={galFilter} set={setGalFilter} />
+              <SortSelect value={sort} onChange={setSort} />
             </FilterBar>
             <p className="text-sm text-slate-500">Menampilkan {filteredGaleri.length} dari {galeri.length} media</p>
             <div className="grid gap-5 md:grid-cols-2">
-              {filteredGaleri.map(function (g) {
+              {sortedGaleri.map(function (g) {
                 return <GalleryCard key={g.id} item={g} isOwner
                   onDetail={function () { setDetail({ type: 'gal', data: g }) }}
                   onEdit={function () { startEditGal(g) }}
@@ -694,10 +700,11 @@ export default function DashboardPage() {
               <FilterSelect icon={ICONS.check} value={hadirFilter.status} onChange={function (v) { setHadirFilter(Object.assign({}, hadirFilter, { status: v })) }}
                 options={[{ value: '', label: 'Semua status' }, { value: 'Masuk', label: 'Masuk' }, { value: 'Izin', label: 'Izin' }, { value: 'Bolos', label: 'Bolos' }]} />
               <TimeFilter filter={hadirFilter} set={setHadirFilter} />
+              <SortSelect value={sort} onChange={setHadirFilterOpen && setSort ? setSort : setSort} />
             </FilterBar>
             <p className="text-sm text-slate-500">Menampilkan {filteredHadir.length} dari {hadir.length} catatan</p>
             <div className="grid gap-5 md:grid-cols-2">
-            {filteredHadir.map(function (h) {
+            {sortedHadir.map(function (h) {
               return <AttendanceCard key={h.id} row={h} isOwner
                 onDetail={function () { setDetail({ type: 'hadir', data: h }) }}
                 onEdit={function () { startEditHadir(h) }}

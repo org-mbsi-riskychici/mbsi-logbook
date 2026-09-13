@@ -149,6 +149,15 @@ const paths = {
       <polyline points="7 10 12 15 17 10" />
       <line x1="12" y1="3" x2="12" y2="15" />
     </>
+  ),
+  sort: (
+    <>
+      <path d="M3 6h13" />
+      <path d="M3 12h9" />
+      <path d="M3 18h5" />
+      <path d="M17 6v12" />
+      <path d="m14 15 3 3 3-3" />
+    </>
   )
 }
 

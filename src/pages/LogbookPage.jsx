@@ -3,9 +3,9 @@ import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../lib/auth.js'
 import { EmptyState, Modal } from '../components/ui.jsx'
 import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
-import { FilterBar, FilterSelect, TimeFilter, countActiveFilters } from '../components/FilterBar.jsx'
+import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
 import { ICONS } from '../components/icons.jsx'
-import { matchesDateFilters } from '../lib/format.js'
+import { matchesDateFilters, urutkanTanggal } from '../lib/format.js'
 import { KATEGORI } from '../lib/constants.js'
 import { SkeletonLogbookCard } from '../components/Skeleton.jsx'
 
@@ -16,6 +16,7 @@ export default function LogbookPage() {
   const [all, setAll] = useState([])
   const [people, setPeople] = useState([])
   const [filter, setFilter] = useState(INITIAL)
+  const [sort, setSort] = useState('terbaru')
   const [open, setOpen] = useState(false)
   const [detail, setDetail] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -42,6 +43,7 @@ export default function LogbookPage() {
     return matchesDateFilters(l.tanggal, filter)
   })
   const active = countActiveFilters(filter)
+  const sortedLogs = urutkanTanggal(logs, sort)
 
   return (
     <div>
@@ -59,13 +61,14 @@ export default function LogbookPage() {
           <FilterSelect icon={ICONS.tag} value={filter.kategori} onChange={function (v) { setFilter(Object.assign({}, filter, { kategori: v })) }}
             options={[{ value: '', label: 'Semua kategori' }].concat(KATEGORI.map(function (k) { return { value: k, label: k } }))} />
           <TimeFilter filter={filter} set={setFilter} />
+          <SortSelect value={sort} onChange={setSort} />
         </FilterBar>
       </section>
 
       <section className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
         {loading
           ? [0, 1, 2, 3, 4, 5].map(function (i) { return <SkeletonLogbookCard key={i} /> })
-          : logs.map(function (l) {
+          : sortedLogs.map(function (l) {
               return <LogbookCard key={l.id} log={l} isOwner={mahasiswa && mahasiswa.id === l.mahasiswa_id}
                 onDetail={function () { setDetail(l) }} />
             })}
