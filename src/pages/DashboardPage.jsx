@@ -12,7 +12,7 @@ import { SizedIcon, ICONS } from '../components/icons.jsx'
 import { FilterBar, FilterSelect, TimeFilter, countActiveFilters } from '../components/FilterBar.jsx'
 
 function newItem() {
-  return { key: Math.random().toString(36).slice(2), judul: '', deskripsi: '', hasil: '', file: null, preview: '', oldPath: '', show: false }
+  return { key: Math.random().toString(36).slice(2), judul: '', deskripsi: '', hasil: '', file: null, preview: '', oldPath: '', oldThumb: '', show: false }
 }
 
 const LOG_INITIAL = { kategori: '', status: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
@@ -49,7 +49,7 @@ export default function DashboardPage() {
   const [items, setItems] = useState([newItem()])
   const [editLogId, setEditLogId] = useState(null)
 
-  const [galForm, setGalForm] = useState({ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '', oldPath: '' })
+  const [galForm, setGalForm] = useState({ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '', oldPath: '', oldThumb: '' })
   const [editGalId, setEditGalId] = useState(null)
 
   const [hadirForm, setHadirForm] = useState({ tanggal: todayInput(), status: 'Masuk', alasan: '' })
@@ -132,23 +132,30 @@ export default function DashboardPage() {
         if (!it.judul.trim()) continue
         let mediaPath = null
         let mediaType = null
+        let mediaThumb = null
         if (it.file) {
           const up = await uploadMedia(it.file, 'logbook')
           mediaPath = up.publicUrl
           mediaType = it.file.type.indexOf('video') === 0 ? 'video' : 'foto'
+          mediaThumb = up.thumbUrl || null
         } else if (it.oldPath) {
           mediaPath = it.oldPath
           mediaType = detectMediaType(it.oldPath)
+          mediaThumb = it.oldThumb || null
         }
-        clean.push({ judul: it.judul.trim(), deskripsi: it.deskripsi.trim(), hasil: it.hasil.trim(), media_path: mediaPath, media_type: mediaType, show_in_gallery: it.show && !!mediaPath })
+        clean.push({ judul: it.judul.trim(), deskripsi: it.deskripsi.trim(), hasil: it.hasil.trim(), media_path: mediaPath, media_type: mediaType, media_thumb: mediaThumb, show_in_gallery: it.show && !!mediaPath })
       }
       if (!clean.length) { alert('Tambahkan minimal satu kegiatan dengan judul.'); setBusy(false); return }
 
       let logId = editLogId
       let oldUrls = []
       if (editLogId) {
-        const oldItems = await supabase.from('logbook_items').select('media_path').eq('logbook_id', editLogId)
-        oldUrls = (oldItems.data || []).map(function (it) { return it.media_path }).filter(Boolean)
+        const oldItems = await supabase.from('logbook_items').select('media_path, media_thumb').eq('logbook_id', editLogId)
+        oldUrls = []
+        ;(oldItems.data || []).forEach(function (it) {
+          if (it.media_path) oldUrls.push(it.media_path)
+          if (it.media_thumb) oldUrls.push(it.media_thumb)
+        })
         await supabase.from('logbooks').update({
           tanggal: form.tanggal, unit: form.unit, kategori: form.kategori, judul: form.judul,
           kendala: form.kendala, solusi: form.solusi, pembelajaran: form.pembelajaran, status: form.status
@@ -163,12 +170,16 @@ export default function DashboardPage() {
       }
 
       const rows = clean.map(function (c, idx) {
-        return { logbook_id: logId, urutan: idx + 1, judul: c.judul, deskripsi: c.deskripsi, hasil: c.hasil, media_path: c.media_path, media_type: c.media_type, show_in_gallery: c.show_in_gallery }
+        return { logbook_id: logId, urutan: idx + 1, judul: c.judul, deskripsi: c.deskripsi, hasil: c.hasil, media_path: c.media_path, media_type: c.media_type, media_thumb: c.media_thumb, show_in_gallery: c.show_in_gallery }
       })
       const insItems = await supabase.from('logbook_items').insert(rows).select()
       await syncGaleriFromLogbook(mahasiswa.id, insItems.data || [], { tanggal: form.tanggal, kategori: form.kategori })
 
-      const newUrls = clean.map(function (c) { return c.media_path }).filter(Boolean)
+      const newUrls = []
+      clean.forEach(function (c) {
+        if (c.media_path) newUrls.push(c.media_path)
+        if (c.media_thumb) newUrls.push(c.media_thumb)
+      })
       for (const u of oldUrls) {
         if (newUrls.indexOf(u) === -1) await hapusMediaR2(u)
       }
@@ -190,7 +201,7 @@ export default function DashboardPage() {
       kendala: log.kendala || '', solusi: log.solusi || '', pembelajaran: log.pembelajaran || '', status: log.status
     })
     const mapped = (log.logbook_items || []).map(function (it) {
-      return { key: it.id, judul: it.judul, deskripsi: it.deskripsi || '', hasil: it.hasil || '', file: null, preview: it.media_path || '', oldPath: it.media_path || '', show: it.show_in_gallery }
+      return { key: it.id, judul: it.judul, deskripsi: it.deskripsi || '', hasil: it.hasil || '', file: null, preview: it.media_path || '', oldPath: it.media_path || '', oldThumb: it.media_thumb || '', show: it.show_in_gallery }
     })
     setItems(mapped.length ? mapped : [newItem()])
     setTab('logbook')
@@ -205,13 +216,13 @@ export default function DashboardPage() {
 
   function startEditGal(g) {
     setEditGalId(g.id)
-    setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_path, oldPath: g.media_path })
+    setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_path, oldPath: g.media_path, oldThumb: g.media_thumb || '' })
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   function cancelEditGal() {
     setEditGalId(null)
-    setGalForm({ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '', oldPath: '' })
+    setGalForm({ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '', oldPath: '', oldThumb: '' })
   }
 
   function startEditHadir(h) {
@@ -235,13 +246,16 @@ export default function DashboardPage() {
     try {
       let mediaPath = ''
       let mediaType = ''
+      let mediaThumb = null
       if (galForm.file) {
         const up = await uploadMedia(galForm.file, 'galeri')
         mediaPath = up.publicUrl
         mediaType = galForm.file.type.indexOf('video') === 0 ? 'video' : 'foto'
+        mediaThumb = up.thumbUrl || null
       } else if (galForm.oldPath) {
         mediaPath = galForm.oldPath
         mediaType = detectMediaType(galForm.oldPath)
+        mediaThumb = galForm.oldThumb || null
       }
       if (!mediaPath) { alert('Galeri wajib memiliki media. Pilih file foto atau video terlebih dahulu.'); setBusy(false); return }
       const payload = {
@@ -251,19 +265,22 @@ export default function DashboardPage() {
         tanggal: galForm.tanggal,
         kegiatan: galForm.kegiatan || 'Lainnya',
         media_path: mediaPath,
-        media_type: mediaType
+        media_type: mediaType,
+        media_thumb: mediaThumb
       }
-      let oldGalUrl = ''
+      let oldGalUrls = []
       if (editGalId) {
         const existing = galeri.find(function (g) { return g.id === editGalId })
-        oldGalUrl = existing && !existing.logbook_item_id && existing.media_path !== payload.media_path ? existing.media_path : ''
+        if (existing && !existing.logbook_item_id && existing.media_path !== payload.media_path) {
+          oldGalUrls = [existing.media_path, existing.media_thumb].filter(Boolean)
+        }
         await supabase.from('galeri').update(payload).eq('id', editGalId)
       } else {
         await supabase.from('galeri').insert(payload)
       }
-      if (oldGalUrl) await hapusMediaR2(oldGalUrl)
+      for (const u of oldGalUrls) await hapusMediaR2(u)
       setEditGalId(null)
-      setGalForm({ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '', oldPath: '' })
+      setGalForm({ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '', oldPath: '', oldThumb: '' })
       await refresh()
     } catch (err) {
       alert('Gagal menyimpan galeri: ' + err.message)
@@ -343,16 +360,20 @@ export default function DashboardPage() {
       return
     }
     if (target.type === 'log') {
-      const urls = (target.data.logbook_items || []).map(function (it) { return it.media_path }).filter(Boolean)
+      const urls = []
+      ;(target.data.logbook_items || []).forEach(function (it) {
+        if (it.media_path) urls.push(it.media_path)
+        if (it.media_thumb) urls.push(it.media_thumb)
+      })
       await supabase.from('logbooks').delete().eq('id', target.data.id)
       for (const u of urls) await hapusMediaR2(u)
     } else if (target.type === 'gal') {
-      const url = target.data.logbook_item_id ? '' : target.data.media_path
+      const urls = target.data.logbook_item_id ? [] : [target.data.media_path, target.data.media_thumb].filter(Boolean)
       await supabase.from('galeri').delete().eq('id', target.data.id)
       if (target.data.logbook_item_id) {
         await supabase.from('logbook_items').update({ show_in_gallery: false }).eq('id', target.data.logbook_item_id)
       }
-      if (url) await hapusMediaR2(url)
+      for (const u of urls) await hapusMediaR2(u)
     } else if (target.type === 'hadir') {
       await supabase.from('daftar_hadir').delete().eq('id', target.data.id)
     }

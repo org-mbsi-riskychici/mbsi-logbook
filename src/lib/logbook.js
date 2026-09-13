@@ -16,7 +16,8 @@ export async function syncGaleriFromLogbook(mahasiswaId, items, meta) {
       if (existing.has(item.id)) {
         await supabase.from('galeri').update({
           media_path: item.media_path,
-          media_type: item.media_type || 'foto'
+          media_type: item.media_type || 'foto',
+          media_thumb: item.media_thumb || null
         }).eq('id', existing.get(item.id))
       } else {
         await supabase.from('galeri').insert({
@@ -27,7 +28,8 @@ export async function syncGaleriFromLogbook(mahasiswaId, items, meta) {
           tanggal: meta.tanggal,
           kegiatan: meta.kategori,
           media_path: item.media_path,
-          media_type: item.media_type || 'foto'
+          media_type: item.media_type || 'foto',
+          media_thumb: item.media_thumb || null
         })
       }
     } else if (existing.has(item.id)) {

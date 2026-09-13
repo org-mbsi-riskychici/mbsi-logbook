@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { SizedIcon } from './icons.jsx'
-import { Lightbox } from './ui.jsx'
+import { Lightbox, SmartFit } from './ui.jsx'
 
 export default function Carousel(props) {
   const slides = props.slides || []
@@ -31,15 +31,13 @@ export default function Carousel(props) {
     return (
       <>
         <div className="relative group rounded-2xl overflow-hidden aspect-video bg-slate-900">
-          {s.type === 'video'
-            ? <video src={s.src} className="h-full w-full object-contain" muted preload="metadata" />
-            : <img src={s.src} alt={s.title || 'Media'} className="h-full w-full cursor-zoom-in object-contain" onClick={function () { setZoom(s) }} />}
+          <SmartFit src={s.src} type={s.type} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} />
           <button type="button" title="Perbesar media" onClick={function () { setZoom(s) }}
             className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
             <SizedIcon name="expand" size={15} />
           </button>
         </div>
-        {zoom ? <Lightbox src={zoom.src} type={zoom.type} title={zoom.title} onClose={function () { setZoom(null) }} /> : null}
+        {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} onClose={function () { setZoom(null) }} /> : null}
       </>
     )
   }
@@ -63,17 +61,15 @@ export default function Carousel(props) {
           {slides.map(function (s, i) {
             return (
               <div key={i} className="carousel-slide">
-                {s.type === 'video'
-                  ? <video src={s.src} muted preload="metadata" />
-                  : <img
-                      src={s.src}
-                      alt={s.title || 'Media'}
-                      className="cursor-zoom-in"
-                      onClick={function () {
-                        if (moved.current) { moved.current = false; return }
-                        setZoom(s)
-                      }}
-                    />}
+                <SmartFit
+                  src={s.src}
+                  type={s.type}
+                  alt={s.title || 'Media'}
+                  onClick={function () {
+                    if (moved.current) { moved.current = false; return }
+                    setZoom(s)
+                  }}
+                />
                 <button type="button" title="Perbesar media" onClick={function (e) { e.stopPropagation(); setZoom(s) }}
                   className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
                   <SizedIcon name="expand" size={15} />
@@ -111,7 +107,7 @@ export default function Carousel(props) {
           })}
         </div>
       </div>
-      {zoom ? <Lightbox src={zoom.src} type={zoom.type} title={zoom.title} onClose={function () { setZoom(null) }} /> : null}
+      {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} onClose={function () { setZoom(null) }} /> : null}
     </>
   )
 }

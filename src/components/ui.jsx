@@ -226,16 +226,13 @@ export function ZoomableMedia(props) {
   const isVideo = props.type === 'video'
   return (
     <div className={'relative group ' + (props.className || '')}>
-      {isVideo ? (
-        <video src={props.src} controls className="absolute inset-0 h-full w-full object-contain" />
-      ) : (
-        <img
-          src={props.src}
-          alt={props.title || 'Media'}
-          onClick={function (e) { e.stopPropagation(); setOpen(true) }}
-          className="absolute inset-0 h-full w-full cursor-zoom-in object-contain"
-        />
-      )}
+      <SmartFit
+        src={props.src}
+        type={props.type}
+        alt={props.title || 'Media'}
+        controls={isVideo}
+        onClick={isVideo ? null : function (e) { e.stopPropagation(); setOpen(true) }}
+      />
       <button
         type="button"
         title="Perbesar media"
@@ -244,7 +241,46 @@ export function ZoomableMedia(props) {
       >
         <SizedIcon name="expand" size={15} />
       </button>
-      {open ? <Lightbox src={props.src} type={props.type} title={props.title} onClose={function () { setOpen(false) }} /> : null}
+      {open ? <Lightbox src={props.full || props.src} type={props.type} title={props.title} onClose={function () { setOpen(false) }} /> : null}
     </div>
+  )
+}
+
+
+export function SmartFit(props) {
+  const [ratio, setRatio] = useState(null)
+  const isVideo = props.type === 'video'
+  function bacaUkuran(e) {
+    const el = e.target
+    const w = isVideo ? el.videoWidth : el.naturalWidth
+    const h = isVideo ? el.videoHeight : el.naturalHeight
+    if (w && h) setRatio(w / h)
+  }
+  const cover = ratio !== null && ratio > 1
+  const potret = ratio !== null && ratio <= 1
+  return (
+    <>
+      {potret && !isVideo ? (
+        <img src={props.src} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-xl" />
+      ) : null}
+      {isVideo ? (
+        <video
+          src={props.src}
+          muted={props.controls ? false : true}
+          preload="metadata"
+          controls={props.controls || false}
+          onLoadedMetadata={bacaUkuran}
+          className={'absolute inset-0 h-full w-full ' + (cover ? 'object-cover' : 'object-contain')}
+        />
+      ) : (
+        <img
+          src={props.src}
+          alt={props.alt || 'Media'}
+          onLoad={bacaUkuran}
+          onClick={props.onClick || undefined}
+          className={'absolute inset-0 h-full w-full ' + (cover ? 'object-cover' : 'object-contain') + (props.onClick ? ' cursor-zoom-in' : '')}
+        />
+      )}
+    </>
   )
 }

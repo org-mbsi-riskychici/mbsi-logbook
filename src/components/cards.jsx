@@ -1,5 +1,5 @@
 import Carousel from './Carousel.jsx'
-import { StatusBadge, CategoryBadge, AttendanceBadge, btnSmall, ZoomableMedia } from './ui.jsx'
+import { StatusBadge, CategoryBadge, AttendanceBadge, btnSmall, ZoomableMedia, SmartFit } from './ui.jsx'
 import { formatTanggal, formatTanggalShort } from '../lib/format.js'
 
 function PersonChip(props) {
@@ -38,7 +38,7 @@ function ActionButtons(props) {
 
 export function slidesFromItems(items) {
   return (items || []).filter(function (i) { return i.media_path }).map(function (i) {
-    return { src: i.media_path, type: i.media_type, title: i.judul }
+    return { src: i.media_thumb || i.media_path, full: i.media_path, type: i.media_type, title: i.judul }
   })
 }
 
@@ -100,7 +100,7 @@ export function LogbookDetail(props) {
                 {i < items.length - 1 ? <span className="absolute left-4 top-9 bottom-0 w-px bg-slate-200 dark:bg-slate-700" /> : null}
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   {it.media_path ? (
-                    <ZoomableMedia src={it.media_path} type={it.media_type} title={it.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3" />
+                    <ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3" />
                   ) : null}
                   <p className="font-bold text-slate-900">
                     {it.judul}
@@ -135,9 +135,7 @@ export function GalleryCard(props) {
   return (
     <article onClick={props.onDetail} className="clickable cursor-pointer bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full">
       <div className="relative aspect-video w-full overflow-hidden bg-slate-900">
-        {item.media_type === 'video'
-          ? <video src={item.media_path} muted preload="metadata" className="absolute inset-0 h-full w-full object-contain" />
-          : <img src={item.media_path} alt={item.judul} className="absolute inset-0 h-full w-full object-contain" />}
+        <SmartFit src={item.media_thumb || item.media_path} type={item.media_type} alt={item.judul} />
       </div>
       <div className="p-5 space-y-3 flex-1 flex flex-col">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -169,7 +167,7 @@ export function GalleryDetail(props) {
   const item = props.item
   return (
     <div className="space-y-4">
-      <ZoomableMedia src={item.media_path} type={item.media_type} title={item.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900" />
+      <ZoomableMedia src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} title={item.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900" />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2">
           <CategoryBadge value={item.kegiatan} />
