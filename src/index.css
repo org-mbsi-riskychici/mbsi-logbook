@@ -283,3 +283,37 @@ textarea {
   .kolom-kartu { width: calc(33.3333% - 0.83333rem); }
   .kolom-kartu-rapat { width: calc(33.3333% - 0.66667rem); }
 }
+
+/* toast-opaque: latar solid bergradasi lembut, tanpa backdrop-filter agar ringan di device low end */
+@keyframes anim-toast {
+  from { opacity: 0; transform: translateX(14px) scale(0.98); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+.anim-toast { animation: anim-toast 0.22s ease-out; opacity: 1; }
+.toast-sukses {
+  background: linear-gradient(180deg, #ffffff 0%, #ecfdf5 100%);
+  border-color: #a7f3d0;
+  box-shadow: 0 10px 30px rgba(6, 95, 70, 0.16);
+}
+.toast-gagal {
+  background: linear-gradient(180deg, #ffffff 0%, #fef2f2 100%);
+  border-color: #fecaca;
+  box-shadow: 0 10px 30px rgba(153, 27, 27, 0.16);
+}
+.toast-sukses .toast-teks { color: #065f46; }
+.toast-gagal .toast-teks { color: #991b1b; }
+.toast-tutup:hover { color: #334155; }
+.dark .toast-sukses {
+  background: linear-gradient(180deg, #065f46 0%, #064e3b 100%);
+  border-color: rgba(52, 211, 153, 0.45);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+.dark .toast-gagal {
+  background: linear-gradient(180deg, #991b1b 0%, #7f1d1d 100%);
+  border-color: rgba(248, 113, 113, 0.45);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+.dark .toast-sukses .toast-teks { color: #d1fae5 !important; }
+.dark .toast-gagal .toast-teks { color: #fee2e2 !important; }
+.dark .toast-tutup { color: #cbd5e1 !important; }
+.dark .toast-tutup:hover { color: #ffffff !important; }

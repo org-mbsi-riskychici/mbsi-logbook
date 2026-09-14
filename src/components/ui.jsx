@@ -1,5 +1,5 @@
 import PemutarVideo from './PemutarVideo.jsx'
-import { useEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { SizedIcon } from './icons.jsx'
 function useBodyScrollLock(active) {
   useEffect(function () {
@@ -511,3 +511,44 @@ export function Pagination(props) {
     </div>
   )
 }
+
+const ToastContext = createContext(null)
+ export function ToastProvider(props) {
+   const [toasts, setToasts] = useState([])
+   function tutupToast(id) {
+     setToasts(function (prev) { return prev.filter(function (t) { return t.id !== id }) })
+   }
+   function tambahToast(tipe, pesan) {
+     const id = Date.now() + Math.random()
+     setToasts(function (prev) { return prev.concat([{ id: id, tipe: tipe, pesan: pesan }]) })
+     setTimeout(function () {
+       setToasts(function (prev) { return prev.filter(function (t) { return t.id !== id }) })
+     }, 4000)
+   }
+   function toastSukses(pesan) { tambahToast('sukses', pesan) }
+   function toastGagal(pesan) { tambahToast('gagal', pesan) }
+   return (
+     <ToastContext.Provider value={{ sukses: toastSukses, gagal: toastGagal }}>
+       {props.children}
+       <div className="fixed top-5 right-5 z-[100] flex w-full max-w-sm flex-col gap-3 pointer-events-none">
+         {toasts.map(function (t) {
+           const sukses = t.tipe === 'sukses'
+           return (
+             <div key={t.id} className={'anim-toast pointer-events-auto flex items-start gap-3 rounded-2xl border p-4 shadow-lg ' + (sukses ? 'toast-sukses' : 'toast-gagal')}>
+               <span className={'mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full ' + (sukses ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white')}>
+                 <SizedIcon name={sukses ? 'check' : 'close'} size={12} />
+               </span>
+               <p className={'flex-1 text-sm font-semibold toast-teks'}>{t.pesan}</p>
+               <button type="button" onClick={function () { tutupToast(t.id) }} className="toast-tutup shrink-0 text-slate-400 hover:text-slate-600">
+                 <SizedIcon name="close" size={14} />
+               </button>
+             </div>
+           )
+         })}
+       </div>
+     </ToastContext.Provider>
+   )
+ }
+ export function useToast() {
+   return useContext(ToastContext)
+ }

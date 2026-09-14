@@ -38,14 +38,26 @@ export function matchesDateFilters(dateString, f) {
   }
   return true
 }
-export function urutkanTanggal(rows, mode) {
-  const salin = (rows || []).slice()
-  salin.sort(function (a, b) {
-    const da = a.tanggal || ''
-    const db = b.tanggal || ''
-    if (da === db) return 0
-    if (mode === 'terlama') return da < db ? -1 : 1
-    return da < db ? 1 : -1
+export function waktuUrut(x) {
+  if (!x) return 0
+  const src = x.created_at || x.updated_at || ''
+  if (!src) return 0
+  const t = new Date(src).getTime()
+  return isNaN(t) ? 0 : t
+}
+export function urutkanTanggal(list, mode) {
+  const arr = (list || []).slice()
+  arr.sort(function (a, b) {
+    const ta = new Date(a.tanggal + 'T00:00:00').getTime()
+    const tb = new Date(b.tanggal + 'T00:00:00').getTime()
+    if (ta !== tb) return mode === 'terlama' ? ta - tb : tb - ta
+    const ca = waktuUrut(a)
+    const cb = waktuUrut(b)
+    if (ca !== cb) return mode === 'terlama' ? ca - cb : cb - ca
+    const ia = a.id || ''
+    const ib = b.id || ''
+    if (ia !== ib) return ia < ib ? (mode === 'terlama' ? -1 : 1) : (mode === 'terlama' ? 1 : -1)
+    return 0
   })
-  return salin
+  return arr
 }

@@ -11,7 +11,7 @@ import { pratinjauHeic, formatHeic } from '../lib/konversi.js'
 import { LabelProses } from '../components/ui.jsx'
 import { todayInput, detectMediaType, matchesDateFilters, urutkanTanggal } from '../lib/format.js'
 import { KATEGORI, UNIT, GALERI_KEGIATAN } from '../lib/constants.js'
-import { EmptyState, Modal, ConfirmModal, inputCls, labelCls, btnPrimary, btnSmall, AutoTextArea, Pagination } from '../components/ui.jsx'
+import { EmptyState, Modal, ConfirmModal, inputCls, labelCls, btnPrimary, btnSmall, AutoTextArea, Pagination, useToast } from '../components/ui.jsx'
 import { LogbookCard, LogbookDetail, GalleryCard, GalleryDetail, AttendanceCard, AttendanceDetail } from '../components/cards.jsx'
 import { CustomSelect, CustomDateInput, FileInput } from '../components/controls.jsx'
 import { SizedIcon, ICONS } from '../components/icons.jsx'
@@ -46,6 +46,7 @@ function ModeIndicator(props) {
 
 export default function DashboardPage() {
   const { mahasiswa, loading } = useAuth()
+  const toast = useToast()
   const [tab, setTab] = useState('logbook')
   const [logs, setLogs] = useState([])
   const [galeri, setGaleri] = useState([])
@@ -188,14 +189,14 @@ export default function DashboardPage() {
         let youtubeId = it.oldYtId || null
         if (it.mode === 'video' && it.ytLink && !it.file) {
           const id = parseYouTubeId(it.ytLink)
-          if (!id) { alert('Link video tidak valid pada kegiatan ' + (i + 1) + '.'); setBusy(false); return }
+          if (!id) { toast.gagal('Link video tidak valid pada kegiatan ' + (i + 1) + '.'); setBusy(false); return }
           mediaSource = 'youtube'
           youtubeId = id
           mediaPath = ytThumb(id)
           mediaThumb = ytThumb(id)
           mediaType = 'video'
         } else if (it.mode === 'video' && it.file) {
-          if (ytQuota.remaining <= 0) { alert('Kuota upload video hari ini sudah habis. Gunakan link video.'); setBusy(false); return }
+          if (ytQuota.remaining <= 0) { toast.gagal('Kuota upload video hari ini sudah habis. Gunakan link video.'); setBusy(false); return }
           const hasilYt = await unggahVideoYouTube(it.file, it.judul || 'Dokumentasi Magang', function (p) { setInfoProses('Mengunggah video ' + Math.round(p * 100) + '%') })
           mediaSource = 'youtube'
           youtubeId = hasilYt.videoId
@@ -226,7 +227,7 @@ export default function DashboardPage() {
         }
         clean.push({ judul: it.judul.trim(), deskripsi: it.deskripsi.trim(), hasil: it.hasil.trim(), media_path: mediaPath, media_type: mediaType, media_thumb: mediaThumb, media_source: mediaSource, youtube_id: youtubeId, show_in_gallery: it.show && !!mediaPath })
       }
-      if (!clean.length) { alert('Tambahkan minimal satu kegiatan dengan judul.'); setBusy(false); return }
+      if (!clean.length) { toast.gagal('Tambahkan minimal satu kegiatan dengan judul.'); setBusy(false); return }
 
       let logId = editLogId
       let oldUrls = []
@@ -272,8 +273,9 @@ export default function DashboardPage() {
       setItems([newItem()])
       await refresh()
        if (menambahLog) setLogPage(1)
+       toast.sukses(menambahLog ? 'Logbook berhasil disimpan' : 'Logbook berhasil diperbarui')
     } catch (err) {
-      alert('Gagal menyimpan logbook: ' + err.message)
+      toast.gagal('Gagal menyimpan logbook: ' + err.message)
     }
     setInfoProses('')
     setBusy(false)
@@ -343,14 +345,14 @@ export default function DashboardPage() {
       let youtubeId = galOldYt || null
       if (galMode === 'video' && galYtLink && !galForm.file) {
         const id = parseYouTubeId(galYtLink)
-        if (!id) { alert('Link video tidak valid.'); setBusy(false); return }
+        if (!id) { toast.gagal('Link video tidak valid.'); setBusy(false); return }
         mediaSource = 'youtube'
         youtubeId = id
         mediaPath = ytThumb(id)
         mediaThumb = ytThumb(id)
         mediaType = 'video'
       } else if (galMode === 'video' && galForm.file) {
-        if (ytQuota.remaining <= 0) { alert('Kuota upload video hari ini sudah habis. Gunakan link video.'); setBusy(false); return }
+        if (ytQuota.remaining <= 0) { toast.gagal('Kuota upload video hari ini sudah habis. Gunakan link video.'); setBusy(false); return }
         const hasilYt = await unggahVideoYouTube(galForm.file, galForm.judul || ('Dokumentasi ' + galForm.tanggal), function (p) { setInfoProses('Mengunggah video ' + Math.round(p * 100) + '%') })
         mediaSource = 'youtube'
         youtubeId = hasilYt.videoId
@@ -379,7 +381,7 @@ export default function DashboardPage() {
         mediaSource = 'r2'
         youtubeId = null
       }
-      if (!mediaPath) { alert('Galeri wajib memiliki media. Pilih file foto atau video terlebih dahulu.'); setBusy(false); return }
+      if (!mediaPath) { toast.gagal('Galeri wajib memiliki media. Pilih file foto atau video terlebih dahulu.'); setBusy(false); return }
       const payload = {
         mahasiswa_id: mahasiswa.id,
         judul: galForm.judul || ('Dokumentasi ' + galForm.tanggal),
@@ -410,8 +412,9 @@ export default function DashboardPage() {
      setGalOldYt(null)
       await refresh()
        if (menambahGal) setGalPage(1)
+       toast.sukses(menambahGal ? 'Media galeri berhasil disimpan' : 'Media galeri berhasil diperbarui')
     } catch (err) {
-      alert('Gagal menyimpan galeri: ' + err.message)
+      toast.gagal('Gagal menyimpan galeri: ' + err.message)
     }
     setInfoProses('')
     setBusy(false)
@@ -424,14 +427,14 @@ export default function DashboardPage() {
     function pilihFotoProfil(e) {
     const f = e.target.files[0]
     if (!f) return
-    if (f.size > 5 * 1024 * 1024) { alert('Ukuran foto maksimal 5 MB.'); e.target.value = ''; return }
+    if (f.size > 5 * 1024 * 1024) { toast.gagal('Ukuran foto maksimal 5 MB.'); e.target.value = ''; return }
     setFotoFile(f)
     const reader = new FileReader()
     reader.onloadend = function () { setFotoPreview(reader.result) }
     reader.readAsDataURL(f)
   }
   async function simpanFotoProfil() {
-    if (!fotoFile) { alert('Pilih file foto terlebih dahulu.'); return }
+    if (!fotoFile) { toast.gagal('Pilih file foto terlebih dahulu.'); return }
     setUploadingFoto(true)
     try {
       const url = await uploadFotoProfil(fotoFile, mahasiswa.id, mahasiswa.foto_profil)
@@ -442,8 +445,9 @@ export default function DashboardPage() {
       setShowUploadFoto(false)
       setFotoPreview(null)
       setFotoFile(null)
+      toast.sukses('Foto profil berhasil disimpan')
     } catch (err) {
-      alert('Gagal upload foto profil: ' + err.message)
+      toast.gagal('Gagal upload foto profil: ' + err.message)
     }
     setUploadingFoto(false)
   }
@@ -454,8 +458,9 @@ export default function DashboardPage() {
       mahasiswa.foto_profil = null
       if (typeof refresh === 'function') await refresh()
       setVersiFoto(function (v) { return v + 1 })
+      toast.sukses('Foto profil berhasil dihapus')
     } catch (err) {
-      alert('Gagal menghapus foto profil: ' + err.message)
+      toast.gagal('Gagal menghapus foto profil: ' + err.message)
     }
   }
 async function submitHadir(e) {
@@ -467,12 +472,13 @@ async function submitHadir(e) {
       await supabase.from('daftar_hadir').update(payload).eq('id', editHadirId)
     } else {
       const res = await supabase.from('daftar_hadir').insert(payload)
-      if (res.error) { alert('Kamu sudah punya catatan hadir di tanggal tersebut.'); setBusy(false); return }
+      if (res.error) { toast.gagal('Kamu sudah punya catatan hadir di tanggal tersebut.'); setBusy(false); return }
     }
     setEditHadirId(null)
     setHadirForm({ tanggal: todayInput(), status: 'Masuk', alasan: '' })
     await refresh()
      if (menambahHadir) setHadirPage(1)
+     toast.sukses(menambahHadir ? 'Daftar hadir berhasil disimpan' : 'Daftar hadir berhasil diperbarui')
     setInfoProses('')
     setBusy(false)
   }
@@ -548,6 +554,7 @@ async function submitHadir(e) {
       await supabase.from('daftar_hadir').delete().eq('id', target.data.id)
     }
     await refresh()
+    toast.sukses('Data berhasil dihapus')
   }
 
   const filteredLogs = logs.filter(function (l) {

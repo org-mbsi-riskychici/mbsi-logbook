@@ -92,12 +92,14 @@ apply-avatar-lencana.cjs
 apply-avatar-publik.cjs
 apply-avatar-tanpa-border.cjs
 apply-bulat-sempurna.cjs
+apply-cek-urutan.cjs
 apply-diagnosis-dan-bersih.cjs
 apply-final-cleanup.cjs
 apply-fix-chip-galeri.cjs
 apply-fix-dospem-pusat.cjs
 apply-fix-dospem-syntax.cjs
 apply-fix-export-unggah.cjs
+apply-fix-galeri-pagination.cjs
 apply-fix-ganti-foto.cjs
 apply-fix-nim-text.cjs
 apply-fix-pagination-galeri.cjs
@@ -108,7 +110,12 @@ apply-fix-state-loading.cjs
 apply-fix-syntax-logbook.cjs
 apply-fix-teks-pagination.cjs
 apply-fix-tiga-masalah.cjs
+apply-fix-toast-hapus.cjs
+apply-fix-toast-hapus2.cjs
+apply-fix-toast.cjs
 apply-fix-token-aman.cjs
+apply-fix-urutan.cjs
+apply-fix-urutan2.cjs
 apply-fix-video-galeri.cjs
 apply-fix-youtube-scope.cjs
 apply-foto-hadir-v2.cjs
@@ -139,6 +146,8 @@ apply-profil-rapi.cjs
 apply-profil-tab.cjs
 apply-scroll-top.cjs
 apply-thumb-youtube-fallback.cjs
+apply-toast-crud.cjs
+apply-toast-opaque.cjs
 apply-youtube-backend.cjs
 apply-youtube-final-fix.cjs
 apply-youtube-final-response.cjs
@@ -167,16 +176,724 @@ vite.config.js
 
 # Files
 
-## File: apply-fix-teks-pagination.cjs
+## File: apply-cek-urutan.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+function baca(rel) {
+  const p = path.join(root, rel)
+  if (!fs.existsSync(p)) return null
+  return fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n')
+}
+
+console.log('Mulai memeriksa status perbaikan urutan...')
+console.log('')
+
+const f = baca('src/lib/format.js')
+const h = baca('src/pages/HomePage.jsx')
+const d = baca('src/pages/DospemPage.jsx')
+if (f === null || h === null || d === null) {
+  console.log('[GAGAL] Salah satu file tidak ditemukan')
+  process.exit(1)
+}
+
+const cek = [
+  [f.includes('function waktuUrut'), 'format.js: fungsi tiebreaker waktuUrut sudah ada'],
+  [f.includes('waktuUrut(a)') && f.includes('waktuUrut(b)'), 'format.js: pembanding urutkanTanggal memakai created_at'],
+  [h.includes("urutkanTanggal(logs, 'terbaru').slice(0, 6)"), 'HomePage.jsx: slice 6 data lewat urutkanTanggal'],
+  [/import[^\n]*urutkanTanggal[^\n]*format\.js/.test(h), 'HomePage.jsx: import urutkanTanggal ada'],
+  [d.includes("urutkanTanggal(logs, 'terbaru').slice(0, 6)"), 'DospemPage.jsx: slice 6 data lewat urutkanTanggal'],
+  [/import[^\n]*urutkanTanggal[^\n]*format\.js/.test(d), 'DospemPage.jsx: import urutkanTanggal ada']
+]
+let semuaOk = true
+cek.forEach(function (c) {
+  console.log((c[0] ? '[OK] ' : '[BELUM] ') + c[1])
+  if (!c[0]) semuaOk = false
+})
+
+console.log('')
+if (semuaOk) {
+  console.log('Semua bagian aktif. Perbaikan urutan berlaku penuh di seluruh halaman.')
+} else {
+  console.log('Masih ada bagian yang belum aktif:')
+  console.log('1. Bila baris format.js yang BELUM: jalankan node apply-fix-urutan2.cjs')
+  console.log('2. Bila baris HomePage atau DospemPage yang BELUM: jalankan node apply-fix-urutan.cjs lagi')
+}
+console.log('')
+console.log('Ringkasan alur akhir di Beranda dan Tim & Dospem:')
+console.log('1. Data diambil dari database apa adanya.')
+console.log('2. Data diurutkan ulang di frontend pakai urutkanTanggal: tanggal dulu, bila kembar maka created_at paling baru menang.')
+console.log('3. Baru kemudian dipotong 6 teratas, jadi yang tampil dijamin 6 yang benar benar terbaru.')
+```
+
+## File: apply-fix-toast-hapus.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+const FILE_D = 'src/pages/DashboardPage.jsx'
+if (!fs.existsSync(path.join(root, FILE_D))) {
+  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
+  process.exit(1)
+}
+let d = fs.readFileSync(path.join(root, FILE_D), 'utf8').replace(/\r\n/g, '\n')
+
+console.log('Mulai memasang toast sukses hapus data...')
+console.log('')
+
+const MARK = "toast.sukses('Data berhasil dihapus')"
+if (d.includes(MARK)) {
+  console.log('[SUDAH ADA] Toast sukses hapus data')
+} else {
+  // Cari pola: await refresh() yang berada di dalam fungsi executeConfirm
+  // lalu sisipkan toast.sukses tepat setelah await refresh()
+  const regex = /(await refresh\(\)\n)([\s\S]*?)(function confirmInfo)/
+  const match = d.match(regex)
+  if (match) {
+    // Cek apakah blok antara await refresh() dan function confirmInfo 
+    // tidak sudah mengandung toast sukses
+    const blokAntara = match[2]
+    if (!blokAntara.includes('toast.sukses')) {
+      // Ambil indentasi dari baris await refresh()
+      const barisRefresh = d.substring(d.lastIndexOf('\n', d.indexOf(match[0])) + 1, d.indexOf(match[0]) + match[1].length)
+      const spasi = barisRefresh.match(/^(\s*)/)[1]
+      
+      d = d.replace(regex, '$1' + spasi + "toast.sukses('Data berhasil dihapus')\n$2$3")
+      fs.writeFileSync(path.join(root, FILE_D), d, 'utf8')
+      console.log('[BERHASIL] Toast sukses hapus data dipasang')
+    }
+  } else {
+    // Fallback: cari await refresh() terakhir sebelum confirmInfo
+    const idxConfirm = d.indexOf('function confirmInfo')
+    if (idxConfirm !== -1) {
+      const bagianAtas = d.substring(0, idxConfirm)
+      const idxRefresh = bagianAtas.lastIndexOf('await refresh()')
+      if (idxRefresh !== -1) {
+        const akhirBaris = d.indexOf('\n', idxRefresh)
+        const awalBaris = d.lastIndexOf('\n', idxRefresh) + 1
+        const spasi = d.substring(awalBaris, idxRefresh).match(/^(\s*)/)[1]
+        d = d.substring(0, akhirBaris) + '\n' + spasi + "toast.sukses('Data berhasil dihapus')" + d.substring(akhirBaris)
+        fs.writeFileSync(path.join(root, FILE_D), d, 'utf8')
+        console.log('[BERHASIL] Toast sukses hapus data dipasang (fallback)')
+      } else {
+        console.log('[TIDAK KETEMU] Pola await refresh() sebelum confirmInfo')
+      }
+    } else {
+      console.log('[TIDAK KETEMU] function confirmInfo di DashboardPage')
+    }
+  }
+}
+
+// Verifikasi
+d = fs.readFileSync(path.join(root, FILE_D), 'utf8')
+console.log('')
+console.log('Verifikasi:')
+console.log((d.includes(MARK) ? '[OK] ' : '[BELUM] ') + 'Toast sukses hapus data')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+```
+
+## File: apply-fix-toast-hapus2.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+const FILE_D = 'src/pages/DashboardPage.jsx'
+if (!fs.existsSync(path.join(root, FILE_D))) {
+  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
+  process.exit(1)
+}
+let d = fs.readFileSync(path.join(root, FILE_D), 'utf8').replace(/\r\n/g, '\n')
+const MARK = "toast.sukses('Data berhasil dihapus')"
+
+console.log('Mulai memasang toast sukses hapus data (versi 2, target executeDelete)...')
+console.log('')
+
+if (d.includes(MARK)) {
+  console.log('[SUDAH ADA] Toast sukses hapus data')
+} else {
+  let pasang = false
+
+  /* Cara 1: masuk ke fungsi executeDelete, sisip setelah await refresh() pertama di dalamnya */
+  const mulai = d.indexOf('async function executeDelete')
+  if (mulai !== -1) {
+    const idxRefresh = d.indexOf('await refresh()', mulai)
+    if (idxRefresh !== -1) {
+      const akhirBaris = d.indexOf('\n', idxRefresh)
+      const awalBaris = d.lastIndexOf('\n', idxRefresh) + 1
+      const spasi = d.slice(awalBaris, idxRefresh).match(/^([ \t]*)/)[1]
+      d = d.slice(0, akhirBaris) + '\n' + spasi + MARK + d.slice(akhirBaris)
+      pasang = true
+      console.log('[BERHASIL] Toast sukses disisipkan setelah await refresh() di dalam executeDelete')
+    } else {
+      console.log('[INFO] executeDelete ketemu tetapi tidak ada await refresh() di dalamnya')
+    }
+  } else {
+    console.log('[INFO] Fungsi executeDelete tidak ketemu, coba pola cadangan')
+  }
+
+  /* Cara 2: pola cadangan lewat cabang hapus daftar hadir */
+  if (!pasang) {
+    const re = /(await supabase\.from\('daftar_hadir'\)\.delete\(\)\.eq\('id', target\.data\.id\)\n[ \t]*\}\n([ \t]*)await refresh\(\))/
+    if (re.test(d)) {
+      d = d.replace(re, function (m, semua, spasiRef) { return semua + '\n' + spasiRef + MARK })
+      pasang = true
+      console.log('[BERHASIL] Toast sukses disisipkan lewat pola cabang daftar hadir')
+    }
+  }
+
+  if (!pasang) {
+    console.log('[TIDAK KETEMU] Pola executeDelete maupun cabang hapus daftar hadir')
+    console.log('Kirim cuplikan fungsi executeDelete dari DashboardPage.jsx ke chat supaya dikunci manual.')
+  } else {
+    fs.writeFileSync(path.join(root, FILE_D), d, 'utf8')
+  }
+}
+
+/* Verifikasi */
+d = fs.readFileSync(path.join(root, FILE_D), 'utf8')
+console.log('')
+console.log('Verifikasi:')
+console.log((d.includes(MARK) ? '[OK] ' : '[BELUM] ') + 'Toast sukses hapus data')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka dashboard, hapus salah satu logbook, media galeri, atau catatan hadir lewat modal konfirmasi.')
+console.log('2. Setelah data hilang dari daftar, toast hijau Data berhasil dihapus muncul di pojok kanan atas.')
+console.log('3. Toast otomatis hilang setelah 4 detik atau bisa ditutup manual.')
+```
+
+## File: apply-fix-toast.cjs
+```javascript
+const fs = require('fs')
+ const path = require('path')
+ const root = process.cwd()
+ function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+ function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+ console.log('Mulai memperbaiki pemasangan toast yang belum selesai...')
+ console.log('')
+
+ /* ===== 1. App.jsx: bungkus ToastProvider di dalam ThemeProvider ===== */
+ let a = baca('src/App.jsx')
+ let aBerubah = false
+ if (!a.includes('<ToastProvider>')) {
+   const baru = a.replace(/(<ThemeProvider>\n)([ \t]*)(<BrowserRouter)/, '$1$2<ToastProvider>\n$2$3')
+   if (baru !== a) { a = baru; aBerubah = true; console.log('[BERHASIL] Pembukaan <ToastProvider> di App.jsx') }
+   else console.log('[TIDAK KETEMU] Pola pembukaan ToastProvider di App.jsx')
+ } else console.log('[SUDAH ADA] Pembukaan <ToastProvider>')
+ if (!a.includes('</ToastProvider>')) {
+   const baru = a.replace(/([ \t]*)<\/BrowserRouter>/, '$1</BrowserRouter>\n$1</ToastProvider>')
+   if (baru !== a) { a = baru; aBerubah = true; console.log('[BERHASIL] Penutup </ToastProvider> di App.jsx') }
+   else console.log('[TIDAK KETEMU] Pola penutup ToastProvider di App.jsx')
+ } else console.log('[SUDAH ADA] Penutup </ToastProvider>')
+ if (aBerubah) simpan('src/App.jsx', a)
+
+ /* ===== 2. DashboardPage: inisialisasi useToast ===== */
+ let d = baca('src/pages/DashboardPage.jsx')
+ let dBerubah = false
+ if (!d.includes('const toast = useToast()')) {
+   const baru = d.replace(/const \{ mahasiswa, loading \} = useAuth\(\)\n([ \t]*)const \[tab, setTab\]/, 'const { mahasiswa, loading } = useAuth()\n$1const toast = useToast()\n$1const [tab, setTab]')
+   if (baru !== d) { d = baru; dBerubah = true; console.log('[BERHASIL] Inisialisasi const toast = useToast()') }
+   else console.log('[TIDAK KETEMU] Pola inisialisasi useToast')
+ } else console.log('[SUDAH ADA] Inisialisasi useToast')
+
+ /* ===== 3. Toast sukses untuk setiap operasi CRUD ===== */
+ const daftarSukses = [
+   {
+     nama: 'toast sukses logbook',
+     cek: 'toast.sukses(menambahLog',
+     pola: /([ \t]*)if \(menambahLog\) setLogPage\(1\)/,
+     ganti: '$1if (menambahLog) setLogPage(1)\n$1toast.sukses(menambahLog ? \'Logbook berhasil disimpan\' : \'Logbook berhasil diperbarui\')'
+   },
+   {
+     nama: 'toast sukses galeri',
+     cek: 'toast.sukses(menambahGal',
+     pola: /([ \t]*)if \(menambahGal\) setGalPage\(1\)/,
+     ganti: '$1if (menambahGal) setGalPage(1)\n$1toast.sukses(menambahGal ? \'Media galeri berhasil disimpan\' : \'Media galeri berhasil diperbarui\')'
+   },
+   {
+     nama: 'toast sukses daftar hadir',
+     cek: 'toast.sukses(menambahHadir',
+     pola: /([ \t]*)if \(menambahHadir\) setHadirPage\(1\)/,
+     ganti: '$1if (menambahHadir) setHadirPage(1)\n$1toast.sukses(menambahHadir ? \'Daftar hadir berhasil disimpan\' : \'Daftar hadir berhasil diperbarui\')'
+   },
+   {
+     nama: 'toast sukses simpan foto profil',
+     cek: "toast.sukses('Foto profil berhasil disimpan')",
+     pola: /([ \t]*)setFotoFile\(null\)\n([ \t]*)\} catch \(err\) \{\n([ \t]*)toast\.gagal\('Gagal upload foto profil: ' \+ err\.message\)/,
+     ganti: '$1setFotoFile(null)\n$1toast.sukses(\'Foto profil berhasil disimpan\')\n$2} catch (err) {\n$3toast.gagal(\'Gagal upload foto profil: \' + err.message)'
+   },
+   {
+     nama: 'toast sukses hapus foto profil',
+     cek: "toast.sukses('Foto profil berhasil dihapus')",
+     pola: /([ \t]*)setVersiFoto\(function \(v\) \{ return v \+ 1 \}\)\n([ \t]*)\} catch \(err\) \{\n([ \t]*)toast\.gagal\('Gagal menghapus foto profil: ' \+ err\.message\)/,
+     ganti: '$1setVersiFoto(function (v) { return v + 1 })\n$1toast.sukses(\'Foto profil berhasil dihapus\')\n$2} catch (err) {\n$3toast.gagal(\'Gagal menghapus foto profil: \' + err.message)'
+   },
+   {
+     nama: 'toast sukses hapus data',
+     cek: "toast.sukses('Data berhasil dihapus')",
+     pola: /([ \t]*)await refresh\(\)\n([ \t]*)\}\n([ \t]*)function confirmInfo/,
+     ganti: '$1await refresh()\n$1toast.sukses(\'Data berhasil dihapus\')\n$2}\n$3function confirmInfo'
+   }
+ ]
+ daftarSukses.forEach(function (s) {
+   if (d.includes(s.cek)) { console.log('[SUDAH ADA] ' + s.nama); return }
+   if (s.pola.test(d)) {
+     d = d.replace(s.pola, s.ganti)
+     dBerubah = true
+     console.log('[BERHASIL] ' + s.nama)
+   } else {
+     console.log('[TIDAK KETEMU] ' + s.nama)
+   }
+ })
+ if (dBerubah) simpan('src/pages/DashboardPage.jsx', d)
+
+ /* ===== 4. Verifikasi akhir ===== */
+ a = baca('src/App.jsx')
+ d = baca('src/pages/DashboardPage.jsx')
+ console.log('')
+ console.log('Verifikasi akhir:')
+ console.log((a.includes('<ToastProvider>') ? '[OK] ' : '[BELUM] ') + 'ToastProvider terpasang di App.jsx')
+ console.log((d.includes('const toast = useToast()') ? '[OK] ' : '[BELUM] ') + 'useToast terinisialisasi di DashboardPage')
+ console.log((d.includes('toast.sukses(menambahLog') ? '[OK] ' : '[BELUM] ') + 'Toast sukses logbook')
+ console.log((d.includes('toast.sukses(menambahGal') ? '[OK] ' : '[BELUM] ') + 'Toast sukses galeri')
+ console.log((d.includes('toast.sukses(menambahHadir') ? '[OK] ' : '[BELUM] ') + 'Toast sukses daftar hadir')
+ console.log((d.includes("toast.sukses('Foto profil berhasil disimpan')") ? '[OK] ' : '[BELUM] ') + 'Toast sukses simpan foto profil')
+ console.log((d.includes("toast.sukses('Foto profil berhasil dihapus')") ? '[OK] ' : '[BELUM] ') + 'Toast sukses hapus foto profil')
+ console.log((d.includes("toast.sukses('Data berhasil dihapus')") ? '[OK] ' : '[BELUM] ') + 'Toast sukses hapus data')
+ console.log('')
+ console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+```
+
+## File: apply-fix-urutan.cjs
 ```javascript
 const fs = require('fs')
 const path = require('path')
 const root = process.cwd()
 function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
 function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-function ada(rel) { return fs.existsSync(path.join(root, rel)) }
+
+console.log('Mulai memperbaiki urutan kartu dengan tiebreaker created_at...')
+console.log('')
+
+/* ===== 1. format.js: ganti urutkanTanggal dengan versi bertiebreaker ===== */
+const FILE_F = 'src/lib/format.js'
+if (!fs.existsSync(path.join(root, FILE_F))) {
+  console.log('[GAGAL] format.js tidak ditemukan')
+  process.exit(1)
+}
+let f = baca(FILE_F)
+const RE_FUNGSI = /export function urutkanTanggal\(list, mode\) \{[\s\S]*?\n\}/
+const FUNGSI_BARU = `export function waktuUrut(x) {
+  if (!x) return 0
+  const src = x.created_at || x.updated_at || ''
+  if (!src) return 0
+  const t = new Date(src).getTime()
+  return isNaN(t) ? 0 : t
+}
+export function urutkanTanggal(list, mode) {
+  const arr = (list || []).slice()
+  arr.sort(function (a, b) {
+    const ta = new Date(a.tanggal + 'T00:00:00').getTime()
+    const tb = new Date(b.tanggal + 'T00:00:00').getTime()
+    if (ta !== tb) return mode === 'terlama' ? ta - tb : tb - ta
+    const ca = waktuUrut(a)
+    const cb = waktuUrut(b)
+    if (ca !== cb) return mode === 'terlama' ? ca - cb : cb - ca
+    const ia = a.id || ''
+    const ib = b.id || ''
+    if (ia !== ib) return ia < ib ? (mode === 'terlama' ? -1 : 1) : (mode === 'terlama' ? 1 : -1)
+    return 0
+  })
+  return arr
+}`
+if (f.includes('export function waktuUrut')) {
+  console.log('[SUDAH ADA] Tiebreaker created_at di format.js')
+} else if (RE_FUNGSI.test(f)) {
+  f = f.replace(RE_FUNGSI, FUNGSI_BARU)
+  simpan(FILE_F, f)
+  console.log('[BERHASIL] urutkanTanggal kini memakai tiebreaker created_at lalu id')
+} else {
+  console.log('[TIDAK KETEMU] Fungsi urutkanTanggal di format.js')
+}
+
+/* ===== 2. Beranda dan Tim & Dospem: urutkan dulu sebelum slice 6 ===== */
+;['src/pages/HomePage.jsx', 'src/pages/DospemPage.jsx'].forEach(function (rel) {
+  if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan'); return }
+  let isi = baca(rel)
+  let berubah = false
+  const MARK_SLICE = "urutkanTanggal(logs, 'terbaru').slice(0, 6)"
+  if (!isi.includes(MARK_SLICE)) {
+    if (isi.includes('logs.slice(0, 6)')) {
+      isi = isi.split('logs.slice(0, 6)').join(MARK_SLICE)
+      berubah = true
+      console.log('[BERHASIL] Slice 6 data kini lewat urutkanTanggal di ' + rel)
+    } else {
+      console.log('[TIDAK KETEMU] Pola logs.slice(0, 6) di ' + rel)
+    }
+  } else {
+    console.log('[SUDAH ADA] Slice terurut di ' + rel)
+  }
+  const RE_IMP = /import \{ ([^}']*) \} from '\.\.\/lib\/format\.js'/
+  if (isi.includes("urutkanTanggal } from '../lib/format.js'") || (RE_IMP.test(isi) && isi.match(RE_IMP)[1].includes('urutkanTanggal'))) {
+    console.log('[SUDAH ADA] Import urutkanTanggal di ' + rel)
+  } else if (RE_IMP.test(isi)) {
+    isi = isi.replace(RE_IMP, function (m, daftar) { return "import { " + daftar + ", urutkanTanggal } from '../lib/format.js'" })
+    berubah = true
+    console.log('[BERHASIL] Import urutkanTanggal ditambahkan di ' + rel)
+  } else {
+    isi = isi.replace(/import /, "import { urutkanTanggal } from '../lib/format.js'\nimport ")
+    berubah = true
+    console.log('[BERHASIL] Baris import format.js baru ditambahkan di ' + rel)
+  }
+  if (berubah) simpan(rel, isi)
+})
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Hasil analisis keberadaan bug sebelum perbaikan:')
+console.log('1. Dashboard tab Logbook: ada, memakai urutkanTanggal tanpa tiebreaker.')
+console.log('2. Dashboard tab Galeri: ada, penyebab sama.')
+console.log('3. Dashboard tab Daftar Hadir: ada, penyebab sama.')
+console.log('4. Publik Logbook, Galeri, Daftar Hadir: ada, penyebab sama.')
+console.log('5. Beranda: ada, slice 6 memakai urutan mentah query yang hanya order tanggal.')
+console.log('6. Tim & Dospem: ada, slice 6 aktivitas memakai urutan mentah query.')
+console.log('')
+console.log('Perilaku baru setelah perbaikan:')
+console.log('1. Data dengan tanggal sama diurutkan berdasarkan waktu dibuat, jadi logbook yang baru ditambah langsung maju ke posisi terdepan kelompok tanggalnya.')
+console.log('2. Kartu kiri dan kanan kini benar benar bergeser saat data ditambah atau dihapus, sesuai harapanmu.')
+console.log('3. Mode terlama juga konsisten: dalam tanggal yang sama, yang lebih dulu dibuat tampil lebih dulu.')
+console.log('4. Bila created_at tidak ada di suatu tabel, urutan jatuh ke id sehingga tetap stabil dan tidak acak acakan.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buat dua logbook dengan tanggal yang sama, catat posisi kiri dan kanannya.')
+console.log('2. Tambah logbook ketiga dengan tanggal yang sama: kartu baru muncul paling depan, kartu lama tergeser ke kanan lalu ke baris bawah.')
+console.log('3. Hapus kartu paling kiri: sisa kartu langsung bergeser mengisi posisi kiri.')
+console.log('4. Ganti sortir ke terlama: urutan dalam tanggal yang sama berbalik rapi.')
+console.log('5. Ulangi pengecekan cepat di tab Galeri, Daftar Hadir, halaman publik, Beranda, dan Tim & Dospem.')
+```
+
+## File: apply-fix-urutan2.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+const FILE_F = 'src/lib/format.js'
+if (!fs.existsSync(path.join(root, FILE_F))) {
+  console.log('[GAGAL] format.js tidak ditemukan')
+  process.exit(1)
+}
+let f = fs.readFileSync(path.join(root, FILE_F), 'utf8').replace(/\r\n/g, '\n')
+
+const FUNGSI_BARU = `export function waktuUrut(x) {
+  if (!x) return 0
+  const src = x.created_at || x.updated_at || ''
+  if (!src) return 0
+  const t = new Date(src).getTime()
+  return isNaN(t) ? 0 : t
+}
+export function urutkanTanggal(list, mode) {
+  const arr = (list || []).slice()
+  arr.sort(function (a, b) {
+    const ta = new Date(a.tanggal + 'T00:00:00').getTime()
+    const tb = new Date(b.tanggal + 'T00:00:00').getTime()
+    if (ta !== tb) return mode === 'terlama' ? ta - tb : tb - ta
+    const ca = waktuUrut(a)
+    const cb = waktuUrut(b)
+    if (ca !== cb) return mode === 'terlama' ? ca - cb : cb - ca
+    const ia = a.id || ''
+    const ib = b.id || ''
+    if (ia !== ib) return ia < ib ? (mode === 'terlama' ? -1 : 1) : (mode === 'terlama' ? 1 : -1)
+    return 0
+  })
+  return arr
+}`
+
+console.log('Mulai mengganti urutkanTanggal di format.js (versi tahan pola)...')
+console.log('')
+
+if (f.includes('function waktuUrut')) {
+  console.log('[SUDAH ADA] Tiebreaker created_at sudah terpasang di format.js')
+} else {
+  const POLA = [
+    /export\s+function\s+urutkanTanggal\s*\([^)]*\)\s*\{/,
+    /function\s+urutkanTanggal\s*\([^)]*\)\s*\{/,
+    /(?:export\s+)?const\s+urutkanTanggal\s*=\s*function\s*\([^)]*\)\s*\{/,
+    /(?:export\s+)?const\s+urutkanTanggal\s*=\s*\([^)]*\)\s*=>\s*\{/
+  ]
+  let m = null
+  for (let i = 0; i < POLA.length; i++) { m = POLA[i].exec(f); if (m) break }
+  if (!m) {
+    if (f.includes('urutkanTanggal')) {
+      console.log('[TIDAK KETEMU] Pola fungsi urutkanTanggal, kirim isi format.js ke chat')
+    } else {
+      f = f.trimEnd() + '\n\n' + FUNGSI_BARU + '\n'
+      fs.writeFileSync(path.join(root, FILE_F), f, 'utf8')
+      console.log('[BERHASIL] Fungsi urutkanTanggal baru ditambahkan di akhir format.js')
+    }
+  } else {
+    const mulai = m.index
+    const idxOpen = m.index + m[0].length - 1
+    let brace = 0, akhir = -1, inStr = false, strCh = ''
+    for (let i = idxOpen; i < f.length; i++) {
+      const ch = f[i]
+      const prev = i > 0 ? f[i - 1] : ''
+      if (inStr) { if (ch === strCh && prev !== '\\') inStr = false; continue }
+      if (ch === '"' || ch === "'" || ch === '`') { inStr = true; strCh = ch; continue }
+      if (ch === '{') brace++
+      if (ch === '}') { brace--; if (brace === 0) { akhir = i + 1; break } }
+    }
+    if (akhir === -1) {
+      console.log('[GAGAL] Batas fungsi urutkanTanggal tidak terbaca')
+    } else {
+      const pakaiExport = m[0].indexOf('export') === 0
+      const teks = pakaiExport ? FUNGSI_BARU : FUNGSI_BARU.replace(/export function/g, 'function')
+      f = f.slice(0, mulai) + teks + f.slice(akhir)
+      fs.writeFileSync(path.join(root, FILE_F), f, 'utf8')
+      console.log('[BERHASIL] urutkanTanggal diganti versi bertiebreaker created_at dan id')
+    }
+  }
+}
+
+/* Verifikasi menyeluruh */
+f = fs.readFileSync(path.join(root, FILE_F), 'utf8')
+const h = fs.readFileSync(path.join(root, 'src/pages/HomePage.jsx'), 'utf8')
+const dd = fs.readFileSync(path.join(root, 'src/pages/DospemPage.jsx'), 'utf8')
+console.log('')
+console.log('Verifikasi:')
+console.log((f.includes('function waktuUrut') ? '[OK] ' : '[BELUM] ') + 'fungsi waktuUrut ada di format.js')
+console.log((f.includes('waktuUrut(a)') ? '[OK] ' : '[BELUM] ') + 'tiebreaker created_at dipakai di pembanding')
+console.log((h.includes("urutkanTanggal(logs, 'terbaru').slice(0, 6)") ? '[OK] ' : '[BELUM] ') + 'slice 6 data Beranda lewat urutkanTanggal')
+console.log((dd.includes("urutkanTanggal(logs, 'terbaru').slice(0, 6)") ? '[OK] ' : '[BELUM] ') + 'slice 6 data Tim & Dospem lewat urutkanTanggal')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Catatan:')
+console.log('1. Perubahan Beranda dan Tim & Dospem dari script sebelumnya sudah aman terpasang dan tetap kompatibel karena nama fungsinya tidak berubah.')
+console.log('2. Begitu format.js terganti, seluruh daftar di dashboard, halaman publik, Beranda, dan Tim & Dospem otomatis memakai tiebreaker baru.')
+console.log('3. Bila masih ada baris TIDAK KETEMU, salin isi file src/lib/format.js ke chat supaya saya ganti manual sesuai bentuk aslinya.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buat dua logbook bertanggal sama, catat posisi kiri dan kanannya.')
+console.log('2. Tambah logbook ketiga bertanggal sama: kartu baru langsung muncul paling depan dan kartu lama bergeser ke kanan lalu ke baris bawah.')
+console.log('3. Hapus kartu paling kiri: sisa kartu langsung bergeser mengisi posisi yang kosong.')
+console.log('4. Ganti sortir ke terlama: urutan dalam tanggal yang sama berbalik rapi.')
+```
+
+## File: apply-toast-crud.cjs
+```javascript
+const fs = require('fs')
+ const path = require('path')
+ const root = process.cwd()
+ function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+ function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+ function ganti(rel, cari, gantiDengan, label) {
+   if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan (' + label + ')'); return }
+   let isi = baca(rel)
+   if (isi.includes(gantiDengan)) { console.log('[SUDAH ADA] ' + label); return }
+   if (!isi.includes(cari)) { console.log('[TIDAK KETEMU] ' + label + ' di ' + rel); return }
+   isi = isi.replace(cari, gantiDengan)
+   simpan(rel, isi)
+   console.log('[BERHASIL] ' + label)
+ }
+ function gantiSemua(rel, cari, gantiDengan, label) {
+   if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan (' + label + ')'); return }
+   let isi = baca(rel)
+   if (isi.includes(gantiDengan)) { console.log('[SUDAH ADA] ' + label); return }
+   if (!isi.includes(cari)) { console.log('[TIDAK KETEMU] ' + label + ' di ' + rel); return }
+   isi = isi.split(cari).join(gantiDengan)
+   simpan(rel, isi)
+   console.log('[BERHASIL] ' + label)
+ }
+ function sisipAkhir(rel, cari, teks, label) {
+   if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan (' + label + ')'); return }
+   let isi = baca(rel)
+   if (isi.includes(label)) { console.log('[SUDAH ADA] ' + label); return }
+   isi = isi.trimEnd() + '\n\n' + teks + '\n'
+   simpan(rel, isi)
+   console.log('[BERHASIL] ' + label)
+ }
+ console.log('Mulai memasang sistem notifikasi toast untuk CRUD...')
+ console.log('')
+ /* ===== 1. ui.jsx: tambahkan createContext dan useContext ke import ===== */
+ ganti('src/components/ui.jsx',
+   "import { useEffect, useRef, useState } from 'react'",
+   "import { createContext, useContext, useEffect, useRef, useState } from 'react'",
+   'import createContext dan useContext di ui.jsx')
+ /* ===== 2. ui.jsx: tambahkan ToastProvider dan useToast ===== */
+ sisipAkhir('src/components/ui.jsx',
+   'ToastProvider',
+   `const ToastContext = createContext(null)
+ export function ToastProvider(props) {
+   const [toasts, setToasts] = useState([])
+   function tutupToast(id) {
+     setToasts(function (prev) { return prev.filter(function (t) { return t.id !== id }) })
+   }
+   function tambahToast(tipe, pesan) {
+     const id = Date.now() + Math.random()
+     setToasts(function (prev) { return prev.concat([{ id: id, tipe: tipe, pesan: pesan }]) })
+     setTimeout(function () {
+       setToasts(function (prev) { return prev.filter(function (t) { return t.id !== id }) })
+     }, 4000)
+   }
+   function toastSukses(pesan) { tambahToast('sukses', pesan) }
+   function toastGagal(pesan) { tambahToast('gagal', pesan) }
+   return (
+     <ToastContext.Provider value={{ sukses: toastSukses, gagal: toastGagal }}>
+       {props.children}
+       <div className="fixed top-5 right-5 z-[100] flex w-full max-w-sm flex-col gap-3 pointer-events-none">
+         {toasts.map(function (t) {
+           const sukses = t.tipe === 'sukses'
+           return (
+             <div key={t.id} className={'anim-toast pointer-events-auto flex items-start gap-3 rounded-2xl border p-4 shadow-lg ' + (sukses ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50')}>
+               <span className={'mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full ' + (sukses ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white')}>
+                 <SizedIcon name={sukses ? 'check' : 'close'} size={12} />
+               </span>
+               <p className={'flex-1 text-sm font-semibold ' + (sukses ? 'text-emerald-800' : 'text-red-700')}>{t.pesan}</p>
+               <button type="button" onClick={function () { tutupToast(t.id) }} className="shrink-0 text-slate-400 hover:text-slate-600">
+                 <SizedIcon name="close" size={14} />
+               </button>
+             </div>
+           )
+         })}
+       </div>
+     </ToastContext.Provider>
+   )
+ }
+ export function useToast() {
+   return useContext(ToastContext)
+ }`,
+   'ToastProvider dan useToast di ui.jsx')
+ /* ===== 3. App.jsx: import ToastProvider ===== */
+ ganti('src/App.jsx',
+   "import { ThemeProvider } from './lib/theme.jsx'",
+   "import { ThemeProvider } from './lib/theme.jsx'\n import { ToastProvider } from './components/ui.jsx'",
+   'import ToastProvider di App.jsx')
+ /* ===== 4. App.jsx: wrap dengan ToastProvider ===== */
+ ganti('src/App.jsx',
+   `<ThemeProvider>
+       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+         <ScrollToTop />`,
+   `<ThemeProvider>
+       <ToastProvider>
+       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+         <ScrollToTop />`,
+   'wrap buka ToastProvider')
+ ganti('src/App.jsx',
+   `</BrowserRouter>
+     </ThemeProvider>`,
+   `</BrowserRouter>
+       </ToastProvider>
+     </ThemeProvider>`,
+   'wrap tutup ToastProvider')
+ /* ===== 5. DashboardPage.jsx: import useToast ===== */
+ ganti('src/pages/DashboardPage.jsx',
+   "import { EmptyState, Modal, ConfirmModal, inputCls, labelCls, btnPrimary, btnSmall, AutoTextArea, Pagination } from '../components/ui.jsx'",
+   "import { EmptyState, Modal, ConfirmModal, inputCls, labelCls, btnPrimary, btnSmall, AutoTextArea, Pagination, useToast } from '../components/ui.jsx'",
+   'import useToast di DashboardPage')
+ /* ===== 6. DashboardPage.jsx: inisialisasi useToast ===== */
+ ganti('src/pages/DashboardPage.jsx',
+   'const { mahasiswa, loading } = useAuth()\n    const [tab, setTab]',
+   'const { mahasiswa, loading } = useAuth()\n    const toast = useToast()\n    const [tab, setTab]',
+   'inisialisasi useToast di DashboardPage')
+ /* ===== 7. DashboardPage.jsx: ganti alert error jadi toast gagal ===== */
+ ganti('src/pages/DashboardPage.jsx',
+   "if (!id) { alert('Link video tidak valid pada kegiatan ' + (i + 1) + '.'); setBusy(false); return }",
+   "if (!id) { toast.gagal('Link video tidak valid pada kegiatan ' + (i + 1) + '.'); setBusy(false); return }",
+   'toast link video tidak valid logbook')
+ gantiSemua('src/pages/DashboardPage.jsx',
+   "if (ytQuota.remaining <= 0) { alert('Kuota upload video hari ini sudah habis. Gunakan link video.'); setBusy(false); return }",
+   "if (ytQuota.remaining <= 0) { toast.gagal('Kuota upload video hari ini sudah habis. Gunakan link video.'); setBusy(false); return }",
+   'toast kuota habis')
+ ganti('src/pages/DashboardPage.jsx',
+   "alert('Tambahkan minimal satu kegiatan dengan judul.'); setBusy(false); return",
+   "toast.gagal('Tambahkan minimal satu kegiatan dengan judul.'); setBusy(false); return",
+   'toast minimal satu kegiatan')
+ ganti('src/pages/DashboardPage.jsx',
+   "alert('Gagal menyimpan logbook: ' + err.message)",
+   "toast.gagal('Gagal menyimpan logbook: ' + err.message)",
+   'toast gagal simpan logbook')
+ ganti('src/pages/DashboardPage.jsx',
+   "if (!id) { alert('Link video tidak valid.'); setBusy(false); return }",
+   "if (!id) { toast.gagal('Link video tidak valid.'); setBusy(false); return }",
+   'toast link video tidak valid galeri')
+ ganti('src/pages/DashboardPage.jsx',
+   "alert('Galeri wajib memiliki media. Pilih file foto atau video terlebih dahulu.'); setBusy(false); return",
+   "toast.gagal('Galeri wajib memiliki media. Pilih file foto atau video terlebih dahulu.'); setBusy(false); return",
+   'toast galeri wajib media')
+ ganti('src/pages/DashboardPage.jsx',
+   "alert('Gagal menyimpan galeri: ' + err.message)",
+   "toast.gagal('Gagal menyimpan galeri: ' + err.message)",
+   'toast gagal simpan galeri')
+ ganti('src/pages/DashboardPage.jsx',
+   "if (f.size > 5 * 1024 * 1024) { alert('Ukuran foto maksimal 5 MB.'); e.target.value = ''; return }",
+   "if (f.size > 5 * 1024 * 1024) { toast.gagal('Ukuran foto maksimal 5 MB.'); e.target.value = ''; return }",
+   'toast ukuran foto maksimal')
+ ganti('src/pages/DashboardPage.jsx',
+   "if (!fotoFile) { alert('Pilih file foto terlebih dahulu.'); return }",
+   "if (!fotoFile) { toast.gagal('Pilih file foto terlebih dahulu.'); return }",
+   'toast pilih foto dulu')
+ ganti('src/pages/DashboardPage.jsx',
+   "alert('Gagal upload foto profil: ' + err.message)",
+   "toast.gagal('Gagal upload foto profil: ' + err.message)",
+   'toast gagal upload foto')
+ ganti('src/pages/DashboardPage.jsx',
+   "alert('Gagal menghapus foto profil: ' + err.message)",
+   "toast.gagal('Gagal menghapus foto profil: ' + err.message)",
+   'toast gagal hapus foto')
+ ganti('src/pages/DashboardPage.jsx',
+   "if (res.error) { alert('Kamu sudah punya catatan hadir di tanggal tersebut.'); setBusy(false); return }",
+   "if (res.error) { toast.gagal('Kamu sudah punya catatan hadir di tanggal tersebut.'); setBusy(false); return }",
+   'toast sudah punya catatan hadir')
+ /* ===== 8. DashboardPage.jsx: tambahkan toast sukses setelah CRUD berhasil ===== */
+ ganti('src/pages/DashboardPage.jsx',
+   'await refresh()\n        if (menambahLog) setLogPage(1)\n      } catch (err) {\n        toast.gagal(\'Gagal menyimpan logbook: \' + err.message)',
+   'await refresh()\n        if (menambahLog) setLogPage(1)\n        toast.sukses(menambahLog ? \'Logbook berhasil disimpan\' : \'Logbook berhasil diperbarui\')\n      } catch (err) {\n        toast.gagal(\'Gagal menyimpan logbook: \' + err.message)',
+   'toast sukses logbook')
+ ganti('src/pages/DashboardPage.jsx',
+   'await refresh()\n         if (menambahGal) setGalPage(1)\n      } catch (err) {\n        toast.gagal(\'Gagal menyimpan galeri: \' + err.message)',
+   'await refresh()\n         if (menambahGal) setGalPage(1)\n        toast.sukses(menambahGal ? \'Media galeri berhasil disimpan\' : \'Media galeri berhasil diperbarui\')\n      } catch (err) {\n        toast.gagal(\'Gagal menyimpan galeri: \' + err.message)',
+   'toast sukses galeri')
+ ganti('src/pages/DashboardPage.jsx',
+   'await refresh()\n       if (menambahHadir) setHadirPage(1)\n      setInfoProses(\'\')',
+   'await refresh()\n       if (menambahHadir) setHadirPage(1)\n      toast.sukses(menambahHadir ? \'Daftar hadir berhasil disimpan\' : \'Daftar hadir berhasil diperbarui\')\n      setInfoProses(\'\')',
+   'toast sukses daftar hadir')
+ ganti('src/pages/DashboardPage.jsx',
+   'await refresh()\n    }\n    async function executeDelete()',
+   'await refresh()\n       toast.sukses(\'Foto profil berhasil disimpan\')\n    }\n    async function executeDelete()',
+   'toast sukses foto profil')
+ ganti('src/pages/DashboardPage.jsx',
+   'setVersiFoto(function (v) { return v + 1 })\n      } catch (err) {\n        toast.gagal(\'Gagal menghapus foto profil: \' + err.message)',
+   'setVersiFoto(function (v) { return v + 1 })\n        toast.sukses(\'Foto profil berhasil dihapus\')\n      } catch (err) {\n        toast.gagal(\'Gagal menghapus foto profil: \' + err.message)',
+   'toast sukses hapus foto profil')
+ ganti('src/pages/DashboardPage.jsx',
+   'await refresh()\n    }\n    function confirmInfo()',
+   'await refresh()\n       toast.sukses(\'Data berhasil dihapus\')\n    }\n    function confirmInfo()',
+   'toast sukses hapus data')
+ console.log('')
+ console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+ console.log('')
+ console.log('Fitur toast yang terpasang:')
+ console.log('1. Notifikasi muncul di pojok kanan atas dengan tema BSI (hijau untuk sukses, merah untuk gagal).')
+ console.log('2. Otomatis hilang setelah 4 detik, atau bisa ditutup manual dengan tombol X.')
+ console.log('3. Semua alert() sudah diganti dengan toast agar tidak memblokir interaksi user.')
+ console.log('4. Toast sukses muncul setelah: simpan/edit logbook, simpan/edit galeri, simpan/edit daftar hadir, simpan/hapus foto profil, hapus data.')
+ console.log('5. Toast gagal muncul untuk: link video tidak valid, kuota habis, validasi form, dan error dari server.')
+```
+
+## File: apply-toast-opaque.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
 function ganti(rel, cari, gantiDengan, label) {
-  if (!ada(rel)) { console.log('[LEWATI] ' + rel + ' tidak ditemukan (' + label + ')'); return }
+  if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan (' + label + ')'); return }
   let isi = baca(rel)
   if (isi.includes(gantiDengan)) { console.log('[SUDAH ADA] ' + label); return }
   if (!isi.includes(cari)) { console.log('[TIDAK KETEMU] ' + label + ' di ' + rel); return }
@@ -185,50 +902,86 @@ function ganti(rel, cari, gantiDengan, label) {
   console.log('[BERHASIL] ' + label)
 }
 
-console.log('Mulai mengganti teks info pagination ke Opsi 2 (Total X • Halaman A dari B)...')
+console.log('Mulai membuat toast opaque yang ringan untuk device low end...')
 console.log('')
 
-/* ===== 1. Halaman publik: Logbook, Galeri, Daftar Hadir ===== */
-ganti('src/pages/LogbookPage.jsx',
-  `Halaman {pageAman} dari {totalPages} • {totalData} logbook`,
-  `Total {totalData} logbook{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}`,
-  'Teks info LogbookPage')
-ganti('src/pages/GalleryPage.jsx',
-  `Halaman {pageAman} dari {totalPages} • {totalData} media`,
-  `Total {totalData} media{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}`,
-  'Teks info GalleryPage')
-ganti('src/pages/AttendancePage.jsx',
-  `Halaman {pageAman} dari {totalPages} • {totalData} catatan`,
-  `Total {totalData} catatan{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}`,
-  'Teks info AttendancePage')
+/* ===== 1. ui.jsx: ganti kelas warna toast ke kelas khusus ===== */
+ganti('src/components/ui.jsx',
+  "(sukses ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50')",
+  "(sukses ? 'toast-sukses' : 'toast-gagal')",
+  'Kelas wadah toast diganti toast-sukses / toast-gagal')
+ganti('src/components/ui.jsx',
+  "'flex-1 text-sm font-semibold ' + (sukses ? 'text-emerald-800' : 'text-red-700')",
+  "'flex-1 text-sm font-semibold toast-teks'",
+  'Kelas teks toast diganti toast-teks')
+ganti('src/components/ui.jsx',
+  "onClick={function () { tutupToast(t.id) }} className=\"shrink-0 text-slate-400 hover:text-slate-600\"",
+  "onClick={function () { tutupToast(t.id) }} className=\"toast-tutup shrink-0 text-slate-400 hover:text-slate-600\"",
+  'Kelas tombol tutup toast ditambah toast-tutup')
 
-/* ===== 2. Dashboard: tab Logbook, Galeri, Daftar Hadir ===== */
-ganti('src/pages/DashboardPage.jsx',
-  `Menampilkan {filteredLogs.length} dari {logs.length} logbook{logTotalPages > 1 ? ' • Halaman ' + logPageAman + ' dari ' + logTotalPages : ''}`,
-  `Total {filteredLogs.length} logbook{logTotalPages > 1 ? ' • Halaman ' + logPageAman + ' dari ' + logTotalPages : ''}`,
-  'Teks info tab Logbook dashboard')
-ganti('src/pages/DashboardPage.jsx',
-  `Menampilkan {filteredGaleri.length} dari {galeri.length} media{galTotalPages > 1 ? ' • Halaman ' + galPageAman + ' dari ' + galTotalPages : ''}`,
-  `Total {filteredGaleri.length} media{galTotalPages > 1 ? ' • Halaman ' + galPageAman + ' dari ' + galTotalPages : ''}`,
-  'Teks info tab Galeri dashboard')
-ganti('src/pages/DashboardPage.jsx',
-  `Menampilkan {filteredHadir.length} dari {hadir.length} catatan{hadirTotalPages > 1 ? ' • Halaman ' + hadirPageAman + ' dari ' + hadirTotalPages : ''}`,
-  `Total {filteredHadir.length} catatan{hadirTotalPages > 1 ? ' • Halaman ' + hadirPageAman + ' dari ' + hadirTotalPages : ''}`,
-  'Teks info tab Daftar Hadir dashboard')
+/* ===== 2. index.css: gaya toast opaque tanpa backdrop-filter ===== */
+const FILE_CSS = 'src/index.css'
+const CSS_TOAST = `/* toast-opaque: latar solid bergradasi lembut, tanpa backdrop-filter agar ringan di device low end */
+@keyframes anim-toast {
+  from { opacity: 0; transform: translateX(14px) scale(0.98); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+.anim-toast { animation: anim-toast 0.22s ease-out; opacity: 1; }
+.toast-sukses {
+  background: linear-gradient(180deg, #ffffff 0%, #ecfdf5 100%);
+  border-color: #a7f3d0;
+  box-shadow: 0 10px 30px rgba(6, 95, 70, 0.16);
+}
+.toast-gagal {
+  background: linear-gradient(180deg, #ffffff 0%, #fef2f2 100%);
+  border-color: #fecaca;
+  box-shadow: 0 10px 30px rgba(153, 27, 27, 0.16);
+}
+.toast-sukses .toast-teks { color: #065f46; }
+.toast-gagal .toast-teks { color: #991b1b; }
+.toast-tutup:hover { color: #334155; }
+.dark .toast-sukses {
+  background: linear-gradient(180deg, #065f46 0%, #064e3b 100%);
+  border-color: rgba(52, 211, 153, 0.45);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+.dark .toast-gagal {
+  background: linear-gradient(180deg, #991b1b 0%, #7f1d1d 100%);
+  border-color: rgba(248, 113, 113, 0.45);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+.dark .toast-sukses .toast-teks { color: #d1fae5 !important; }
+.dark .toast-gagal .toast-teks { color: #fee2e2 !important; }
+.dark .toast-tutup { color: #cbd5e1 !important; }
+.dark .toast-tutup:hover { color: #ffffff !important; }
+`
+if (!fs.existsSync(path.join(root, FILE_CSS))) {
+  console.log('[LEWATI] index.css tidak ditemukan')
+} else {
+  let css = baca(FILE_CSS)
+  if (css.includes('/* toast-opaque */')) {
+    console.log('[SUDAH ADA] CSS toast-opaque di index.css')
+  } else {
+    simpan(FILE_CSS, css.trimEnd() + '\n\n' + CSS_TOAST)
+    console.log('[BERHASIL] CSS toast-opaque ditambahkan di index.css')
+  }
+}
 
 console.log('')
 console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
 console.log('')
-console.log('Format teks baru (Opsi 2):')
-console.log('1. Bila halaman lebih dari satu: Total 25 logbook • Halaman 1 dari 3.')
-console.log('2. Bila hanya satu halaman: Total 7 logbook (tanpa keterangan halaman supaya tidak redundan).')
-console.log('3. Angka total merujuk jumlah data sesuai filter aktif, bukan jumlah kartu yang tampil di halaman tersebut, sehingga tidak lagi membingungkan.')
+console.log('Kenapa versi ini ringan di device jadul:')
+console.log('1. Tidak memakai backdrop-filter blur sama sekali, jadi GPU tidak perlu merender ulang area di belakang toast setiap frame.')
+console.log('2. Latar diganti gradasi solid yang hanya dirasterisasi sekali, bukan warna semi transparan yang tembus pandang.')
+console.log('3. Animasi masuk hanya memakai opacity dan transform, dua properti termurah yang dikerjakan kompositor GPU.')
+console.log('4. Kedalaman visual didapat dari box-shadow statis, bukan dari efek blur hidup.')
+console.log('5. Mode gelap memakai hijau tua dan merah tua pekat dengan teks terang, kontras nyaman dibaca dan tidak tembus.')
 console.log('')
 console.log('Langkah uji:')
-console.log('1. Buka dashboard tab Logbook dengan 7 data: teks berbunyi Total 7 logbook • Halaman 1 dari 2.')
-console.log('2. Klik tombol halaman 2: teks berubah menjadi Total 7 logbook • Halaman 2 dari 2.')
-console.log('3. Aktifkan filter sehingga hasil kurang dari 6: teks cukup Total X logbook tanpa keterangan halaman.')
-console.log('4. Ulangi pengecekan di tab Galeri, Daftar Hadir, serta halaman publik Logbook, Galeri, dan Daftar Hadir.')
+console.log('1. Mode gelap: hapus sebuah data, toast muncul hijau tua pekat, tombol Dashboard dan Keluar di belakangnya tidak lagi tembus.')
+console.log('2. Mode terang: toast sukses putih kehijauan lembut, toast gagal putih kemerah-merahan, keduanya solid.')
+console.log('3. Scroll halaman saat toast tampil: tidak ada patah patah karena tidak ada blur yang dihitung ulang.')
+console.log('4. Tombol X tetap jelas di kedua mode dan berubah putih saat disentuh di mode gelap.')
 ```
 
 ## File: api/r2/delete.js
@@ -2961,6 +3714,59 @@ console.log('2. Uji upload video: progres naik, lalu logbook tersimpan dan kartu
 console.log('3. Favicon hijau muncul di tab browser dan permintaan favicon.ico tidak lagi 404.')
 ```
 
+## File: apply-fix-galeri-pagination.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+const FILE_D = 'src/pages/DashboardPage.jsx'
+
+if (!fs.existsSync(path.join(root, FILE_D))) {
+  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
+  process.exit(1)
+}
+
+let d = fs.readFileSync(path.join(root, FILE_D), 'utf8')
+
+console.log('Mulai menambahkan Pagination di tab Galeri...')
+console.log('')
+
+const MARK = 'onPageChange={gantiHalamanGal}'
+if (d.includes(MARK)) {
+  console.log('[SUDAH ADA] Pagination di tab Galeri sudah ada')
+  process.exit(0)
+}
+
+// Cari pola: EmptyState galeri + penutup div grid galeri + penutup div wrapper
+// Lalu sisipkan Pagination setelah penutup div grid
+const regex = /(\{!filteredGaleri\.length \? <EmptyState icon="camera"[^}]*\} : null\})\s*\n(\s*)(<\/div>\s*\n\s*<\/div>)/
+
+if (regex.test(d)) {
+  d = d.replace(regex, function(match, emptyState, spasi, closingDivs) {
+    return emptyState + spasi + closingDivs + spasi + '<Pagination totalItems={galTotal} perPage={PER_PAGE_DASH} page={galPageAman} onPageChange={gantiHalamanGal} />'
+  })
+  fs.writeFileSync(path.join(root, FILE_D), d, 'utf8')
+  console.log('[BERHASIL] Pagination ditambahkan di tab Galeri')
+} else {
+  console.log('[TIDAK KETEMU] Pola grid galeri tidak cocok, coba cari manual')
+  console.log('')
+  console.log('Solusi manual: buka src/pages/DashboardPage.jsx, cari bagian:')
+  console.log('  {!filteredGaleri.length ? <EmptyState icon="camera" ...')
+  console.log('  </div>')
+  console.log('Lalu tambahkan baris ini SETELAH </div> penutup grid:')
+  console.log('  <Pagination totalItems={galTotal} perPage={PER_PAGE_DASH} page={galPageAman} onPageChange={gantiHalamanGal} />')
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka dashboard tab Galeri dengan lebih dari 6 media.')
+console.log('2. Tombol nomor halaman (1, 2, dst) muncul di bawah daftar media.')
+console.log('3. Klik nomor 2: hanya 6 media berikutnya yang tampil.')
+console.log('4. Tab Logbook dan Daftar Hadir tetap berfungsi normal.')
+```
+
 ## File: apply-fix-ganti-foto.cjs
 ```javascript
 const fs = require('fs')
@@ -3440,6 +4246,70 @@ if (isi !== sebelum) {
 console.log('')
 console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
 console.log('Website akan kembali normal dan tidak blank lagi.')
+```
+
+## File: apply-fix-teks-pagination.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+function ada(rel) { return fs.existsSync(path.join(root, rel)) }
+function ganti(rel, cari, gantiDengan, label) {
+  if (!ada(rel)) { console.log('[LEWATI] ' + rel + ' tidak ditemukan (' + label + ')'); return }
+  let isi = baca(rel)
+  if (isi.includes(gantiDengan)) { console.log('[SUDAH ADA] ' + label); return }
+  if (!isi.includes(cari)) { console.log('[TIDAK KETEMU] ' + label + ' di ' + rel); return }
+  isi = isi.replace(cari, gantiDengan)
+  simpan(rel, isi)
+  console.log('[BERHASIL] ' + label)
+}
+
+console.log('Mulai mengganti teks info pagination ke Opsi 2 (Total X • Halaman A dari B)...')
+console.log('')
+
+/* ===== 1. Halaman publik: Logbook, Galeri, Daftar Hadir ===== */
+ganti('src/pages/LogbookPage.jsx',
+  `Halaman {pageAman} dari {totalPages} • {totalData} logbook`,
+  `Total {totalData} logbook{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}`,
+  'Teks info LogbookPage')
+ganti('src/pages/GalleryPage.jsx',
+  `Halaman {pageAman} dari {totalPages} • {totalData} media`,
+  `Total {totalData} media{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}`,
+  'Teks info GalleryPage')
+ganti('src/pages/AttendancePage.jsx',
+  `Halaman {pageAman} dari {totalPages} • {totalData} catatan`,
+  `Total {totalData} catatan{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}`,
+  'Teks info AttendancePage')
+
+/* ===== 2. Dashboard: tab Logbook, Galeri, Daftar Hadir ===== */
+ganti('src/pages/DashboardPage.jsx',
+  `Menampilkan {filteredLogs.length} dari {logs.length} logbook{logTotalPages > 1 ? ' • Halaman ' + logPageAman + ' dari ' + logTotalPages : ''}`,
+  `Total {filteredLogs.length} logbook{logTotalPages > 1 ? ' • Halaman ' + logPageAman + ' dari ' + logTotalPages : ''}`,
+  'Teks info tab Logbook dashboard')
+ganti('src/pages/DashboardPage.jsx',
+  `Menampilkan {filteredGaleri.length} dari {galeri.length} media{galTotalPages > 1 ? ' • Halaman ' + galPageAman + ' dari ' + galTotalPages : ''}`,
+  `Total {filteredGaleri.length} media{galTotalPages > 1 ? ' • Halaman ' + galPageAman + ' dari ' + galTotalPages : ''}`,
+  'Teks info tab Galeri dashboard')
+ganti('src/pages/DashboardPage.jsx',
+  `Menampilkan {filteredHadir.length} dari {hadir.length} catatan{hadirTotalPages > 1 ? ' • Halaman ' + hadirPageAman + ' dari ' + hadirTotalPages : ''}`,
+  `Total {filteredHadir.length} catatan{hadirTotalPages > 1 ? ' • Halaman ' + hadirPageAman + ' dari ' + hadirTotalPages : ''}`,
+  'Teks info tab Daftar Hadir dashboard')
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Format teks baru (Opsi 2):')
+console.log('1. Bila halaman lebih dari satu: Total 25 logbook • Halaman 1 dari 3.')
+console.log('2. Bila hanya satu halaman: Total 7 logbook (tanpa keterangan halaman supaya tidak redundan).')
+console.log('3. Angka total merujuk jumlah data sesuai filter aktif, bukan jumlah kartu yang tampil di halaman tersebut, sehingga tidak lagi membingungkan.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka dashboard tab Logbook dengan 7 data: teks berbunyi Total 7 logbook • Halaman 1 dari 2.')
+console.log('2. Klik tombol halaman 2: teks berubah menjadi Total 7 logbook • Halaman 2 dari 2.')
+console.log('3. Aktifkan filter sehingga hasil kurang dari 6: teks cukup Total X logbook tanpa keterangan halaman.')
+console.log('4. Ulangi pengecekan di tab Galeri, Daftar Hadir, serta halaman publik Logbook, Galeri, dan Daftar Hadir.')
 ```
 
 ## File: apply-fix-tiga-masalah.cjs
@@ -13200,16 +14070,28 @@ export function matchesDateFilters(dateString, f) {
   }
   return true
 }
-export function urutkanTanggal(rows, mode) {
-  const salin = (rows || []).slice()
-  salin.sort(function (a, b) {
-    const da = a.tanggal || ''
-    const db = b.tanggal || ''
-    if (da === db) return 0
-    if (mode === 'terlama') return da < db ? -1 : 1
-    return da < db ? 1 : -1
+export function waktuUrut(x) {
+  if (!x) return 0
+  const src = x.created_at || x.updated_at || ''
+  if (!src) return 0
+  const t = new Date(src).getTime()
+  return isNaN(t) ? 0 : t
+}
+export function urutkanTanggal(list, mode) {
+  const arr = (list || []).slice()
+  arr.sort(function (a, b) {
+    const ta = new Date(a.tanggal + 'T00:00:00').getTime()
+    const tb = new Date(b.tanggal + 'T00:00:00').getTime()
+    if (ta !== tb) return mode === 'terlama' ? ta - tb : tb - ta
+    const ca = waktuUrut(a)
+    const cb = waktuUrut(b)
+    if (ca !== cb) return mode === 'terlama' ? ca - cb : cb - ca
+    const ia = a.id || ''
+    const ib = b.id || ''
+    if (ia !== ib) return ia < ib ? (mode === 'terlama' ? -1 : 1) : (mode === 'terlama' ? 1 : -1)
+    return 0
   })
-  return salin
+  return arr
 }
 ```
 
@@ -14187,6 +15069,7 @@ export default function LoginPage() {
 import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { ThemeProvider } from './lib/theme.jsx'
+ import { ToastProvider } from './components/ui.jsx'
 import { useAuth } from './lib/auth.js'
 import Layout from './components/Layout.jsx'
 import HomePage from './pages/HomePage.jsx'
@@ -14215,6 +15098,7 @@ function RequireAuth(props) {
 export default function App() {
   return (
     <ThemeProvider>
+      <ToastProvider>
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ScrollToTop />
         <Routes>
@@ -14231,6 +15115,7 @@ export default function App() {
           </Route>
         </Routes>
       </BrowserRouter>
+      </ToastProvider>
     </ThemeProvider>
   )
 }
@@ -14238,6 +15123,7 @@ export default function App() {
 
 ## File: src/pages/DospemPage.jsx
 ```javascript
+import { urutkanTanggal } from '../lib/format.js'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
@@ -14368,7 +15254,7 @@ return (
         <div className="grid-pusat mt-6">
           {loading
             ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
-            : logs.slice(0, 6).map(function (l) {
+            : urutkanTanggal(logs, 'terbaru').slice(0, 6).map(function (l) {
                 return (
                   <div key={l.id} className="kolom-kartu">
                     <LogbookCard log={l} onDetail={function () { setDetail(l) }} />
@@ -14391,6 +15277,7 @@ return (
 
 ## File: src/pages/HomePage.jsx
 ```javascript
+import { urutkanTanggal } from '../lib/format.js'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
@@ -14465,7 +15352,7 @@ export default function HomePage() {
         <div className="grid-pusat mt-6">
           {loading
             ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
-            : logs.slice(0, 6).map(function (l) {
+            : urutkanTanggal(logs, 'terbaru').slice(0, 6).map(function (l) {
                 return (
                   <div key={l.id} className="kolom-kartu">
                     <LogbookCard log={l} onDetail={function () { setDetail(l) }} />
@@ -14543,118 +15430,6 @@ export default function TimPage() {
               )
             })}
       </section>
-    </div>
-  )
-}
-```
-
-## File: src/pages/LogbookPage.jsx
-```javascript
-import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase.js'
-import { useAuth } from '../lib/auth.js'
-import { EmptyState, Modal, Pagination } from '../components/ui.jsx'
-import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
-import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
-import { ICONS } from '../components/icons.jsx'
-import { matchesDateFilters, urutkanTanggal } from '../lib/format.js'
-import { KATEGORI } from '../lib/constants.js'
-import { SkeletonLogbookCard } from '../components/Skeleton.jsx'
-
-const INITIAL = { mahasiswa: '', kategori: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
-const PER_PAGE = 12
-
-export default function LogbookPage() {
-  const { mahasiswa } = useAuth()
-  const [all, setAll] = useState([])
-  const [people, setPeople] = useState([])
-  const [filter, setFilter] = useState(INITIAL)
-  const [sort, setSort] = useState('terbaru')
-  const [open, setOpen] = useState(false)
-  const [detail, setDetail] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [page, setPage] = useState(1)
-
-  useEffect(function () {
-    async function load() {
-      const l = await supabase
-        .from('logbooks')
-        .select('*, mahasiswa(*), logbook_items(*)')
-        .eq('status', 'publik')
-        .order('tanggal', { ascending: false })
-        .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
-      const p = await supabase.from('mahasiswa').select('id, nama').order('nama')
-      setAll(l.data || [])
-      setPeople(p.data || [])
-      setLoading(false)
-    }
-    load()
-  }, [])
-
-  useEffect(function () {
-    setPage(1)
-  }, [filter, sort])
-  function gantiHalaman(p) {
-    setPage(p)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-  const logs = all.filter(function (l) {
-    if (filter.mahasiswa && l.mahasiswa_id !== filter.mahasiswa) return false
-    if (filter.kategori && l.kategori !== filter.kategori) return false
-    return matchesDateFilters(l.tanggal, filter)
-  })
-  const active = countActiveFilters(filter)
-  const sortedLogs = urutkanTanggal(logs, sort)
-  const totalData = sortedLogs.length
-  const totalPages = Math.ceil(totalData / PER_PAGE)
-  const pageAman = Math.min(page, Math.max(1, totalPages))
-  const mulai = totalData === 0 ? 0 : (pageAman - 1) * PER_PAGE + 1
-  const akhir = Math.min(pageAman * PER_PAGE, totalData)
-  const paginatedLogs = sortedLogs.slice((pageAman - 1) * PER_PAGE, pageAman * PER_PAGE)
-
-  return (
-    <div>
-      <section className="rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Logbook publik</p>
-        <h1 className="mt-2 text-3xl lg:text-4xl font-black text-slate-900">Catatan kegiatan magang</h1>
-        <p className="mt-3 text-slate-600 max-w-2xl">Satu logbook mewakili satu hari kerja dan bisa berisi beberapa kegiatan.</p>
-      </section>
-
-      <section className="mt-6">
-        <FilterBar open={open} onToggle={function () { setOpen(function (o) { return !o }) }} activeCount={active}
-          onReset={function () { setFilter(INITIAL) }}>
-          <FilterSelect icon={ICONS.user} value={filter.mahasiswa} onChange={function (v) { setFilter(Object.assign({}, filter, { mahasiswa: v })) }}
-            options={[{ value: '', label: 'Semua mahasiswa' }].concat(people.map(function (p) { return { value: p.id, label: p.nama } }))} />
-          <FilterSelect icon={ICONS.tag} value={filter.kategori} onChange={function (v) { setFilter(Object.assign({}, filter, { kategori: v })) }}
-            options={[{ value: '', label: 'Semua kategori' }].concat(KATEGORI.map(function (k) { return { value: k, label: k } }))} />
-          <TimeFilter filter={filter} set={setFilter} />
-          <SortSelect value={sort} onChange={setSort} />
-        </FilterBar>
-      </section>
-
-      <section className="grid-pusat mt-8">
-        {loading
-          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
-          : paginatedLogs.map(function (l) {
-              return (
-                <div key={l.id} className="kolom-kartu">
-                  <LogbookCard log={l} isOwner={mahasiswa && mahasiswa.id === l.mahasiswa_id}
-                    onDetail={function () { setDetail(l) }} />
-                </div>
-              )
-            })}
-        {!loading && !logs.length ? <div className="w-full"><EmptyState title="Logbook tidak ditemukan" desc="Coba reset filter atau pilih filter lain." /></div> : null}
-      </section>
-      {!loading && totalData > 0 ? (
-        <div className="mt-6 text-center text-sm text-slate-500">
-          Total {totalData} logbook{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}
-        </div>
-      ) : null}
-      {!loading ? <Pagination totalItems={totalData} perPage={PER_PAGE} page={pageAman} onPageChange={gantiHalaman} /> : null}
-
-      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
-        {detail ? <LogbookDetail log={detail} /> : null}
-      </Modal>
     </div>
   )
 }
@@ -14868,6 +15643,118 @@ export function EyeToggle(props) {
       <circle cx="12" cy="12" r="3" className="eye-pupil" />
       <line x1="2" y1="2" x2="22" y2="22" className="eye-slash" />
     </svg>
+  )
+}
+```
+
+## File: src/pages/LogbookPage.jsx
+```javascript
+import { useEffect, useState } from 'react'
+import { supabase } from '../lib/supabase.js'
+import { useAuth } from '../lib/auth.js'
+import { EmptyState, Modal, Pagination } from '../components/ui.jsx'
+import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
+import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
+import { ICONS } from '../components/icons.jsx'
+import { matchesDateFilters, urutkanTanggal } from '../lib/format.js'
+import { KATEGORI } from '../lib/constants.js'
+import { SkeletonLogbookCard } from '../components/Skeleton.jsx'
+
+const INITIAL = { mahasiswa: '', kategori: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
+const PER_PAGE = 12
+
+export default function LogbookPage() {
+  const { mahasiswa } = useAuth()
+  const [all, setAll] = useState([])
+  const [people, setPeople] = useState([])
+  const [filter, setFilter] = useState(INITIAL)
+  const [sort, setSort] = useState('terbaru')
+  const [open, setOpen] = useState(false)
+  const [detail, setDetail] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
+
+  useEffect(function () {
+    async function load() {
+      const l = await supabase
+        .from('logbooks')
+        .select('*, mahasiswa(*), logbook_items(*)')
+        .eq('status', 'publik')
+        .order('tanggal', { ascending: false })
+        .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
+      const p = await supabase.from('mahasiswa').select('id, nama').order('nama')
+      setAll(l.data || [])
+      setPeople(p.data || [])
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  useEffect(function () {
+    setPage(1)
+  }, [filter, sort])
+  function gantiHalaman(p) {
+    setPage(p)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+  const logs = all.filter(function (l) {
+    if (filter.mahasiswa && l.mahasiswa_id !== filter.mahasiswa) return false
+    if (filter.kategori && l.kategori !== filter.kategori) return false
+    return matchesDateFilters(l.tanggal, filter)
+  })
+  const active = countActiveFilters(filter)
+  const sortedLogs = urutkanTanggal(logs, sort)
+  const totalData = sortedLogs.length
+  const totalPages = Math.ceil(totalData / PER_PAGE)
+  const pageAman = Math.min(page, Math.max(1, totalPages))
+  const mulai = totalData === 0 ? 0 : (pageAman - 1) * PER_PAGE + 1
+  const akhir = Math.min(pageAman * PER_PAGE, totalData)
+  const paginatedLogs = sortedLogs.slice((pageAman - 1) * PER_PAGE, pageAman * PER_PAGE)
+
+  return (
+    <div>
+      <section className="rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Logbook publik</p>
+        <h1 className="mt-2 text-3xl lg:text-4xl font-black text-slate-900">Catatan kegiatan magang</h1>
+        <p className="mt-3 text-slate-600 max-w-2xl">Satu logbook mewakili satu hari kerja dan bisa berisi beberapa kegiatan.</p>
+      </section>
+
+      <section className="mt-6">
+        <FilterBar open={open} onToggle={function () { setOpen(function (o) { return !o }) }} activeCount={active}
+          onReset={function () { setFilter(INITIAL) }}>
+          <FilterSelect icon={ICONS.user} value={filter.mahasiswa} onChange={function (v) { setFilter(Object.assign({}, filter, { mahasiswa: v })) }}
+            options={[{ value: '', label: 'Semua mahasiswa' }].concat(people.map(function (p) { return { value: p.id, label: p.nama } }))} />
+          <FilterSelect icon={ICONS.tag} value={filter.kategori} onChange={function (v) { setFilter(Object.assign({}, filter, { kategori: v })) }}
+            options={[{ value: '', label: 'Semua kategori' }].concat(KATEGORI.map(function (k) { return { value: k, label: k } }))} />
+          <TimeFilter filter={filter} set={setFilter} />
+          <SortSelect value={sort} onChange={setSort} />
+        </FilterBar>
+      </section>
+
+      <section className="grid-pusat mt-8">
+        {loading
+          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
+          : paginatedLogs.map(function (l) {
+              return (
+                <div key={l.id} className="kolom-kartu">
+                  <LogbookCard log={l} isOwner={mahasiswa && mahasiswa.id === l.mahasiswa_id}
+                    onDetail={function () { setDetail(l) }} />
+                </div>
+              )
+            })}
+        {!loading && !logs.length ? <div className="w-full"><EmptyState title="Logbook tidak ditemukan" desc="Coba reset filter atau pilih filter lain." /></div> : null}
+      </section>
+      {!loading && totalData > 0 ? (
+        <div className="mt-6 text-center text-sm text-slate-500">
+          Total {totalData} logbook{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}
+        </div>
+      ) : null}
+      {!loading ? <Pagination totalItems={totalData} perPage={PER_PAGE} page={pageAman} onPageChange={gantiHalaman} /> : null}
+
+      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
+        {detail ? <LogbookDetail log={detail} /> : null}
+      </Modal>
+    </div>
   )
 }
 ```
@@ -15426,6 +16313,40 @@ textarea {
   .kolom-kartu { width: calc(33.3333% - 0.83333rem); }
   .kolom-kartu-rapat { width: calc(33.3333% - 0.66667rem); }
 }
+
+/* toast-opaque: latar solid bergradasi lembut, tanpa backdrop-filter agar ringan di device low end */
+@keyframes anim-toast {
+  from { opacity: 0; transform: translateX(14px) scale(0.98); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+.anim-toast { animation: anim-toast 0.22s ease-out; opacity: 1; }
+.toast-sukses {
+  background: linear-gradient(180deg, #ffffff 0%, #ecfdf5 100%);
+  border-color: #a7f3d0;
+  box-shadow: 0 10px 30px rgba(6, 95, 70, 0.16);
+}
+.toast-gagal {
+  background: linear-gradient(180deg, #ffffff 0%, #fef2f2 100%);
+  border-color: #fecaca;
+  box-shadow: 0 10px 30px rgba(153, 27, 27, 0.16);
+}
+.toast-sukses .toast-teks { color: #065f46; }
+.toast-gagal .toast-teks { color: #991b1b; }
+.toast-tutup:hover { color: #334155; }
+.dark .toast-sukses {
+  background: linear-gradient(180deg, #065f46 0%, #064e3b 100%);
+  border-color: rgba(52, 211, 153, 0.45);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+.dark .toast-gagal {
+  background: linear-gradient(180deg, #991b1b 0%, #7f1d1d 100%);
+  border-color: rgba(248, 113, 113, 0.45);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+.dark .toast-sukses .toast-teks { color: #d1fae5 !important; }
+.dark .toast-gagal .toast-teks { color: #fee2e2 !important; }
+.dark .toast-tutup { color: #cbd5e1 !important; }
+.dark .toast-tutup:hover { color: #ffffff !important; }
 ```
 
 ## File: src/components/cards.jsx
@@ -15675,7 +16596,7 @@ export function AttendanceDetail(props) {
 ## File: src/components/ui.jsx
 ```javascript
 import PemutarVideo from './PemutarVideo.jsx'
-import { useEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { SizedIcon } from './icons.jsx'
 function useBodyScrollLock(active) {
   useEffect(function () {
@@ -16187,6 +17108,47 @@ export function Pagination(props) {
     </div>
   )
 }
+
+const ToastContext = createContext(null)
+ export function ToastProvider(props) {
+   const [toasts, setToasts] = useState([])
+   function tutupToast(id) {
+     setToasts(function (prev) { return prev.filter(function (t) { return t.id !== id }) })
+   }
+   function tambahToast(tipe, pesan) {
+     const id = Date.now() + Math.random()
+     setToasts(function (prev) { return prev.concat([{ id: id, tipe: tipe, pesan: pesan }]) })
+     setTimeout(function () {
+       setToasts(function (prev) { return prev.filter(function (t) { return t.id !== id }) })
+     }, 4000)
+   }
+   function toastSukses(pesan) { tambahToast('sukses', pesan) }
+   function toastGagal(pesan) { tambahToast('gagal', pesan) }
+   return (
+     <ToastContext.Provider value={{ sukses: toastSukses, gagal: toastGagal }}>
+       {props.children}
+       <div className="fixed top-5 right-5 z-[100] flex w-full max-w-sm flex-col gap-3 pointer-events-none">
+         {toasts.map(function (t) {
+           const sukses = t.tipe === 'sukses'
+           return (
+             <div key={t.id} className={'anim-toast pointer-events-auto flex items-start gap-3 rounded-2xl border p-4 shadow-lg ' + (sukses ? 'toast-sukses' : 'toast-gagal')}>
+               <span className={'mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full ' + (sukses ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white')}>
+                 <SizedIcon name={sukses ? 'check' : 'close'} size={12} />
+               </span>
+               <p className={'flex-1 text-sm font-semibold toast-teks'}>{t.pesan}</p>
+               <button type="button" onClick={function () { tutupToast(t.id) }} className="toast-tutup shrink-0 text-slate-400 hover:text-slate-600">
+                 <SizedIcon name="close" size={14} />
+               </button>
+             </div>
+           )
+         })}
+       </div>
+     </ToastContext.Provider>
+   )
+ }
+ export function useToast() {
+   return useContext(ToastContext)
+ }
 ```
 
 ## File: src/pages/DashboardPage.jsx
@@ -16204,7 +17166,7 @@ import { pratinjauHeic, formatHeic } from '../lib/konversi.js'
 import { LabelProses } from '../components/ui.jsx'
 import { todayInput, detectMediaType, matchesDateFilters, urutkanTanggal } from '../lib/format.js'
 import { KATEGORI, UNIT, GALERI_KEGIATAN } from '../lib/constants.js'
-import { EmptyState, Modal, ConfirmModal, inputCls, labelCls, btnPrimary, btnSmall, AutoTextArea, Pagination } from '../components/ui.jsx'
+import { EmptyState, Modal, ConfirmModal, inputCls, labelCls, btnPrimary, btnSmall, AutoTextArea, Pagination, useToast } from '../components/ui.jsx'
 import { LogbookCard, LogbookDetail, GalleryCard, GalleryDetail, AttendanceCard, AttendanceDetail } from '../components/cards.jsx'
 import { CustomSelect, CustomDateInput, FileInput } from '../components/controls.jsx'
 import { SizedIcon, ICONS } from '../components/icons.jsx'
@@ -16239,6 +17201,7 @@ function ModeIndicator(props) {
 
 export default function DashboardPage() {
   const { mahasiswa, loading } = useAuth()
+  const toast = useToast()
   const [tab, setTab] = useState('logbook')
   const [logs, setLogs] = useState([])
   const [galeri, setGaleri] = useState([])
@@ -16381,14 +17344,14 @@ export default function DashboardPage() {
         let youtubeId = it.oldYtId || null
         if (it.mode === 'video' && it.ytLink && !it.file) {
           const id = parseYouTubeId(it.ytLink)
-          if (!id) { alert('Link video tidak valid pada kegiatan ' + (i + 1) + '.'); setBusy(false); return }
+          if (!id) { toast.gagal('Link video tidak valid pada kegiatan ' + (i + 1) + '.'); setBusy(false); return }
           mediaSource = 'youtube'
           youtubeId = id
           mediaPath = ytThumb(id)
           mediaThumb = ytThumb(id)
           mediaType = 'video'
         } else if (it.mode === 'video' && it.file) {
-          if (ytQuota.remaining <= 0) { alert('Kuota upload video hari ini sudah habis. Gunakan link video.'); setBusy(false); return }
+          if (ytQuota.remaining <= 0) { toast.gagal('Kuota upload video hari ini sudah habis. Gunakan link video.'); setBusy(false); return }
           const hasilYt = await unggahVideoYouTube(it.file, it.judul || 'Dokumentasi Magang', function (p) { setInfoProses('Mengunggah video ' + Math.round(p * 100) + '%') })
           mediaSource = 'youtube'
           youtubeId = hasilYt.videoId
@@ -16419,7 +17382,7 @@ export default function DashboardPage() {
         }
         clean.push({ judul: it.judul.trim(), deskripsi: it.deskripsi.trim(), hasil: it.hasil.trim(), media_path: mediaPath, media_type: mediaType, media_thumb: mediaThumb, media_source: mediaSource, youtube_id: youtubeId, show_in_gallery: it.show && !!mediaPath })
       }
-      if (!clean.length) { alert('Tambahkan minimal satu kegiatan dengan judul.'); setBusy(false); return }
+      if (!clean.length) { toast.gagal('Tambahkan minimal satu kegiatan dengan judul.'); setBusy(false); return }
 
       let logId = editLogId
       let oldUrls = []
@@ -16465,8 +17428,9 @@ export default function DashboardPage() {
       setItems([newItem()])
       await refresh()
        if (menambahLog) setLogPage(1)
+       toast.sukses(menambahLog ? 'Logbook berhasil disimpan' : 'Logbook berhasil diperbarui')
     } catch (err) {
-      alert('Gagal menyimpan logbook: ' + err.message)
+      toast.gagal('Gagal menyimpan logbook: ' + err.message)
     }
     setInfoProses('')
     setBusy(false)
@@ -16536,14 +17500,14 @@ export default function DashboardPage() {
       let youtubeId = galOldYt || null
       if (galMode === 'video' && galYtLink && !galForm.file) {
         const id = parseYouTubeId(galYtLink)
-        if (!id) { alert('Link video tidak valid.'); setBusy(false); return }
+        if (!id) { toast.gagal('Link video tidak valid.'); setBusy(false); return }
         mediaSource = 'youtube'
         youtubeId = id
         mediaPath = ytThumb(id)
         mediaThumb = ytThumb(id)
         mediaType = 'video'
       } else if (galMode === 'video' && galForm.file) {
-        if (ytQuota.remaining <= 0) { alert('Kuota upload video hari ini sudah habis. Gunakan link video.'); setBusy(false); return }
+        if (ytQuota.remaining <= 0) { toast.gagal('Kuota upload video hari ini sudah habis. Gunakan link video.'); setBusy(false); return }
         const hasilYt = await unggahVideoYouTube(galForm.file, galForm.judul || ('Dokumentasi ' + galForm.tanggal), function (p) { setInfoProses('Mengunggah video ' + Math.round(p * 100) + '%') })
         mediaSource = 'youtube'
         youtubeId = hasilYt.videoId
@@ -16572,7 +17536,7 @@ export default function DashboardPage() {
         mediaSource = 'r2'
         youtubeId = null
       }
-      if (!mediaPath) { alert('Galeri wajib memiliki media. Pilih file foto atau video terlebih dahulu.'); setBusy(false); return }
+      if (!mediaPath) { toast.gagal('Galeri wajib memiliki media. Pilih file foto atau video terlebih dahulu.'); setBusy(false); return }
       const payload = {
         mahasiswa_id: mahasiswa.id,
         judul: galForm.judul || ('Dokumentasi ' + galForm.tanggal),
@@ -16603,8 +17567,9 @@ export default function DashboardPage() {
      setGalOldYt(null)
       await refresh()
        if (menambahGal) setGalPage(1)
+       toast.sukses(menambahGal ? 'Media galeri berhasil disimpan' : 'Media galeri berhasil diperbarui')
     } catch (err) {
-      alert('Gagal menyimpan galeri: ' + err.message)
+      toast.gagal('Gagal menyimpan galeri: ' + err.message)
     }
     setInfoProses('')
     setBusy(false)
@@ -16617,14 +17582,14 @@ export default function DashboardPage() {
     function pilihFotoProfil(e) {
     const f = e.target.files[0]
     if (!f) return
-    if (f.size > 5 * 1024 * 1024) { alert('Ukuran foto maksimal 5 MB.'); e.target.value = ''; return }
+    if (f.size > 5 * 1024 * 1024) { toast.gagal('Ukuran foto maksimal 5 MB.'); e.target.value = ''; return }
     setFotoFile(f)
     const reader = new FileReader()
     reader.onloadend = function () { setFotoPreview(reader.result) }
     reader.readAsDataURL(f)
   }
   async function simpanFotoProfil() {
-    if (!fotoFile) { alert('Pilih file foto terlebih dahulu.'); return }
+    if (!fotoFile) { toast.gagal('Pilih file foto terlebih dahulu.'); return }
     setUploadingFoto(true)
     try {
       const url = await uploadFotoProfil(fotoFile, mahasiswa.id, mahasiswa.foto_profil)
@@ -16635,8 +17600,9 @@ export default function DashboardPage() {
       setShowUploadFoto(false)
       setFotoPreview(null)
       setFotoFile(null)
+      toast.sukses('Foto profil berhasil disimpan')
     } catch (err) {
-      alert('Gagal upload foto profil: ' + err.message)
+      toast.gagal('Gagal upload foto profil: ' + err.message)
     }
     setUploadingFoto(false)
   }
@@ -16647,8 +17613,9 @@ export default function DashboardPage() {
       mahasiswa.foto_profil = null
       if (typeof refresh === 'function') await refresh()
       setVersiFoto(function (v) { return v + 1 })
+      toast.sukses('Foto profil berhasil dihapus')
     } catch (err) {
-      alert('Gagal menghapus foto profil: ' + err.message)
+      toast.gagal('Gagal menghapus foto profil: ' + err.message)
     }
   }
 async function submitHadir(e) {
@@ -16660,12 +17627,13 @@ async function submitHadir(e) {
       await supabase.from('daftar_hadir').update(payload).eq('id', editHadirId)
     } else {
       const res = await supabase.from('daftar_hadir').insert(payload)
-      if (res.error) { alert('Kamu sudah punya catatan hadir di tanggal tersebut.'); setBusy(false); return }
+      if (res.error) { toast.gagal('Kamu sudah punya catatan hadir di tanggal tersebut.'); setBusy(false); return }
     }
     setEditHadirId(null)
     setHadirForm({ tanggal: todayInput(), status: 'Masuk', alasan: '' })
     await refresh()
      if (menambahHadir) setHadirPage(1)
+     toast.sukses(menambahHadir ? 'Daftar hadir berhasil disimpan' : 'Daftar hadir berhasil diperbarui')
     setInfoProses('')
     setBusy(false)
   }
@@ -16741,6 +17709,7 @@ async function submitHadir(e) {
       await supabase.from('daftar_hadir').delete().eq('id', target.data.id)
     }
     await refresh()
+    toast.sukses('Data berhasil dihapus')
   }
 
   const filteredLogs = logs.filter(function (l) {

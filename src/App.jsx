@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { ThemeProvider } from './lib/theme.jsx'
+ import { ToastProvider } from './components/ui.jsx'
 import { useAuth } from './lib/auth.js'
 import Layout from './components/Layout.jsx'
 import HomePage from './pages/HomePage.jsx'
@@ -29,6 +30,7 @@ function RequireAuth(props) {
 export default function App() {
   return (
     <ThemeProvider>
+      <ToastProvider>
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ScrollToTop />
         <Routes>
@@ -45,6 +47,7 @@ export default function App() {
           </Route>
         </Routes>
       </BrowserRouter>
+      </ToastProvider>
     </ThemeProvider>
   )
 }

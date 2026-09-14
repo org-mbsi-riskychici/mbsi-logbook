@@ -1,3 +1,4 @@
+import { urutkanTanggal } from '../lib/format.js'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
@@ -72,7 +73,7 @@ export default function HomePage() {
         <div className="grid-pusat mt-6">
           {loading
             ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
-            : logs.slice(0, 6).map(function (l) {
+            : urutkanTanggal(logs, 'terbaru').slice(0, 6).map(function (l) {
                 return (
                   <div key={l.id} className="kolom-kartu">
                     <LogbookCard log={l} onDetail={function () { setDetail(l) }} />
