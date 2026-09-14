@@ -4,6 +4,8 @@ import { useAuth } from '../lib/auth.js'
 import { uploadMedia, deleteMedia } from '../lib/upload.js'
 import { syncGaleriFromLogbook } from '../lib/logbook.js'
 import { parseYouTubeId, ytThumb, fetchYouTubeQuota, unggahVideoYouTube } from '../lib/youtube.js'
+import { uploadFotoProfil, updateFotoProfilMahasiswa, hapusFotoProfil } from '../lib/profil.js'
+import { Avatar } from '../components/ui.jsx'
 import { supabase as sbClient } from '../lib/supabase.js'
 import { pratinjauHeic, formatHeic } from '../lib/konversi.js'
 import { LabelProses } from '../components/ui.jsx'
@@ -63,6 +65,11 @@ export default function DashboardPage() {
   const [infoProses, setInfoProses] = useState('')
   const [ytQuota, setYtQuota] = useState({ limit: 6, used: 0, remaining: 6 })
   const [ytQuotaLoading, setYtQuotaLoading] = useState(true)
+  const [showUploadFoto, setShowUploadFoto] = useState(false)
+  const [fotoPreview, setFotoPreview] = useState(null)
+  const [fotoFile, setFotoFile] = useState(null)
+  const [uploadingFoto, setUploadingFoto] = useState(false)
+  const [, setVersiFoto] = useState(0)
   const [galMode, setGalMode] = useState('foto')
   const [galYtLink, setGalYtLink] = useState('')
   const [galOldYt, setGalOldYt] = useState(null)
@@ -80,11 +87,11 @@ export default function DashboardPage() {
 
   async function refresh() {
     if (!mahasiswa) return
-    const l = await supabase.from('logbooks').select('*, mahasiswa(nim, nama, prodi), logbook_items(*)')
+    const l = await supabase.from('logbooks').select('*, mahasiswa(*), logbook_items(*)')
       .eq('mahasiswa_id', mahasiswa.id).order('tanggal', { ascending: false })
       .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
-    const g = await supabase.from('galeri').select('*, mahasiswa(nim, nama, prodi)').eq('mahasiswa_id', mahasiswa.id).order('tanggal', { ascending: false })
-    const h = await supabase.from('daftar_hadir').select('*, mahasiswa(nim, nama, prodi)').eq('mahasiswa_id', mahasiswa.id).order('tanggal', { ascending: false })
+    const g = await supabase.from('galeri').select('*, mahasiswa(*)').eq('mahasiswa_id', mahasiswa.id).order('tanggal', { ascending: false })
+    const h = await supabase.from('daftar_hadir').select('*, mahasiswa(*)').eq('mahasiswa_id', mahasiswa.id).order('tanggal', { ascending: false })
     setLogs(l.data || [])
     setGaleri(g.data || [])
     setHadir(h.data || [])
@@ -397,7 +404,44 @@ export default function DashboardPage() {
     setPendingDelete({ type: 'gal', data: item })
   }
 
-  async function submitHadir(e) {
+    function pilihFotoProfil(e) {
+    const f = e.target.files[0]
+    if (!f) return
+    if (f.size > 5 * 1024 * 1024) { alert('Ukuran foto maksimal 5 MB.'); e.target.value = ''; return }
+    setFotoFile(f)
+    const reader = new FileReader()
+    reader.onloadend = function () { setFotoPreview(reader.result) }
+    reader.readAsDataURL(f)
+  }
+  async function simpanFotoProfil() {
+    if (!fotoFile) { alert('Pilih file foto terlebih dahulu.'); return }
+    setUploadingFoto(true)
+    try {
+      const url = await uploadFotoProfil(fotoFile, mahasiswa.id, mahasiswa.foto_profil)
+      await updateFotoProfilMahasiswa(mahasiswa.id, url)
+      mahasiswa.foto_profil = url
+      if (typeof refresh === 'function') await refresh()
+      setVersiFoto(function (v) { return v + 1 })
+      setShowUploadFoto(false)
+      setFotoPreview(null)
+      setFotoFile(null)
+    } catch (err) {
+      alert('Gagal upload foto profil: ' + err.message)
+    }
+    setUploadingFoto(false)
+  }
+  async function hapusFotoProfilKu() {
+    if (!window.confirm('Hapus foto profil saat ini?')) return
+    try {
+      await hapusFotoProfil(mahasiswa.id, mahasiswa.foto_profil)
+      mahasiswa.foto_profil = null
+      if (typeof refresh === 'function') await refresh()
+      setVersiFoto(function (v) { return v + 1 })
+    } catch (err) {
+      alert('Gagal menghapus foto profil: ' + err.message)
+    }
+  }
+async function submitHadir(e) {
     e.preventDefault()
     setBusy(true)
     const payload = { mahasiswa_id: mahasiswa.id, tanggal: hadirForm.tanggal, status: hadirForm.status, alasan: hadirForm.status === 'Masuk' ? '' : hadirForm.alasan }
@@ -521,20 +565,67 @@ export default function DashboardPage() {
       <section className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-6">
           <div>
-            <p className="text-sm text-slate-500">Dashboard mahasiswa</p>
+            <div className="flex flex-wrap items-center gap-6">
+<Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl"  onClick={function () { setTab('profil') }} title="Kelola foto profil" />
+<div className="min-w-0 flex-1">
             <h1 className="text-2xl lg:text-3xl font-black text-slate-900">{mahasiswa.nama}</h1>
             <p className="text-sm text-slate-500">NIM {mahasiswa.nim}</p>
-            {mahasiswa.prodi ? <p className="text-sm text-slate-500">{mahasiswa.prodi}</p> : null}
+{mahasiswa.prodi ? <p className="text-sm text-slate-500">{mahasiswa.prodi}</p> : null}
           </div>
         </div>
-        <div className="mt-8 flex flex-wrap gap-2">
+        </div>
+<div className="mt-8 flex flex-wrap gap-2">
           <button onClick={function () { setTab('logbook') }} className={tabCls('logbook')}>Logbook</button>
           <button onClick={function () { setTab('galeri') }} className={tabCls('galeri')}>Galeri</button>
           <button onClick={function () { setTab('absen') }} className={tabCls('absen')}>Daftar Hadir</button>
+<button onClick={function () { setTab('profil') }} className={tabCls('profil')}>Profil</button>
         </div>
-      </section>
+      
+</div></section>
 
-      {tab === 'logbook' ? (
+      {tab === 'profil' ? (
+<section className="mt-8 grid gap-6 lg:grid-cols-[0.85fr_1.15fr] items-start">
+<div className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 shadow-sm flex flex-col items-center text-center">
+<Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="2xl" />
+<h2 className="mt-4 text-xl font-black text-slate-900">{mahasiswa.nama}</h2>
+<p className="mt-1 text-sm text-slate-500">NIM {mahasiswa.nim}</p>
+<div className="mt-5 flex flex-wrap justify-center gap-2">
+<button type="button" onClick={function () { setShowUploadFoto(!showUploadFoto) }} className="px-4 py-2 rounded-xl text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition">{mahasiswa.foto_profil ? 'Ganti Foto' : 'Upload Foto'}</button>
+{mahasiswa.foto_profil ? <button type="button" onClick={hapusFotoProfilKu} className="px-4 py-2 rounded-xl text-sm font-bold bg-red-50 text-red-700 hover:bg-red-100 transition">Hapus Foto</button> : null}
+</div>
+{showUploadFoto ? (
+<div className="mt-5 w-full border-t border-slate-200 pt-5 text-left">
+<div className="flex flex-wrap items-start gap-4">
+{fotoPreview ? <img src={fotoPreview} alt="Pratinjau foto profil" className="h-20 w-20 rounded-[28%] object-cover shadow-lg" /> : null}
+<div className="min-w-0 flex-1">
+<input type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/heif" onChange={pilihFotoProfil} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-800 hover:file:bg-emerald-100" />
+<p className="mt-2 text-xs text-slate-500">Format JPG, PNG, WebP, atau HEIC iPhone. Otomatis dikonversi ke WebP ringan. Maksimal 5 MB.</p>
+</div>
+</div>
+<div className="mt-4 flex gap-2">
+<button type="button" onClick={simpanFotoProfil} disabled={uploadingFoto || !fotoFile} className="px-4 py-2 rounded-xl text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition disabled:opacity-50">{uploadingFoto ? 'Mengunggah...' : 'Simpan Foto'}</button>
+<button type="button" onClick={function () { setShowUploadFoto(false); setFotoPreview(null); setFotoFile(null) }} className="px-4 py-2 rounded-xl text-sm font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition">Batal</button>
+</div>
+</div>
+) : null}
+</div>
+<div className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 shadow-sm">
+<h2 className="text-lg font-black text-slate-900">Ringkasan aktivitas magang</h2>
+<div className="mt-4 grid grid-cols-3 gap-4">
+<div className="rounded-2xl bg-slate-50 p-4 text-center"><p className="text-2xl font-black text-bsi-800">{typeof logs !== 'undefined' ? logs.length : 0}</p><p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Logbook</p></div>
+<div className="rounded-2xl bg-slate-50 p-4 text-center"><p className="text-2xl font-black text-bsi-800">{typeof galeri !== 'undefined' ? galeri.length : 0}</p><p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Media Galeri</p></div>
+<div className="rounded-2xl bg-slate-50 p-4 text-center"><p className="text-2xl font-black text-bsi-800">{typeof hadir !== 'undefined' ? hadir.length : 0}</p><p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Kehadiran</p></div>
+</div>
+<div className="mt-6 space-y-2 border-t border-slate-100 pt-4 text-sm text-slate-600">
+<p>Foto profil tampil otomatis di kartu kamu pada halaman publik, logbook, galeri, dan daftar hadir.</p>
+<p>Gunakan foto dengan pencahayaan baik dan wajah terlihat jelas agar mudah dikenali dosen pembimbing.</p>
+<p>Klik foto pada kartu header kapan saja untuk kembali ke halaman ini dan memperbarui foto.</p>
+</div>
+</div>
+</section>
+) : null}
+
+{tab === 'logbook' ? (
         <section className="mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
           <div className={'card-hover bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editLogId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
             <ModeIndicator edit={!!editLogId} onCancel={cancelEditLog} />

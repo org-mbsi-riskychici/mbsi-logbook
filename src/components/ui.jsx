@@ -358,6 +358,7 @@ export function MediaYouTube(props) {
 }
 
 export function TitikAnim() {
+
   return (
     <span className="titik-anim" aria-hidden="true">
       <i></i>
@@ -372,6 +373,74 @@ export function LabelProses(props) {
     <span className="inline-flex items-center justify-center">
       <span>{bersih}</span>
       <TitikAnim />
+    </span>
+  )
+}
+
+export function Avatar(props) {
+  const ukuran = { sm: 36, md: 44, lg: 56, xl: 96, '2xl': 160 }
+  const px = ukuran[props.size] || 44
+  const radius = Math.round(px * 0.28) + 'px'
+  const nama = props.nama || ''
+  const kata = nama.trim().split(/\s+/)
+  const inisial = nama ? ((kata[0] ? kata[0].charAt(0) : '') + (kata[1] ? kata[1].charAt(0) : '')).toUpperCase() : '?'
+  const palet = ['#166534', '#15803d', '#a16207', '#ca8a04', '#334155', '#047857']
+  let hash = 0
+  for (let i = 0; i < nama.length; i++) hash = (hash * 31 + nama.charCodeAt(i)) >>> 0
+  const warna = palet[hash % palet.length]
+  const bisaKlik = typeof props.onClick === 'function'
+  const gaya = {
+    boxSizing: 'content-box',
+    display: 'inline-block',
+    width: px + 'px',
+    height: px + 'px',
+    padding: 0,
+    margin: 0,
+    borderRadius: radius,
+    overflow: 'hidden',
+    position: 'relative',
+    verticalAlign: 'middle',
+    flexShrink: 0,
+    background: props.src ? '#ffffff' : warna,
+    boxShadow: '0 1px 2px rgba(15, 23, 42, 0.10), 0 10px 28px rgba(15, 23, 42, 0.22)',
+    cursor: bisaKlik ? 'pointer' : 'default',
+    outline: 'none',
+    lineHeight: 0
+  }
+  const gayaFoto = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+    objectPosition: 'center',
+    display: 'block',
+    borderRadius: radius
+  }
+  const gayaTeks = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#ffffff',
+    fontWeight: 800,
+    fontSize: Math.round(px * 0.36) + 'px'
+  }
+  if (bisaKlik) {
+    return (
+      <button type="button" onClick={props.onClick} title={props.title} style={gaya}>
+        {props.src ? <img src={props.src} alt={nama || 'Foto profil'} style={gayaFoto} /> : <span style={gayaTeks}>{inisial}</span>}
+      </button>
+    )
+  }
+  return (
+    <span style={gaya}>
+      {props.src ? <img src={props.src} alt={nama || 'Foto profil'} style={gayaFoto} /> : <span style={gayaTeks}>{inisial}</span>}
     </span>
   )
 }

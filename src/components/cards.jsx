@@ -1,3 +1,4 @@
+import { Avatar } from './ui.jsx'
 import PemutarVideo from './PemutarVideo.jsx'
 import Carousel from './Carousel.jsx'
 import { StatusBadge, CategoryBadge, AttendanceBadge, btnSmall, ZoomableMedia, SmartFit , MediaYouTube } from './ui.jsx'
@@ -12,12 +13,10 @@ function PersonChip(props) {
   return (
     <div className="flex items-center gap-3">
       <div className={'rounded-2xl bg-bsi-800 text-white grid place-items-center font-bold ' + (props.size === 'sm' ? 'h-9 w-9 text-xs' : 'h-11 w-11')}>
-        {initials}
-      </div>
+        {typeof p !== 'undefined' && p && p.foto_profil ? <img src={p.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : typeof m !== 'undefined' && m && m.foto_profil ? <img src={m.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : initials}</div>
       <div>
-        <p className={'font-semibold text-slate-900 ' + (props.size === 'sm' ? 'text-sm' : '')}>{nama}</p>
+        <p className="font-semibold text-slate-900">{nama}</p>
         <p className="text-xs text-slate-500">NIM {nim}</p>
-        {prodi ? <p className="text-xs text-slate-400">{prodi}</p> : null}
       </div>
     </div>
   )
@@ -157,13 +156,13 @@ export function GalleryCard(props) {
         <h3 className="text-lg font-bold text-slate-900">{item.judul}</h3>
         <p className="text-sm text-slate-600 line-clamp-2">{item.deskripsi || 'Tidak ada deskripsi.'}</p>
         <div className="mt-auto pt-3 border-t border-slate-100 space-y-3">
-          <PersonChip size="sm" mahasiswa={item.mahasiswa} />
+          <PersonChip mahasiswa={item.mahasiswa} />
           {props.onEdit ? (
             <div className="flex flex-wrap gap-2" onClick={function (e) { e.stopPropagation() }}>
               <button onClick={props.onEdit} className={btnSmall + ' bg-slate-900 text-white hover:bg-slate-700'}>Edit</button>
               <button onClick={props.onDelete} className={btnSmall + ' bg-red-50 text-red-700 hover:bg-red-100'}>Hapus</button>
             </div>
-          ) : props.isOwner ? null : (
+          ) : (
             <span className="text-xs font-semibold text-bsi-800">Klik kartu untuk melihat detail</span>
           )}
         </div>
@@ -203,9 +202,9 @@ export function AttendanceCard(props) {
     <div className="card-hover bg-white rounded-3xl border border-slate-200 shadow-sm p-5 flex flex-col h-full">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-sm text-slate-500">{formatTanggal(row.tanggal)}</p>
-          <p className="mt-1 font-bold text-slate-900">{row.mahasiswa ? row.mahasiswa.nama : 'Mahasiswa'}</p>
-          <p className="text-xs text-slate-500">NIM {row.mahasiswa ? row.mahasiswa.nim : '-'}</p>
+          <p className="text-sm text-slate-500 pb-4">{formatTanggal(row.tanggal)}</p>
+          <div className="flex items-center gap-3"><Avatar src={props.row && props.row.mahasiswa && props.row.mahasiswa.foto_profil ? props.row.mahasiswa.foto_profil : null} nama={props.row && props.row.mahasiswa ? props.row.mahasiswa.nama : 'Mahasiswa'} size="md" /><div className="min-w-0 flex-1"><p className="mt-1 font-bold text-slate-900">{row.mahasiswa ? row.mahasiswa.nama : 'Mahasiswa'}</p>
+          <p className="text-xs text-slate-500">NIM {row.mahasiswa ? row.mahasiswa.nim : '-'}</p></div></div>
         </div>
         <AttendanceBadge status={row.status} />
       </div>

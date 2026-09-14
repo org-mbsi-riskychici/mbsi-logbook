@@ -9,8 +9,7 @@ const LINKS = [
   { to: '/logbook', label: 'Logbook' },
   { to: '/galeri', label: 'Galeri' },
   { to: '/absen', label: 'Daftar Hadir' },
-  { to: '/dospem', label: 'Dospem' },
-  { to: '/tim', label: 'Tim' }
+  { to: '/dospem', label: 'Tim & Dospem' }
 ]
 
 export default function Layout() {

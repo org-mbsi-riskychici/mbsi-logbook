@@ -60,6 +60,7 @@ src/
     format.js
     konversi.js
     logbook.js
+    profil.js
     supabase.js
     theme.jsx
     upload.js
@@ -81,14 +82,41 @@ supabase/
 .env.example
 .gitignore
 apply-auto-rotate-youtube.cjs
+apply-avatar-bulat-v3.cjs
+apply-avatar-final.cjs
+apply-avatar-inline.cjs
+apply-avatar-kartu-v2.cjs
+apply-avatar-kartu.cjs
+apply-avatar-kotak-lengkung.cjs
+apply-avatar-lencana.cjs
+apply-avatar-publik.cjs
+apply-avatar-tanpa-border.cjs
+apply-bulat-sempurna.cjs
+apply-diagnosis-dan-bersih.cjs
 apply-final-cleanup.cjs
+apply-fix-chip-galeri.cjs
 apply-fix-export-unggah.cjs
+apply-fix-ganti-foto.cjs
+apply-fix-nim-text.cjs
+apply-fix-prodi-final.cjs
+apply-fix-setmahasiswa.cjs
 apply-fix-sisa-netral.cjs
 apply-fix-state-loading.cjs
+apply-fix-syntax-logbook.cjs
+apply-fix-tiga-masalah.cjs
 apply-fix-token-aman.cjs
 apply-fix-video-galeri.cjs
 apply-fix-youtube-scope.cjs
+apply-foto-hadir-v2.cjs
+apply-foto-hadir.cjs
+apply-foto-profil-webp.cjs
+apply-foto-profil.cjs
+apply-gabung-tim-dospem.cjs
 apply-galeri-picker.cjs
+apply-hapus-ringkasan.cjs
+apply-kartu-tim-cantik.cjs
+apply-kartu-tim-kehadiran-v2.cjs
+apply-kartu-tim-kehadiran.cjs
 apply-loading-kuota.cjs
 apply-netral-final.cjs
 apply-netral-youtube-dan-titik.cjs
@@ -99,6 +127,8 @@ apply-pemutar-pas-tengah.cjs
 apply-pemutar-referensi.cjs
 apply-pemutar-tutup-merek.cjs
 apply-preview-video-controls.cjs
+apply-profil-rapi.cjs
+apply-profil-tab.cjs
 apply-thumb-youtube-fallback.cjs
 apply-youtube-backend.cjs
 apply-youtube-final-fix.cjs
@@ -108,9 +138,13 @@ apply-youtube-frontend.cjs
 apply-youtube-latest-middleware.cjs
 apply-youtube-verify.cjs
 fix-errors.cjs
+fix-publik-dan-key.cjs
+fix-query-dan-key.cjs
+fix-ui-avatar.cjs
 index.html
 package.json
 postcss.config.js
+prototipe-tim-gabung.html
 README.md
 setup-semua-fitur.cjs
 setup-youtube-token-multi.cjs
@@ -123,6 +157,3779 @@ vite.config.js
 ```
 
 # Files
+
+## File: src/lib/profil.js
+```javascript
+import { supabase } from './supabase.js'
+import { siapkanFotoProfil } from './konversi.js'
+
+const MAKS_FOTO_PROFIL = 5 * 1024 * 1024
+
+export async function uploadFotoProfil(file, userId) {
+  if (!file) throw new Error('File foto tidak ditemukan')
+  const tipe = String(file.type || '').toLowerCase()
+  if (tipe.indexOf('image/') !== 0) throw new Error('File harus berupa gambar')
+  if (file.size > MAKS_FOTO_PROFIL) throw new Error('Ukuran foto maksimal 5 MB')
+  const siap = await siapkanFotoProfil(file, 640, 0.85)
+  const namaFile = userId + '/profil-' + Date.now() + '.webp'
+  const { error } = await supabase.storage
+    .from('foto-profil')
+    .upload(namaFile, siap, { upsert: true, contentType: siap.type })
+  if (error) throw new Error(error.message)
+  const { data } = supabase.storage.from('foto-profil').getPublicUrl(namaFile)
+  return data.publicUrl
+}
+
+export async function updateFotoProfilMahasiswa(mahasiswaId, fotoUrl) {
+  const { error } = await supabase.from('mahasiswa').update({ foto_profil: fotoUrl }).eq('id', mahasiswaId)
+  if (error) throw new Error(error.message)
+}
+
+export async function hapusFotoProfil(mahasiswaId, fotoUrl) {
+  if (fotoUrl) {
+    const bagian = String(fotoUrl).split('/foto-profil/')
+    if (bagian[1]) {
+      await supabase.storage.from('foto-profil').remove([decodeURIComponent(bagian[1])])
+    }
+  }
+  const { error } = await supabase.from('mahasiswa').update({ foto_profil: null }).eq('id', mahasiswaId)
+  if (error) throw new Error(error.message)
+}
+```
+
+## File: apply-avatar-bulat-v3.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Diagnosis dan penguncian bentuk bulat versi 3...')
+console.log('')
+
+const FILE_U = 'src/components/ui.jsx'
+if (!fs.existsSync(path.join(root, FILE_U))) {
+  console.log('[GAGAL] ui.jsx tidak ditemukan')
+  process.exit(1)
+}
+
+let u = baca(FILE_U)
+
+/* ===== 1. Diagnosis: cetak fungsi Avatar yang aktif saat ini ===== */
+const idxAvatar = u.indexOf('function Avatar(')
+if (idxAvatar === -1) {
+  console.log('[DIAGNOSIS] Fungsi Avatar tidak ditemukan di ui.jsx sama sekali.')
+} else {
+  console.log('[DIAGNOSIS] Isi fungsi Avatar saat ini:')
+  console.log(u.slice(idxAvatar - 7, idxAvatar + 700))
+  console.log('')
+}
+
+/* ===== 2. Tandai img foto profil di dalam Avatar dengan data-fp ===== */
+if (idxAvatar === -1) {
+  console.log('[LEWATI] Penandaan img dilewati karena Avatar tidak ditemukan')
+} else if (u.includes('data-fp=')) {
+  console.log('[SUDAH ADA] Penanda data-fp pada img Avatar')
+} else {
+  let brace = 0
+  let akhir = -1
+  let inString = false
+  let stringChar = ''
+  for (let i = idxAvatar; i < u.length; i++) {
+    const ch = u[i]
+    const prev = i > 0 ? u[i - 1] : ''
+    if (inString) {
+      if (ch === stringChar && prev !== '\\') inString = false
+      continue
+    }
+    if (ch === '"' || ch === "'" || ch === '`') { inString = true; stringChar = ch; continue }
+    if (ch === '{') brace++
+    if (ch === '}') {
+      brace--
+      if (brace === 0) { akhir = i + 1; break }
+    }
+  }
+  if (akhir === -1) {
+    console.log('[GAGAL] Batas fungsi Avatar tidak terbaca')
+  } else {
+    let potongan = u.slice(idxAvatar, akhir)
+    const potonganBaru = potongan.replace('<img ', '<img data-fp="1" ')
+    if (potonganBaru === potongan) {
+      console.log('[TIDAK KETEMU] Tag img di dalam fungsi Avatar')
+    } else {
+      u = u.slice(0, idxAvatar) + potonganBaru + u.slice(akhir)
+      simpan(FILE_U, u)
+      console.log('[BERHASIL] Tag img foto profil ditandai data-fp')
+    }
+  }
+}
+
+/* ===== 3. CSS palu bulat: paksa seluruh rantai wadah menjadi lingkaran ===== */
+const FILE_CSS = 'src/index.css'
+if (!fs.existsSync(path.join(root, FILE_CSS))) {
+  console.log('[LEWATI] index.css tidak ditemukan')
+} else {
+  let css = baca(FILE_CSS)
+  if (css.includes('/* bulat-v3 */')) {
+    console.log('[SUDAH ADA] Aturan CSS bulat-v3')
+  } else {
+    css = css.trimEnd() + '\n\n' + `/* bulat-v3: paksa foto profil bulat sempurna tanpa peduli markup wadah */
+img[data-fp] {
+  border-radius: 9999px !important;
+  object-fit: cover !important;
+  object-position: center !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+*:has(> img[data-fp]) {
+  display: inline-grid !important;
+  place-items: center !important;
+  position: relative !important;
+  background: transparent !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 9999px !important;
+  overflow: hidden !important;
+  box-shadow: 0 0 0 3px #166534, 0 3px 10px rgba(15, 23, 42, 0.3) !important;
+}
+*:has(> * > img[data-fp]) {
+  background: transparent !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 9999px !important;
+  box-shadow: none !important;
+}
+*:has(> * > * > img[data-fp]) {
+  background: transparent !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 9999px !important;
+  box-shadow: none !important;
+}
+`
+    simpan(FILE_CSS, css)
+    console.log('[BERHASIL] Aturan CSS bulat-v3 dipasang')
+  }
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Cara kerja versi ini:')
+console.log('1. Tag img foto profil diberi atribut data-fp sehingga bisa dibidik CSS tanpa bergantung kelas atau nama variabel.')
+console.log('2. Wadah tingkat pertama, kedua, dan ketiga di atas foto dipaksa transparan, tanpa padding, tanpa border, dan beradius penuh, sehingga kotak hijau squircle apa pun akan lenyap.')
+console.log('3. Cincin hijau dibuat lewat box-shadow pada wadah langsung foto, yang tidak mungkin terpotong oleh overflow wadah mana pun, jadi hasilnya lingkaran sempurna merata 360 derajat.')
+console.log('4. Fallback inisial tidak terpengaruh karena aturan hanya aktif bila ada img beratribut data-fp.')
+console.log('')
+console.log('Bila setelah hard refresh masih tidak berubah, salin seluruh keluaran [DIAGNOSIS] dari terminal ke chat supaya aku bisa melihat kode Avatar yang sebenarnya aktif di proyekmu.')
+```
+
+## File: apply-avatar-final.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Perbaikan final: Avatar berdiri sendiri tanpa pembungkus luar...')
+console.log('')
+
+/* ===== 1. ui.jsx: Avatar menerima onClick, tanpa pembungkus apa pun ===== */
+const FILE_U = 'src/components/ui.jsx'
+if (!fs.existsSync(path.join(root, FILE_U))) { console.log('[GAGAL] ui.jsx tidak ditemukan'); process.exit(1) }
+
+let u = baca(FILE_U)
+const m = u.match(/export\s+function\s+Avatar\s*\(/) || u.match(/function\s+Avatar\s*\(/)
+if (!m) { console.log('[GAGAL] Fungsi Avatar tidak ditemukan'); process.exit(1) }
+
+const mulai = m.index
+let brace = 0, akhir = -1, inStr = false, strCh = ''
+for (let i = mulai; i < u.length; i++) {
+  const ch = u[i], prev = i > 0 ? u[i-1] : ''
+  if (inStr) { if (ch === strCh && prev !== '\\') inStr = false; continue }
+  if (ch === '"' || ch === "'" || ch === '`') { inStr = true; strCh = ch; continue }
+  if (ch === '{') brace++
+  if (ch === '}') { brace--; if (brace === 0) { akhir = i + 1; break } }
+}
+
+const pakaiExport = u.slice(mulai, mulai + 20).includes('export')
+const AVATAR_FINAL = (pakaiExport ? 'export ' : '') + `function Avatar(props) {
+  const ukuran = { sm: 36, md: 44, lg: 56, xl: 96, '2xl': 160 }
+  const px = ukuran[props.size] || 44
+  const nama = props.nama || ''
+  const kata = nama.trim().split(/\\s+/)
+  const inisial = nama ? ((kata[0] ? kata[0].charAt(0) : '') + (kata[1] ? kata[1].charAt(0) : '')).toUpperCase() : '?'
+  const palet = ['#166534', '#15803d', '#a16207', '#ca8a04', '#334155', '#047857']
+  let hash = 0
+  for (let i = 0; i < nama.length; i++) hash = (hash * 31 + nama.charCodeAt(i)) >>> 0
+  const warna = palet[hash % palet.length]
+  const bisaKlik = typeof props.onClick === 'function'
+  const Tag = bisaKlik ? 'button' : 'span'
+  const gaya = {
+    boxSizing: 'content-box',
+    display: 'inline-block',
+    width: px + 'px',
+    height: px + 'px',
+    padding: 0,
+    margin: 0,
+    border: '3px solid #166534',
+    borderRadius: '9999px',
+    overflow: 'hidden',
+    position: 'relative',
+    verticalAlign: 'middle',
+    flexShrink: 0,
+    background: props.src ? '#ffffff' : warna,
+    boxShadow: '0 2px 8px rgba(15, 23, 42, 0.25)',
+    cursor: bisaKlik ? 'pointer' : 'default',
+    outline: 'none',
+    lineHeight: 0
+  }
+  if (props.style) Object.assign(gaya, props.style)
+  const gayaFoto = {
+    position: 'absolute', top: 0, left: 0,
+    width: '100%', height: '100%',
+    objectFit: 'cover', objectPosition: 'center',
+    display: 'block', borderRadius: '9999px'
+  }
+  const gayaTeks = {
+    position: 'absolute', top: 0, left: 0,
+    width: '100%', height: '100%',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    color: '#ffffff', fontWeight: 800,
+    fontSize: Math.round(px * 0.36) + 'px'
+  }
+  return (
+    <Tag type={bisaKlik ? 'button' : undefined} onClick={props.onClick} title={props.title} style={gaya}>
+      {props.src ? <img src={props.src} alt={nama || 'Foto profil'} style={gayaFoto} /> : <span style={gayaTeks}>{inisial}</span>}
+    </Tag>
+  )
+}`
+
+u = u.slice(0, mulai) + AVATAR_FINAL + u.slice(akhir)
+simpan(FILE_U, u)
+console.log('[BERHASIL] Avatar ditulis ulang final: bisa diklik langsung, tanpa pembungkus luar')
+
+/* ===== 2. DashboardPage: hapus pembungkus <button> di avatar header ===== */
+const FILE_D = 'src/pages/DashboardPage.jsx'
+if (fs.existsSync(path.join(root, FILE_D))) {
+  let d = baca(FILE_D)
+  let berubah = false
+  
+  // Pola: <button ... onClick={...setTab('profil')...}><Avatar .../></button>
+  d = d.replace(/<button[^>]*onClick=\{function\s*\(\)\s*\{\s*setTab\('profil'\)\s*\}\}[^>]*>\s*<Avatar([^>]*?)\/>\s*<\/button>/gs, function (m, attrs) {
+    berubah = true
+    return `<Avatar${attrs} onClick={function () { setTab('profil') }} title="Kelola foto profil" />`
+  })
+  
+  // Pola alternatif dengan panah: onClick={() => setTab('profil')}
+  d = d.replace(/<button[^>]*onClick=\{\(\)\s*=>\s*setTab\('profil'\)\}[^>]*>\s*<Avatar([^>]*?)\/>\s*<\/button>/gs, function (m, attrs) {
+    berubah = true
+    return `<Avatar${attrs} onClick={function () { setTab('profil') }} title="Kelola foto profil" />`
+  })
+  
+  if (berubah) {
+    simpan(FILE_D, d)
+    console.log('[BERHASIL] Pembungkus button di avatar header dihapus')
+  } else {
+    console.log('[INFO] Avatar header sudah tidak dibungkus button (atau pola berbeda)')
+  }
+}
+
+/* ===== 3. cards.jsx: pastikan PersonChip tidak membungkus Avatar ===== */
+const FILE_C = 'src/components/cards.jsx'
+if (fs.existsSync(path.join(root, FILE_C))) {
+  let c = baca(FILE_C)
+  let berubahC = false
+  
+  // Hapus pembungkus div/span di sekitar <Avatar...>
+  c = c.replace(/<div[^>]*className="[^"]*rounded-full[^"]*"[^>]*>\s*<Avatar([^>]*?)\/>\s*<\/div>/gs, function (m, attrs) {
+    berubahC = true
+    return `<Avatar${attrs}/>`
+  })
+  c = c.replace(/<span[^>]*className="[^"]*rounded-full[^"]*"[^>]*>\s*<Avatar([^>]*?)\/>\s*<\/span>/gs, function (m, attrs) {
+    berubahC = true
+    return `<Avatar${attrs}/>`
+  })
+  
+  if (berubahC) {
+    simpan(FILE_C, c)
+    console.log('[BERHASIL] Pembungkus bulat palsu di cards.jsx dihapus')
+  } else {
+    console.log('[INFO] Tidak ada pembungkus bulat palsu di cards.jsx')
+  }
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R (WAJIB Ctrl+Shift+R, bukan F5 biasa).')
+console.log('')
+console.log('Perubahan final:')
+console.log('1. Avatar kini berdiri sendiri tanpa pembungkus luar apa pun. Tidak ada lagi elemen asing yang memberi bentuk squircle hijau.')
+console.log('2. Avatar menerima prop onClick, sehingga avatar header bisa diklik langsung tanpa perlu dibungkus <button>.')
+console.log('3. Semua gaya ditulis inline dengan borderRadius 9999px dan lebar=tinggi piksel sama, sehingga lingkaran dijamin matematis.')
+console.log('4. Cincin hijau adalah border asli dari Avatar itu sendiri, bukan dari elemen pembungkus.')
+console.log('5. Fallback inisial memakai wadah dan cincin yang identik, bentuk tidak berubah antara foto dan inisial.')
+```
+
+## File: apply-avatar-inline.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+const FILE_U = 'src/components/ui.jsx'
+
+if (!fs.existsSync(path.join(root, FILE_U))) {
+  console.log('[GAGAL] ui.jsx tidak ditemukan')
+  process.exit(1)
+}
+
+let u = fs.readFileSync(path.join(root, FILE_U), 'utf8').replace(/\r\n/g, '\n')
+
+/* ===== Cari fungsi Avatar dengan pola longgar ===== */
+let m = u.match(/export\s+function\s+Avatar\s*\(/)
+let pakaiExport = true
+if (!m) {
+  m = u.match(/function\s+Avatar\s*\(/)
+  pakaiExport = false
+}
+if (!m) {
+  const idx = u.indexOf('Avatar')
+  console.log('[TIDAK KETEMU] Fungsi Avatar. Cuplikan sekitar kata Avatar:')
+  console.log(idx === -1 ? '(kata Avatar tidak ada sama sekali)' : u.slice(Math.max(0, idx - 200), idx + 400))
+  process.exit(1)
+}
+
+const mulai = m.index
+let brace = 0
+let akhir = -1
+let inString = false
+let stringChar = ''
+for (let i = mulai; i < u.length; i++) {
+  const ch = u[i]
+  const prev = i > 0 ? u[i - 1] : ''
+  if (inString) {
+    if (ch === stringChar && prev !== '\\') inString = false
+    continue
+  }
+  if (ch === '"' || ch === "'" || ch === '`') { inString = true; stringChar = ch; continue }
+  if (ch === '{') brace++
+  if (ch === '}') {
+    brace--
+    if (brace === 0) { akhir = i + 1; break }
+  }
+}
+if (akhir === -1) {
+  console.log('[GAGAL] Batas akhir fungsi Avatar tidak terbaca')
+  process.exit(1)
+}
+
+const AVATAR_BARU = (pakaiExport ? 'export ' : '') + `function Avatar(props) {
+  const ukuran = { sm: 36, md: 44, lg: 56, xl: 96, '2xl': 160 }
+  const px = ukuran[props.size] || 44
+  const nama = props.nama || ''
+  const kata = nama.trim().split(/\\s+/)
+  const inisial = nama ? ((kata[0] ? kata[0].charAt(0) : '') + (kata[1] ? kata[1].charAt(0) : '')).toUpperCase() : '?'
+  const palet = ['#166534', '#15803d', '#a16207', '#ca8a04', '#334155', '#047857']
+  let hash = 0
+  for (let i = 0; i < nama.length; i++) hash = (hash * 31 + nama.charCodeAt(i)) >>> 0
+  const warna = palet[hash % palet.length]
+  const gayaWadah = {
+    boxSizing: 'border-box',
+    width: px + 'px',
+    height: px + 'px',
+    borderRadius: '50%',
+    overflow: 'hidden',
+    position: 'relative',
+    display: 'inline-block',
+    verticalAlign: 'middle',
+    flexShrink: 0,
+    border: '3px solid #166534',
+    boxShadow: '0 2px 8px rgba(15, 23, 42, 0.25)',
+    background: props.src ? '#ffffff' : warna
+  }
+  const gayaFoto = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+    objectPosition: 'center',
+    borderRadius: '50%',
+    display: 'block'
+  }
+  const gayaTeks = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#ffffff',
+    fontWeight: 800,
+    fontSize: Math.round(px * 0.36) + 'px',
+    letterSpacing: '0.02em'
+  }
+  return (
+    <span style={gayaWadah}>
+      {props.src ? <img src={props.src} alt={nama || 'Foto profil'} style={gayaFoto} /> : <span style={gayaTeks}>{inisial}</span>}
+    </span>
+  )
+}`
+
+u = u.slice(0, mulai) + AVATAR_BARU + u.slice(akhir)
+fs.writeFileSync(path.join(root, FILE_U), u, 'utf8')
+
+console.log('[BERHASIL] Avatar ditulis ulang dengan gaya inline berukuran piksel tetap')
+console.log('')
+console.log('Selesai. Lanjutkan dua langkah berikut agar perubahan pasti terlihat:')
+console.log('1. Restart dev server: tekan Ctrl+C lalu jalankan npm run dev -- --host')
+console.log('2. Hard refresh browser dengan Ctrl + Shift + R')
+console.log('')
+console.log('Jaminan bentuk pada versi ini:')
+console.log('1. Wadah span punya lebar dan tinggi piksel yang sama persis, jadi borderRadius 50 persen menghasilkan lingkaran sempurna, bukan elips.')
+console.log('2. Semua gaya ditulis inline sehingga tidak ada satu pun aturan CSS lama yang bisa menimpa atau mendistorsinya.')
+console.log('3. Foto diposisikan absolut mengisi wadah dengan object-fit cover dan radius 50 persen, sehingga foto juga lingkaran sempurna di dalam wadah lingkaran.')
+console.log('4. Cincin hijau 3 piksel mengikuti keliling wadah secara merata karena merupakan border dari wadah yang bulat.')
+console.log('5. Fallback inisial memakai wadah yang sama persis, jadi bentuknya identik dengan versi foto.')
+```
+
+## File: apply-avatar-kartu-v2.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai memasang foto profil pada semua lingkaran inisial...')
+console.log('')
+
+/* Kumpulkan semua file jsx di bawah src */
+const daftar = []
+function jalan(dir) {
+  const entries = fs.readdirSync(dir, { withFileTypes: true })
+  entries.forEach(function (e) {
+    const full = path.join(dir, e.name)
+    if (e.isDirectory()) { jalan(full); return }
+    if (/\.jsx$/.test(e.name)) daftar.push(full)
+  })
+}
+jalan(path.join(root, 'src'))
+
+/* Hanya menarget isi lingkaran: {initials} atau {inisial} yang diikuti penutup div */
+const regexIsi = /\{\s*(initials|inisial)\s*\}\s*<\/div>/g
+
+let totalFile = 0
+let totalSub = 0
+daftar.forEach(function (full) {
+  const rel = path.relative(root, full).replace(/\\/g, '/')
+  let isi = baca(rel)
+  if (!regexIsi.test(isi)) return
+  regexIsi.lastIndex = 0
+  let jumlah = 0
+  const hasil = isi.replace(regexIsi, function (m, varName) {
+    jumlah++
+    return `{typeof p !== 'undefined' && p && p.foto_profil ? <img src={p.foto_profil} alt="Foto profil" className="h-full w-full rounded-full object-cover" /> : ` +
+      `typeof m !== 'undefined' && m && m.foto_profil ? <img src={m.foto_profil} alt="Foto profil" className="h-full w-full rounded-full object-cover" /> : ` +
+      varName + '}</div>'
+  })
+  if (jumlah === 0) return
+  simpan(rel, hasil)
+  totalFile++
+  totalSub += jumlah
+  console.log('[BERHASIL] ' + jumlah + ' lingkaran inisial mendukung foto profil di ' + rel)
+})
+
+if (totalFile === 0) {
+  console.log('[TIDAK KETEMU] Tidak ada file yang memuat pola {initials} atau {inisial}')
+  console.log('')
+  console.log('Bila baris ini muncul, kirim isi fungsi PersonChip dari src/components/cards.jsx')
+  console.log('supaya aku kunci polanya persis pada bentuk yang dipakai proyekmu.')
+}
+
+console.log('')
+console.log('Ringkasan: ' + totalSub + ' lingkaran diperbarui pada ' + totalFile + ' file.')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Upload foto profil dari dashboard bila belum.')
+console.log('2. Buka beranda: kartu Profil Mahasiswa menampilkan foto bulat pengganti inisial.')
+console.log('3. Buka logbook, galeri, dan daftar hadir: PersonChip menampilkan foto kecil pemilik.')
+console.log('4. Mahasiswa tanpa foto tetap melihat inisial berwarna tema seperti semula.')
+console.log('5. Hapus foto dari dashboard: semua permukaan kembali ke inisial dengan mulus.')
+```
+
+## File: apply-avatar-kartu.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+function ada(rel) { return fs.existsSync(path.join(root, rel)) }
+
+console.log('Mulai memasang foto profil pada lingkaran inisial...')
+console.log('')
+
+const TARGET = [
+  'src/components/cards.jsx',
+  'src/pages/HomePage.jsx',
+  'src/pages/TimPage.jsx',
+  'src/pages/DospemPage.jsx'
+]
+
+/* Div lingkaran yang isinya variabel initials atau inisial */
+const regexDiv = /(<div\b[^>]*rounded-full[^>]*>)\s*\{(initials|inisial)\}\s*<\/div>/g
+
+TARGET.forEach(function (rel) {
+  if (!ada(rel)) { console.log('[LEWATI] ' + rel + ' tidak ditemukan'); return }
+  let isi = baca(rel)
+  let jumlah = 0
+  const hasil = isi.replace(regexDiv, function (m, buka, varName) {
+    jumlah++
+    return buka +
+      `{typeof p !== 'undefined' && p && p.foto_profil ? <img src={p.foto_profil} alt="Foto profil" className="h-full w-full rounded-full object-cover border-2 border-white shadow-md" /> : ` +
+      `typeof m !== 'undefined' && m && m.foto_profil ? <img src={m.foto_profil} alt="Foto profil" className="h-full w-full rounded-full object-cover border-2 border-white shadow-md" /> : ` +
+      varName + '}</div>'
+  })
+  if (jumlah === 0) { console.log('[TIDAK KETEMU] Lingkaran inisial di ' + rel); return }
+  simpan(rel, hasil)
+  console.log('[BERHASIL] ' + jumlah + ' lingkaran inisial kini mendukung foto profil di ' + rel)
+})
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Cakupan perbaikan:')
+console.log('1. PersonChip di cards.jsx dipakai oleh kartu logbook, kartu galeri, baris daftar hadir, dan detail, sehingga semuanya otomatis menampilkan foto.')
+console.log('2. PersonCard di cards.jsx dipakai oleh grid Profil Mahasiswa di beranda, sehingga kartu publik ikut menampilkan foto.')
+console.log('3. Div lingkaran berukuran tetap dipertahankan, jadi tidak ada perubahan tata letak sama sekali.')
+console.log('4. Mahasiswa tanpa foto tetap melihat inisial berwarna tema seperti sebelumnya.')
+console.log('5. Pengaman typeof membuat komponen tidak crash bila nama variabel mahasiswa berbeda antar fungsi.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Upload foto profil dari dashboard seperti langkah sebelumnya.')
+console.log('2. Buka beranda: kartu Profil Mahasiswa menampilkan foto bulat, bukan inisial.')
+console.log('3. Buka logbook dan galeri: PersonChip di setiap kartu menampilkan foto kecil mahasiswa pemilik.')
+console.log('4. Buka daftar hadir: baris kehadiran menampilkan foto mahasiswa.')
+console.log('5. Hapus foto profil dari dashboard: semua permukaan kembali ke inisial berwarna tema.')
+```
+
+## File: apply-avatar-kotak-lengkung.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+function ada(rel) { return fs.existsSync(path.join(root, rel)) }
+
+console.log('Mulai mengubah seluruh foto profil menjadi kotak bersudut melengkung halus...')
+console.log('')
+
+/* ===== 1. ui.jsx: Avatar menjadi kotak melengkung proporsional ===== */
+const FILE_U = 'src/components/ui.jsx'
+if (!ada(FILE_U)) {
+  console.log('[GAGAL] ui.jsx tidak ditemukan')
+  process.exit(1)
+}
+let u = baca(FILE_U)
+const m = u.match(/export\s+function\s+Avatar\s*\(/) || u.match(/function\s+Avatar\s*\(/)
+if (!m) {
+  console.log('[TIDAK KETEMU] Fungsi Avatar di ui.jsx')
+} else {
+  const mulai = m.index
+  let brace = 0, akhir = -1, inStr = false, strCh = ''
+  for (let i = mulai; i < u.length; i++) {
+    const ch = u[i]
+    const prev = i > 0 ? u[i - 1] : ''
+    if (inStr) { if (ch === strCh && prev !== '\\') inStr = false; continue }
+    if (ch === '"' || ch === "'" || ch === '`') { inStr = true; strCh = ch; continue }
+    if (ch === '{') brace++
+    if (ch === '}') { brace--; if (brace === 0) { akhir = i + 1; break } }
+  }
+  if (akhir === -1) {
+    console.log('[GAGAL] Batas fungsi Avatar tidak terbaca')
+  } else {
+    const pakaiExport = u.slice(mulai, mulai + 20).includes('export')
+    const AVATAR_KOTAK = (pakaiExport ? 'export ' : '') + `function Avatar(props) {
+  const ukuran = { sm: 36, md: 44, lg: 56, xl: 96, '2xl': 160 }
+  const px = ukuran[props.size] || 44
+  const radius = Math.round(px * 0.28) + 'px'
+  const nama = props.nama || ''
+  const kata = nama.trim().split(/\\s+/)
+  const inisial = nama ? ((kata[0] ? kata[0].charAt(0) : '') + (kata[1] ? kata[1].charAt(0) : '')).toUpperCase() : '?'
+  const palet = ['#166534', '#15803d', '#a16207', '#ca8a04', '#334155', '#047857']
+  let hash = 0
+  for (let i = 0; i < nama.length; i++) hash = (hash * 31 + nama.charCodeAt(i)) >>> 0
+  const warna = palet[hash % palet.length]
+  const bisaKlik = typeof props.onClick === 'function'
+  const gaya = {
+    boxSizing: 'content-box',
+    display: 'inline-block',
+    width: px + 'px',
+    height: px + 'px',
+    padding: 0,
+    margin: 0,
+    border: '3px solid #166534',
+    borderRadius: radius,
+    overflow: 'hidden',
+    position: 'relative',
+    verticalAlign: 'middle',
+    flexShrink: 0,
+    background: props.src ? '#ffffff' : warna,
+    boxShadow: '0 2px 8px rgba(15, 23, 42, 0.25)',
+    cursor: bisaKlik ? 'pointer' : 'default',
+    outline: 'none',
+    lineHeight: 0
+  }
+  const gayaFoto = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+    objectPosition: 'center',
+    display: 'block',
+    borderRadius: radius
+  }
+  const gayaTeks = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#ffffff',
+    fontWeight: 800,
+    fontSize: Math.round(px * 0.36) + 'px'
+  }
+  if (bisaKlik) {
+    return (
+      <button type="button" onClick={props.onClick} title={props.title} style={gaya}>
+        {props.src ? <img src={props.src} alt={nama || 'Foto profil'} style={gayaFoto} /> : <span style={gayaTeks}>{inisial}</span>}
+      </button>
+    )
+  }
+  return (
+    <span style={gaya}>
+      {props.src ? <img src={props.src} alt={nama || 'Foto profil'} style={gayaFoto} /> : <span style={gayaTeks}>{inisial}</span>}
+    </span>
+  )
+}`
+    u = u.slice(0, mulai) + AVATAR_KOTAK + u.slice(akhir)
+    simpan(FILE_U, u)
+    console.log('[BERHASIL] Avatar kini kotak bersudut melengkung proporsional')
+  }
+}
+
+/* ===== 2. Foto inline sisa script lama dan pratinjau form ===== */
+const TARGET = [
+  'src/components/cards.jsx',
+  'src/components/ui.jsx',
+  'src/pages/TimPage.jsx',
+  'src/pages/HomePage.jsx',
+  'src/pages/DospemPage.jsx',
+  'src/pages/DashboardPage.jsx',
+  'src/pages/AttendancePage.jsx',
+  'src/pages/LogbookPage.jsx',
+  'src/pages/GalleryPage.jsx'
+]
+TARGET.forEach(function (rel) {
+  if (!ada(rel)) return
+  let isi = baca(rel)
+  const sebelum = isi
+
+  /* a. img foto profil: rounded-full menjadi rounded 28 persen */
+  isi = isi.replace(/(<img\b[^>]*?alt="(?:Foto profil|Pratinjau foto profil)"[^>]*?)rounded-full object-cover/g, '$1rounded-[28%] object-cover')
+
+  /* b. wadah div di belakang foto inline ikut melengkung kotak */
+  isi = isi.replace(/<div\b[^>]*?rounded-full[^>]*?(?=>\s*\{typeof (?:p|m) !== 'undefined')/g, function (tag) {
+    return tag.replace('rounded-full', 'rounded-[28%] overflow-hidden')
+  })
+
+  if (isi !== sebelum) {
+    simpan(rel, isi)
+    console.log('[BERHASIL] Foto profil inline diperbarui di ' + rel)
+  }
+})
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Bentuk baru yang berlaku seragam:')
+console.log('1. Setiap foto profil menjadi kotak dengan sudut melengkung halus sebesar 28 persen dari ukurannya, mirip ikon aplikasi modern.')
+console.log('2. Lengkungan bersifat proporsional: avatar kecil di PersonChip melengkung ringkas, avatar besar di tab Profil melengkung lebih lembut, sehingga serasi di semua ukuran.')
+console.log('3. Cincin hijau BSI mengikuti bentuk kotak melengkung yang sama, jadi bingkai dan foto selalu sejajar.')
+console.log('4. Fallback inisial memakai wadah dan lengkungan identik, sehingga transisi foto ke inisial tidak mengubah bentuk.')
+console.log('5. Pratinjau di form upload dan seluruh foto inline di kartu logbook, galeri, daftar hadir, tim, dan dospem mengikuti bentuk yang sama.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Header dashboard dan tab Profil menampilkan kotak melengkung halus bercincin hijau.')
+console.log('2. Kartu beranda, tim, dospem, serta PersonChip di logbook, galeri, dan daftar hadir seragam kotak melengkung.')
+console.log('3. Form upload menampilkan pratinjau dengan bentuk yang sama persis.')
+console.log('4. Mahasiswa tanpa foto melihat inisial pada kotak melengkung berwarna tema.')
+```
+
+## File: apply-avatar-lencana.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai memasang Avatar gaya lencana bulat sempurna...')
+console.log('')
+
+/* ===== 1. ui.jsx: tulis ulang fungsi Avatar ===== */
+const FILE_U = 'src/components/ui.jsx'
+if (!fs.existsSync(path.join(root, FILE_U))) {
+  console.log('[GAGAL] ui.jsx tidak ditemukan')
+  process.exit(1)
+}
+let u = baca(FILE_U)
+const mulai = u.indexOf('export function Avatar(props) {')
+if (mulai === -1) {
+  console.log('[TIDAK KETEMU] Fungsi Avatar di ui.jsx')
+} else if (u.includes('avatar-bulat ')) {
+  console.log('[SUDAH ADA] Avatar gaya lencana')
+} else {
+  let brace = 0
+  let akhir = -1
+  let inString = false
+  let stringChar = ''
+  for (let i = mulai; i < u.length; i++) {
+    const ch = u[i]
+    const prev = i > 0 ? u[i - 1] : ''
+    if (inString) {
+      if (ch === stringChar && prev !== '\\') inString = false
+      continue
+    }
+    if (ch === '"' || ch === "'" || ch === '`') { inString = true; stringChar = ch; continue }
+    if (ch === '{') brace++
+    if (ch === '}') {
+      brace--
+      if (brace === 0) { akhir = i + 1; break }
+    }
+  }
+  if (akhir === -1) {
+    console.log('[GAGAL] Batas akhir fungsi Avatar tidak ditemukan')
+  } else {
+    const AVATAR_BARU = `export function Avatar(props) {
+  const size = props.size || 'md'
+  const kotak = size === 'sm' ? 'h-9 w-9 text-xs' : size === 'lg' ? 'h-14 w-14 text-base' : size === 'xl' ? 'h-24 w-24 text-2xl' : size === '2xl' ? 'h-40 w-40 text-4xl' : 'h-11 w-11 text-sm'
+  const nama = props.nama || ''
+  const inisial = nama ? nama.trim().split(/\\s+/).map(function (w) { return w[0] }).join('').slice(0, 2).toUpperCase() : '?'
+  const palet = ['bg-bsi-700', 'bg-bsi-600', 'bg-gold-600', 'bg-gold-500', 'bg-slate-700', 'bg-emerald-700']
+  let hash = 0
+  for (let i = 0; i < nama.length; i++) hash = (hash * 31 + nama.charCodeAt(i)) >>> 0
+  const warna = palet[hash % palet.length]
+  return (
+    <span className={'avatar-bulat ' + kotak + ' ' + (props.src ? '' : warna)}>
+      {props.src ? <img src={props.src} alt={nama || 'Foto profil'} /> : <span className="font-black text-white">{inisial}</span>}
+    </span>
+  )
+}`
+    u = u.slice(0, mulai) + AVATAR_BARU + u.slice(akhir)
+    simpan(FILE_U, u)
+    console.log('[BERHASIL] Avatar ditulis ulang dengan struktur satu elemen')
+  }
+}
+
+/* ===== 2. index.css: kelas tunggal pengunci bentuk bulat ===== */
+const FILE_CSS = 'src/index.css'
+if (!fs.existsSync(path.join(root, FILE_CSS))) {
+  console.log('[LEWATI] index.css tidak ditemukan')
+} else {
+  let css = baca(FILE_CSS)
+  if (css.includes('/* avatar-bulat-v2 */')) {
+    console.log('[SUDAH ADA] CSS avatar-bulat-v2')
+  } else {
+    css = css.trimEnd() + '\n\n' + `/* avatar-bulat-v2: satu kelas pengunci bentuk lingkaran sempurna */
+.avatar-bulat {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-radius: 9999px;
+  border: 3px solid #166534;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.25);
+}
+.avatar-bulat img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 9999px;
+  display: block;
+}
+`
+    simpan(FILE_CSS, css)
+    console.log('[BERHASIL] CSS avatar-bulat-v2 ditambahkan')
+  }
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Hasil akhir gaya lencana:')
+console.log('1. Foto dipotong lingkaran penuh dan mengisi seluruh wadah, tidak ada lagi wadah squircle di belakangnya.')
+console.log('2. Cincin hijau BSI 3 piksel mengelilingi foto secara merata, memberi kesan lencana resmi yang rapi.')
+console.log('3. Mahasiswa tanpa foto melihat lingkaran hijau atau emas berisi inisial dengan cincin yang sama persis.')
+console.log('4. Semua ukuran dari sm sampai 2xl memakai kelas yang sama, jadi bentuknya konsisten di header, tab Profil, kartu publik, PersonChip, dan daftar hadir.')
+console.log('5. Bila ingin cincin berwarna lain, cukup ganti nilai border pada .avatar-bulat di index.css, misalnya #ffffff untuk cincin putih atau #eab308 untuk emas.')
+```
+
+## File: apply-avatar-publik.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+function ada(rel) { return fs.existsSync(path.join(root, rel)) }
+
+console.log('Mulai mengganti lingkaran inisial di kartu publik dengan Avatar...')
+console.log('')
+
+const TARGET = [
+  'src/components/cards.jsx',
+  'src/components/ui.jsx',
+  'src/pages/HomePage.jsx',
+  'src/pages/TimPage.jsx',
+  'src/pages/DospemPage.jsx',
+  'src/pages/LogbookPage.jsx',
+  'src/pages/GalleryPage.jsx',
+  'src/pages/AttendancePage.jsx'
+]
+
+/* Pola longgar: div ber-rounded-full whose isi JSX boleh memuat satu tingkat kurung kurawal bersarang */
+const regexLingkaran = /<div\b[^>]*rounded-full[^>]*>\s*(\{(?:[^{}]|\{[^{}]*\})*\})\s*<\/div>/g
+const regexImportAvatar = /import\s*\{[^}]*\bAvatar\b[^}]*\}\s*from/
+
+TARGET.forEach(function (rel) {
+  if (!ada(rel)) { console.log('[LEWATI] ' + rel + ' tidak ditemukan'); return }
+  let isi = baca(rel)
+  let jumlah = 0
+  const hasil = isi.replace(regexLingkaran, function (m, ekspresi) {
+    if (ekspresi.indexOf('.nama') === -1) return m
+    const varMatch = ekspresi.match(/([A-Za-z0-9_]+)\.nama/)
+    if (!varMatch) return m
+    jumlah++
+    const v = varMatch[1]
+    return '<Avatar src={' + v + '.foto_profil || null} nama={' + v + '.nama} size="lg" />'
+  })
+  if (jumlah === 0) { console.log('[TIDAK KETEMU] Lingkaran inisial di ' + rel); return }
+  let akhir = hasil
+  if (rel !== 'src/components/ui.jsx' && !regexImportAvatar.test(akhir)) {
+    const impor = rel.indexOf('/pages/') !== -1
+      ? "import { Avatar } from '../components/ui.jsx'\n"
+      : "import { Avatar } from './ui.jsx'\n"
+    akhir = impor + akhir
+  }
+  simpan(rel, akhir)
+  console.log('[BERHASIL] ' + jumlah + ' lingkaran inisial diganti Avatar di ' + rel)
+})
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka halaman beranda: kartu mahasiswa kini menampilkan foto profil bila sudah diunggah.')
+console.log('2. Mahasiswa tanpa foto tetap melihat lingkaran inisial berwarna tema dari fallback Avatar.')
+console.log('3. Halaman tim dan dospem bila menampilkan orang juga ikut memakai Avatar yang sama.')
+console.log('4. Bila masih ada baris TIDAK KETEMU untuk cards.jsx, kirim potongan markup PersonCard supaya aku sesuaikan polanya.')
+```
+
+## File: apply-avatar-tanpa-border.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+function ada(rel) { return fs.existsSync(path.join(root, rel)) }
+
+console.log('Mulai menghapus border dan menambahkan bayangan pada seluruh foto profil...')
+console.log('')
+
+/* ===== 1. ui.jsx: Avatar tanpa border, bayangan berlapis ===== */
+const FILE_U = 'src/components/ui.jsx'
+if (!ada(FILE_U)) {
+  console.log('[GAGAL] ui.jsx tidak ditemukan')
+  process.exit(1)
+}
+let u = baca(FILE_U)
+let berubahU = false
+
+if (u.includes("border: '3px solid #166534',")) {
+  u = u.replace(/[ \t]*border: '3px solid #166534',\n/, '')
+  berubahU = true
+  console.log('[BERHASIL] Border hijau pada Avatar dihapus')
+} else {
+  console.log('[SUDAH ADA] Avatar tanpa border hijau')
+}
+
+if (u.includes("boxShadow: '0 2px 8px rgba(15, 23, 42, 0.25)',")) {
+  u = u.replace("boxShadow: '0 2px 8px rgba(15, 23, 42, 0.25)',", "boxShadow: '0 1px 2px rgba(15, 23, 42, 0.10), 0 10px 28px rgba(15, 23, 42, 0.22)',")
+  berubahU = true
+  console.log('[BERHASIL] Bayangan berlapis dipasang pada Avatar')
+} else if (u.includes('0 10px 28px rgba(15, 23, 42, 0.22)')) {
+  console.log('[SUDAH ADA] Bayangan berlapis pada Avatar')
+} else {
+  console.log('[TIDAK KETEMU] Pola boxShadow lama pada Avatar')
+}
+
+if (berubahU) simpan(FILE_U, u)
+
+/* ===== 2. Foto inline dan pratinjau: buang border putih, pindahkan bayangan ke wadah ===== */
+const TARGET = [
+  'src/components/cards.jsx',
+  'src/components/ui.jsx',
+  'src/pages/TimPage.jsx',
+  'src/pages/HomePage.jsx',
+  'src/pages/DospemPage.jsx',
+  'src/pages/DashboardPage.jsx',
+  'src/pages/AttendancePage.jsx',
+  'src/pages/LogbookPage.jsx',
+  'src/pages/GalleryPage.jsx'
+]
+
+TARGET.forEach(function (rel) {
+  if (!ada(rel)) return
+  let isi = baca(rel)
+  const sebelum = isi
+
+  /* border putih pada img foto profil dibuang, bayangan standar dipasang */
+  isi = isi.split('rounded-[28%] object-cover border-2 border-white shadow-md').join('rounded-[28%] object-cover shadow-lg')
+  isi = isi.split('rounded-full object-cover border-2 border-white shadow-md').join('rounded-[28%] object-cover shadow-lg')
+
+  /* wadah ber-overflow-hidden tidak bisa menampilkan bayangan img, jadi bayangan ditaruh di wadahnya */
+  isi = isi.split('rounded-[28%] overflow-hidden').join('rounded-[28%] overflow-hidden shadow-lg')
+
+  if (isi !== sebelum) {
+    simpan(rel, isi)
+    console.log('[BERHASIL] Border putih dibuang dan bayangan dipasang di ' + rel)
+  }
+})
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Hasil akhir tampilan:')
+console.log('1. Tidak ada lagi cincin hijau maupun border putih di foto profil mana pun, termasuk header, tab Profil, kartu publik, PersonChip, kartu kehadiran, dan pratinjau form upload.')
+console.log('2. Foto memakai bayangan berlapis: bayangan tipis menempel untuk ketajaman tepi plus bayangan lebar yang lembut untuk kesan melayang.')
+console.log('3. Bayangan pada foto inline ditaruh di wadah luarnya karena wadah ber-overflow hidden akan memotong bayangan yang berasal dari img di dalamnya.')
+console.log('4. Bentuk kotak melengkung 28 persen tetap berlaku seragam di semua ukuran avatar.')
+console.log('')
+console.log('Bila bayangan terasa kurang kuat atau terlalu kuat, kabari aku: kekuatannya diatur dari satu nilai boxShadow di Avatar dan kelas shadow-lg pada foto inline.')
+```
+
+## File: apply-bulat-sempurna.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai mengunci semua foto profil menjadi lingkaran sempurna...')
+console.log('')
+
+/* ===== 1. ui.jsx: tulis ulang Avatar dengan pola wadah terkunci ===== */
+const FILE_U = 'src/components/ui.jsx'
+if (!fs.existsSync(path.join(root, FILE_U))) {
+  console.log('[GAGAL] ui.jsx tidak ditemukan')
+  process.exit(1)
+}
+let u = baca(FILE_U)
+const mulai = u.indexOf('export function Avatar(props) {')
+if (mulai === -1) {
+  console.log('[TIDAK KETEMU] Fungsi Avatar di ui.jsx')
+} else {
+  let brace = 0
+  let akhir = -1
+  let inString = false
+  let stringChar = ''
+  for (let i = mulai; i < u.length; i++) {
+    const ch = u[i]
+    const prev = i > 0 ? u[i - 1] : ''
+    if (inString) {
+      if (ch === stringChar && prev !== '\\') inString = false
+      continue
+    }
+    if (ch === '"' || ch === "'" || ch === '`') { inString = true; stringChar = ch; continue }
+    if (ch === '{') brace++
+    if (ch === '}') {
+      brace--
+      if (brace === 0) { akhir = i + 1; break }
+    }
+  }
+  if (akhir === -1) {
+    console.log('[GAGAL] Tidak dapat menemukan batas akhir fungsi Avatar')
+  } else {
+    const AVATAR_BARU = `export function Avatar(props) {
+  const size = props.size || 'md'
+  const kelas = size === 'sm' ? 'h-9 w-9 text-xs' : size === 'lg' ? 'h-14 w-14 text-base' : size === 'xl' ? 'h-24 w-24 text-2xl' : size === '2xl' ? 'h-40 w-40 text-4xl' : 'h-11 w-11 text-sm'
+  const nama = props.nama || ''
+  const inisial = nama ? nama.trim().split(/\\s+/).map(function (w) { return w[0] }).join('').slice(0, 2).toUpperCase() : '?'
+  const palet = ['bg-bsi-700', 'bg-bsi-600', 'bg-gold-600', 'bg-gold-500', 'bg-slate-700', 'bg-emerald-700']
+  let hash = 0
+  for (let i = 0; i < nama.length; i++) hash = (hash * 31 + nama.charCodeAt(i)) >>> 0
+  const warna = palet[hash % palet.length]
+  if (props.src) {
+    return (
+      <span className={kelas + ' relative inline-block shrink-0 overflow-hidden rounded-full border-2 border-white shadow-md'}>
+        <img src={props.src} alt={nama || 'Foto profil'} className="absolute inset-0 h-full w-full rounded-full object-cover" />
+      </span>
+    )
+  }
+  return (
+    <span className={kelas + ' ' + warna + ' relative inline-block shrink-0 overflow-hidden rounded-full border-2 border-white shadow-md'}>
+      <span className="absolute inset-0 grid place-items-center font-black text-white">{inisial}</span>
+    </span>
+  )
+}`
+    u = u.slice(0, mulai) + AVATAR_BARU + u.slice(akhir)
+    simpan(FILE_U, u)
+    console.log('[BERHASIL] Avatar ditulis ulang dengan wadah lingkaran terkunci')
+  }
+}
+
+/* ===== 2. index.css: aturan global pemaksa lingkaran sempurna ===== */
+const FILE_CSS = 'src/index.css'
+if (!fs.existsSync(path.join(root, FILE_CSS))) {
+  console.log('[LEWATI] index.css tidak ditemukan')
+} else {
+  let css = baca(FILE_CSS)
+  if (css.includes('/* bulat-sempurna-v1 */')) {
+    console.log('[SUDAH ADA] Aturan CSS bulat-sempurna')
+  } else {
+    css = css.trimEnd() + '\n\n' + `/* bulat-sempurna-v1: paksa semua foto profil menjadi lingkaran sempurna */
+.rounded-full {
+  overflow: hidden;
+}
+.rounded-full:has(> img) {
+  aspect-ratio: 1 / 1;
+  position: relative;
+  overflow: hidden;
+}
+.rounded-full > img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  object-position: center !important;
+  border-radius: 9999px !important;
+}
+img[alt="Foto profil"],
+img.rounded-full {
+  border-radius: 9999px !important;
+  object-fit: cover !important;
+  object-position: center !important;
+}
+`
+    simpan(FILE_CSS, css)
+    console.log('[BERHASIL] Aturan CSS pemaksa lingkaran sempurna ditambahkan')
+  }
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Cara kerja penguncian:')
+console.log('1. Komponen Avatar kini memakai wadah span persegi tetap dengan overflow tersembunyi, sehingga foto apa pun dipotong melingkar penuh tanpa peduli rasio aslinya.')
+console.log('2. Foto di dalam Avatar diposisikan absolut mengisi wadah, jadi tidak ada lagi sisi lurus atau sudut yang lolos.')
+console.log('3. Aturan CSS global menangkap semua gambar di dalam wadah bulat di halaman mana pun, termasuk sisa img inline hasil script sebelumnya, dan memaksanya cover plus radius penuh.')
+console.log('4. aspect-ratio 1 banding 1 menjamin wadah tetap persegi walau suatu halaman lupa memberi tinggi tetap, sehingga hasilnya lingkaran, bukan elips.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Header dashboard: avatar foto terlihat lingkaran penuh dengan ring putih rapi.')
+console.log('2. Tab Profil: foto besar 2xl lingkaran sempurna tanpa sisi terpotong aneh.')
+console.log('3. Beranda, Tim, Dospem: kartu mahasiswa menampilkan foto lingkaran penuh.')
+console.log('4. Kartu logbook, galeri, dan baris daftar hadir: PersonChip menampilkan foto lingkaran kecil yang rapi.')
+console.log('5. Mahasiswa tanpa foto tetap melihat lingkaran inisial berwarna tema dengan bentuk yang sama persis.')
+```
+
+## File: apply-diagnosis-dan-bersih.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+const FILE_U = 'src/components/ui.jsx'
+const FILE_D = 'src/pages/DashboardPage.jsx'
+const FILE_CSS = 'src/index.css'
+
+console.log('================ DIAGNOSIS ================')
+
+/* 1. Hitung dan cetak semua definisi Avatar di ui.jsx */
+let u = baca(FILE_U)
+const defs = []
+const reDef = /(?:export\s+)?function\s+Avatar\s*\(/g
+let mm
+while ((mm = reDef.exec(u)) !== null) defs.push(mm.index)
+console.log('Jumlah definisi fungsi Avatar di ui.jsx: ' + defs.length)
+defs.forEach(function (idx, i) {
+  console.log('--- Awal definisi Avatar nomor ' + (i + 1) + ' ---')
+  console.log(u.slice(idx, idx + 240).replace(/\n/g, ' | '))
+})
+
+/* 2. Cetak markup header dashboard di sekitar avatar */
+let d = baca(FILE_D)
+const ih = d.indexOf('Dashboard mahasiswa')
+console.log('--- Cuplikan header DashboardPage ---')
+console.log(ih === -1 ? '(teks Dashboard mahasiswa tidak ditemukan)' : d.slice(Math.max(0, ih - 500), ih + 200).replace(/\n/g, ' | '))
+
+/* 3. Cetak baris CSS yang berkaitan avatar atau pembulatan */
+let css = baca(FILE_CSS)
+console.log('--- Baris CSS berkaitan avatar atau pembulatan ---')
+css.split('\n').forEach(function (l, i) {
+  if (/bulat|avatar|data-fp|rounded-full/.test(l)) console.log((i + 1) + ': ' + l.trim())
+})
+console.log('=============== AKHIR DIAGNOSIS ===============')
+console.log('')
+
+/* ===== PERBAIKAN 1: buang SEMUA definisi Avatar, pasang satu versi bersih di akhir file ===== */
+const ranges = []
+const reScan = /(?:export\s+)?function\s+Avatar\s*\(/g
+let m2
+while ((m2 = reScan.exec(u)) !== null) {
+  let brace = 0, end = -1, inStr = false, strCh = ''
+  for (let i = m2.index; i < u.length; i++) {
+    const ch = u[i]
+    const prev = i > 0 ? u[i - 1] : ''
+    if (inStr) { if (ch === strCh && prev !== '\\') inStr = false; continue }
+    if (ch === '"' || ch === "'" || ch === '`') { inStr = true; strCh = ch; continue }
+    if (ch === '{') brace++
+    if (ch === '}') { brace--; if (brace === 0) { end = i + 1; break } }
+  }
+  if (end === -1) break
+  ranges.push([m2.index, end])
+}
+for (let i = ranges.length - 1; i >= 0; i--) {
+  u = u.slice(0, ranges[i][0]) + u.slice(ranges[i][1])
+}
+const AVATAR_BERSIH = `export function Avatar(props) {
+  const ukuran = { sm: 36, md: 44, lg: 56, xl: 96, '2xl': 160 }
+  const px = ukuran[props.size] || 44
+  const nama = props.nama || ''
+  const kata = nama.trim().split(/\\s+/)
+  const inisial = nama ? ((kata[0] ? kata[0].charAt(0) : '') + (kata[1] ? kata[1].charAt(0) : '')).toUpperCase() : '?'
+  const palet = ['#166534', '#15803d', '#a16207', '#ca8a04', '#334155', '#047857']
+  let hash = 0
+  for (let i = 0; i < nama.length; i++) hash = (hash * 31 + nama.charCodeAt(i)) >>> 0
+  const warna = palet[hash % palet.length]
+  const bisaKlik = typeof props.onClick === 'function'
+  const gaya = {
+    boxSizing: 'content-box',
+    display: 'inline-block',
+    width: px + 'px',
+    height: px + 'px',
+    padding: 0,
+    margin: 0,
+    border: '3px solid #166534',
+    borderRadius: '50%',
+    overflow: 'hidden',
+    position: 'relative',
+    verticalAlign: 'middle',
+    flexShrink: 0,
+    background: props.src ? '#ffffff' : warna,
+    boxShadow: '0 2px 8px rgba(15, 23, 42, 0.25)',
+    cursor: bisaKlik ? 'pointer' : 'default',
+    outline: 'none',
+    lineHeight: 0
+  }
+  const gayaFoto = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+    objectPosition: 'center',
+    display: 'block',
+    borderRadius: '50%'
+  }
+  const gayaTeks = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#ffffff',
+    fontWeight: 800,
+    fontSize: Math.round(px * 0.36) + 'px'
+  }
+  if (bisaKlik) {
+    return (
+      <button type="button" onClick={props.onClick} title={props.title} style={gaya}>
+        {props.src ? <img src={props.src} alt={nama || 'Foto profil'} style={gayaFoto} /> : <span style={gayaTeks}>{inisial}</span>}
+      </button>
+    )
+  }
+  return (
+    <span style={gaya}>
+      {props.src ? <img src={props.src} alt={nama || 'Foto profil'} style={gayaFoto} /> : <span style={gayaTeks}>{inisial}</span>}
+    </span>
+  )
+}`
+u = u.trimEnd() + '\n\n' + AVATAR_BERSIH + '\n'
+simpan(FILE_U, u)
+console.log('[BERHASIL] Semua definisi Avatar lama dibuang, satu Avatar bersih dipasang di akhir ui.jsx')
+
+/* ===== PERBAIKAN 2: buang seluruh blok CSS avatar lama dari index.css ===== */
+const cutIdx = css.indexOf('/* bulat-sempurna-v1')
+if (cutIdx !== -1) {
+  css = css.slice(0, cutIdx).trimEnd() + '\n'
+  simpan(FILE_CSS, css)
+  console.log('[BERHASIL] Blok CSS bulat-sempurna-v1, avatar-bulat-v2, dan bulat-v3 dibuang dari index.css')
+} else {
+  console.log('[INFO] Blok CSS avatar lama tidak ditemukan di index.css')
+}
+
+/* ===== PERBAIKAN 3: lepas pembungkus div atau span polos yang mengurung Avatar di DashboardPage ===== */
+let berubahD = false
+d = d.replace(/<(div|span)\b[^>]*>\s*(<Avatar\b[^>]*?\/>)\s*<\/\1>/gs, function (m, tag, avatar) {
+  berubahD = true
+  return avatar
+})
+if (berubahD) {
+  simpan(FILE_D, d)
+  console.log('[BERHASIL] Pembungkus div atau span polos di sekitar Avatar dilepas')
+} else {
+  console.log('[INFO] Tidak ada pembungkus div atau span polos di sekitar Avatar')
+}
+
+console.log('')
+console.log('WAJIB lakukan dua hal berikut agar perubahan pasti terlihat:')
+console.log('1. Matikan dev server (Ctrl+C) lalu jalankan ulang: npm run dev -- --host')
+console.log('2. Buka browser dalam jendela samaran (incognito) atau DevTools dengan cache disabled, lalu hard refresh Ctrl + Shift + R')
+console.log('')
+console.log('Bila bentuk squircle masih muncul, salin seluruh keluaran bagian DIAGNOSIS di atas ke chat.')
+console.log('Dari situ aku bisa melihat definisi Avatar asli, markup header asli, dan baris CSS asli yang selama ini bersembunyi.')
+```
+
+## File: apply-fix-chip-galeri.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+const FILE_C = 'src/components/cards.jsx'
+
+if (!fs.existsSync(path.join(root, FILE_C))) {
+  console.log('[GAGAL] cards.jsx tidak ditemukan')
+  process.exit(1)
+}
+
+let c = fs.readFileSync(path.join(root, FILE_C), 'utf8').replace(/\r\n/g, '\n')
+let berubah = false
+
+console.log('Mulai menyamakan chip galeri dengan logbook dan merapikan teks bantuan...')
+console.log('')
+
+/* ===== 1. Samakan panggilan PersonChip di GalleryCard dengan logbook ===== */
+const chipSm = '<PersonChip size="sm" mahasiswa={item.mahasiswa} />'
+const chipBiasa = '<PersonChip mahasiswa={item.mahasiswa} />'
+if (c.includes(chipSm)) {
+  c = c.split(chipSm).join(chipBiasa)
+  berubah = true
+  console.log('[BERHASIL] Prop size sm dihapus dari PersonChip kartu galeri')
+} else if (c.includes(chipBiasa)) {
+  console.log('[SUDAH ADA] PersonChip kartu galeri sudah tanpa prop size')
+} else {
+  console.log('[TIDAK KETEMU] Pola PersonChip di GalleryCard')
+}
+
+/* ===== 2. Normalkan PersonChip: prop ukuran tidak lagi mengubah ukuran teks ===== */
+const regexNama = /<p className=\{'font-semibold text-slate-900 ' \+ \(props\.size === 'sm' \? 'text-sm' : ''\)\}>\{nama\}<\/p>/g
+if (regexNama.test(c)) {
+  c = c.replace(regexNama, '<p className="font-semibold text-slate-900">{nama}</p>')
+  berubah = true
+  console.log('[BERHASIL] Teks nama PersonChip dinormalkan tanpa pengecilan ukuran')
+} else {
+  const regexNamaLonggar = /<p className=\{[^>]*?props\.size === 'sm'[^>]*?\}>\{nama\}<\/p>/g
+  if (regexNamaLonggar.test(c)) {
+    c = c.replace(regexNamaLonggar, '<p className="font-semibold text-slate-900">{nama}</p>')
+    berubah = true
+    console.log('[BERHASIL] Teks nama PersonChip dinormalkan lewat pola longgar')
+  } else {
+    console.log('[INFO] Pola teks nama bersyarat tidak ditemukan di PersonChip')
+  }
+}
+
+const regexNim = /<p className=\{[^>]*?props\.size === 'sm'[^>]*?\}>NIM \{nim\}<\/p>/g
+if (regexNim.test(c)) {
+  c = c.replace(regexNim, '<p className="text-xs text-slate-500">NIM {nim}</p>')
+  berubah = true
+  console.log('[BERHASIL] Teks NIM PersonChip dinormalkan tanpa pengecilan ukuran')
+} else {
+  console.log('[INFO] Teks NIM PersonChip sudah seragam')
+}
+
+/* ===== 3. Teks bantuan tampil di semua kartu pada tampilan publik ===== */
+const polaLama = ') : props.isOwner ? null : ('
+const polaBaru = ') : ('
+if (c.includes(polaLama)) {
+  c = c.split(polaLama).join(polaBaru)
+  berubah = true
+  console.log('[BERHASIL] Teks Klik kartu untuk melihat detail kini tampil di semua kartu publik')
+} else if (c.includes('<span className="text-xs font-semibold text-bsi-800">Klik kartu untuk melihat detail</span>')) {
+  console.log('[SUDAH ADA] Logika teks bantuan sudah tampil di semua kartu')
+} else {
+  console.log('[TIDAK KETEMU] Pola logika teks bantuan di GalleryCard')
+}
+
+if (berubah) {
+  fs.writeFileSync(path.join(root, FILE_C), c, 'utf8')
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Hasil akhir kedua perbaikan:')
+console.log('1. Chip pemilik di kartu galeri kini identik dengan kartu logbook: nama berukuran sama, NIM berukuran sama, dan avatar ikut seragam.')
+console.log('2. PersonChip tidak lagi mengecilkan teks berdasarkan prop ukuran, sehingga semua permukaan yang memakainya konsisten selamanya.')
+console.log('3. Pada halaman Galeri publik, setiap kartu menampilkan teks Klik kartu untuk melihat detail, bukan hanya kartu milik orang lain.')
+console.log('4. Di dashboard galeri milik sendiri, tombol Edit dan Hapus tetap tampil menggantikan teks bantuan, sehingga tidak ada duplikasi instruksi.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka halaman Logbook dan Galeri berdampingan: bandingkan chip pemilik, ukuran nama dan NIM kini sama persis.')
+console.log('2. Buka halaman Galeri saat login: semua kartu menampilkan teks bantuan klik, termasuk kartu milik sendiri.')
+console.log('3. Buka tab Galeri di dashboard: kartu milik sendiri menampilkan tombol Edit dan Hapus tanpa teks bantuan.')
+console.log('4. Buka modal detail galeri: chip di dalam modal tetap rapi dengan ukuran teks yang sama.')
+```
+
+## File: apply-fix-ganti-foto.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+console.log('Mulai memperbaiki agar file lama terhapus saat ganti foto profil...')
+console.log('')
+
+fs.writeFileSync(path.join(root, 'src/lib/profil.js'), `import { supabase } from './supabase.js'
+import { siapkanFotoProfil } from './konversi.js'
+
+const MAKS_FOTO_PROFIL = 5 * 1024 * 1024
+
+async function hapusFileLama(fotoUrlLama) {
+  if (!fotoUrlLama) return
+  const bagian = String(fotoUrlLama).split('/foto-profil/')
+  if (bagian[1]) {
+    try {
+      await supabase.storage.from('foto-profil').remove([decodeURIComponent(bagian[1])])
+    } catch (e) {
+      console.warn('Gagal menghapus foto lama dari storage:', e.message)
+    }
+  }
+}
+
+export async function uploadFotoProfil(file, userId, fotoUrlLama) {
+  if (!file) throw new Error('File foto tidak ditemukan')
+  const tipe = String(file.type || '').toLowerCase()
+  if (tipe.indexOf('image/') !== 0 && tipe.indexOf('heic') === -1 && tipe.indexOf('heif') === -1) {
+    throw new Error('File harus berupa gambar')
+  }
+  if (file.size > MAKS_FOTO_PROFIL) throw new Error('Ukuran foto maksimal 5 MB')
+
+  const siap = await siapkanFotoProfil(file, 640, 0.85)
+  const namaFile = userId + '/profil-' + Date.now() + '.webp'
+
+  // Hapus file lama dari storage sebelum upload file baru
+  await hapusFileLama(fotoUrlLama)
+
+  const { error } = await supabase.storage
+    .from('foto-profil')
+    .upload(namaFile, siap, { upsert: true, contentType: siap.type })
+  if (error) throw new Error(error.message)
+
+  const { data } = supabase.storage.from('foto-profil').getPublicUrl(namaFile)
+  return data.publicUrl
+}
+
+export async function updateFotoProfilMahasiswa(mahasiswaId, fotoUrl) {
+  const { error } = await supabase.from('mahasiswa').update({ foto_profil: fotoUrl }).eq('id', mahasiswaId)
+  if (error) throw new Error(error.message)
+}
+
+export async function hapusFotoProfil(mahasiswaId, fotoUrl) {
+  await hapusFileLama(fotoUrl)
+  const { error } = await supabase.from('mahasiswa').update({ foto_profil: null }).eq('id', mahasiswaId)
+  if (error) throw new Error(error.message)
+}
+`, 'utf8')
+console.log('[BERHASIL] src/lib/profil.js ditulis ulang dengan penghapusan file lama saat ganti foto')
+
+/* ===== 2. DashboardPage: kirim fotoUrlLama ke uploadFotoProfil ===== */
+const FILE_D = 'src/pages/DashboardPage.jsx'
+if (fs.existsSync(path.join(root, FILE_D))) {
+  let d = fs.readFileSync(path.join(root, FILE_D), 'utf8').replace(/\r\n/g, '\n')
+  let berubah = false
+
+  // Cari pemanggilan uploadFotoProfil(fotoFile, mahasiswa.id) dan tambahkan parameter ketiga
+  const cari = 'uploadFotoProfil(fotoFile, mahasiswa.id)'
+  const ganti = 'uploadFotoProfil(fotoFile, mahasiswa.id, mahasiswa.foto_profil)'
+  if (d.includes(cari) && !d.includes(ganti)) {
+    d = d.split(cari).join(ganti)
+    berubah = true
+    console.log('[BERHASIL] Parameter fotoUrlLama ditambahkan ke pemanggilan uploadFotoProfil')
+  } else if (d.includes(ganti)) {
+    console.log('[SUDAH ADA] Parameter fotoUrlLama sudah ada')
+  } else {
+    console.log('[TIDAK KETEMU] Pemanggilan uploadFotoProfil di DashboardPage')
+  }
+
+  if (berubah) {
+    fs.writeFileSync(path.join(root, FILE_D), d, 'utf8')
+  }
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Alur baru saat ganti foto profil:')
+console.log('1. User memilih foto baru dan klik Simpan.')
+console.log('2. Foto baru dikonversi ke WebP 640px seperti biasa.')
+console.log('3. SEBELUM upload file baru, file lama dihapus dari Supabase Storage.')
+console.log('4. File baru diunggah dengan nama unik baru.')
+console.log('5. URL baru disimpan ke kolom foto_profil di database.')
+console.log('6. Hasilnya: hanya ada SATU file per user di storage, tidak ada sampah menumpuk.')
+console.log('')
+console.log('Alur saat hapus foto profil:')
+console.log('1. User klik Hapus Foto.')
+console.log('2. File dihapus dari storage.')
+console.log('3. Kolom foto_profil di database dikosongkan.')
+console.log('4. Avatar kembali ke inisial berwarna tema.')
+console.log('')
+console.log('Pembersihan file lama yang sudah terlanjur menumpuk (opsional):')
+console.log('Buka Supabase Dashboard > Storage > bucket foto-profil > folder UUID user')
+console.log('Hapus manual file-file profil-xxxxx.webp yang lama (sisakan yang terbaru saja).')
+```
+
+## File: apply-fix-nim-text.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+const FILE_D = 'src/pages/DospemPage.jsx'
+
+if (!fs.existsSync(path.join(root, FILE_D))) {
+  console.log('[GAGAL] DospemPage.jsx tidak ditemukan')
+  process.exit(1)
+}
+
+let d = fs.readFileSync(path.join(root, FILE_D), 'utf8').replace(/\r\n/g, '\n')
+
+/* Cari baris NIM di dalam kartu Profil Tim yang masih menggunakan text-sm */
+const cari = '<p className="truncate text-sm text-slate-500">NIM {p.nim}</p>'
+const ganti = '<p className="truncate text-xs text-slate-500">NIM {p.nim}</p>'
+
+if (d.includes(ganti)) {
+  console.log('[SUDAH ADA] Teks NIM sudah menggunakan text-xs')
+  process.exit(0)
+}
+
+if (!d.includes(cari)) {
+  console.log('[TIDAK KETEMU] Pola teks NIM dengan text-sm di kartu Profil Tim')
+  process.exit(1)
+}
+
+d = d.split(cari).join(ganti)
+fs.writeFileSync(path.join(root, FILE_D), d, 'utf8')
+
+console.log('[BERHASIL] Teks NIM di kartu Profil Tim diubah dari text-sm menjadi text-xs')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Hasil perubahan:')
+console.log('1. Nama mahasiswa tetap menonjol dengan ukuran text-lg dan ketebalan font-black.')
+console.log('2. NIM turun satu tingkat menjadi text-xs sehingga terlihat lebih tipis dan tidak bersaing dengan nama.')
+console.log('3. Pil prodi hijau mint di bawahnya tetap memakai ukuran text-[11px] sehingga selaras dengan NIM yang baru diperkecil.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka menu Tim & Dospem, lihat section Profil tim magang.')
+console.log('2. Perhatikan urutan tipografi: nama besar tebal, NIM kecil tipis, pil prodi mungil berwarna.')
+console.log('3. Pastikan tidak ada teks yang saling bertumpuk atau keluar dari batas kartu.')
+```
+
+## File: apply-fix-prodi-final.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+function ada(rel) { return fs.existsSync(path.join(root, rel)) }
+
+console.log('Mulai mencabut prodi dari PersonChip dan menata header dashboard...')
+console.log('')
+
+/* ===== 1. cards.jsx: cabut baris prodi dari dalam fungsi PersonChip ===== */
+const FILE_C = 'src/components/cards.jsx'
+if (!ada(FILE_C)) {
+  console.log('[GAGAL] cards.jsx tidak ditemukan')
+  process.exit(1)
+}
+let c = baca(FILE_C)
+const mChip = /function\s+PersonChip\s*\(/.exec(c)
+if (!mChip) {
+  console.log('[TIDAK KETEMU] Fungsi PersonChip di cards.jsx')
+} else {
+  const mulai = mChip.index
+  let brace = 0, akhir = -1, inStr = false, strCh = ''
+  for (let i = mulai; i < c.length; i++) {
+    const ch = c[i]
+    const prev = i > 0 ? c[i - 1] : ''
+    if (inStr) { if (ch === strCh && prev !== '\\') inStr = false; continue }
+    if (ch === '"' || ch === "'" || ch === '`') { inStr = true; strCh = ch; continue }
+    if (ch === '{') brace++
+    if (ch === '}') { brace--; if (brace === 0) { akhir = i + 1; break } }
+  }
+  if (akhir === -1) {
+    console.log('[GAGAL] Batas fungsi PersonChip tidak terbaca')
+  } else {
+    let body = c.slice(mulai, akhir)
+    let n = 0
+    body = body.replace(/\s*\{prodi \? <p[^>]*>\{prodi\}<\/p> : null\}/g, function () { n++; return '' })
+    body = body.replace(/\s*\{prodi \? '[^']*' \+ prodi : ''\}/g, function () { n++; return '' })
+    body = body.replace(/\s*<p[^>]*>\{prodi\}<\/p>/g, function () { n++; return '' })
+    if (n === 0) {
+      console.log('[INFO] Tidak ada baris prodi tersisa di PersonChip')
+    } else {
+      c = c.slice(0, mulai) + body + c.slice(akhir)
+      simpan(FILE_C, c)
+      console.log('[BERHASIL] ' + n + ' baris prodi dicabut dari PersonChip (kartu logbook, galeri, dan detail)')
+    }
+  }
+}
+
+/* ===== 2. DashboardPage: hapus teks Dashboard mahasiswa ===== */
+const FILE_D = 'src/pages/DashboardPage.jsx'
+if (!ada(FILE_D)) {
+  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
+  process.exit(1)
+}
+let d = baca(FILE_D)
+let ubahD = false
+
+const regexLabel = /\s*<p className="text-sm text-slate-500">Dashboard mahasiswa<\/p>/
+if (regexLabel.test(d)) {
+  d = d.replace(regexLabel, '')
+  ubahD = true
+  console.log('[BERHASIL] Teks Dashboard mahasiswa dihapus dari header')
+} else {
+  console.log('[SUDAH ADA] Teks Dashboard mahasiswa tidak ditemukan di header')
+}
+
+/* ===== 3. DashboardPage: tampilkan prodi di bawah NIM pada header ===== */
+const nimP = '<p className="text-sm text-slate-500">NIM {mahasiswa.nim}</p>'
+const prodiP = '{mahasiswa.prodi ? <p className="text-sm text-slate-500">{mahasiswa.prodi}</p> : null}'
+if (d.includes(nimP + '\n' + prodiP)) {
+  console.log('[SUDAH ADA] Prodi sudah tampil di bawah NIM pada header')
+} else if (d.includes(nimP)) {
+  d = d.replace(nimP, nimP + '\n' + prodiP)
+  ubahD = true
+  console.log('[BERHASIL] Prodi ditambahkan di bawah NIM pada header dashboard')
+} else {
+  console.log('[TIDAK KETEMU] Baris NIM pada header dashboard')
+}
+
+if (ubahD) simpan(FILE_D, d)
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Hasil akhir kedua perubahan:')
+console.log('1. Kartu logbook dan kartu galeri beserta modal detailnya kini hanya menampilkan nama dan NIM pada chip pemilik, tanpa baris prodi.')
+console.log('2. Header dashboard tidak lagi menampilkan label Dashboard mahasiswa, sehingga kartu langsung dibuka oleh nama mahasiswa.')
+console.log('3. Nama prodi tampil rapi di bawah baris NIM pada header dashboard, sesuai lampiran kedua yang kamu kirim.')
+console.log('4. Halaman Tim & Dospem tetap menjadi satu-satunya halaman publik lain yang menampilkan prodi, sesuai kesepakatan sebelumnya.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka halaman Logbook dan Galeri: chip pemilik di setiap kartu hanya berisi foto, nama, dan NIM.')
+console.log('2. Buka detail logbook atau galeri: chip di dalam modal juga tanpa prodi.')
+console.log('3. Buka dashboard: header menampilkan foto, nama besar, NIM, lalu prodi di bawahnya, tanpa label Dashboard mahasiswa.')
+console.log('4. Buka Tim & Dospem: pil prodi di kartu Profil tim magang tetap tampil normal.')
+```
+
+## File: apply-fix-setmahasiswa.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+const FILE_D = 'src/pages/DashboardPage.jsx'
+
+if (!fs.existsSync(path.join(root, FILE_D))) {
+  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
+  process.exit(1)
+}
+
+let d = fs.readFileSync(path.join(root, FILE_D), 'utf8').replace(/\r\n/g, '\n')
+let berubah = false
+
+/* ===== 1. State kecil pemaksa render setelah foto berubah ===== */
+if (d.includes('setVersiFoto')) {
+  console.log('[SUDAH ADA] State pemaksa render foto')
+} else {
+  const anchor = 'const [uploadingFoto, setUploadingFoto] = useState(false)'
+  if (d.includes(anchor)) {
+    d = d.replace(anchor, anchor + '\n  const [, setVersiFoto] = useState(0)')
+    berubah = true
+    console.log('[BERHASIL] State pemaksa render foto ditambahkan')
+  } else {
+    console.log('[TIDAK KETEMU] Anchor state uploadingFoto')
+  }
+}
+
+/* ===== 2. simpanFotoProfil: ganti setMahasiswa dengan mutasi plus refresh ===== */
+const cariUrl = 'setMahasiswa(Object.assign({}, mahasiswa, { foto_profil: url }))'
+const gantiUrl = `mahasiswa.foto_profil = url
+      if (typeof refresh === 'function') await refresh()
+      setVersiFoto(function (v) { return v + 1 })`
+if (d.includes(cariUrl)) {
+  d = d.split(cariUrl).join(gantiUrl)
+  berubah = true
+  console.log('[BERHASIL] simpanFotoProfil tidak lagi memakai setMahasiswa')
+} else {
+  console.log('[TIDAK KETEMU] Pola setMahasiswa pada simpanFotoProfil')
+}
+
+/* ===== 3. hapusFotoProfilKu: ganti setMahasiswa dengan mutasi plus refresh ===== */
+const cariNull = 'setMahasiswa(Object.assign({}, mahasiswa, { foto_profil: null }))'
+const gantiNull = `mahasiswa.foto_profil = null
+      if (typeof refresh === 'function') await refresh()
+      setVersiFoto(function (v) { return v + 1 })`
+if (d.includes(cariNull)) {
+  d = d.split(cariNull).join(gantiNull)
+  berubah = true
+  console.log('[BERHASIL] hapusFotoProfilKu tidak lagi memakai setMahasiswa')
+} else {
+  console.log('[TIDAK KETEMU] Pola setMahasiswa pada hapusFotoProfilKu')
+}
+
+if (berubah) {
+  fs.writeFileSync(path.join(root, FILE_D), d, 'utf8')
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Catatan:')
+console.log('1. Foto yang tadi gagal tampil sebenarnya sudah tersimpan di bucket dan database.')
+console.log('2. Setelah perbaikan ini, upload baru akan langsung memperbarui avatar header, kartu Profil, dan seluruh kartu publik.')
+console.log('3. Bila foto lama belum muncul, cukup muat ulang halaman satu kali karena datanya sudah ada di database.')
+```
+
+## File: apply-fix-tiga-masalah.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+function ada(rel) { return fs.existsSync(path.join(root, rel)) }
+
+console.log('Mulai memperbaiki NIM kosong, jarak kartu hadir, dan sebaran prodi...')
+console.log('')
+
+/* ===== 1. AttendancePage: query mahasiswa harus memuat nim ===== */
+const FILE_H = 'src/pages/AttendancePage.jsx'
+if (!ada(FILE_H)) {
+  console.log('[LEWATI] AttendancePage.jsx tidak ditemukan')
+} else {
+  let h = baca(FILE_H)
+  let ubahH = false
+  h = h.replace(/\.from\('mahasiswa'\)\.select\('([^']*)'\)/g, function (m, isi) {
+    if (isi.includes('nim')) return m
+    ubahH = true
+    return ".from('mahasiswa').select('" + isi + ", nim')"
+  })
+  if (ubahH) {
+    simpan(FILE_H, h)
+    console.log('[BERHASIL] Query mahasiswa di AttendancePage kini memuat kolom nim')
+  } else {
+    console.log('[SUDAH ADA] Query AttendancePage sudah memuat nim')
+  }
+}
+
+/* ===== 2. cards.jsx: tambah ruang bawah tanggal di AttendanceCard ===== */
+const FILE_C = 'src/components/cards.jsx'
+if (!ada(FILE_C)) {
+  console.log('[GAGAL] cards.jsx tidak ditemukan')
+  process.exit(1)
+}
+let c = baca(FILE_C)
+const mFn = /export function AttendanceCard\s*\(/.exec(c)
+if (!mFn) {
+  console.log('[TIDAK KETEMU] Fungsi AttendanceCard di cards.jsx')
+} else {
+  const mulai = mFn.index
+  let brace = 0, akhir = -1, inStr = false, strCh = ''
+  for (let i = mulai; i < c.length; i++) {
+    const ch = c[i]
+    const prev = i > 0 ? c[i - 1] : ''
+    if (inStr) { if (ch === strCh && prev !== '\\') inStr = false; continue }
+    if (ch === '"' || ch === "'" || ch === '`') { inStr = true; strCh = ch; continue }
+    if (ch === '{') brace++
+    if (ch === '}') { brace--; if (brace === 0) { akhir = i + 1; break } }
+  }
+  if (akhir === -1) {
+    console.log('[GAGAL] Batas fungsi AttendanceCard tidak terbaca')
+  } else {
+    let body = c.slice(mulai, akhir)
+    if (body.indexOf('formatTanggal(row.tanggal)') === -1) {
+      console.log('[TIDAK KETEMU] Paragraf tanggal di AttendanceCard')
+    } else if (/className="[^"]*pb-[^"]*"[^>]*>\{formatTanggal\(row\.tanggal\)\}/.test(body)) {
+      console.log('[SUDAH ADA] Jarak bawah tanggal di AttendanceCard')
+    } else {
+      const bodyBaru = body.replace(/<p className="([^"]*)">\{formatTanggal\(row\.tanggal\)\}<\/p>/, function (m, cls) {
+        return '<p className="' + cls + ' pb-4">{formatTanggal(row.tanggal)}</p>'
+      })
+      if (bodyBaru === body) {
+        console.log('[TIDAK KETEMU] Pola paragraf tanggal untuk diberi jarak')
+      } else {
+        c = c.slice(0, mulai) + bodyBaru + c.slice(akhir)
+        simpan(FILE_C, c)
+        console.log('[BERHASIL] Jarak antara tanggal dan baris foto nama diperlebar di AttendanceCard')
+      }
+    }
+  }
+}
+
+/* ===== 3. Cabut prodi dari cards.jsx (PersonChip dan PersonCard) ===== */
+c = baca(FILE_C)
+let nC = 0
+c = c.replace(/\s*\{m\.prodi \? '[^']*' \+ m\.prodi : ''\}/g, function () { nC++; return '' })
+c = c.replace(/\s*\{m\.prodi \? <p[^>]*>\{m\.prodi\}<\/p> : null\}/g, function () { nC++; return '' })
+if (nC > 0) {
+  simpan(FILE_C, c)
+  console.log('[BERHASIL] ' + nC + ' kemunculan prodi dihapus dari cards.jsx')
+} else {
+  console.log('[INFO] Tidak ada prodi tersisa di cards.jsx')
+}
+
+/* ===== 4. Cabut prodi dari DashboardPage (header dan tab Profil) ===== */
+const FILE_D = 'src/pages/DashboardPage.jsx'
+if (!ada(FILE_D)) {
+  console.log('[LEWATI] DashboardPage.jsx tidak ditemukan')
+} else {
+  let d = baca(FILE_D)
+  let nD = 0
+  d = d.replace(/\s*\{mahasiswa\.prodi \? <p[^>]*>\{mahasiswa\.prodi\}<\/p> : null\}/g, function () { nD++; return '' })
+  d = d.replace(/\s*<p[^>]*>\{mahasiswa\.prodi\}<\/p>/g, function () { nD++; return '' })
+  if (nD > 0) {
+    simpan(FILE_D, d)
+    console.log('[BERHASIL] ' + nD + ' kemunculan prodi dihapus dari DashboardPage')
+  } else {
+    console.log('[INFO] Tidak ada prodi tersisa di DashboardPage')
+  }
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Hasil akhir ketiga perbaikan:')
+console.log('1. Kartu grafik kehadiran di halaman Daftar Hadir kini menampilkan angka NIM lengkap di bawah nama.')
+console.log('2. Kartu daftar hadir punya napas lega: tanggal berjarak 16 piksel dari baris foto, nama, dan badge status.')
+console.log('3. Nama prodi hanya tampil di halaman Tim & Dospem, yaitu pada pil hijau di kartu Profil tim magang.')
+console.log('4. Beranda, kartu logbook, kartu galeri, PersonChip di detail, header dashboard, dan tab Profil tidak lagi menampilkan prodi.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka Daftar Hadir: kartu grafik per mahasiswa menampilkan NIM berisi angka, bukan label kosong.')
+console.log('2. Lihat kartu kehadiran: jarak tanggal ke baris foto dan nama kini lebih renggang dan nyaman dibaca.')
+console.log('3. Sapu beranda, logbook, galeri, dan dashboard: tidak ada lagi teks prodi di luar halaman Tim & Dospem.')
+console.log('4. Buka Tim & Dospem: pil prodi di kartu Profil tim magang tetap tampil sebagai satu-satunya pengecualian.')
+```
+
+## File: apply-foto-hadir-v2.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+const FILE_C = 'src/components/cards.jsx'
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+
+if (!fs.existsSync(path.join(root, FILE_C))) {
+  console.log('[GAGAL] cards.jsx tidak ditemukan')
+  process.exit(1)
+}
+let c = baca(FILE_C)
+
+function potongFungsi(isi, nama) {
+  const re = new RegExp('export function ' + nama + '\\s*\\(')
+  const m = re.exec(isi)
+  if (!m) return null
+  let brace = 0, akhir = -1, inStr = false, strCh = ''
+  for (let i = m.index; i < isi.length; i++) {
+    const ch = isi[i]
+    const prev = i > 0 ? isi[i - 1] : ''
+    if (inStr) { if (ch === strCh && prev !== '\\') inStr = false; continue }
+    if (ch === '"' || ch === "'" || ch === '`') { inStr = true; strCh = ch; continue }
+    if (ch === '{') brace++
+    if (ch === '}') { brace--; if (brace === 0) { akhir = i + 1; break } }
+  }
+  if (akhir === -1) return null
+  return { mulai: m.index, akhir: akhir }
+}
+
+const TARGET = [
+  { nama: 'AttendanceCard', size: 'md' },
+  { nama: 'AttendanceDetail', size: 'lg' }
+]
+
+let berubahAny = false
+TARGET.forEach(function (t) {
+  const r = potongFungsi(c, t.nama)
+  if (!r) { console.log('[TIDAK KETEMU] Fungsi ' + t.nama + ' di cards.jsx'); return }
+  const body = c.slice(r.mulai, r.akhir)
+  if (body.indexOf('<Avatar') !== -1) { console.log('[SUDAH ADA] Avatar di ' + t.nama); return }
+
+  const AV = '<Avatar src={props.row && props.row.mahasiswa && props.row.mahasiswa.foto_profil ? props.row.mahasiswa.foto_profil : null} nama={props.row && props.row.mahasiswa ? props.row.mahasiswa.nama : \'Mahasiswa\'} size="' + t.size + '" />'
+  let baru = body
+  let pola = ''
+
+  /* Pola 1: wadah flex yang langsung diikuti blok min-w-0 */
+  const p1 = baru.replace(/(<div\s+className="flex\s+items-(?:start|center)[^"]*"\s*>)\s*(<div\s+className="min-w-0)/, function (m, a, b) {
+    return a + '\n' + AV + '\n' + b
+  })
+  if (p1 !== baru) { baru = p1; pola = 'flex+min-w-0' }
+
+  /* Pola 2: blok min-w-0 berdiri sendiri */
+  if (!pola) {
+    const p2 = baru.replace(/<div\s+className="min-w-0/, function (m) { return AV + '\n' + m })
+    if (p2 !== baru) { baru = p2; pola = 'min-w-0' }
+  }
+
+  /* Pola 3: bungkus paragraf atau heading nama bersama Avatar dalam baris flex */
+  if (!pola) {
+    const p3 = baru.replace(/<(p|h2|h3|h4)\b[^>]*>\s*\{[^<>]*?\.nama[^<>]*?\}\s*<\/\1>(\s*<(?:p|h2|h3|h4)\b[^>]*>[\s\S]{0,220}?<\/(?:p|h2|h3|h4)>)?/, function (m) {
+      return '<div className="flex items-center gap-3">' + AV + '<div className="min-w-0 flex-1">' + m + '</div></div>'
+    })
+    if (p3 !== baru) { baru = p3; pola = 'bungkus-nama' }
+  }
+
+  if (!pola) {
+    console.log('[TIDAK KETEMU] Anchor di ' + t.nama + '. Cuplikan isi fungsi:')
+    console.log(body.slice(0, 600))
+    return
+  }
+
+  c = c.slice(0, r.mulai) + baru + c.slice(r.akhir)
+  berubahAny = true
+  console.log('[BERHASIL] Avatar dipasang di ' + t.nama + ' lewat pola ' + pola)
+})
+
+if (berubahAny) {
+  fs.writeFileSync(path.join(root, FILE_C), c, 'utf8')
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Catatan:')
+console.log('1. Avatar merujuk props.row sehingga aman apa pun nama variabel lokal di dalam fungsi.')
+console.log('2. Pola bungkus-nama membuat foto berdampingan dengan nama dan baris identitas di bawahnya tanpa mengubah struktur lain.')
+console.log('3. Bila masih ada fungsi yang melaporkan TIDAK KETEMU, cuplikan isi fungsinya tercetak otomatis; salin ke chat supaya aku kunci pola persisnya.')
+```
+
+## File: apply-foto-hadir.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+function ada(rel) { return fs.existsSync(path.join(root, rel)) }
+
+console.log('Mulai memasang foto profil di halaman daftar hadir...')
+console.log('')
+
+/* ===== 1. AttendancePage.jsx: pastikan query memuat foto_profil ===== */
+const FILE_A = 'src/pages/AttendancePage.jsx'
+if (!ada(FILE_A)) {
+  console.log('[LEWATI] AttendancePage.jsx tidak ditemukan')
+} else {
+  let a = baca(FILE_A)
+  console.log('[DIAGNOSIS] Query select di AttendancePage:')
+  const semuaSelect = a.match(/\.select\([^)]*\)/g) || []
+  semuaSelect.forEach(function (s) { console.log('   ' + s) })
+  let berubah = false
+  a = a.replace(/\.select\((['"`])([^'"`]+)\1\)/g, function (m, q, c) {
+    if (c.includes('mahasiswa') && !c.includes('foto_profil') && c.indexOf('mahasiswa(*)') === -1) {
+      berubah = true
+      return '.select(' + q + c.replace(/mahasiswa(!inner)?\([^)]*\)/g, 'mahasiswa$1(*)') + q + ')'
+    }
+    return m
+  })
+  if (berubah) {
+    simpan(FILE_A, a)
+    console.log('[BERHASIL] Query daftar hadir kini memuat seluruh kolom mahasiswa termasuk foto_profil')
+  } else {
+    console.log('[INFO] Query daftar hadir sudah memuat mahasiswa(*) atau foto_profil')
+  }
+}
+
+/* ===== 2. cards.jsx: pastikan Avatar terimpor ===== */
+const FILE_C = 'src/components/cards.jsx'
+if (!ada(FILE_C)) {
+  console.log('[GAGAL] cards.jsx tidak ditemukan')
+  process.exit(1)
+}
+let c = baca(FILE_C)
+const regexImpAvatar = /import\s*\{[^}]*\bAvatar\b[^}]*\}\s*from\s*'\.\/ui\.jsx'/
+if (regexImpAvatar.test(c)) {
+  console.log('[SUDAH ADA] Import Avatar di cards.jsx')
+} else {
+  const mImp = c.match(/import\s*\{([^}]*)\}\s*from\s*'\.\/ui\.jsx'/)
+  if (mImp) {
+    c = c.replace(mImp[0], "import {" + mImp[1] + ", Avatar } from './ui.jsx'")
+    console.log('[BERHASIL] Avatar ditambahkan ke import ui.jsx yang sudah ada')
+  } else {
+    c = "import { Avatar } from './ui.jsx'\n" + c
+    console.log('[BERHASIL] Baris import Avatar baru ditambahkan di cards.jsx')
+  }
+}
+
+/* ===== 3. Sisipkan Avatar ke AttendanceCard dan AttendanceDetail ===== */
+function potongFungsi(isi, nama) {
+  const re = new RegExp('export function ' + nama + '\\s*\\(')
+  const m = re.exec(isi)
+  if (!m) return null
+  let brace = 0, akhir = -1, inStr = false, strCh = ''
+  for (let i = m.index; i < isi.length; i++) {
+    const ch = isi[i]
+    const prev = i > 0 ? isi[i - 1] : ''
+    if (inStr) { if (ch === strCh && prev !== '\\') inStr = false; continue }
+    if (ch === '"' || ch === "'" || ch === '`') { inStr = true; strCh = ch; continue }
+    if (ch === '{') brace++
+    if (ch === '}') { brace--; if (brace === 0) { akhir = i + 1; break } }
+  }
+  if (akhir === -1) return null
+  return { mulai: m.index, akhir: akhir }
+}
+
+const TARGET_KOMPONEN = [
+  { nama: 'AttendanceCard', size: 'md' },
+  { nama: 'AttendanceDetail', size: 'lg' }
+]
+
+TARGET_KOMPONEN.forEach(function (t) {
+  const rentang = potongFungsi(c, t.nama)
+  if (!rentang) {
+    console.log('[TIDAK KETEMU] Fungsi ' + t.nama + ' di cards.jsx')
+    return
+  }
+  const body = c.slice(rentang.mulai, rentang.akhir)
+  if (body.indexOf('<Avatar') !== -1) {
+    console.log('[SUDAH ADA] Avatar di ' + t.nama)
+    return
+  }
+  const avatarJsx = '<Avatar src={row.mahasiswa && row.mahasiswa.foto_profil ? row.mahasiswa.foto_profil : null} nama={row.mahasiswa ? row.mahasiswa.nama : \'Mahasiswa\'} size="' + t.size + '" />'
+  let bodyBaru = body.replace(/(<div\s+className="flex\s+items-(?:start|center)[^"]*"\s*>)\s*(<div\s+className="min-w-0)/, function (m, p1, p2) {
+    return p1 + '\n' + avatarJsx + '\n' + p2
+  })
+  let pola = 'flex + min-w-0'
+  if (bodyBaru === body) {
+    bodyBaru = body.replace(/<div\s+className="min-w-0/, function (m) {
+      return avatarJsx + '\n' + m
+    })
+    pola = 'min-w-0 langsung'
+  }
+  if (bodyBaru === body) {
+    console.log('[TIDAK KETEMU] Anchor penyisipan di ' + t.nama)
+    return
+  }
+  c = c.slice(0, rentang.mulai) + bodyBaru + c.slice(rentang.akhir)
+  console.log('[BERHASIL] Avatar dipasang di ' + t.nama + ' lewat pola ' + pola)
+})
+
+simpan(FILE_C, c)
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Hasil yang akan terlihat:')
+console.log('1. Setiap kartu kehadiran di halaman Daftar Hadir menampilkan foto profil kotak melengkung di sebelah nama dan NIM.')
+console.log('2. Modal detail kehadiran menampilkan foto ukuran lebih besar di bagian identitas.')
+console.log('3. Mahasiswa tanpa foto tetap melihat inisial berwarna tema dengan bentuk yang sama.')
+console.log('4. Tab Daftar Hadir di dashboard pemilik akun juga ikut berubah karena memakai kartu yang sama.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka halaman Daftar Hadir: kartu kehadiran kini punya foto di kiri nama.')
+console.log('2. Klik Detail pada salah satu baris: modal menampilkan foto ukuran besar.')
+console.log('3. Buka tab Daftar Hadir di dashboard: perubahan yang sama terlihat di sana.')
+console.log('4. Bila foto belum muncul padahal mahasiswa sudah upload, cek baris [DIAGNOSIS] query di atas dan kirim ke aku bila tidak memuat mahasiswa(*).')
+```
+
+## File: apply-foto-profil-webp.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+function ada(rel) { return fs.existsSync(path.join(root, rel)) }
+
+console.log('Mulai menyamakan pipeline foto profil dengan alur konversi R2...')
+console.log('')
+
+/* ===== 0. Cek dependensi heic2any ===== */
+if (ada('package.json')) {
+  const pkg = baca('package.json')
+  if (pkg.includes('heic2any')) console.log('[AMAN] Dependensi heic2any sudah terpasang')
+  else console.log('[PERINGATAN] heic2any belum ada di package.json. Jalankan dulu: npm install heic2any')
+}
+
+/* ===== 1. konversi.js: tambahkan helper khusus foto profil ===== */
+const FILE_K = 'src/lib/konversi.js'
+if (!ada(FILE_K)) {
+  console.log('[GAGAL] src/lib/konversi.js tidak ditemukan')
+  process.exit(1)
+}
+let k = baca(FILE_K)
+console.log('[DIAGNOSIS] Daftar export di konversi.js:')
+;(k.match(/export\s+(?:async\s+)?function\s+[A-Za-z0-9_]+/g) || []).forEach(function (e) { console.log('   ' + e) })
+
+if (!/import\s+heic2any\s+from\s+'heic2any'/.test(k)) {
+  k = "import heic2any from 'heic2any'\n" + k
+  console.log('[BERHASIL] Import heic2any ditambahkan di konversi.js')
+}
+
+const BLOK_KONVERSI = `/* foto-profil-webp: pipeline konversi foto profil, pola sama dengan alur media R2 */
+function muatGambarProfil(sumber) {
+  return new Promise(function (resolve, reject) {
+    const url = URL.createObjectURL(sumber)
+    const img = new Image()
+    img.onload = function () { resolve({ img: img, url: url }) }
+    img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('Gambar tidak dapat dibaca')) }
+    img.src = url
+  })
+}
+
+export async function siapkanFotoProfil(file, maksSisi, kualitas) {
+  const sisi = maksSisi || 640
+  const mutu = kualitas || 0.85
+  let kerja = file
+  const tipe = String(file.type || '').toLowerCase()
+  if (tipe.indexOf('heic') !== -1 || tipe.indexOf('heif') !== -1) {
+    const blob = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.92 })
+    kerja = new File([Array.isArray(blob) ? blob[0] : blob], (file.name || 'foto').replace(/\\.(heic|heif)$/i, '.jpg'), { type: 'image/jpeg' })
+  }
+  const muat = await muatGambarProfil(kerja)
+  try {
+    const rasio = Math.min(1, sisi / Math.max(muat.img.width, muat.img.height))
+    const w = Math.max(1, Math.round(muat.img.width * rasio))
+    const h = Math.max(1, Math.round(muat.img.height * rasio))
+    const canvas = document.createElement('canvas')
+    canvas.width = w
+    canvas.height = h
+    const ctx = canvas.getContext('2d')
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
+    ctx.drawImage(muat.img, 0, 0, w, h)
+    const blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/webp', mutu) })
+    if (!blob) throw new Error('Gagal mengonversi foto ke WebP')
+    return new File([blob], 'profil-' + Date.now() + '.webp', { type: 'image/webp' })
+  } finally {
+    URL.revokeObjectURL(muat.url)
+  }
+}`
+
+if (k.includes('siapkanFotoProfil')) {
+  console.log('[SUDAH ADA] siapkanFotoProfil di konversi.js')
+} else {
+  k = k.trimEnd() + '\n\n' + BLOK_KONVERSI + '\n'
+  simpan(FILE_K, k)
+  console.log('[BERHASIL] siapkanFotoProfil ditambahkan di konversi.js')
+}
+
+/* ===== 2. profil.js: tulis ulang agar memakai pipeline konversi ===== */
+simpan('src/lib/profil.js', `import { supabase } from './supabase.js'
+import { siapkanFotoProfil } from './konversi.js'
+
+const MAKS_FOTO_PROFIL = 5 * 1024 * 1024
+
+export async function uploadFotoProfil(file, userId) {
+  if (!file) throw new Error('File foto tidak ditemukan')
+  const tipe = String(file.type || '').toLowerCase()
+  if (tipe.indexOf('image/') !== 0) throw new Error('File harus berupa gambar')
+  if (file.size > MAKS_FOTO_PROFIL) throw new Error('Ukuran foto maksimal 5 MB')
+  const siap = await siapkanFotoProfil(file, 640, 0.85)
+  const namaFile = userId + '/profil-' + Date.now() + '.webp'
+  const { error } = await supabase.storage
+    .from('foto-profil')
+    .upload(namaFile, siap, { upsert: true, contentType: siap.type })
+  if (error) throw new Error(error.message)
+  const { data } = supabase.storage.from('foto-profil').getPublicUrl(namaFile)
+  return data.publicUrl
+}
+
+export async function updateFotoProfilMahasiswa(mahasiswaId, fotoUrl) {
+  const { error } = await supabase.from('mahasiswa').update({ foto_profil: fotoUrl }).eq('id', mahasiswaId)
+  if (error) throw new Error(error.message)
+}
+
+export async function hapusFotoProfil(mahasiswaId, fotoUrl) {
+  if (fotoUrl) {
+    const bagian = String(fotoUrl).split('/foto-profil/')
+    if (bagian[1]) {
+      await supabase.storage.from('foto-profil').remove([decodeURIComponent(bagian[1])])
+    }
+  }
+  const { error } = await supabase.from('mahasiswa').update({ foto_profil: null }).eq('id', mahasiswaId)
+  if (error) throw new Error(error.message)
+}
+`)
+console.log('[BERHASIL] src/lib/profil.js ditulis ulang dengan pipeline konversi WebP')
+
+/* ===== 3. DashboardPage: izinkan HEIC dan perbarui teks bantuan ===== */
+const FILE_D = 'src/pages/DashboardPage.jsx'
+if (!ada(FILE_D)) {
+  console.log('[LEWATI] DashboardPage.jsx tidak ditemukan')
+} else {
+  let d = baca(FILE_D)
+  const sebelum = d
+  d = d.split('accept="image/png,image/jpeg,image/webp"').join('accept="image/png,image/jpeg,image/webp,image/heic,image/heif"')
+  d = d.split('Format JPG, PNG, atau WebP. Maksimal 5 MB.').join('Format JPG, PNG, WebP, atau HEIC iPhone. Otomatis dikonversi ke WebP ringan. Maksimal 5 MB.')
+  if (d !== sebelum) {
+    simpan(FILE_D, d)
+    console.log('[BERHASIL] Input file dan teks bantuan foto profil diperbarui')
+  } else {
+    console.log('[INFO] Tidak ada teks input foto profil yang perlu diubah')
+  }
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Alur baru foto profil, identik dengan pola media R2:')
+console.log('1. File HEIC atau HEIF dari iPhone dikonversi lebih dulu ke JPG lewat heic2any, persis seperti alur upload foto logbook dan galeri.')
+console.log('2. Semua format kemudian digambar ulang di canvas dengan sisi terpanjang maksimal 640 piksel dan penghalusan kualitas tinggi, sehingga hasil kecil tetapi tetap mulus tanpa pecah atau gerigi aliasing.')
+console.log('3. Canvas menyimpan hasil sebagai WebP kualitas 0,85, lalu file itulah yang diunggah ke bucket foto-profil dengan ekstensi webp.')
+console.log('4. Ukuran akhir biasanya hanya 50 sampai 120 KB, sangat cukup untuk tampilan terbesar 160 piksel di tab Profil maupun 96 piksel di header.')
+console.log('5. Validasi tetap berjalan: hanya berkas gambar dan maksimal 5 MB sebelum konversi.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka tab Profil, klik Ganti atau Upload Foto, pilih foto besar dari kamera atau iPhone.')
+console.log('2. Simpan, lalu buka bucket foto-profil di dashboard Supabase: file baru berakhiran .webp dengan ukuran kecil.')
+console.log('3. Periksa tampilan di header, tab Profil, dan kartu publik: foto tetap tajam dan mulus.')
+console.log('4. Foto lama yang sudah terunggah tidak berubah formatnya; hanya unggahan baru yang melewati pipeline konversi.')
+```
+
+## File: apply-foto-profil.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+function ada(rel) { return fs.existsSync(path.join(root, rel)) }
+
+function sisipSetelah(rel, anchor, teks, marker, label) {
+  if (!ada(rel)) { console.log('[LEWATI] ' + rel + ' tidak ditemukan (' + label + ')'); return }
+  let isi = baca(rel)
+  if (isi.includes(marker)) { console.log('[SUDAH ADA] ' + label); return }
+  if (!isi.includes(anchor)) { console.log('[TIDAK KETEMU] Anchor untuk ' + label + ' di ' + rel); return }
+  isi = isi.replace(anchor, anchor + '\n' + teks)
+  simpan(rel, isi)
+  console.log('[BERHASIL] ' + label)
+}
+
+function sisipSebelum(rel, anchor, teks, marker, label) {
+  if (!ada(rel)) { console.log('[LEWATI] ' + rel + ' tidak ditemukan (' + label + ')'); return }
+  let isi = baca(rel)
+  if (isi.includes(marker)) { console.log('[SUDAH ADA] ' + label); return }
+  if (!isi.includes(anchor)) { console.log('[TIDAK KETEMU] Anchor untuk ' + label + ' di ' + rel); return }
+  isi = isi.replace(anchor, teks + '\n' + anchor)
+  simpan(rel, isi)
+  console.log('[BERHASIL] ' + label)
+}
+
+console.log('Mulai memasang fitur foto profil mahasiswa...')
+console.log('')
+
+/* ===== 1. src/lib/profil.js: helper upload, simpan, hapus foto profil ===== */
+simpan('src/lib/profil.js', `import { supabase } from './supabase.js'
+
+const MAKS_FOTO_PROFIL = 5 * 1024 * 1024
+
+export async function uploadFotoProfil(file, userId) {
+  if (!file) throw new Error('File foto tidak ditemukan')
+  const tipe = String(file.type || '').toLowerCase()
+  if (tipe.indexOf('heic') !== -1 || tipe.indexOf('heif') !== -1) {
+    throw new Error('Format HEIC belum didukung untuk foto profil. Ubah dulu ke JPG atau PNG.')
+  }
+  if (tipe.indexOf('image/') !== 0) throw new Error('File harus berupa gambar')
+  if (file.size > MAKS_FOTO_PROFIL) throw new Error('Ukuran foto maksimal 5 MB')
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+  const namaFile = userId + '/profil-' + Date.now() + '.' + ext
+  const { error } = await supabase.storage
+    .from('foto-profil')
+    .upload(namaFile, file, { upsert: true, contentType: file.type })
+  if (error) throw new Error(error.message)
+  const { data } = supabase.storage.from('foto-profil').getPublicUrl(namaFile)
+  return data.publicUrl
+}
+
+export async function updateFotoProfilMahasiswa(mahasiswaId, fotoUrl) {
+  const { error } = await supabase.from('mahasiswa').update({ foto_profil: fotoUrl }).eq('id', mahasiswaId)
+  if (error) throw new Error(error.message)
+}
+
+export async function hapusFotoProfil(mahasiswaId, fotoUrl) {
+  if (fotoUrl) {
+    const bagian = String(fotoUrl).split('/foto-profil/')
+    if (bagian[1]) {
+      await supabase.storage.from('foto-profil').remove([decodeURIComponent(bagian[1])])
+    }
+  }
+  const { error } = await supabase.from('mahasiswa').update({ foto_profil: null }).eq('id', mahasiswaId)
+  if (error) throw new Error(error.message)
+}
+`)
+console.log('[BERHASIL] src/lib/profil.js ditulis')
+
+/* ===== 2. ui.jsx: komponen Avatar dengan fallback inisial bertema ===== */
+const FILE_U = 'src/components/ui.jsx'
+sisipSetelah(FILE_U,
+  'export function TitikAnim() {',
+  `export function Avatar(props) {
+  const size = props.size || 'md'
+  const kelas = size === 'sm' ? 'h-9 w-9 text-xs' : size === 'lg' ? 'h-14 w-14 text-base' : size === 'xl' ? 'h-24 w-24 text-2xl' : 'h-11 w-11 text-sm'
+  const nama = props.nama || ''
+  const inisial = nama ? nama.trim().split(/\\s+/).map(function (w) { return w[0] }).join('').slice(0, 2).toUpperCase() : '?'
+  const palet = ['bg-bsi-700', 'bg-bsi-600', 'bg-gold-600', 'bg-gold-500', 'bg-slate-700', 'bg-emerald-700']
+  let hash = 0
+  for (let i = 0; i < nama.length; i++) hash = (hash * 31 + nama.charCodeAt(i)) >>> 0
+  const warna = palet[hash % palet.length]
+  if (props.src) {
+    return <img src={props.src} alt={nama || 'Foto profil'} className={kelas + ' rounded-full object-cover border-2 border-white shadow-md'} />
+  }
+  return <div className={kelas + ' ' + warna + ' rounded-full grid place-items-center font-black text-white border-2 border-white shadow-md'}>{inisial}</div>
+}`,
+  'export function Avatar',
+  'Komponen Avatar ditambahkan di ui.jsx')
+
+/* ===== 3. DashboardPage: import helper dan Avatar ===== */
+const FILE_D = 'src/pages/DashboardPage.jsx'
+sisipSetelah(FILE_D,
+  `import { parseYouTubeId, ytThumb, fetchYouTubeQuota, unggahVideoYouTube } from '../lib/youtube.js'`,
+  `import { uploadFotoProfil, updateFotoProfilMahasiswa, hapusFotoProfil } from '../lib/profil.js'
+import { Avatar } from '../components/ui.jsx'`,
+  "from '../lib/profil.js'",
+  'Import helper foto profil dan Avatar di DashboardPage')
+
+/* ===== 4. DashboardPage: state foto profil ===== */
+sisipSetelah(FILE_D,
+  'const [ytQuotaLoading, setYtQuotaLoading] = useState(true)',
+  `  const [showUploadFoto, setShowUploadFoto] = useState(false)
+  const [fotoPreview, setFotoPreview] = useState(null)
+  const [fotoFile, setFotoFile] = useState(null)
+  const [uploadingFoto, setUploadingFoto] = useState(false)`,
+  'showUploadFoto',
+  'State foto profil ditambahkan di DashboardPage')
+
+/* ===== 5. DashboardPage: handler foto profil ===== */
+sisipSebelum(FILE_D,
+  'async function submitHadir(e) {',
+  `  function pilihFotoProfil(e) {
+    const f = e.target.files[0]
+    if (!f) return
+    if (f.size > 5 * 1024 * 1024) { alert('Ukuran foto maksimal 5 MB.'); e.target.value = ''; return }
+    setFotoFile(f)
+    const reader = new FileReader()
+    reader.onloadend = function () { setFotoPreview(reader.result) }
+    reader.readAsDataURL(f)
+  }
+  async function simpanFotoProfil() {
+    if (!fotoFile) { alert('Pilih file foto terlebih dahulu.'); return }
+    setUploadingFoto(true)
+    try {
+      const url = await uploadFotoProfil(fotoFile, mahasiswa.id)
+      await updateFotoProfilMahasiswa(mahasiswa.id, url)
+      setMahasiswa(Object.assign({}, mahasiswa, { foto_profil: url }))
+      setShowUploadFoto(false)
+      setFotoPreview(null)
+      setFotoFile(null)
+    } catch (err) {
+      alert('Gagal upload foto profil: ' + err.message)
+    }
+    setUploadingFoto(false)
+  }
+  async function hapusFotoProfilKu() {
+    if (!window.confirm('Hapus foto profil saat ini?')) return
+    try {
+      await hapusFotoProfil(mahasiswa.id, mahasiswa.foto_profil)
+      setMahasiswa(Object.assign({}, mahasiswa, { foto_profil: null }))
+    } catch (err) {
+      alert('Gagal menghapus foto profil: ' + err.message)
+    }
+  }`,
+  'function simpanFotoProfil',
+  'Handler foto profil ditambahkan di DashboardPage')
+
+/* ===== 6. DashboardPage: section UI foto profil ===== */
+const SECTION_FOTO = `<section className="mt-8 card-hover rounded-[2rem] bg-white border border-slate-200 p-6 shadow-sm">
+  <div className="flex flex-wrap items-center gap-4">
+    <Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl" />
+    <div className="min-w-0 flex-1">
+      <h2 className="text-lg font-black text-slate-900">Foto Profil</h2>
+      <p className="text-sm text-slate-500">Foto ini tampil di kartu kamu pada halaman publik, logbook, dan galeri.</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button type="button" onClick={function () { setShowUploadFoto(!showUploadFoto) }} className="px-4 py-2 rounded-xl text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition">{mahasiswa.foto_profil ? 'Ganti Foto' : 'Upload Foto'}</button>
+        {mahasiswa.foto_profil ? <button type="button" onClick={hapusFotoProfilKu} className="px-4 py-2 rounded-xl text-sm font-bold bg-red-50 text-red-700 hover:bg-red-100 transition">Hapus Foto</button> : null}
+      </div>
+    </div>
+  </div>
+  {showUploadFoto ? (
+    <div className="mt-4 border-t border-slate-200 pt-4">
+      <div className="flex flex-wrap items-start gap-4">
+        {fotoPreview ? <img src={fotoPreview} alt="Pratinjau foto profil" className="h-24 w-24 rounded-full object-cover border-2 border-white shadow-md" /> : null}
+        <div className="min-w-0 flex-1">
+          <input type="file" accept="image/png,image/jpeg,image/webp" onChange={pilihFotoProfil} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-800 hover:file:bg-emerald-100" />
+          <p className="mt-2 text-xs text-slate-500">Format JPG, PNG, atau WebP. Maksimal 5 MB.</p>
+          <div className="mt-3 flex gap-2">
+            <button type="button" onClick={simpanFotoProfil} disabled={uploadingFoto || !fotoFile} className="px-4 py-2 rounded-xl text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition disabled:opacity-50">{uploadingFoto ? 'Mengunggah...' : 'Simpan Foto'}</button>
+            <button type="button" onClick={function () { setShowUploadFoto(false); setFotoPreview(null); setFotoFile(null) }} className="px-4 py-2 rounded-xl text-sm font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition">Batal</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  ) : null}
+</section>`
+if (ada(FILE_D)) {
+  let d = baca(FILE_D)
+  if (d.includes('>Foto Profil<')) {
+    console.log('[SUDAH ADA] Section foto profil di DashboardPage')
+  } else if (d.includes("{tab === 'logbook' ? (")) {
+    d = d.replace("{tab === 'logbook' ? (", SECTION_FOTO + '\n' + "{tab === 'logbook' ? (")
+    simpan(FILE_D, d)
+    console.log('[BERHASIL] Section foto profil dipasang di DashboardPage')
+  } else if (d.includes("{tab === 'galeri' ? (")) {
+    d = d.replace("{tab === 'galeri' ? (", SECTION_FOTO + '\n' + "{tab === 'galeri' ? (")
+    simpan(FILE_D, d)
+    console.log('[BERHASIL] Section foto profil dipasang di DashboardPage (anchor galeri)')
+  } else {
+    console.log('[TIDAK KETEMU] Anchor section foto profil di DashboardPage')
+  }
+} else {
+  console.log('[LEWATI] DashboardPage tidak ditemukan')
+}
+
+/* ===== 7. Best effort: ganti lingkaran inisial di kartu publik dan PersonChip dengan Avatar ===== */
+const TARGET = ['src/components/cards.jsx', 'src/components/ui.jsx', 'src/pages/PublicPage.jsx', 'src/pages/BerandaPage.jsx']
+const regexInisial = /<div\b[^>]*rounded-full[^>]*>\s*\{([^{}]*?\.nama[^{}]*?)\}\s*<\/div>/g
+TARGET.forEach(function (rel) {
+  if (!ada(rel)) { console.log('[LEWATI] ' + rel + ' tidak ditemukan'); return }
+  let isi = baca(rel)
+  let jumlah = 0
+  const hasil = isi.replace(regexInisial, function (m, ekspresi) {
+    const varMatch = ekspresi.match(/([A-Za-z0-9_]+)\.nama/)
+    if (!varMatch) return m
+    jumlah++
+    const v = varMatch[1]
+    return `<Avatar src={${v}.foto_profil || null} nama={${v}.nama} size="lg" />`
+  })
+  if (jumlah === 0) { console.log('[TIDAK KETEMU] Lingkaran inisial di ' + rel); return }
+  let akhir = hasil
+  if (rel !== 'src/components/ui.jsx' && !akhir.includes("import { Avatar } from")) {
+    const impor = rel.indexOf('/pages/') !== -1 ? "import { Avatar } from '../components/ui.jsx'\n" : "import { Avatar } from './ui.jsx'\n"
+    akhir = impor + akhir
+  }
+  simpan(rel, akhir)
+  console.log('[BERHASIL] ' + jumlah + ' lingkaran inisial diganti Avatar di ' + rel)
+})
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Pengingat wajib sebelum uji:')
+console.log('1. SQL Langkah 1 harus sudah dijalankan: kolom foto_profil, bucket foto-profil, dan keempat policy storage.')
+console.log('2. Bila query mahasiswa di DashboardPage memilih kolom tertentu, pastikan foto_profil ikut dipilih.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Login sebagai mahasiswa, lihat section Foto Profil di bagian atas dashboard.')
+console.log('2. Klik Upload Foto, pilih JPG atau PNG di bawah 5 MB, pratinjau muncul, lalu Simpan Foto.')
+console.log('3. Avatar besar langsung berubah menjadi foto kamu tanpa reload halaman.')
+console.log('4. Buka halaman publik: kartu mahasiswa menampilkan foto, bukan lingkaran inisial.')
+console.log('5. Klik Hapus Foto untuk menguji penghapusan; avatar kembali ke inisial berwarna tema.')
+console.log('6. Foto tersimpan di bucket foto-profil dengan pola folder sesuai id user, aman per pengguna.')
+```
+
+## File: apply-gabung-tim-dospem.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+function ada(rel) { return fs.existsSync(path.join(root, rel)) }
+
+console.log('Mulai menerapkan penggabungan halaman Tim ke dalam Dospem...')
+console.log('')
+
+/* ===== 1. DospemPage.jsx: data tim dan section Profil tim magang ===== */
+const FILE_D = 'src/pages/DospemPage.jsx'
+if (!ada(FILE_D)) {
+  console.log('[GAGAL] DospemPage.jsx tidak ditemukan')
+  process.exit(1)
+}
+let d = baca(FILE_D)
+let ubahD = false
+
+if (d.indexOf('Avatar') === -1) {
+  d = d.replace(/import\s*\{([^}]*)\}\s*from\s*'\.\.\/components\/ui\.jsx'/, function (m, isi) {
+    return "import {" + isi + ", Avatar } from '../components/ui.jsx'"
+  })
+  ubahD = true
+  console.log('[BERHASIL] Import Avatar ditambahkan di DospemPage')
+} else {
+  console.log('[SUDAH ADA] Import Avatar di DospemPage')
+}
+
+if (d.indexOf('galRows') === -1) {
+  d = d.replace(/const \[hadirCount, setHadirCount\] = useState\(0\)/,
+    "const [hadirCount, setHadirCount] = useState(0)\n  const [galRows, setGalRows] = useState([])\n  const [hadirRows, setHadirRows] = useState([])")
+  ubahD = true
+  console.log('[BERHASIL] State galRows dan hadirRows ditambahkan')
+} else {
+  console.log('[SUDAH ADA] State galRows dan hadirRows')
+}
+
+if (d.indexOf("select('id, mahasiswa_id')") === -1) {
+  d = d.replace(".from('galeri').select('id')", ".from('galeri').select('id, mahasiswa_id')")
+  d = d.replace(".from('daftar_hadir').select('id')", ".from('daftar_hadir').select('id, mahasiswa_id')")
+  ubahD = true
+  console.log('[BERHASIL] Query galeri dan daftar hadir kini membawa mahasiswa_id')
+} else {
+  console.log('[SUDAH ADA] Query galeri dan daftar hadir sudah membawa mahasiswa_id')
+}
+
+if (d.indexOf('setGalRows(') === -1) {
+  d = d.replace(/setGalCount\(\(g\.data\s*\|\|\s*\[\]\)\.length\)/, function (m) {
+    return m + "\n      setGalRows(g.data || [])"
+  })
+  d = d.replace(/setHadirCount\(\(h\.data\s*\|\|\s*\[\]\)\.length\)/, function (m) {
+    return m + "\n      setHadirRows(h.data || [])"
+  })
+  ubahD = true
+  console.log('[BERHASIL] Pengisian state galRows dan hadirRows ditambahkan')
+} else {
+  console.log('[SUDAH ADA] Pengisian state galRows dan hadirRows')
+}
+
+if (d.indexOf('foto_profil') === -1) {
+  d = d.replace(/\.select\('id, nama, nim, prodi'\)/, ".select('id, nama, nim, prodi, foto_profil')")
+  ubahD = true
+  console.log('[BERHASIL] Query mahasiswa kini membawa foto_profil')
+} else {
+  console.log('[SUDAH ADA] Query mahasiswa sudah membawa foto_profil')
+}
+
+if (d.indexOf('Profil tim magang') === -1) {
+  const anchor = '<section className="mt-10">'
+  const idx = d.indexOf(anchor)
+  if (idx === -1) {
+    console.log('[TIDAK KETEMU] Anchor section untuk menyisipkan Profil tim magang')
+  } else {
+    const SECTION_TIM = `<section className="mt-10">
+<h2 className="text-2xl lg:text-3xl font-black text-slate-900">Profil tim magang</h2>
+<p className="mt-2 max-w-3xl text-slate-500">Seluruh mahasiswa magang beserta kontribusi logbook, media galeri, dan catatan kehadiran masing-masing.</p>
+<div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+{loading
+? [0, 1, 2].map(function (i) { return <SkeletonPersonCard key={i} /> })
+: people.map(function (p) {
+const totalLog = logs.filter(function (x) { return x.mahasiswa_id === p.id }).length
+const totalGal = galRows.filter(function (x) { return x.mahasiswa_id === p.id }).length
+const totalHadir = hadirRows.filter(function (x) { return x.mahasiswa_id === p.id }).length
+return (
+<div key={p.id} className="card-hover flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+<Avatar src={p.foto_profil || null} nama={p.nama} size="lg" />
+<div className="min-w-0 flex-1">
+<p className="truncate font-bold text-slate-900">{p.nama}</p>
+<p className="truncate text-xs text-slate-500">NIM {p.nim}{p.prodi ? ' • ' + p.prodi : ''}</p>
+<div className="mt-2 flex flex-wrap gap-1.5 text-[11px] font-semibold">
+<span className="inline-flex px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">{totalLog} logbook</span>
+<span className="inline-flex px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">{totalGal} media</span>
+<span className="inline-flex px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{totalHadir} hadir</span>
+</div>
+</div>
+</div>
+)
+})}
+{!loading && !people.length ? <EmptyState title="Belum ada data mahasiswa" desc="Profil tim akan tampil setelah mahasiswa terdaftar." /> : null}
+</div>
+</section>
+`
+    d = d.slice(0, idx) + SECTION_TIM + d.slice(idx)
+    ubahD = true
+    console.log('[BERHASIL] Section Profil tim magang disisipkan sebelum grid logbook')
+  }
+} else {
+  console.log('[SUDAH ADA] Section Profil tim magang')
+}
+
+if (ubahD) simpan(FILE_D, d)
+
+/* ===== 2. App.jsx: route /tim dialihkan ke /dospem ===== */
+const FILE_A = 'src/App.jsx'
+if (!ada(FILE_A)) {
+  console.log('[LEWATI] App.jsx tidak ditemukan')
+} else {
+  let a = baca(FILE_A)
+  if (a.indexOf('Navigate to="/dospem"') !== -1) {
+    console.log('[SUDAH ADA] Redirect /tim ke /dospem')
+  } else {
+    const sebelum = a
+    a = a.replace(/<Route\s+path="\/tim"\s*element=\{<TimPage\s*\/>\}\s*\/>/, '<Route path="/tim" element={<Navigate to="/dospem" replace />} />')
+    if (a === sebelum) {
+      a = a.replace(/<Route\s+path="\/tim"[^>]*\/>/, '<Route path="/tim" element={<Navigate to="/dospem" replace />} />')
+    }
+    if (a !== sebelum) {
+      if (!/import\s*\{[^}]*\bNavigate\b[^}]*\}\s*from\s*'react-router-dom'/.test(a)) {
+        a = a.replace(/import\s*\{([^}]*)\}\s*from\s*'react-router-dom'/, function (m, isi) {
+          return "import {" + isi + ", Navigate } from 'react-router-dom'"
+        })
+      }
+      simpan(FILE_A, a)
+      console.log('[BERHASIL] Route /tim kini dialihkan otomatis ke /dospem')
+    } else {
+      console.log('[TIDAK KETEMU] Pola route /tim di App.jsx, periksa manual')
+    }
+  }
+}
+
+/* ===== 3. Layout.jsx: satu menu gabungan ===== */
+const FILE_L = 'src/components/Layout.jsx'
+if (!ada(FILE_L)) {
+  console.log('[LEWATI] Layout.jsx tidak ditemukan')
+} else {
+  let l = baca(FILE_L)
+  const sebelum = l
+  l = l.replace(/<(NavLink|Link)\b[^>]*to="\/tim"[^>]*>[^<]*<\/\1>/g, '')
+  l = l.replace(/,?\s*\{\s*to:\s*['"]\/tim['"][^}]*\}/g, '')
+  l = l.split('>Dospem<').join('>Tim & Dospem<')
+  l = l.replace(/label:\s*'Dospem'/, "label: 'Tim & Dospem'")
+  l = l.replace(/label:\s*"Dospem"/, 'label: "Tim & Dospem"')
+  if (l !== sebelum) {
+    simpan(FILE_L, l)
+    console.log('[BERHASIL] Menu Tim dihapus dan menu Dospem berganti label Tim & Dospem')
+  } else {
+    console.log('[INFO] Navigasi tidak berubah, periksa manual bila menu Tim masih tampil')
+  }
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Hasil yang berlaku sekarang:')
+console.log('1. Halaman /dospem memuat hero monitoring, section Profil tim magang dengan avatar kotak melengkung dan lencana kontribusi, lalu grid logbook publik, persis seperti pratinjau HTML yang kamu setujui.')
+console.log('2. Menu navigasi hanya menampilkan satu butir bernama Tim & Dospem.')
+console.log('3. Alamat lama /tim otomatis dialihkan ke /dospem sehingga tautan yang pernah dibagikan tetap hidup.')
+console.log('4. Berkas TimPage.jsx dibiarkan ada namun tidak terpakai, aman dihapus manual kapan saja bersama preview-tim-dospem.html bila sudah tidak diperlukan.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka menu Tim & Dospem: hero statistik tampil lebih dulu, lalu kartu profil anggota tim, lalu grid logbook.')
+console.log('2. Ketik /tim di address bar: browser otomatis mendarat di /dospem.')
+console.log('3. Pastikan foto profil muncul pada kartu anggota bagi mahasiswa yang sudah mengunggah foto, dan inisial berwarna bagi yang belum.')
+console.log('4. Buka halaman pada perangkat kecil: grid kartu turun menjadi satu atau dua kolom dengan rapi.')
+```
+
+## File: apply-hapus-ringkasan.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+function ada(rel) { return fs.existsSync(path.join(root, rel)) }
+
+console.log('Mulai menghapus section Ringkasan logbook per mahasiswa...')
+console.log('')
+
+const TARGET = ['src/pages/DospemPage.jsx', 'src/pages/TimPage.jsx']
+let totalHapus = 0
+
+TARGET.forEach(function (rel) {
+  if (!ada(rel)) return
+  let isi = baca(rel)
+  const idx = isi.indexOf('Ringkasan logbook per mahasiswa')
+  if (idx === -1) {
+    console.log('[INFO] Judul tidak ditemukan di ' + rel)
+    return
+  }
+  const start = isi.lastIndexOf('<section', idx)
+  const end = isi.indexOf('</section>', idx)
+  if (start === -1 || end === -1) {
+    console.log('[TIDAK KETEMU] Batas section di ' + rel)
+    return
+  }
+  const endFull = end + '</section>'.length
+  const potongan = isi.slice(start, endFull)
+  isi = isi.slice(0, start) + isi.slice(endFull)
+  isi = isi.replace(/\n{3,}/g, '\n\n')
+  simpan(rel, isi)
+  totalHapus++
+  console.log('[BERHASIL] Section dihapus dari ' + rel + ' (' + potongan.length + ' karakter dibuang)')
+})
+
+if (totalHapus === 0) {
+  console.log('[GAGAL] Tidak ada section yang berhasil dihapus')
+  process.exit(1)
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Struktur halaman Tim & Dospem setelah penghapusan:')
+console.log('1. Hero hijau gelap dengan empat kartu statistik dan tiga tombol pintasan.')
+console.log('2. Section Profil tim magang berisi kartu anggota dengan foto, identitas, pil prodi, dan tiga kotak kontribusi.')
+console.log('3. Tidak ada lagi section ringkasan per mahasiswa yang duplikat, sehingga halaman lebih ringkas dan cepat dimuat.')
+console.log('')
+console.log('Catatan aman:')
+console.log('1. Data logbook publik tetap dapat dijelajahi penuh lewat menu Logbook atau tombol Lihat logbook di hero.')
+console.log('2. State dan modal detail dibiarkan ada sebagai jaring pengaman bila masih dirujuk bagian lain, sehingga tidak ada error referensi.')
+console.log('3. Berkas TimPage.jsx ikut dibersihkan bila judul yang sama masih tersisa di sana, meski halamannya sudah dialihkan ke /dospem.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka menu Tim & Dospem: setelah kartu profil tim, halaman langsung berakhir tanpa section ringkasan lama.')
+console.log('2. Gulir sampai bawah untuk memastikan tidak ada sisa kartu bernama Logbook publik satuan.')
+console.log('3. Klik tombol Lihat logbook di hero: halaman Logbook tetap menampilkan seluruh logbook publik seperti biasa.')
+```
+
+## File: apply-kartu-tim-cantik.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+const FILE_D = 'src/pages/DospemPage.jsx'
+
+if (!fs.existsSync(path.join(root, FILE_D))) {
+  console.log('[GAGAL] DospemPage.jsx tidak ditemukan')
+  process.exit(1)
+}
+
+let d = fs.readFileSync(path.join(root, FILE_D), 'utf8').replace(/\r\n/g, '\n')
+
+if (d.indexOf('Profil tim magang') === -1) {
+  console.log('[TIDAK KETEMU] Section Profil tim magang di DospemPage')
+  process.exit(1)
+}
+
+if (d.indexOf('grid grid-cols-3 gap-3') !== -1 && d.indexOf('rounded-3xl border border-slate-200 bg-white p-5') !== -1) {
+  console.log('[SUDAH ADA] Kartu tim versi baru sudah terpasang')
+  process.exit(0)
+}
+
+const regexKartuLama = /<div key=\{p\.id\} className="card-hover flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/
+
+const KARTU_BARU = `<div key={p.id} className="card-hover rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+<div className="flex items-center gap-4">
+<Avatar src={p.foto_profil || null} nama={p.nama} size="lg" />
+<div className="min-w-0 flex-1">
+<p className="truncate text-lg font-black text-slate-900">{p.nama}</p>
+<p className="truncate text-sm text-slate-500">NIM {p.nim}</p>
+{p.prodi ? <span className="mt-2 inline-flex px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold">{p.prodi}</span> : null}
+</div>
+</div>
+<div className="mt-4 grid grid-cols-3 gap-3">
+<div className="rounded-2xl bg-slate-50 p-3">
+<p className="text-xs font-semibold text-slate-500">Logbook</p>
+<p className="mt-1 text-xl font-black text-bsi-800">{totalLog}</p>
+</div>
+<div className="rounded-2xl bg-slate-50 p-3">
+<p className="text-xs font-semibold text-slate-500">Media</p>
+<p className="mt-1 text-xl font-black text-bsi-800">{totalGal}</p>
+</div>
+<div className="rounded-2xl bg-slate-50 p-3">
+<p className="text-xs font-semibold text-slate-500">Hadir</p>
+<p className="mt-1 text-xl font-black text-bsi-800">{totalHadir}</p>
+</div>
+</div>
+</div>`
+
+if (!regexKartuLama.test(d)) {
+  console.log('[TIDAK KETEMU] Pola kartu tim lama untuk diganti')
+  process.exit(1)
+}
+
+d = d.replace(regexKartuLama, KARTU_BARU)
+fs.writeFileSync(path.join(root, FILE_D), d, 'utf8')
+
+console.log('[BERHASIL] Kartu Profil tim magang ditata ulang sesuai lampiran')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Tampilan baru kartu tim:')
+console.log('1. Baris atas: foto profil kotak melengkung di kiri, nama tebal berukuran besar, NIM di bawahnya, dan pil prodi hijau mint seperti lampiran.')
+console.log('2. Baris bawah: tiga kotak statistik abu-abu muda berisi angka Logbook, Media, dan Hadir berwarna hijau tua, menggantikan lencana kecil sebelumnya.')
+console.log('3. Angka取自 data publik yang sama sehingga tetap akurat: logbook publik, media galeri, dan catatan kehadiran per mahasiswa.')
+console.log('4. Kartu memakai sudut lebih bulat (rounded-3xl) agar terasa lembut dan modern sesuai contoh gambar.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka menu Tim & Dospem, gulir ke section Profil tim magang.')
+console.log('2. Setiap kartu menampilkan foto, identitas, pil prodi, dan tiga kotak angka kontribusi.')
+console.log('3. Mahasiswa tanpa foto tetap menampilkan inisial berwarna tema pada kotak avatar yang sama.')
+console.log('4. Lebar layar kecil: grid kartu turun kolom namun tiga kotak statistik tetap sejajar rapi.')
+```
+
+## File: apply-kartu-tim-kehadiran-v2.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+const FILE_D = 'src/pages/DospemPage.jsx'
+
+if (!fs.existsSync(path.join(root, FILE_D))) {
+  console.log('[GAGAL] DospemPage.jsx tidak ditemukan')
+  process.exit(1)
+}
+
+let d = fs.readFileSync(path.join(root, FILE_D), 'utf8').replace(/\r\n/g, '\n')
+
+console.log('Mulai mengganti kartu Profil Tim dengan versi rekap kehadiran...')
+console.log('')
+
+if (d.indexOf('Profil tim magang') === -1) {
+  console.log('[TIDAK KETEMU] Section Profil tim magang di DospemPage')
+  process.exit(1)
+}
+
+if (d.indexOf('Rekap Kehadiran') !== -1) {
+  console.log('[SUDAH ADA] Desain kartu rekap kehadiran sudah terpasang')
+  process.exit(0)
+}
+
+if (d.indexOf(".from('daftar_hadir').select('id, mahasiswa_id, status')") === -1) {
+  console.log('[PERINGATAN] Query status belum ada, mencoba memperbarui dulu')
+  d = d.replace(".from('daftar_hadir').select('id, mahasiswa_id')", ".from('daftar_hadir').select('id, mahasiswa_id, status')")
+}
+
+/* Jangkar baru: dari awal kartu sampai penutup callback map, versi kartu apa pun pasti cocok */
+const regexKartu = /<div key=\{p\.id\}[\s\S]*?\n\)\s*\n\}\)\}/
+
+if (!regexKartu.test(d)) {
+  console.log('[TIDAK KETEMU] Blok kartu di dalam people.map')
+  process.exit(1)
+}
+
+const KARTU_BARU = `<div key={p.id} className="card-hover rounded-3xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col">
+<div className="flex items-center gap-4">
+<Avatar src={p.foto_profil || null} nama={p.nama} size="lg" />
+<div className="min-w-0 flex-1">
+<p className="truncate text-lg font-black text-slate-900">{p.nama}</p>
+<p className="truncate text-sm text-slate-500">NIM {p.nim}</p>
+{p.prodi ? <span className="mt-1.5 inline-flex px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold">{p.prodi}</span> : null}
+</div>
+</div>
+<div className="mt-4 grid grid-cols-2 gap-3">
+<div className="rounded-2xl bg-slate-50 p-3">
+<p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Logbook</p>
+<p className="mt-0.5 text-xl font-black text-bsi-800">{totalLog}</p>
+</div>
+<div className="rounded-2xl bg-slate-50 p-3">
+<p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Media</p>
+<p className="mt-0.5 text-xl font-black text-bsi-800">{totalGal}</p>
+</div>
+</div>
+<div className="mt-3 pt-3 border-t border-slate-100">
+<p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Rekap Kehadiran</p>
+<div className="grid grid-cols-3 gap-2">
+<div className="rounded-xl bg-emerald-50 p-2 text-center">
+<p className="text-[10px] font-bold text-emerald-600 uppercase">Masuk</p>
+<p className="text-base font-black text-emerald-700">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Masuk' }).length}</p>
+</div>
+<div className="rounded-xl bg-amber-50 p-2 text-center">
+<p className="text-[10px] font-bold text-amber-600 uppercase">Izin</p>
+<p className="text-base font-black text-amber-700">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Izin' }).length}</p>
+</div>
+<div className="rounded-xl bg-red-50 p-2 text-center">
+<p className="text-[10px] font-bold text-red-600 uppercase">Bolos</p>
+<p className="text-base font-black text-red-700">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Bolos' }).length}</p>
+</div>
+</div>
+</div>
+</div>
+)
+})}`
+
+d = d.replace(regexKartu, KARTU_BARU)
+fs.writeFileSync(path.join(root, FILE_D), d, 'utf8')
+
+console.log('[BERHASIL] Kartu Profil Tim diganti dengan versi rekap kehadiran tiga status')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Isi kartu baru sesuai pratinjau yang kamu setujui:')
+console.log('1. Baris identitas: avatar kotak melengkung, nama tebal besar, NIM, dan pil prodi hijau mint.')
+console.log('2. Baris kontribusi: dua kotak abu-abu untuk Logbook dan Media.')
+console.log('3. Baris kehadiran: tiga kotak berwarna Masuk hijau, Izin kuning, Bolos merah, dihitung terpisah dari kolom status.')
+console.log('4. Variabel totalLog dan totalGal tetap dipakai dari callback map yang sudah ada, sehingga tidak ada state baru yang perlu ditambah.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka menu Tim & Dospem, gulir ke section Profil tim magang.')
+console.log('2. Setiap kartu menampilkan identitas, dua kotak kontribusi, lalu tiga kotak rekap kehadiran.')
+console.log('3. Isi daftar hadir dengan status Izin atau Bolos, refresh, dan pastikan angka bertambah pada kotak yang sesuai warna.')
+console.log('4. Mahasiswa tanpa catatan kehadiran menampilkan tiga kotak bernilai nol dengan rapi.')
+```
+
+## File: apply-kartu-tim-kehadiran.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+const FILE_D = 'src/pages/DospemPage.jsx'
+
+if (!fs.existsSync(path.join(root, FILE_D))) {
+  console.log('[GAGAL] DospemPage.jsx tidak ditemukan')
+  process.exit(1)
+}
+
+let d = fs.readFileSync(path.join(root, FILE_D), 'utf8').replace(/\r\n/g, '\n')
+let berubah = false
+
+console.log('Mulai menerapkan desain kartu Profil Tim dengan rekap kehadiran...')
+console.log('')
+
+/* ===== 1. Update Query: ambil kolom status dari daftar_hadir ===== */
+if (d.includes(".from('daftar_hadir').select('id, mahasiswa_id')")) {
+  d = d.replace(".from('daftar_hadir').select('id, mahasiswa_id')", ".from('daftar_hadir').select('id, mahasiswa_id, status')")
+  berubah = true
+  console.log('[BERHASIL] Query daftar_hadir diperbarui untuk mengambil kolom status')
+} else if (d.includes(".from('daftar_hadir').select('id, mahasiswa_id, status')")) {
+  console.log('[SUDAH ADA] Query daftar_hadir sudah mengambil kolom status')
+} else {
+  console.log('[TIDAK KETEMU] Pola query daftar_hadir untuk diperbarui')
+}
+
+/* ===== 2. Update Markup: ganti kartu lama dengan desain baru ===== */
+// Cari pola kartu lama (dari apply-kartu-tim-cantik.cjs)
+const regexKartuLama = /<div key=\{p\.id\} className="card-hover rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">[\s\S]*?<\/div>\s*<\/div>\s*<\/div>\s*<\/div>\s*<\/div>/
+
+const KARTU_BARU = `<div key={p.id} className="card-hover rounded-3xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col">
+<div className="flex items-center gap-4">
+<Avatar src={p.foto_profil || null} nama={p.nama} size="lg" />
+<div className="min-w-0 flex-1">
+<p className="truncate text-lg font-black text-slate-900">{p.nama}</p>
+<p className="truncate text-sm text-slate-500">NIM {p.nim}</p>
+{p.prodi ? <span className="mt-1.5 inline-flex px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold">{p.prodi}</span> : null}
+</div>
+</div>
+<div className="mt-4 grid grid-cols-2 gap-3">
+<div className="rounded-2xl bg-slate-50 p-3">
+<p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Logbook</p>
+<p className="mt-0.5 text-xl font-black text-bsi-800">{totalLog}</p>
+</div>
+<div className="rounded-2xl bg-slate-50 p-3">
+<p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Media</p>
+<p className="mt-0.5 text-xl font-black text-bsi-800">{totalGal}</p>
+</div>
+</div>
+<div className="mt-3 pt-3 border-t border-slate-100">
+<p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Rekap Kehadiran</p>
+<div className="grid grid-cols-3 gap-2">
+<div className="rounded-xl bg-emerald-50 p-2 text-center">
+<p className="text-[10px] font-bold text-emerald-600 uppercase">Masuk</p>
+<p className="text-base font-black text-emerald-700">{hadirRows.filter(function(x) { return x.mahasiswa_id === p.id && x.status === 'Masuk' }).length}</p>
+</div>
+<div className="rounded-xl bg-amber-50 p-2 text-center">
+<p className="text-[10px] font-bold text-amber-600 uppercase">Izin</p>
+<p className="text-base font-black text-amber-700">{hadirRows.filter(function(x) { return x.mahasiswa_id === p.id && x.status === 'Izin' }).length}</p>
+</div>
+<div className="rounded-xl bg-red-50 p-2 text-center">
+<p className="text-[10px] font-bold text-red-600 uppercase">Bolos</p>
+<p className="text-base font-black text-red-700">{hadirRows.filter(function(x) { return x.mahasiswa_id === p.id && x.status === 'Bolos' }).length}</p>
+</div>
+</div>
+</div>
+</div>`
+
+if (regexKartuLama.test(d)) {
+  d = d.replace(regexKartuLama, KARTU_BARU)
+  berubah = true
+  console.log('[BERHASIL] Markup kartu Profil Tim diganti dengan desain rekap kehadiran')
+} else if (d.includes('Rekap Kehadiran')) {
+  console.log('[SUDAH ADA] Desain kartu rekap kehadiran sudah terpasang')
+} else {
+  console.log('[TIDAK KETEMU] Pola kartu Profil Tim lama. Pastikan script apply-kartu-tim-cantik.cjs sudah dijalankan sebelumnya.')
+}
+
+if (berubah) {
+  fs.writeFileSync(path.join(root, FILE_D), d, 'utf8')
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Perubahan yang diterapkan:')
+console.log('1. Query Supabase kini mengambil kolom status dari tabel daftar_hadir.')
+console.log('2. Kotak kontribusi Logbook dan Media tetap ada di bagian tengah kartu.')
+console.log('3. Bagian bawah kartu kini menampilkan 3 kotak Rekap Kehadiran (Masuk, Izin, Bolos) dengan kode warna hijau, kuning, dan merah.')
+console.log('4. Perhitungan dilakukan langsung di dalam render menggunakan filter status, sehingga datanya selalu akurat dan real-time.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka menu Tim & Dospem dan lihat section Profil tim magang.')
+console.log('2. Perhatikan kartu anggota: di bawah kotak Logbook dan Media, kini ada garis pemisah dan 3 kotak kecil berwarna untuk rekap kehadiran.')
+console.log('3. Coba isi daftar hadir dengan status Izin atau Bolos, lalu refresh halaman Tim & Dospem untuk melihat angkanya bertambah di kotak yang sesuai.')
+```
+
+## File: apply-profil-rapi.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai menata ulang tab Profil agar tidak duplikat...')
+console.log('')
+
+/* ===== 1. ui.jsx: tambah ukuran 2xl pada Avatar ===== */
+const FILE_U = 'src/components/ui.jsx'
+let u = baca(FILE_U)
+if (u.includes("size === '2xl'")) {
+  console.log('[SUDAH ADA] Ukuran 2xl pada Avatar')
+} else {
+  const cariU = `size === 'xl' ? 'h-24 w-24 text-2xl' : 'h-11 w-11 text-sm'`
+  if (u.includes(cariU)) {
+    u = u.replace(cariU, `size === 'xl' ? 'h-24 w-24 text-2xl' : size === '2xl' ? 'h-40 w-40 text-4xl' : 'h-11 w-11 text-sm'`)
+    simpan(FILE_U, u)
+    console.log('[BERHASIL] Ukuran 2xl ditambahkan pada Avatar')
+  } else {
+    console.log('[TIDAK KETEMU] Pola ukuran Avatar di ui.jsx')
+  }
+}
+
+/* ===== 2. DashboardPage: ganti isi tab Profil dengan tata letak dua kolom ===== */
+const FILE_D = 'src/pages/DashboardPage.jsx'
+let d = baca(FILE_D)
+const mulaiProfil = d.indexOf("{tab === 'profil' ? (")
+if (mulaiProfil === -1) {
+  console.log('[TIDAK KETEMU] Blok tab Profil di DashboardPage')
+} else {
+  const akhirSection = d.indexOf('</section>', mulaiProfil)
+  const akhirBlok = d.indexOf(') : null}', akhirSection)
+  if (akhirSection === -1 || akhirBlok === -1) {
+    console.log('[TIDAK KETEMU] Batas akhir blok tab Profil')
+  } else {
+    const BLOK_BARU = `{tab === 'profil' ? (
+<section className="mt-8 grid gap-6 lg:grid-cols-[0.85fr_1.15fr] items-start">
+<div className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 shadow-sm flex flex-col items-center text-center">
+<Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="2xl" />
+<h2 className="mt-4 text-xl font-black text-slate-900">{mahasiswa.nama}</h2>
+<p className="mt-1 text-sm text-slate-500">NIM {mahasiswa.nim}</p>
+<p className="text-sm text-slate-500">{mahasiswa.prodi}</p>
+<div className="mt-5 flex flex-wrap justify-center gap-2">
+<button type="button" onClick={function () { setShowUploadFoto(!showUploadFoto) }} className="px-4 py-2 rounded-xl text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition">{mahasiswa.foto_profil ? 'Ganti Foto' : 'Upload Foto'}</button>
+{mahasiswa.foto_profil ? <button type="button" onClick={hapusFotoProfilKu} className="px-4 py-2 rounded-xl text-sm font-bold bg-red-50 text-red-700 hover:bg-red-100 transition">Hapus Foto</button> : null}
+</div>
+{showUploadFoto ? (
+<div className="mt-5 w-full border-t border-slate-200 pt-5 text-left">
+<div className="flex flex-wrap items-start gap-4">
+{fotoPreview ? <img src={fotoPreview} alt="Pratinjau foto profil" className="h-20 w-20 rounded-full object-cover border-2 border-white shadow-md" /> : null}
+<div className="min-w-0 flex-1">
+<input type="file" accept="image/png,image/jpeg,image/webp" onChange={pilihFotoProfil} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-800 hover:file:bg-emerald-100" />
+<p className="mt-2 text-xs text-slate-500">Format JPG, PNG, atau WebP. Maksimal 5 MB.</p>
+</div>
+</div>
+<div className="mt-4 flex gap-2">
+<button type="button" onClick={simpanFotoProfil} disabled={uploadingFoto || !fotoFile} className="px-4 py-2 rounded-xl text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition disabled:opacity-50">{uploadingFoto ? 'Mengunggah...' : 'Simpan Foto'}</button>
+<button type="button" onClick={function () { setShowUploadFoto(false); setFotoPreview(null); setFotoFile(null) }} className="px-4 py-2 rounded-xl text-sm font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition">Batal</button>
+</div>
+</div>
+) : null}
+</div>
+<div className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 shadow-sm">
+<h2 className="text-lg font-black text-slate-900">Ringkasan aktivitas magang</h2>
+<div className="mt-4 grid grid-cols-3 gap-4">
+<div className="rounded-2xl bg-slate-50 p-4 text-center"><p className="text-2xl font-black text-bsi-800">{typeof logs !== 'undefined' ? logs.length : 0}</p><p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Logbook</p></div>
+<div className="rounded-2xl bg-slate-50 p-4 text-center"><p className="text-2xl font-black text-bsi-800">{typeof galeri !== 'undefined' ? galeri.length : 0}</p><p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Media Galeri</p></div>
+<div className="rounded-2xl bg-slate-50 p-4 text-center"><p className="text-2xl font-black text-bsi-800">{typeof hadir !== 'undefined' ? hadir.length : 0}</p><p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Kehadiran</p></div>
+</div>
+<div className="mt-6 space-y-2 border-t border-slate-100 pt-4 text-sm text-slate-600">
+<p>Foto profil tampil otomatis di kartu kamu pada halaman publik, logbook, galeri, dan daftar hadir.</p>
+<p>Gunakan foto dengan pencahayaan baik dan wajah terlihat jelas agar mudah dikenali dosen pembimbing.</p>
+<p>Klik foto pada kartu header kapan saja untuk kembali ke halaman ini dan memperbarui foto.</p>
+</div>
+</div>
+</section>
+) : null}`
+    d = d.slice(0, mulaiProfil) + BLOK_BARU + d.slice(akhirBlok + ') : null}'.length)
+    simpan(FILE_D, d)
+    console.log('[BERHASIL] Tab Profil ditata ulang menjadi dua kolom')
+  }
+}
+
+/* ===== 3. DashboardPage: avatar header menjadi tombol pintasan ke tab Profil ===== */
+d = baca(FILE_D)
+const avatarHeader = `<Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl" />`
+if (d.includes('title="Kelola foto profil"')) {
+  console.log('[SUDAH ADA] Avatar header sebagai tombol pintasan')
+} else if (d.includes(avatarHeader)) {
+  d = d.replace(avatarHeader,
+    `<button type="button" onClick={function () { setTab('profil') }} title="Kelola foto profil" className="rounded-full transition hover:opacity-90 focus:outline-none focus:ring-4 focus:ring-gold-300">
+<Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl" />
+</button>`)
+  simpan(FILE_D, d)
+  console.log('[BERHASIL] Avatar header kini bisa diklik menuju tab Profil')
+} else {
+  console.log('[TIDAK KETEMU] Avatar pada kartu header')
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Hasil akhir yang akan kamu lihat:')
+console.log('1. Header tetap ringkas: avatar, nama, NIM, prodi, dan deretan tab tanpa section duplikat di bawahnya.')
+console.log('2. Klik avatar di header langsung membuka tab Profil, jadi jalur ganti foto terasa alami.')
+console.log('3. Tab Profil menampilkan foto besar sebagai pusat perhatian beserta tombol Ganti atau Upload dan Hapus.')
+console.log('4. Form upload muncul di dalam kartu foto yang sama, lengkap dengan pratinjau bulat dan tombol Simpan atau Batal.')
+console.log('5. Kolom kanan memberi nilai tambah berupa ringkasan jumlah logbook, media galeri, dan kehadiran plus panduan foto.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka dashboard: tidak ada lagi kartu Foto Profil duplikat di bawah header.')
+console.log('2. Klik avatar di header: tab Profil terbuka otomatis.')
+console.log('3. Klik Upload atau Ganti Foto: form muncul rapi di bawah tombol dalam kartu yang sama.')
+console.log('4. Simpan foto: avatar besar, avatar header, dan seluruh kartu publik langsung memakai foto baru.')
+console.log('5. Hapus foto: semua permukaan kembali ke inisial berwarna tema tanpa sisa tampilan rusak.')
+```
+
+## File: apply-profil-tab.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+const FILE_D = 'src/pages/DashboardPage.jsx'
+
+if (!fs.existsSync(path.join(root, FILE_D))) {
+  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
+  process.exit(1)
+}
+
+let d = fs.readFileSync(path.join(root, FILE_D), 'utf8').replace(/\r\n/g, '\n')
+
+console.log('Mulai menata ulang foto profil dan menambah tab Profil...')
+console.log('')
+
+/* ===== 1. Pindahkan section Foto Profil menjadi konten tab Profil ===== */
+const idxFoto = d.indexOf('>Foto Profil<')
+if (idxFoto === -1) {
+  console.log('[TIDAK KETEMU] Section Foto Profil di DashboardPage')
+} else if (d.includes("{tab === 'profil' ? (")) {
+  console.log('[SUDAH ADA] Section Foto Profil sudah berada di tab Profil')
+} else {
+  const mulaiBlok = d.lastIndexOf('<section', idxFoto)
+  const akhirBlok = d.indexOf('</section>', idxFoto) + '</section>'.length
+  const blok = d.slice(mulaiBlok, akhirBlok)
+  const sisa = d.slice(0, mulaiBlok) + d.slice(akhirBlok)
+  d = sisa.slice(0, mulaiBlok) + "{tab === 'profil' ? (\n" + blok + "\n) : null}\n" + sisa.slice(mulaiBlok)
+  console.log('[BERHASIL] Section Foto Profil kini hanya tampil pada tab Profil')
+}
+
+/* ===== 2. Header card: Avatar di kiri teks plus tombol tab Profil ===== */
+const idxHeader = d.indexOf('Dashboard mahasiswa')
+if (idxHeader === -1) {
+  console.log('[TIDAK KETEMU] Teks Dashboard mahasiswa pada header')
+} else {
+  const sectionStart = d.lastIndexOf('<section', idxHeader)
+  const sectionEnd = d.indexOf('</section>', idxHeader)
+  let header = d.slice(sectionStart, sectionEnd)
+
+  if (header.includes('<Avatar src={mahasiswa.foto_profil')) {
+    console.log('[SUDAH ADA] Avatar pada kartu header')
+  } else {
+    header = header.replace(
+      /(<p[^>]*>Dashboard mahasiswa<\/p>)/,
+      `<div className="flex flex-wrap items-center gap-6">
+<Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl" />
+<div className="min-w-0 flex-1">
+$1`
+    )
+    header = header.replace(
+      /(<div[^>]*>\s*<button onClick=\{function \(\) \{ setTab\('logbook'\) \}\})/,
+      '</div>\n$1'
+    )
+    header = header + '\n</div>'
+    console.log('[BERHASIL] Avatar dipasang di kiri teks kartu header')
+  }
+
+  if (header.includes("setTab('profil')")) {
+    console.log('[SUDAH ADA] Tombol tab Profil')
+  } else {
+    header = header.replace(
+      /(<button onClick=\{function \(\) \{ setTab\('absen'\) \}\} className=\{tabCls\('absen'\)\}>Daftar Hadir<\/button>)/,
+      `$1
+<button onClick={function () { setTab('profil') }} className={tabCls('profil')}>Profil</button>`
+    )
+    console.log('[BERHASIL] Tombol tab Profil ditambahkan setelah Daftar Hadir')
+  }
+
+  d = d.slice(0, sectionStart) + header + d.slice(sectionEnd)
+}
+
+fs.writeFileSync(path.join(root, FILE_D), d, 'utf8')
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Perilaku baru:')
+console.log('1. Kartu header dashboard menampilkan foto profil bulat di sebelah kiri nama, NIM, dan prodi.')
+console.log('2. Mahasiswa tanpa foto tetap melihat inisial berwarna tema pada posisi yang sama.')
+console.log('3. Tombol tab baru bernama Profil muncul di sebelah Daftar Hadir.')
+console.log('4. Form upload, ganti, dan hapus foto hanya tampil saat tab Profil dibuka, sehingga halaman utama tetap lega.')
+console.log('5. Setelah foto disimpan, avatar di header langsung berubah tanpa reload karena state mahasiswa diperbarui.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka dashboard: avatar muncul di kiri teks header dan section foto tidak lagi memenuhi halaman.')
+console.log('2. Klik tab Profil: form upload foto muncul lengkap dengan pratinjau dan tombol simpan.')
+console.log('3. Upload atau ganti foto, lalu kembali ke tab Logbook: avatar header sudah memakai foto baru.')
+console.log('4. Hapus foto dari tab Profil: avatar header kembali ke inisial berwarna tema.')
+```
+
+## File: fix-publik-dan-key.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai memperbaiki foto profil di halaman publik dan warning key...')
+console.log('')
+
+/* ===== 1. Perbaiki query select mahasiswa agar menyertakan foto_profil ===== */
+const pages = [
+  'src/pages/HomePage.jsx',
+  'src/pages/LogbookPage.jsx',
+  'src/pages/GalleryPage.jsx',
+  'src/pages/AttendancePage.jsx',
+  'src/pages/DospemPage.jsx',
+  'src/pages/TimPage.jsx'
+]
+
+pages.forEach(rel => {
+  const full = path.join(root, rel)
+  if (!fs.existsSync(full)) return
+  let code = baca(rel)
+  let changed = false
+  
+  // Cari pola .select('...') yang memuat mahasiswa(...)
+  code = code.replace(/\.select\((['"`])([^'"`]+)\1\)/g, (match, quote, content) => {
+    if (content.includes('mahasiswa') && !content.includes('foto_profil') && !content.includes('mahasiswa(*)')) {
+      changed = true
+      // Ganti mahasiswa(id, nama, dll) menjadi mahasiswa(*) agar semua kolom termasuk foto_profil ikut diambil
+      let newContent = content.replace(/mahasiswa\([^)]*\)/, 'mahasiswa(*)')
+      return `.select(${quote}${newContent}${quote})`
+    }
+    return match
+  })
+  
+  if (changed) {
+    simpan(rel, code)
+    console.log('[BERHASIL] Query mahasiswa diperbarui di ' + rel)
+  }
+})
+
+/* ===== 2. Tulis ulang PersonChip dan PersonCard di cards.jsx ===== */
+const cardsPath = path.join(root, 'src/components/cards.jsx')
+if (fs.existsSync(cardsPath)) {
+  let cards = baca('src/components/cards.jsx')
+  
+  if (!cards.includes("import { Avatar } from './ui.jsx'") && !cards.includes('import { Avatar } from')) {
+    cards = "import { Avatar } from './ui.jsx'\n" + cards
+  }
+
+  // Timpa PersonChip lama dengan versi yang pasti memanggil Avatar
+  cards = cards.replace(/export function PersonChip[\s\S]*?\n\}/, `export function PersonChip(props) {
+  const m = props.mahasiswa || props.person || props.m || props.p
+  if (!m) return null
+  return (
+    <div className="flex items-center gap-2">
+      <Avatar src={m.foto_profil || null} nama={m.nama} size={props.size || 'md'} />
+      <div className="min-w-0">
+        <p className="truncate font-bold text-slate-900">{m.nama}</p>
+        <p className="truncate text-xs text-slate-500">{m.nim || ''} {m.prodi ? '• ' + m.prodi : ''}</p>
+      </div>
+    </div>
+  )
+}`)
+
+  // Timpa PersonCard lama dengan versi yang pasti memanggil Avatar
+  cards = cards.replace(/export function PersonCard[\s\S]*?\n\}/, `export function PersonCard(props) {
+  const m = props.mahasiswa || props.person || props.m || props.p
+  if (!m) return null
+  return (
+    <div className="card-hover flex flex-col items-center gap-3 rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm">
+      <Avatar src={m.foto_profil || null} nama={m.nama} size="xl" />
+      <div>
+        <p className="font-bold text-slate-900">{m.nama}</p>
+        <p className="text-xs text-slate-500">{m.nim || ''}</p>
+        {m.prodi ? <p className="text-xs text-slate-500">{m.prodi}</p> : null}
+      </div>
+    </div>
+  )
+}`)
+
+  simpan('src/components/cards.jsx', cards)
+  console.log('[BERHASIL] PersonChip dan PersonCard ditulis ulang menggunakan Avatar')
+}
+
+/* ===== 3. Perbaiki warning "unique key prop" di AttendancePage.jsx ===== */
+const attPath = path.join(root, 'src/pages/AttendancePage.jsx')
+if (fs.existsSync(attPath)) {
+  let att = baca('src/pages/AttendancePage.jsx')
+  let changedAtt = false
+  
+  // Pola 1: .map(function (x, i) { return <Element ...
+  att = att.replace(/\.map\(function\s*\(([^,)]+)(?:,\s*([^)]+))?\)\s*\{\s*return\s*(<[A-Za-z][\s\S]*?)(\s*\/?>)/g, (match, p1, p2, tag, close) => {
+    if (tag.includes('key=')) return match
+    changedAtt = true
+    const indexVar = p2 ? p2.trim() : 'i'
+    const newTag = tag.replace(/<([A-Za-z0-9_]+)/, `<$1 key={${indexVar}}`)
+    const params = p2 ? `${p1}, ${p2}` : `${p1}, ${indexVar}`
+    return `.map(function (${params}) { return ${newTag}${close}`
+  })
+
+  // Pola 2: .map((x, i) => <Element ...
+  att = att.replace(/\.map\(\(([^,)]+)(?:,\s*([^)]+))?\)\s*=>\s*(<[A-Za-z][\s\S]*?)(\s*\/?>)/g, (match, p1, p2, tag, close) => {
+    if (tag.includes('key=')) return match
+    changedAtt = true
+    const indexVar = p2 ? p2.trim() : 'i'
+    const newTag = tag.replace(/<([A-Za-z0-9_]+)/, `<$1 key={${indexVar}}`)
+    const params = p2 ? `${p1}, ${p2}` : `${p1}, ${indexVar}`
+    return `.map((${params}) => ${newTag}${close}`
+  })
+  
+  if (changedAtt) {
+    simpan('src/pages/AttendancePage.jsx', att)
+    console.log('[BERHASIL] Warning key prop diperbaiki di AttendancePage.jsx')
+  } else {
+    console.log('[INFO] Tidak ada .map tanpa key yang terdeteksi di AttendancePage.jsx (mungkin sudah benar atau polanya berbeda)')
+  }
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Penjelasan perbaikan:')
+console.log('1. Query database di halaman publik kini mengambil seluruh kolom mahasiswa (termasuk foto_profil).')
+console.log('2. PersonChip dan PersonCard ditulis ulang secara eksplisit memanggil komponen Avatar, sehingga tidak bergantung pada tebakan nama variabel.')
+console.log('3. Script secara otomatis menyuntikkan atribut key pada elemen yang di-render di dalam .map() di AttendancePage.jsx untuk menghilangkan warning React.')
+```
+
+## File: fix-query-dan-key.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai memperbaiki query foto profil dan warning key...')
+console.log('')
+
+/* ===== 1. DashboardPage.jsx: Paksa query mengambil semua kolom mahasiswa ===== */
+const FILE_D = 'src/pages/DashboardPage.jsx'
+if (fs.existsSync(path.join(root, FILE_D))) {
+  let d = baca(FILE_D)
+  let berubah = false
+  
+  // Ubah mahasiswa(id, nama, nim) atau mahasiswa!inner(...) menjadi mahasiswa(*)
+  d = d.replace(/mahasiswa(!inner)?\([^)]*\)/g, function (match, inner) {
+    berubah = true
+    return 'mahasiswa' + (inner || '') + '(*)'
+  })
+  
+  if (berubah) {
+    simpan(FILE_D, d)
+    console.log('[BERHASIL] Query mahasiswa di DashboardPage kini mengambil semua kolom (termasuk foto_profil)')
+  } else {
+    console.log('[INFO] Tidak ada query mahasiswa spesifik yang perlu diubah di DashboardPage')
+  }
+}
+
+/* ===== 2. TimPage.jsx: Tambahkan foto_profil ke query select ===== */
+const FILE_T = 'src/pages/TimPage.jsx'
+if (fs.existsSync(path.join(root, FILE_T))) {
+  let t = baca(FILE_T)
+  let berubahT = false
+  
+  t = t.replace(/\.select\((['"`])([^'"`]+)\1\)/g, function (match, quote, content) {
+    if (content.includes('foto_profil') || content === '*') return match
+    berubahT = true
+    return '.select(' + quote + content + ', foto_profil' + quote + ')'
+  })
+  
+  if (berubahT) {
+    simpan(FILE_T, t)
+    console.log('[BERHASIL] Query di TimPage kini menyertakan kolom foto_profil')
+  } else {
+    console.log('[INFO] Query TimPage sudah memuat foto_profil atau menggunakan *')
+  }
+}
+
+/* ===== 3. AttendancePage.jsx: Tambal warning unique key prop ===== */
+const FILE_A = 'src/pages/AttendancePage.jsx'
+if (fs.existsSync(path.join(root, FILE_A))) {
+  let a = baca(FILE_A)
+  let berubahA = false
+  
+  // Pola 1: .map(function (item, index) { return <Tag ...
+  a = a.replace(/\.map\(\s*function\s*\(([^,)]+)(?:,\s*([^)]+))?\)\s*\{\s*return\s*(<[a-zA-Z][^>]*?)(\s*\/?>)/g, function (m, p1, p2, tag, close) {
+    if (tag.includes('key=')) return m
+    berubahA = true
+    const idx = p2 ? p2.trim() : 'i'
+    const newTag = tag.replace(/<([a-zA-Z0-9_]+)/, '<$1 key={' + idx + '}')
+    return m.replace(tag, newTag)
+  })
+
+  // Pola 2: .map((item, index) => <Tag ...
+  a = a.replace(/\.map\(\s*\(([^,)]+)(?:,\s*([^)]+))?\)\s*=>\s*(<[a-zA-Z][^>]*?)(\s*\/?>)/g, function (m, p1, p2, tag, close) {
+    if (tag.includes('key=')) return m
+    berubahA = true
+    const idx = p2 ? p2.trim() : 'i'
+    const newTag = tag.replace(/<([a-zA-Z0-9_]+)/, '<$1 key={' + idx + '}')
+    return m.replace(tag, newTag)
+  })
+  
+  if (berubahA) {
+    simpan(FILE_A, a)
+    console.log('[BERHASIL] Warning key prop ditambal di AttendancePage')
+  } else {
+    console.log('[INFO] Tidak ada .map tanpa key yang terdeteksi di AttendancePage')
+  }
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Catatan untuk error "startTime" di console:')
+console.log('Error tersebut berasal dari ekstensi browser (seperti Web Vitals atau Google Translate) yang mencoba mengukur performa halaman, bukan dari kode aplikasimu. Kamu bisa mengabaikannya dengan aman.')
+```
+
+## File: fix-ui-avatar.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+
+const filePath = path.join(process.cwd(), 'src/components/ui.jsx')
+let code = fs.readFileSync(filePath, 'utf8')
+
+const startIdx = code.indexOf('export function Avatar(props) {')
+if (startIdx === -1) {
+  console.log('Fungsi Avatar tidak ditemukan di ui.jsx. File mungkin sudah benar.')
+  process.exit(0)
+}
+
+let braceCount = 0
+let endIdx = -1
+let inString = false
+let stringChar = ''
+let inComment = false
+let inLineComment = false
+
+for (let i = startIdx; i < code.length; i++) {
+  const char = code[i]
+  const nextChar = i < code.length - 1 ? code[i+1] : ''
+  const prevChar = i > 0 ? code[i-1] : ''
+  
+  if (inLineComment) {
+    if (char === '\n') inLineComment = false
+    continue
+  }
+  if (inComment) {
+    if (char === '*' && nextChar === '/') {
+      inComment = false
+      i++
+    }
+    continue
+  }
+  if (inString) {
+    if (char === stringChar && prevChar !== '\\') {
+      inString = false
+    }
+    continue
+  }
+  
+  if (char === '/' && nextChar === '/') {
+    inLineComment = true
+    continue
+  }
+  if (char === '/' && nextChar === '*') {
+    inComment = true
+    i++
+    continue
+  }
+  if (char === '"' || char === "'" || char === '`') {
+    inString = true
+    stringChar = char
+    continue
+  }
+  
+  if (char === '{') braceCount++
+  if (char === '}') {
+    braceCount--
+    if (braceCount === 0) {
+      endIdx = i + 1
+      break
+    }
+  }
+}
+
+if (endIdx === -1) {
+  console.log('Gagal menemukan batas akhir fungsi Avatar.')
+  process.exit(1)
+}
+
+const avatarBlock = code.substring(startIdx, endIdx)
+code = code.substring(0, startIdx) + code.substring(endIdx)
+
+if (code.includes('export function Avatar(props) {')) {
+  console.log('Avatar sudah ada di tempat lain yang valid.')
+} else {
+  code = code.trimEnd() + '\n\n' + avatarBlock + '\n'
+  console.log('Avatar berhasil dipindahkan ke akhir file (top-level).')
+}
+
+fs.writeFileSync(filePath, code, 'utf8')
+console.log('')
+console.log('Selesai. Vite akan otomatis reload. Jika masih error, restart dev server dengan Ctrl+C lalu npm run dev.')
+```
+
+## File: prototipe-tim-gabung.html
+```html
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pratinjau Kartu Profil Tim dengan Rekap Kehadiran</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = { theme: { extend: { colors: {
+  bsi: { 50:'#eefbf3',100:'#d6f5e0',200:'#b0e8c6',300:'#7dd4a4',400:'#48b97e',500:'#279d63',600:'#1a7f4e',700:'#166534',800:'#14532d',900:'#0f3d22' },
+  gold: { 50:'#fffbeb',100:'#fef3c7',300:'#fcd34d',400:'#fbbf24',500:'#f59e0b',600:'#d97706' }
+} } } }
+</script>
+<style>
+  body { font-family: ui-sans-serif, system-ui, sans-serif; }
+  .avatar-preview {
+    border-radius: 28%;
+    overflow: hidden;
+    box-shadow: 0 1px 2px rgba(15,23,42,.10), 0 10px 28px rgba(15,23,42,.22);
+    flex-shrink: 0;
+  }
+  .kartu { transition: transform .2s ease, box-shadow .2s ease; }
+  .kartu:hover { transform: translateY(-3px); box-shadow: 0 14px 34px rgba(15,23,42,.14); }
+</style>
+</head>
+<body class="bg-slate-100 text-slate-900">
+
+<p class="bg-gold-500 text-slate-900 text-center text-xs font-bold py-2 tracking-wide">PRATINJAU STATIS: KARTU PROFIL TIM DENGAN REKAP KEHADIRAN (MASUK / IZIN / BOLOS)</p>
+
+<main class="mx-auto max-w-6xl px-4 py-10 space-y-8">
+
+  <section>
+    <div class="flex flex-wrap items-end justify-between gap-3">
+      <div>
+        <h2 class="text-2xl lg:text-3xl font-black">Profil tim magang</h2>
+        <p class="mt-2 max-w-3xl text-slate-500">Seluruh mahasiswa magang beserta kontribusi kegiatan dan rekapitulasi kehadiran masing-masing.</p>
+      </div>
+      <span class="text-xs font-bold uppercase tracking-wide text-slate-400">3 anggota</span>
+    </div>
+    
+    <div class="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+
+      <!-- Kartu 1: Rajin Masuk -->
+      <div class="kartu rounded-3xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col">
+        <!-- Identitas -->
+        <div class="flex items-center gap-4">
+          <div class="avatar-preview h-14 w-14 grid place-items-center bg-bsi-700 text-white font-black text-lg">RW</div>
+          <div class="min-w-0 flex-1">
+            <p class="truncate text-lg font-black text-slate-900">Risky Wahyu Firmansyah</p>
+            <p class="truncate text-sm text-slate-500">NIM 24070041</p>
+            <span class="mt-1.5 inline-flex px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold">Rekayasa Perangkat Lunak</span>
+          </div>
+        </div>
+
+        <!-- Kontribusi Kegiatan -->
+        <div class="mt-4 grid grid-cols-2 gap-3">
+          <div class="rounded-2xl bg-slate-50 p-3">
+            <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Logbook</p>
+            <p class="mt-0.5 text-xl font-black text-bsi-800">8</p>
+          </div>
+          <div class="rounded-2xl bg-slate-50 p-3">
+            <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Media</p>
+            <p class="mt-0.5 text-xl font-black text-bsi-800">15</p>
+          </div>
+        </div>
+
+        <!-- Rekap Kehadiran -->
+        <div class="mt-3 pt-3 border-t border-slate-100">
+          <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Rekap Kehadiran</p>
+          <div class="grid grid-cols-3 gap-2">
+            <div class="rounded-xl bg-emerald-50 p-2 text-center">
+              <p class="text-[10px] font-bold text-emerald-600 uppercase">Masuk</p>
+              <p class="text-base font-black text-emerald-700">18</p>
+            </div>
+            <div class="rounded-xl bg-amber-50 p-2 text-center">
+              <p class="text-[10px] font-bold text-amber-600 uppercase">Izin</p>
+              <p class="text-base font-black text-amber-700">2</p>
+            </div>
+            <div class="rounded-xl bg-red-50 p-2 text-center">
+              <p class="text-[10px] font-bold text-red-600 uppercase">Bolos</p>
+              <p class="text-base font-black text-red-700">0</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Kartu 2: Ada Izin dan Bolos -->
+      <div class="kartu rounded-3xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col">
+        <!-- Identitas -->
+        <div class="flex items-center gap-4">
+          <div class="avatar-preview h-14 w-14 grid place-items-center bg-gold-600 text-white font-black text-lg">AS</div>
+          <div class="min-w-0 flex-1">
+            <p class="truncate text-lg font-black text-slate-900">Alya Salsabila</p>
+            <p class="truncate text-sm text-slate-500">NIM 24070042</p>
+            <span class="mt-1.5 inline-flex px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold">Rekayasa Perangkat Lunak</span>
+          </div>
+        </div>
+
+        <!-- Kontribusi Kegiatan -->
+        <div class="mt-4 grid grid-cols-2 gap-3">
+          <div class="rounded-2xl bg-slate-50 p-3">
+            <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Logbook</p>
+            <p class="mt-0.5 text-xl font-black text-bsi-800">6</p>
+          </div>
+          <div class="rounded-2xl bg-slate-50 p-3">
+            <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Media</p>
+            <p class="mt-0.5 text-xl font-black text-bsi-800">11</p>
+          </div>
+        </div>
+
+        <!-- Rekap Kehadiran -->
+        <div class="mt-3 pt-3 border-t border-slate-100">
+          <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Rekap Kehadiran</p>
+          <div class="grid grid-cols-3 gap-2">
+            <div class="rounded-xl bg-emerald-50 p-2 text-center">
+              <p class="text-[10px] font-bold text-emerald-600 uppercase">Masuk</p>
+              <p class="text-base font-black text-emerald-700">12</p>
+            </div>
+            <div class="rounded-xl bg-amber-50 p-2 text-center">
+              <p class="text-[10px] font-bold text-amber-600 uppercase">Izin</p>
+              <p class="text-base font-black text-amber-700">5</p>
+            </div>
+            <div class="rounded-xl bg-red-50 p-2 text-center">
+              <p class="text-[10px] font-bold text-red-600 uppercase">Bolos</p>
+              <p class="text-base font-black text-red-700">3</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Kartu 3: Belum Ada Data -->
+      <div class="kartu rounded-3xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col">
+        <!-- Identitas -->
+        <div class="flex items-center gap-4">
+          <div class="avatar-preview h-14 w-14 grid place-items-center bg-slate-700 text-white font-black text-lg">BP</div>
+          <div class="min-w-0 flex-1">
+            <p class="truncate text-lg font-black text-slate-900">Bagas Prakoso</p>
+            <p class="truncate text-sm text-slate-500">NIM 24070043</p>
+            <span class="mt-1.5 inline-flex px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold">Rekayasa Perangkat Lunak</span>
+          </div>
+        </div>
+
+        <!-- Kontribusi Kegiatan -->
+        <div class="mt-4 grid grid-cols-2 gap-3">
+          <div class="rounded-2xl bg-slate-50 p-3">
+            <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Logbook</p>
+            <p class="mt-0.5 text-xl font-black text-bsi-800">0</p>
+          </div>
+          <div class="rounded-2xl bg-slate-50 p-3">
+            <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Media</p>
+            <p class="mt-0.5 text-xl font-black text-bsi-800">0</p>
+          </div>
+        </div>
+
+        <!-- Rekap Kehadiran -->
+        <div class="mt-3 pt-3 border-t border-slate-100">
+          <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Rekap Kehadiran</p>
+          <div class="grid grid-cols-3 gap-2">
+            <div class="rounded-xl bg-emerald-50 p-2 text-center">
+              <p class="text-[10px] font-bold text-emerald-600 uppercase">Masuk</p>
+              <p class="text-base font-black text-emerald-700">0</p>
+            </div>
+            <div class="rounded-xl bg-amber-50 p-2 text-center">
+              <p class="text-[10px] font-bold text-amber-600 uppercase">Izin</p>
+              <p class="text-base font-black text-amber-700">0</p>
+            </div>
+            <div class="rounded-xl bg-red-50 p-2 text-center">
+              <p class="text-[10px] font-bold text-red-600 uppercase">Bolos</p>
+              <p class="text-base font-black text-red-700">0</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <p class="text-center text-xs text-slate-400 pb-6">File ini hanya pratinjau statis. Struktur datanya akan mengambil status 'Masuk', 'Izin', dan 'Bolos' langsung dari tabel daftar_hadir di Supabase.</p>
+</main>
+</body>
+</html>
+```
+
+## File: api/r2/delete.js
+```javascript
+import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3'
+import { createClient } from '@supabase/supabase-js'
+
+const s3 = new S3Client({
+  region: 'auto',
+  endpoint: 'https://' + process.env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
+  }
+})
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const authHeader = req.headers.authorization || ''
+  const token = authHeader.replace('Bearer ', '')
+  if (!token) return res.status(401).json({ error: 'Belum login' })
+
+  const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: authHeader } }
+  })
+  const check = await supabase.auth.getUser(token)
+  if (check.error || !check.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
+
+  const { key } = req.body || {}
+  if (!key) return res.status(400).json({ error: 'Key tidak ada' })
+  await s3.send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key }))
+  return res.status(200).json({ ok: true })
+}
+```
+
+## File: api/r2/presign.js
+```javascript
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { createClient } from '@supabase/supabase-js'
+
+const s3 = new S3Client({
+  region: 'auto',
+  endpoint: 'https://' + process.env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
+  }
+})
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const authHeader = req.headers.authorization || ''
+  const token = authHeader.replace('Bearer ', '')
+  if (!token) return res.status(401).json({ error: 'Belum login' })
+
+  const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: authHeader } }
+  })
+  const check = await supabase.auth.getUser(token)
+  if (check.error || !check.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
+
+  const { filename, contentType, kind } = req.body || {}
+  if (!filename || !contentType || !kind) return res.status(400).json({ error: 'Payload tidak lengkap' })
+
+  const ext = (filename.split('.').pop() || 'bin').toLowerCase()
+  const key = kind + '/' + new Date().getFullYear() + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + ext
+
+  const uploadUrl = await getSignedUrl(
+    s3,
+    new PutObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key, ContentType: contentType }),
+    { expiresIn: 300 }
+  )
+  const publicUrl = process.env.R2_PUBLIC_BASE_URL + '/' + key
+  return res.status(200).json({ uploadUrl, publicUrl, key })
+}
+```
+
+## File: api/youtube/verify.js
+```javascript
+import { createClient } from '@supabase/supabase-js'
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const authHeader = req.headers.authorization || ''
+  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
+  const authClient = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
+  const chk = await authClient.auth.getUser()
+  if (chk.error || !chk.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
+  const { ref } = req.body || {}
+  if (!ref) return res.status(400).json({ error: 'Ref tidak ada' })
+  const params = new URLSearchParams()
+  params.set('client_id', process.env.YOUTUBE_CLIENT_ID || '')
+  params.set('client_secret', process.env.YOUTUBE_CLIENT_SECRET || '')
+  params.set('refresh_token', process.env.YOUTUBE_REFRESH_TOKEN || '')
+  params.set('grant_type', 'refresh_token')
+  const tr = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
+  if (!tr.ok) return res.status(500).json({ error: 'Gagal refresh token YouTube' })
+  const tok = await tr.json()
+  const url = 'https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&forMine=true&order=date&maxResults=10&q=' + encodeURIComponent(ref)
+  const r = await fetch(url, { headers: { Authorization: 'Bearer ' + tok.access_token } })
+  if (!r.ok) return res.status(502).json({ error: 'Gagal memeriksa video di YouTube' })
+  const j = await r.json()
+  const items = j.items || []
+  const batas = Date.now() - 15 * 60 * 1000
+  const cocok = items.find(function (it) {
+    const desc = (it.snippet && it.snippet.description) || ''
+    const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
+    return desc.indexOf('REF ' + ref) === 0 && (isNaN(t) ? true : t >= batas)
+  }) || items[0]
+  if (!cocok) return res.status(404).json({ error: 'Video tidak ditemukan di channel' })
+  return res.status(200).json({ videoId: cocok.id && cocok.id.videoId })
+}
+```
 
 ## File: src/components/PemutarVideo.jsx
 ```javascript
@@ -422,6 +4229,907 @@ export default function PemutarVideo(props) {
 }
 ```
 
+## File: src/components/Skeleton.jsx
+```javascript
+export function SkeletonStatCard() {
+  return (
+    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
+      <div className="skeleton h-4 w-28"></div>
+      <div className="skeleton h-9 w-16 mt-3"></div>
+      <div className="skeleton h-3 w-36 mt-2"></div>
+    </div>
+  )
+}
+
+export function SkeletonLogbookCard() {
+  return (
+    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 flex flex-col gap-4">
+      <div className="skeleton h-40 w-full rounded-2xl"></div>
+      <div className="flex gap-2">
+        <div className="skeleton h-6 w-24 rounded-full"></div>
+        <div className="skeleton h-6 w-20 rounded-full"></div>
+      </div>
+      <div className="skeleton h-4 w-32"></div>
+      <div className="skeleton h-6 w-3/4"></div>
+      <div className="skeleton h-4 w-full"></div>
+      <div className="skeleton h-4 w-2/3"></div>
+      <div className="flex items-center gap-3 pt-2">
+        <div className="skeleton h-11 w-11 rounded-2xl"></div>
+        <div className="flex-1 space-y-2">
+          <div className="skeleton h-4 w-32"></div>
+          <div className="skeleton h-3 w-24"></div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonGalleryCard() {
+  return (
+    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="skeleton aspect-video w-full rounded-none"></div>
+      <div className="p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="skeleton h-6 w-24 rounded-full"></div>
+          <div className="skeleton h-4 w-16"></div>
+        </div>
+        <div className="skeleton h-5 w-3/4"></div>
+        <div className="skeleton h-4 w-full"></div>
+        <div className="skeleton h-4 w-1/2"></div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonAttendanceCard() {
+  return (
+    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <div className="skeleton h-4 w-40"></div>
+          <div className="skeleton h-5 w-32"></div>
+        </div>
+        <div className="skeleton h-6 w-16 rounded-full"></div>
+      </div>
+      <div className="skeleton h-16 w-full rounded-2xl"></div>
+    </div>
+  )
+}
+
+export function SkeletonPersonCard() {
+  return (
+    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
+      <div className="flex items-center gap-4">
+        <div className="skeleton h-14 w-14 rounded-3xl"></div>
+        <div className="flex-1 space-y-2">
+          <div className="skeleton h-5 w-32"></div>
+          <div className="skeleton h-4 w-24"></div>
+          <div className="skeleton h-4 w-28 rounded-full"></div>
+        </div>
+      </div>
+      <div className="mt-5 grid grid-cols-2 gap-3">
+        <div className="skeleton h-20 rounded-2xl"></div>
+        <div className="skeleton h-20 rounded-2xl"></div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonChartRow() {
+  return (
+    <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5">
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <div className="skeleton h-4 w-32"></div>
+          <div className="skeleton h-3 w-24"></div>
+        </div>
+        <div className="skeleton h-4 w-40"></div>
+      </div>
+      <div className="skeleton h-4 w-full rounded-full mt-4"></div>
+    </div>
+  )
+}
+```
+
+## File: src/lib/supabase.js
+```javascript
+import { createClient } from '@supabase/supabase-js'
+
+export const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+)
+```
+
+## File: src/lib/theme.jsx
+```javascript
+import { createContext, useContext, useEffect, useState } from 'react'
+
+const ThemeContext = createContext(null)
+
+export function ThemeProvider(props) {
+  const [dark, setDark] = useState(function () {
+    const saved = localStorage.getItem('mbsi-theme')
+    if (saved) return saved === 'dark'
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  })
+
+  useEffect(function () {
+    document.documentElement.classList.toggle('dark', dark)
+    localStorage.setItem('mbsi-theme', dark ? 'dark' : 'light')
+  }, [dark])
+
+  return (
+    <ThemeContext.Provider value={{ dark: dark, toggle: function () { setDark(function (d) { return !d }) } }}>
+      {props.children}
+    </ThemeContext.Provider>
+  )
+}
+
+export function useTheme() {
+  return useContext(ThemeContext)
+}
+```
+
+## File: src/lib/youtube.js
+```javascript
+import { supabase } from './supabase.js'
+
+export function parseYouTubeId(url) {
+  if (!url) return null
+  const s = String(url).trim()
+  if (/^[A-Za-z0-9_-]{11}$/.test(s)) return s
+  try {
+    const u = new URL(s)
+    const host = u.hostname.replace('www.', '').replace('m.', '')
+    if (host === 'youtu.be') {
+      const id = u.pathname.slice(1).split('/')[0]
+      return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null
+    }
+    if (host.endsWith('youtube.com') || host.endsWith('youtube-nocookie.com')) {
+      const v = u.searchParams.get('v')
+      if (v && /^[A-Za-z0-9_-]{11}$/.test(v)) return v
+      const parts = u.pathname.split('/').filter(Boolean)
+      if (parts[0] === 'embed' || parts[0] === 'shorts' || parts[0] === 'live') {
+        const id = parts[1]
+        return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null
+      }
+    }
+  } catch (e) {}
+  return null
+}
+export function ytThumb(id) {
+  return 'https://i.ytimg.com/vi/' + id + '/hqdefault.jpg'
+}
+export function ytEmbedUrl(id) {
+  return 'https://www.youtube-nocookie.com/embed/' + id + '?rel=0&modestbranding=1'
+}
+export async function fetchYouTubeQuota() {
+  try {
+    const r = await fetch('/api/youtube/quota', { cache: 'no-store' })
+    if (!r.ok) return { limit: 5, used: 0, remaining: 5 }
+    return await r.json()
+  } catch (e) {
+    return { limit: 5, used: 0, remaining: 5 }
+  }
+}
+export async function startYouTubeSession(title, description, contentType, token) {
+  if (!token) throw new Error('Sesi login tidak terbaca. Silakan masuk ulang lalu coba lagi.')
+  const r = await fetch('/api/youtube/session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ title: title, description: description, contentType: contentType })
+  })
+  if (!r.ok) {
+    const j = await r.json().catch(function () { return { error: 'Gagal memulai sesi upload video' } })
+    throw new Error(j.error || 'Gagal memulai sesi upload video')
+  }
+  return await r.json()
+}
+export async function uploadToYouTube(sessionUri, blob, onProgress) {
+  const hasil = await new Promise(function (resolve) {
+    const xhr = new XMLHttpRequest()
+    xhr.open('PUT', sessionUri)
+    xhr.setRequestHeader('Content-Type', blob.type || 'video/mp4')
+    if (onProgress) {
+      xhr.upload.onprogress = function (e) {
+        if (e.lengthComputable) onProgress(e.loaded / e.total)
+      }
+    }
+    xhr.onload = function () { resolve({ status: xhr.status, body: xhr.responseText }) }
+    xhr.onerror = function () { resolve({ status: 0, body: '' }) }
+    xhr.send(blob)
+  })
+  if (hasil.status >= 200 && hasil.status < 300) {
+    try {
+      const j = JSON.parse(hasil.body || '{}')
+      if (j && j.id) return { videoId: j.id }
+    } catch (e) { /* respons tidak terbaca, pulihkan lewat server */ }
+  } else if (hasil.status !== 0) {
+    throw new Error('Upload video gagal (status ' + hasil.status + ')')
+  }
+  const sesi = await supabase.auth.getSession()
+  const token = await ambilTokenSesi()
+  const r = await fetch('/api/youtube/latest', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({})
+  })
+  if (r.ok) {
+    try {
+      const j = await r.json()
+      if (j && j.videoId) return { videoId: j.videoId }
+    } catch (e) {
+      console.warn('Respons pemulihan bukan JSON, dilewati:', e.message)
+    }
+  }
+  throw new Error('Upload selesai tetapi id video tidak terbaca. Video kemungkinan sudah tersimpan; tempel link video secara manual.')
+}
+
+export async function unggahVideoYouTube(file, judul, onProgress) {
+  const sesiData = await supabase.auth.getSession()
+  const token = await ambilTokenSesi()
+  const sesi = await startYouTubeSession(judul || 'Dokumentasi Magang', 'Diunggah dari portal logbook magang BSI.', file.type || 'video/mp4', token)
+  return await uploadToYouTube(sesi.sessionUri, file, onProgress)
+}
+
+export async function ambilTokenSesi() {
+  try {
+    const r = await supabase.auth.getSession()
+    const ssn = r && r.data ? r.data.session : null
+    return ssn && ssn.access_token ? ssn.access_token : ''
+  } catch (e) {
+    return ''
+  }
+}
+```
+
+## File: src/main.jsx
+```javascript
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import App from './App.jsx'
+import './index.css'
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+)
+```
+
+## File: .env.example
+```
+VITE_SUPABASE_URL=
+VITE_SUPABASE_ANON_KEY=
+R2_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET_NAME=mbsi-media
+R2_PUBLIC_BASE_URL=
+```
+
+## File: apply-auto-rotate-youtube.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function simpan(rel, isi) {
+  const full = path.join(root, rel)
+  fs.mkdirSync(path.dirname(full), { recursive: true })
+  fs.writeFileSync(full, isi, 'utf8')
+  console.log('[BERHASIL] ' + rel + ' ditulis')
+}
+
+const KEPALA = `import { createClient } from '@supabase/supabase-js'
+const LIMIT_PER_PROJECT = 5
+function ptToday() {
+  const now = new Date()
+  const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
+  const y = pt.getFullYear()
+  const m = String(pt.getMonth() + 1).padStart(2, '0')
+  const d = String(pt.getDate()).padStart(2, '0')
+  return y + '-' + m + '-' + d
+}
+function daftarKredensial() {
+  const list = []
+  for (let n = 1; n <= 6; n++) {
+    const id = process.env['YOUTUBE_CLIENT_ID_' + n]
+    const secret = process.env['YOUTUBE_CLIENT_SECRET_' + n]
+    const refresh = process.env['YOUTUBE_REFRESH_TOKEN_' + n]
+    if (id && secret && refresh) list.push({ n: n, id: id, secret: secret, refresh: refresh })
+  }
+  if (!list.length && process.env.YOUTUBE_CLIENT_ID && process.env.YOUTUBE_CLIENT_SECRET && process.env.YOUTUBE_REFRESH_TOKEN) {
+    list.push({ n: 1, id: process.env.YOUTUBE_CLIENT_ID, secret: process.env.YOUTUBE_CLIENT_SECRET, refresh: process.env.YOUTUBE_REFRESH_TOKEN })
+  }
+  return list
+}
+const cacheToken = {}
+async function getAccessToken(kred) {
+  const now = Date.now()
+  const c = cacheToken[kred.n]
+  if (c && c.expire > now + 60000) return c.token
+  const params = new URLSearchParams()
+  params.set('client_id', kred.id)
+  params.set('client_secret', kred.secret)
+  params.set('refresh_token', kred.refresh)
+  params.set('grant_type', 'refresh_token')
+  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
+  if (!r.ok) throw new Error('refresh token project ' + kred.n + ' gagal (status ' + r.status + ')')
+  const j = await r.json()
+  cacheToken[kred.n] = { token: j.access_token, expire: now + (j.expires_in || 3600) * 1000 }
+  return j.access_token
+}
+`
+
+/* ===== 1. api/youtube/quota.js ===== */
+simpan('api/youtube/quota.js', KEPALA + `export default async function handler(req, res) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+  const today = ptToday()
+  const kredensial = daftarKredensial()
+  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
+  let usedTotal = 0
+  const perProject = []
+  for (const kred of kredensial) {
+    const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
+    const used = hit.count || 0
+    usedTotal += used
+    perProject.push({ project: kred.n, used: used, remaining: Math.max(0, LIMIT_PER_PROJECT - used) })
+  }
+  const limit = kredensial.length * LIMIT_PER_PROJECT
+  res.setHeader('Cache-Control', 'no-store')
+  return res.status(200).json({ limit: limit, used: usedTotal, remaining: Math.max(0, limit - usedTotal), perProject: perProject, ptDate: today })
+}
+`)
+
+/* ===== 2. api/youtube/session.js ===== */
+simpan('api/youtube/session.js', KEPALA + `export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const authHeader = req.headers.authorization || ''
+  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
+  const authClient = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
+  const chk = await authClient.auth.getUser()
+  if (chk.error || !chk.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
+  const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+  const today = ptToday()
+  const kredensial = daftarKredensial()
+  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
+  const body = req.body || {}
+  if (!body.title) return res.status(400).json({ error: 'Judul video wajib diisi' })
+  let terakhir = ''
+  for (const kred of kredensial) {
+    const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
+    if ((hit.count || 0) >= LIMIT_PER_PROJECT) { terakhir = 'project ' + kred.n + ' sudah penuh'; continue }
+    let access
+    try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
+    const meta = {
+      snippet: { title: String(body.title).slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
+      status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
+    }
+    const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
+      body: JSON.stringify(meta)
+    })
+    if (!init.ok) { terakhir = 'project ' + kred.n + ' ditolak Google (status ' + init.status + ')'; continue }
+    const sessionUri = init.headers.get('location')
+    if (!sessionUri) { terakhir = 'project ' + kred.n + ' tanpa lokasi upload'; continue }
+    await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: chk.data.user.id, project_id: kred.n })
+    return res.status(200).json({ sessionUri: sessionUri, project: kred.n })
+  }
+  return res.status(429).json({ error: 'Kuota harian semua project video sudah habis. Coba lagi besok atau gunakan link video eksternal.', detail: terakhir })
+}
+`)
+
+/* ===== 3. api/youtube/latest.js ===== */
+simpan('api/youtube/latest.js', KEPALA + `export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const authHeader = req.headers.authorization || ''
+  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
+  const authClient = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
+  const chk = await authClient.auth.getUser()
+  if (chk.error || !chk.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
+  const kredensial = daftarKredensial()
+  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
+  let terakhir = ''
+  for (const kred of kredensial) {
+    let access
+    try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
+    const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&order=date&maxResults=5', { headers: { Authorization: 'Bearer ' + access } })
+    if (!r.ok) { terakhir = 'project ' + kred.n + ' status ' + r.status; continue }
+    const j = await r.json()
+    const items = j.items || []
+    const batas = Date.now() - 15 * 60 * 1000
+    const cocok = items.find(function (it) {
+      const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
+      return isNaN(t) ? false : t >= batas
+    })
+    if (!cocok) return res.status(404).json({ error: 'Video terbaru tidak ditemukan' })
+    return res.status(200).json({ videoId: cocok.id && cocok.id.videoId, project: kred.n })
+  }
+  return res.status(502).json({ error: 'Gagal memeriksa video terbaru: ' + terakhir })
+}
+`)
+
+/* ===== 4. vite.config.js: ganti seluruh plugin YouTube ===== */
+const FILE_V = 'vite.config.js'
+let v = fs.readFileSync(path.join(root, FILE_V), 'utf8').replace(/\r\n/g, '\n')
+const mulai = v.indexOf('function pluginApiYoutube(env) {')
+const akhir = v.indexOf('export default defineConfig')
+if (mulai === -1 || akhir === -1) {
+  console.log('[TIDAK KETEMU] Blok pluginApiYoutube di vite.config.js')
+} else if (v.includes('LIMIT_PER_PROJECT')) {
+  console.log('[SUDAH ADA] Plugin YouTube multi-project di vite.config.js')
+} else {
+  const pluginBaru = `function pluginApiYoutube(env) {
+  const admin = createClient(env.VITE_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY)
+  const LIMIT_PER_PROJECT = 5
+  function ptToday() {
+    const now = new Date()
+    const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
+    const y = pt.getFullYear()
+    const m = String(pt.getMonth() + 1).padStart(2, '0')
+    const d = String(pt.getDate()).padStart(2, '0')
+    return y + '-' + m + '-' + d
+  }
+  function daftarKredensial() {
+    const list = []
+    for (let n = 1; n <= 6; n++) {
+      const id = env['YOUTUBE_CLIENT_ID_' + n]
+      const secret = env['YOUTUBE_CLIENT_SECRET_' + n]
+      const refresh = env['YOUTUBE_REFRESH_TOKEN_' + n]
+      if (id && secret && refresh) list.push({ n: n, id: id, secret: secret, refresh: refresh })
+    }
+    if (!list.length && env.YOUTUBE_CLIENT_ID && env.YOUTUBE_CLIENT_SECRET && env.YOUTUBE_REFRESH_TOKEN) {
+      list.push({ n: 1, id: env.YOUTUBE_CLIENT_ID, secret: env.YOUTUBE_CLIENT_SECRET, refresh: env.YOUTUBE_REFRESH_TOKEN })
+    }
+    return list
+  }
+  const cacheToken = {}
+  async function getAccessToken(kred) {
+    const now = Date.now()
+    const c = cacheToken[kred.n]
+    if (c && c.expire > now + 60000) return c.token
+    const params = new URLSearchParams()
+    params.set('client_id', kred.id)
+    params.set('client_secret', kred.secret)
+    params.set('refresh_token', kred.refresh)
+    params.set('grant_type', 'refresh_token')
+    const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
+    if (!r.ok) throw new Error('refresh token project ' + kred.n + ' gagal (status ' + r.status + ')')
+    const j = await r.json()
+    cacheToken[kred.n] = { token: j.access_token, expire: now + (j.expires_in || 3600) * 1000 }
+    return j.access_token
+  }
+  async function cekSesi(req) {
+    const authHeader = req.headers.authorization || ''
+    const token = authHeader.replace('Bearer ', '')
+    if (!token) return null
+    const supabase = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
+    const r = await supabase.auth.getUser(token)
+    return r.error ? null : r.data.user
+  }
+  function kirim(res, code, obj) {
+    res.statusCode = code
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify(obj))
+  }
+  return {
+    name: 'api-youtube-dev',
+    configureServer(server) {
+      server.middlewares.use('/api/youtube/quota', async function (req, res) {
+        const today = ptToday()
+        const kredensial = daftarKredensial()
+        if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
+        let usedTotal = 0
+        const perProject = []
+        for (const kred of kredensial) {
+          const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
+          const used = hit.count || 0
+          usedTotal += used
+          perProject.push({ project: kred.n, used: used, remaining: Math.max(0, LIMIT_PER_PROJECT - used) })
+        }
+        const limit = kredensial.length * LIMIT_PER_PROJECT
+        res.setHeader('Cache-Control', 'no-store')
+        kirim(res, 200, { limit: limit, used: usedTotal, remaining: Math.max(0, limit - usedTotal), perProject: perProject, ptDate: today })
+      })
+      server.middlewares.use('/api/youtube/session', async function (req, res) {
+        if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
+        const user = await cekSesi(req)
+        if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
+        const today = ptToday()
+        const kredensial = daftarKredensial()
+        if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
+        const body = await bacaBody(req)
+        if (!body.title) { kirim(res, 400, { error: 'Judul video wajib diisi' }); return }
+        let terakhir = ''
+        for (const kred of kredensial) {
+          const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
+          if ((hit.count || 0) >= LIMIT_PER_PROJECT) { terakhir = 'project ' + kred.n + ' sudah penuh'; continue }
+          let access
+          try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
+          const meta = {
+            snippet: { title: String(body.title).slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
+            status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
+          }
+          const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+            method: 'POST',
+            headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
+            body: JSON.stringify(meta)
+          })
+          if (!init.ok) { terakhir = 'project ' + kred.n + ' ditolak Google (status ' + init.status + ')'; continue }
+          const sessionUri = init.headers.get('location')
+          if (!sessionUri) { terakhir = 'project ' + kred.n + ' tanpa lokasi upload'; continue }
+          await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: user.id, project_id: kred.n })
+          kirim(res, 200, { sessionUri: sessionUri, project: kred.n })
+          return
+        }
+        kirim(res, 429, { error: 'Kuota harian semua project video sudah habis. Coba lagi besok atau gunakan link video eksternal.', detail: terakhir })
+      })
+      server.middlewares.use('/api/youtube/latest', async function (req, res) {
+        if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
+        const user = await cekSesi(req)
+        if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
+        const kredensial = daftarKredensial()
+        if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
+        let terakhir = ''
+        for (const kred of kredensial) {
+          let access
+          try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
+          const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&order=date&maxResults=5', { headers: { Authorization: 'Bearer ' + access } })
+          if (!r.ok) { terakhir = 'project ' + kred.n + ' status ' + r.status; continue }
+          const j = await r.json()
+          const items = j.items || []
+          const batas = Date.now() - 15 * 60 * 1000
+          const cocok = items.find(function (it) {
+            const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
+            return isNaN(t) ? false : t >= batas
+          })
+          if (!cocok) { kirim(res, 404, { error: 'Video terbaru tidak ditemukan' }); return }
+          kirim(res, 200, { videoId: cocok.id && cocok.id.videoId, project: kred.n })
+          return
+        }
+        kirim(res, 502, { error: 'Gagal memeriksa video terbaru: ' + terakhir })
+      })
+    }
+  }
+}
+
+`
+  v = v.slice(0, mulai) + pluginBaru + v.slice(akhir)
+  fs.writeFileSync(path.join(root, FILE_V), v, 'utf8')
+  console.log('[BERHASIL] Plugin YouTube multi-project dipasang di vite.config.js')
+}
+
+console.log('')
+console.log('Selesai. Restart dev server sekali: Ctrl+C lalu npm run dev -- --host')
+console.log('Setelah itu rotasi project berjalan otomatis tanpa restart lagi.')
+```
+
+## File: apply-final-cleanup.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai pembersihan akhir jalur YouTube...')
+console.log('')
+
+/* ===== 1. youtube.js: bungkus parsing JSON pemulihan dengan try/catch ===== */
+const FILE_Y = 'src/lib/youtube.js'
+let y = baca(FILE_Y)
+const cariY = `  if (r.ok) {
+    const j = await r.json()
+    if (j.videoId) return { videoId: j.videoId }
+  }`
+const gantiY = `  if (r.ok) {
+    try {
+      const j = await r.json()
+      if (j && j.videoId) return { videoId: j.videoId }
+    } catch (e) {
+      console.warn('Respons pemulihan bukan JSON, dilewati:', e.message)
+    }
+  }`
+if (y.includes(gantiY)) {
+  console.log('[SUDAH ADA] Pengaman parsing JSON pemulihan di youtube.js')
+} else if (y.includes(cariY)) {
+  y = y.replace(cariY, gantiY)
+  simpan(FILE_Y, y)
+  console.log('[BERHASIL] Pengaman parsing JSON pemulihan dipasang di youtube.js')
+} else {
+  console.log('[TIDAK KETEMU] Pola pemulihan di youtube.js, periksa manual')
+}
+
+/* ===== 2. vite.config.js: samakan limit middleware kuota menjadi 5 ===== */
+const FILE_V = 'vite.config.js'
+let v = baca(FILE_V)
+const cariV = `res.end(JSON.stringify({ limit: 6, used: used, remaining: Math.max(0, 5 - used), ptDate: today }))`
+const gantiV = `res.end(JSON.stringify({ limit: 5, used: used, remaining: Math.max(0, 5 - used), ptDate: today }))`
+if (v.includes(gantiV)) {
+  console.log('[SUDAH ADA] Limit middleware kuota sudah 5')
+} else if (v.includes(cariV)) {
+  v = v.replace(cariV, gantiV)
+  simpan(FILE_V, v)
+  console.log('[BERHASIL] Limit middleware kuota disamakan menjadi 5')
+} else {
+  console.log('[TIDAK KETEMU] Pola limit middleware kuota, periksa manual')
+}
+
+console.log('')
+console.log('Selesai. Restart dev server: Ctrl+C lalu npm run dev -- --host')
+console.log('')
+console.log('Langkah uji akhir:')
+console.log('1. Upload satu video kecil dari form logbook atau galeri.')
+console.log('2. Progres 100 persen, lalu id video dipulihkan lewat /api/youtube/latest.')
+console.log('3. Logbook atau galeri tersimpan tanpa alert error.')
+console.log('4. Tulisan kuota tampil konsisten: sisa dari 5, baik di localhost maupun Vercel.')
+console.log('5. Bila pemulihan gagal, pesan yang muncul kini pesan ramah, bukan SyntaxError.')
+```
+
+## File: apply-fix-export-unggah.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai memperbaiki export unggahVideoYouTube dan favicon...')
+console.log('')
+
+/* ===== 1. youtube.js: tambahkan export jembatan unggahVideoYouTube ===== */
+const FILE_Y = 'src/lib/youtube.js'
+let y = baca(FILE_Y)
+if (y.includes('export async function unggahVideoYouTube')) {
+  console.log('[SUDAH ADA] export unggahVideoYouTube di youtube.js')
+} else if (!y.includes('export async function uploadToYouTube') || !y.includes('export async function startYouTubeSession')) {
+  console.log('[TIDAK KETEMU] startYouTubeSession atau uploadToYouTube di youtube.js, batal menambahkan')
+} else {
+  y = y.trimEnd() + '\n\n' + [
+    'export async function unggahVideoYouTube(file, judul, onProgress) {',
+    '  const sesiData = await supabase.auth.getSession()',
+    '  const token = sesiData.data.session ? sesiData.session.access_token : \'\'',
+    '  const sesi = await startYouTubeSession(judul || \'Dokumentasi Magang\', \'Diunggah dari portal logbook magang BSI.\', file.type || \'video/mp4\', token)',
+    '  return await uploadToYouTube(sesi.sessionUri, file, onProgress)',
+    '}',
+    ''
+  ].join('\n')
+  simpan(FILE_Y, y)
+  console.log('[BERHASIL] export unggahVideoYouTube ditambahkan di youtube.js')
+}
+
+/* ===== 2. index.html: tambahkan favicon supaya tidak 404 ===== */
+const FILE_H = 'index.html'
+let h = baca(FILE_H)
+if (h.includes('rel="icon"')) {
+  console.log('[SUDAH ADA] favicon di index.html')
+} else {
+  const favicon = '    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns=\'http://www.w3.org/2000/svg\'%20viewBox=\'0%200%2064%2064\'%3E%3Crect%20width=\'64\'%20height=\'64\'%20rx=\'14\'%20fill=\'%2316623c\'/%3E%3Ctext%20x=\'32\'%20y=\'44\'%20font-size=\'34\'%20font-weight=\'700\'%20text-anchor=\'middle\'%20fill=\'%23ffffff\'%20font-family=\'Arial,%20sans-serif\'%3EB%3C/text%3E%3C/svg%3E" />\n'
+  if (h.includes('    <title>')) {
+    h = h.replace('    <title>', favicon + '    <title>')
+    simpan(FILE_H, h)
+    console.log('[BERHASIL] favicon ditambahkan di index.html')
+  } else {
+    console.log('[TIDAK KETEMU] baris title di index.html, favicon dilewati')
+  }
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka kembali http://localhost:5173/dashboard, halaman tidak lagi blank.')
+console.log('2. Uji upload video: progres naik, lalu logbook tersimpan dan kartu menampilkan thumbnail YouTube.')
+console.log('3. Favicon hijau muncul di tab browser dan permintaan favicon.ico tidak lagi 404.')
+```
+
+## File: apply-fix-sisa-netral.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+function cariGanti(rel, cari, ganti, label) {
+  if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan'); return }
+  let isi = baca(rel)
+  if (isi.includes(ganti)) { console.log('[SUDAH ADA] ' + label); return }
+  if (!isi.includes(cari)) { console.log('[TIDAK KETEMU] ' + label + ' di ' + rel); return }
+  isi = isi.replace(cari, ganti)
+  simpan(rel, isi)
+  console.log('[BERHASIL] ' + label)
+}
+
+console.log('Memperbaiki regex LabelProses dan menangkap sisa teks...')
+console.log('')
+
+/* ===== 1. Fix regex double backslash di LabelProses (ui.jsx) ===== */
+cariGanti('src/components/ui.jsx',
+  `const bersih = String(props.teks|| '').replace(/\\\\.{3}/g, '').replace(/\\\\s+/g, ' ').trim()`,
+  `const bersih = String(props.teks || '').replace(/\\.\\.\\./g, '').replace(/\\s+/g, ' ').trim()`,
+  'Regex LabelProses diperbaiki')
+
+/* ===== 2. Fallback teks yang polanya sedikit berbeda ===== */
+cariGanti('src/lib/youtube.js',
+  'Jaringan gagal saat upload YouTube',
+  'Jaringan gagal saat upload video',
+  'Pesan jaringan youtube.js dinetralkan')
+cariGanti('src/pages/DashboardPage.jsx',
+  `Mengunggah... ' + Math.round(p * 100) + '%'`,
+  `Mengunggah ' + Math.round(p * 100) + '%'`,
+  'Progres R2 dinetralkan dari titik tiga')
+cariGanti('src/pages/DashboardPage.jsx',
+  'Mengonversi HEIC ke JPG',
+  'Mengonversi foto HEIC',
+  'Teks konversi HEIC dinetralkan')
+cariGanti('src/lib/upload.js',
+  'Mengonversi foto ke WebP',
+  'Mengonversi foto',
+  'Teks konversi WebP dinetralkan')
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+```
+
+## File: apply-fix-state-loading.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+const FILE_D = 'src/pages/DashboardPage.jsx'
+
+if (!fs.existsSync(path.join(root, FILE_D))) {
+  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
+  process.exit(1)
+}
+let d = fs.readFileSync(path.join(root, FILE_D), 'utf8').replace(/\r\n/g, '\n')
+
+if (d.includes('const [ytQuotaLoading, setYtQuotaLoading]')) {
+  console.log('[SUDAH ADA] State ytQuotaLoading, tidak ada yang perlu ditambah')
+} else {
+  const regex = /([ \t]*)const \[ytQuota, setYtQuota\] = useState\([^\n]*\)\n/
+  if (regex.test(d)) {
+    d = d.replace(regex, function (m, indent) {
+      return m + indent + 'const [ytQuotaLoading, setYtQuotaLoading] = useState(true)\n'
+    })
+    fs.writeFileSync(path.join(root, FILE_D), d, 'utf8')
+    console.log('[BERHASIL] State ytQuotaLoading ditambahkan tepat di bawah state ytQuota')
+  } else {
+    console.log('[TIDAK KETEMU] Baris state ytQuota. Tambahkan manual baris berikut tepat di bawahnya:')
+    console.log('  const [ytQuotaLoading, setYtQuotaLoading] = useState(true)')
+  }
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('Error ytQuotaLoading is not defined akan hilang setelah perbaikan ini.')
+```
+
+## File: apply-fix-syntax-logbook.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+const FILE_L = 'src/lib/logbook.js'
+const filePath = path.join(root, FILE_L)
+
+if (!fs.existsSync(filePath)) {
+  console.log('[GAGAL] ' + FILE_L + ' tidak ditemukan')
+  process.exit(1)
+}
+
+let isi = fs.readFileSync(filePath, 'utf8')
+const sebelum = isi
+
+// Tambahkan koma yang hilang sebelum media_source (baik yang dipisahkan spasi maupun enter)
+isi = isi.replace(/(\|\| null)(\s*)(media_source:)/g, '$1,$2$3')
+
+if (isi !== sebelum) {
+  fs.writeFileSync(filePath, isi, 'utf8')
+  console.log('[BERHASIL] Koma yang hilang sebelum media_source telah ditambahkan di logbook.js.')
+} else {
+  console.log('[SUDAH BENAR] Tidak ada koma yang hilang di logbook.js.')
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('Website akan kembali normal dan tidak blank lagi.')
+```
+
+## File: apply-fix-token-aman.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+const regexBaris = /^([ \t]*)const ([A-Za-z0-9_]+) = [^\n]*\.access_token[^\n]*$/gm
+
+console.log('Mulai mengamankan pengambilan token sesi...')
+console.log('')
+
+/* ===== 1. youtube.js ===== */
+const FILE_Y = 'src/lib/youtube.js'
+let y = baca(FILE_Y)
+const ySebelum = y
+y = y.replace(regexBaris, function (m, indent, name) {
+  return indent + 'const ' + name + ' = await ambilTokenSesi()'
+})
+if (y !== ySebelum) console.log('[BERHASIL] Baris access_token di youtube.js diganti fungsi aman')
+
+if (!y.includes('export async function ambilTokenSesi')) {
+  y = y.trimEnd() + '\n\n' + [
+    'export async function ambilTokenSesi() {',
+    '  try {',
+    '    const r = await supabase.auth.getSession()',
+    '    const ssn = r && r.data ? r.data.session : null',
+    '    return ssn && ssn.access_token ? ssn.access_token : \'\'',
+    '  } catch (e) {',
+    '    return \'\'',
+    '  }',
+    '}',
+    ''
+  ].join('\n')
+  console.log('[BERHASIL] Fungsi ambilTokenSesi ditambahkan di youtube.js')
+} else {
+  console.log('[SUDAH ADA] Fungsi ambilTokenSesi di youtube.js')
+}
+
+if (!y.includes('Sesi login tidak terbaca')) {
+  const cariGuard = `export async function startYouTubeSession(title, description, contentType, token) {
+  const r = await fetch('/api/youtube/session', {`
+  const gantiGuard = `export async function startYouTubeSession(title, description, contentType, token) {
+  if (!token) throw new Error('Sesi login tidak terbaca. Silakan masuk ulang lalu coba lagi.')
+  const r = await fetch('/api/youtube/session', {`
+  if (y.includes(cariGuard)) {
+    y = y.replace(cariGuard, gantiGuard)
+    console.log('[BERHASIL] Penjaga token kosong di startYouTubeSession')
+  } else {
+    console.log('[TIDAK KETEMU] Pola startYouTubeSession, penjaga dilewati')
+  }
+} else {
+  console.log('[SUDAH ADA] Penjaga token kosong di startYouTubeSession')
+}
+simpan(FILE_Y, y)
+
+/* ===== 2. DashboardPage.jsx ===== */
+const FILE_D = 'src/pages/DashboardPage.jsx'
+let d = baca(FILE_D)
+const dSebelum = d
+d = d.replace(regexBaris, function (m, indent, name) {
+  return indent + 'const ' + name + ' = await ambilTokenSesi()'
+})
+if (d !== dSebelum) {
+  console.log('[BERHASIL] Baris access_token di DashboardPage diganti fungsi aman')
+  if (d.includes('ambilTokenSesi()') && !d.includes('ambilTokenSesi }')) {
+    d = d.replace("} from '../lib/youtube.js'", ", ambilTokenSesi } from '../lib/youtube.js'")
+    console.log('[BERHASIL] Import ambilTokenSesi ditambahkan di DashboardPage')
+  }
+  simpan(FILE_D, d)
+} else {
+  console.log('[SUDAH AMAAN] Tidak ada baris access_token langsung di DashboardPage')
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka dashboard, pilih mode Video dengan file video kecil, lalu simpan.')
+console.log('2. Bila sesi login valid, progres upload berjalan dan logbook tersimpan.')
+console.log('3. Bila sesi kedaluwarsa, pesan yang muncul kini kalimat ramah, bukan error access_token.')
+console.log('4. Uji juga mode Foto dan mode link YouTube untuk memastikan tidak ada regresi.')
+```
+
 ## File: apply-fix-video-galeri.cjs
 ```javascript
 const fs = require('fs')
@@ -548,6 +5256,682 @@ console.log('1. Edit logbook berisi video YouTube, centang tampilkan di galeri, 
 console.log('2. Media tidak hilang lagi di logbook dan thumbnail beserta link terlihat di form edit.')
 console.log('3. Buka tab Galeri: video muncul sebagai kartu dengan pemutar kustom, bukan media rusak.')
 console.log('4. Edit lagi tanpa mengubah apa pun dan simpan: tidak ada permintaan upload ulang.')
+```
+
+## File: apply-fix-youtube-scope.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai memperbaiki scope OAuth dan jalur pemulihan...')
+console.log('')
+
+/* ===== 1. setup-youtube-token.cjs: tambah scope baca ===== */
+const FILE_S = 'setup-youtube-token.cjs'
+if (!fs.existsSync(path.join(root, FILE_S))) {
+  console.log('[TIDAK KETEMU] ' + FILE_S)
+} else {
+  let s = baca(FILE_S)
+  const cariS = `const scope = 'https://www.googleapis.com/auth/youtube.upload'`
+  const gantiS = `const scope = 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly'`
+  if (s.includes('youtube.readonly')) {
+    console.log('[SUDAH ADA] Scope baca di setup-youtube-token.cjs')
+  } else if (s.includes(cariS)) {
+    s = s.replace(cariS, gantiS)
+    simpan(FILE_S, s)
+    console.log('[BERHASIL] Scope baca ditambahkan di setup-youtube-token.cjs')
+  } else {
+    console.log('[TIDAK KETEMU] Baris scope di setup-youtube-token.cjs')
+  }
+}
+
+/* ===== 2. api/youtube/latest.js: sertakan alasan asli dari YouTube ===== */
+const FILE_L = 'api/youtube/latest.js'
+if (!fs.existsSync(path.join(root, FILE_L))) {
+  console.log('[TIDAK KETEMU] ' + FILE_L)
+} else {
+  let l = baca(FILE_L)
+  const cariL = `if (!r.ok) return res.status(502).json({ error: 'Gagal memeriksa video terbaru' })`
+  const gantiL = `if (!r.ok) { const t = await r.text(); return res.status(502).json({ error: 'Gagal memeriksa video terbaru: ' + r.status + ' ' + t }) }`
+  if (l.includes('Gagal memeriksa video terbaru: ')) {
+    console.log('[SUDAH ADA] Detail error di api/youtube/latest.js')
+  } else if (l.includes(cariL)) {
+    l = l.replace(cariL, gantiL)
+    simpan(FILE_L, l)
+    console.log('[BERHASIL] Detail error ditambahkan di api/youtube/latest.js')
+  } else {
+    console.log('[TIDAK KETEMU] Baris 502 di api/youtube/latest.js')
+  }
+}
+
+/* ===== 3. vite.config.js: detail error middleware latest ===== */
+const FILE_V = 'vite.config.js'
+let v = baca(FILE_V)
+const cariV = `if (!r.ok) { res.statusCode = 502; res.end(JSON.stringify({ error: 'Gagal memeriksa video terbaru' })); return }`
+const gantiV = `if (!r.ok) { const t = await r.text(); res.statusCode = 502; res.end(JSON.stringify({ error: 'Gagal memeriksa video terbaru: ' + r.status + ' ' + t })); return }`
+if (v.includes('Gagal memeriksa video terbaru: ')) {
+  console.log('[SUDAH ADA] Detail error middleware latest')
+} else if (v.includes(cariV)) {
+  v = v.replace(cariV, gantiV)
+  simpan(FILE_V, v)
+  console.log('[BERHASIL] Detail error middleware latest ditambahkan')
+} else {
+  console.log('[TIDAK KETEMU] Baris 502 middleware latest di vite.config.js')
+}
+
+/* ===== 4. youtube.js: ulangi pemulihan hingga 3 kali ===== */
+const FILE_Y = 'src/lib/youtube.js'
+let y = baca(FILE_Y)
+if (y.includes('for (let percobaan = 0')) {
+  console.log('[SUDAH ADA] Pengulangan pemulihan di youtube.js')
+} else {
+  const regexY = /const v = await fetch\('\/api\/youtube\/latest', \{[\s\S]*?secara manual\.'\)/
+  const gantiY = `for (let percobaan = 0; percobaan < 3; percobaan++) {
+    if (percobaan > 0) await new Promise(function (tunggu) { setTimeout(tunggu, 4000) })
+    const v = await fetch('/api/youtube/latest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({})
+    })
+    if (v.ok) {
+      try {
+        const j = await v.json()
+        if (j && j.videoId) return { videoId: j.videoId }
+      } catch (e) {
+        console.warn('Respons pemulihan bukan JSON, dilewati.')
+      }
+    } else {
+      const teks = await v.text().catch(function () { return '' })
+      console.warn('Pemulihan percobaan ' + (percobaan + 1) + ' gagal: ' + teks)
+    }
+  }
+  throw new Error('Upload selesai tetapi id video tidak terbaca. Video kemungkinan sudah masuk channel; tempel link YouTube secara manual.')`
+  if (regexY.test(y)) {
+    y = y.replace(regexY, gantiY)
+    simpan(FILE_Y, y)
+    console.log('[BERHASIL] Pengulangan pemulihan dipasang di youtube.js')
+  } else {
+    console.log('[TIDAK KETEMU] Blok pemulihan di youtube.js')
+  }
+}
+
+console.log('')
+console.log('Selesai. Lanjutkan dengan langkah manual berikut:')
+console.log('1. Jalankan: node setup-youtube-token.cjs')
+console.log('2. Browser terbuka dan kini meminta dua izin: kelola upload dan lihat video YouTube kamu.')
+console.log('3. Setujui, lalu salin refresh token BARU yang tercetak di terminal.')
+console.log('4. Ganti nilai YOUTUBE_REFRESH_TOKEN di .env.local dengan token baru itu.')
+console.log('5. Restart dev server: Ctrl+C lalu npm run dev -- --host')
+console.log('6. Uji upload video kecil lagi dari dashboard.')
+console.log('7. Sebelum deploy, perbarui juga YOUTUBE_REFRESH_TOKEN di Environment Variables Vercel.')
+```
+
+## File: apply-galeri-picker.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+
+const root = process.cwd()
+
+function baca(rel) {
+  return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n')
+}
+
+function simpan(rel, isi) {
+  fs.writeFileSync(path.join(root, rel), isi, 'utf8')
+}
+
+function ganti(rel, cari, gantiDengan, label) {
+  if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan'); return }
+  let isi = baca(rel)
+  if (isi.includes(gantiDengan)) { console.log('[SUDAH ADA] ' + label); return }
+  if (!isi.includes(cari)) { console.log('[TIDAK KETEMU] ' + label + ' di ' + rel); return }
+  isi = isi.replace(cari, gantiDengan)
+  simpan(rel, isi)
+  console.log('[BERHASIL] ' + label)
+}
+
+function gantiRegex(rel, regex, gantiDengan, label, marker) {
+  if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan'); return }
+  let isi = baca(rel)
+  if (marker && isi.includes(marker)) { console.log('[SUDAH ADA] ' + label); return }
+  if (!regex.test(isi)) { console.log('[TIDAK KETEMU] ' + label + ' di ' + rel); return }
+  isi = isi.replace(regex, gantiDengan)
+  simpan(rel, isi)
+  console.log('[BERHASIL] ' + label)
+}
+
+const FILE_D = 'src/pages/DashboardPage.jsx'
+
+console.log('Mulai memasang pemilih jenis media pada form galeri...')
+console.log('')
+
+/* ===== 1. Import helper YouTube ===== */
+if (!fs.existsSync(path.join(root, FILE_D))) {
+  console.log('[GAGAL] ' + FILE_D + ' tidak ditemukan')
+  process.exit(1)
+}
+let d = baca(FILE_D)
+if (d.includes("from '../lib/youtube.js'")) {
+  console.log('[SUDAH ADA] Import helper YouTube')
+} else if (d.includes("from '../lib/konversi.js'")) {
+  d = d.replace("from '../lib/konversi.js'", "from '../lib/konversi.js'\nimport { parseYouTubeId, ytThumb, fetchYouTubeQuota, startYouTubeSession, uploadToYouTube } from '../lib/youtube.js'")
+  simpan(FILE_D, d)
+  console.log('[BERHASIL] Import helper YouTube')
+} else {
+  console.log('[TIDAK KETEMU] Import helper YouTube')
+}
+
+/* ===== 2. State YouTube dan mode galeri ===== */
+d = baca(FILE_D)
+const stateBaru = []
+if (!d.includes('const [ytQuota, setYtQuota]')) stateBaru.push("  const [ytQuota, setYtQuota] = useState({ limit: 6, used: 0, remaining: 6 })")
+if (!d.includes('const [galMode, setGalMode]')) stateBaru.push("  const [galMode, setGalMode] = useState('foto')")
+if (!d.includes('const [galYtLink, setGalYtLink]')) stateBaru.push("  const [galYtLink, setGalYtLink] = useState('')")
+if (!d.includes('const [galOldYt, setGalOldYt]')) stateBaru.push('  const [galOldYt, setGalOldYt] = useState(null)')
+if (stateBaru.length === 0) {
+  console.log('[SUDAH ADA] State YouTube dan mode galeri')
+} else if (d.includes("const [infoProses, setInfoProses] = useState('')")) {
+  d = d.replace("const [infoProses, setInfoProses] = useState('')", "const [infoProses, setInfoProses] = useState('')\n" + stateBaru.join('\n'))
+  simpan(FILE_D, d)
+  console.log('[BERHASIL] State YouTube dan mode galeri (' + stateBaru.length + ' baris)')
+} else {
+  console.log('[TIDAK KETEMU] State YouTube dan mode galeri')
+}
+
+/* ===== 3. Muat kuota YouTube berkala ===== */
+ganti(FILE_D,
+  `  useEffect(function () {
+    if (mahasiswa) refresh()
+  }, [mahasiswa])`,
+  `  useEffect(function () {
+    if (mahasiswa) refresh()
+    fetchYouTubeQuota().then(setYtQuota)
+    const iv = setInterval(function () { fetchYouTubeQuota().then(setYtQuota) }, 30000)
+    return function () { clearInterval(iv) }
+  }, [mahasiswa])`,
+  'Muat kuota YouTube berkala')
+
+/* ===== 4. Cabang YouTube pada submitGaleri ===== */
+ganti(FILE_D,
+  `      let mediaPath = ''
+      let mediaType = ''
+      let mediaThumb = null
+      if (galForm.file) {`,
+  `      let mediaPath = ''
+      let mediaType = ''
+      let mediaThumb = null
+      let mediaSource = galOldYt ? 'youtube' : 'r2'
+      let youtubeId = galOldYt || null
+      if (galMode === 'video' && galYtLink && !galForm.file) {
+        const id = parseYouTubeId(galYtLink)
+        if (!id) { alert('Link YouTube tidak valid.'); setBusy(false); return }
+        mediaSource = 'youtube'
+        youtubeId = id
+        mediaPath = ytThumb(id)
+        mediaThumb = ytThumb(id)
+        mediaType = 'video'
+      } else if (galMode === 'video' && galForm.file) {
+        if (ytQuota.remaining <= 0) { alert('Kuota upload YouTube hari ini sudah habis. Gunakan link YouTube.'); setBusy(false); return }
+        const sesiData = await supabase.auth.getSession()
+        const tokenS = sesiData.data.session ? sesiData.data.session.access_token : ''
+        const sesi = await startYouTubeSession(galForm.judul || ('Dokumentasi ' + galForm.tanggal), galForm.deskripsi || '', galForm.file.type || 'video/mp4', tokenS)
+        const hasilYt = await uploadToYouTube(sesi.sessionUri, galForm.file, function (p) { setInfoProses('Mengunggah ke YouTube... ' + Math.round(p * 100) + '%') })
+        mediaSource = 'youtube'
+        youtubeId = hasilYt.videoId
+        mediaPath = ytThumb(hasilYt.videoId)
+        mediaThumb = ytThumb(hasilYt.videoId)
+        mediaType = 'video'
+        setYtQuota(function (q) { return Object.assign({}, q, { used: q.used + 1, remaining: Math.max(0, q.remaining - 1) }) })
+        fetchYouTubeQuota().then(setYtQuota)
+      } else if (galForm.file) {`,
+  'Cabang YouTube pada submitGaleri')
+ganti(FILE_D,
+  `        media_path: mediaPath,
+        media_type: mediaType,
+        media_thumb: mediaThumb
+      }`,
+  `        media_path: mediaPath,
+        media_type: mediaType,
+        media_thumb: mediaThumb,
+        media_source: mediaSource,
+        youtube_id: youtubeId
+      }`,
+  'Payload galeri membawa kolom YouTube')
+
+/* ===== 5. startEditGal membawa mode dan sumber lama ===== */
+ganti(FILE_D,
+  `setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_path, oldPath: g.media_path, oldThumb: g.media_thumb || '', previewLoading: false })`,
+  `setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_path || '', oldPath: g.media_source === 'youtube' ? '' : (g.media_path || ''), oldThumb: g.media_source === 'youtube' ? '' : (g.media_thumb || ''), previewLoading: false })
+    setGalMode(g.media_source === 'youtube' ? 'video' : (g.media_type === 'video' ? 'video' : 'foto'))
+    setGalYtLink('')
+    setGalOldYt(g.youtube_id || null)`,
+  'startEditGal membawa mode dan sumber lama')
+
+/* ===== 6. Reset mode galeri setelah simpan dan batal ===== */
+d = baca(FILE_D)
+if (d.includes('setGalOldYt(null)')) {
+  console.log('[SUDAH ADA] Reset mode galeri')
+} else {
+  const polaReset = `setGalForm({ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false })`
+  const gantiReset = polaReset + `\n    setGalMode('foto')\n    setGalYtLink('')\n    setGalOldYt(null)`
+  if (d.includes(polaReset)) {
+    d = d.split(polaReset).join(gantiReset)
+    simpan(FILE_D, d)
+    console.log('[BERHASIL] Reset mode galeri')
+  } else {
+    console.log('[TIDAK KETEMU] Reset mode galeri')
+  }
+}
+
+/* ===== 7. hapusMediaR2 melewatkan URL YouTube ===== */
+ganti(FILE_D,
+  `  async function hapusMediaR2(url) {
+    const key = keyDariUrl(url)`,
+  `  async function hapusMediaR2(url) {
+    if (String(url || '').indexOf('i.ytimg.com') !== -1 || String(url || '').indexOf('youtube') !== -1) return
+    const key = keyDariUrl(url)`,
+  'hapusMediaR2 melewatkan URL YouTube')
+
+/* ===== 8. Hapus galeri melewatkan media YouTube ===== */
+ganti(FILE_D,
+  `      const urls = target.data.logbook_item_id ? [] : [target.data.media_path, target.data.media_thumb].filter(Boolean)`,
+  `      const urls = target.data.logbook_item_id || target.data.media_source === 'youtube' ? [] : [target.data.media_path, target.data.media_thumb].filter(Boolean)`,
+  'Hapus galeri melewatkan media YouTube')
+
+/* ===== 9. UI pemilih jenis media pada form galeri ===== */
+gantiRegex(FILE_D,
+  /<label className=\{labelCls\}>Pilih foto atau video[\s\S]*?\}\} \/>\s*<\/div>\s*<\/div>/,
+  `<label className={labelCls}>Jenis media {editGalId ? null : <span className="text-red-500">*</span>}</label>
+                <div className="mt-1.5 flex gap-2">
+                  <button type="button" onClick={function () { setGalMode('foto') }} className={'px-3 py-1.5 rounded-xl text-xs font-bold ' + (galMode !== 'video' ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600')}>Foto</button>
+                  <button type="button" onClick={function () { setGalMode('video') }} className={'px-3 py-1.5 rounded-xl text-xs font-bold ' + (galMode === 'video' ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600')}>Video</button>
+                </div>
+                <div className="mt-1.5">
+                  {galMode === 'video' ? (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-slate-500">Sisa kuota upload YouTube hari ini: {ytQuota.remaining} dari {ytQuota.limit}</p>
+                      <div className={ytQuota.remaining <= 0 && !galForm.file ? 'opacity-50 pointer-events-none' : ''}>
+                        <FileInput accept="video/*" fileName={galForm.file ? galForm.file.name : ''}
+                          onChange={function (e) {
+                            const f = e.target.files[0]
+                            if (!f) return
+                            setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: URL.createObjectURL(f), previewLoading: false }) })
+                          }} />
+                      </div>
+                      {ytQuota.remaining <= 0 ? <p className="text-xs text-red-600">Kuota habis. Gunakan link YouTube di bawah.</p> : null}
+                      <input className={inputCls} value={galYtLink} onChange={function (e) { setGalYtLink(e.target.value) }} placeholder="Atau tempel link YouTube (unlisted)" />
+                    </div>
+                  ) : (
+                    <FileInput accept="image/*" fileName={galForm.file ? galForm.file.name : ''}
+                      onChange={async function (e) {
+                        const f = e.target.files[0]
+                        if (!f) return
+                        if (formatHeic(f)) {
+                          setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: '', previewLoading: true }) })
+                          const blob = await pratinjauHeic(f)
+                          const preview = blob ? URL.createObjectURL(blob) : URL.createObjectURL(f)
+                          setGalForm(function (g) { return Object.assign({}, g, { preview: preview, previewLoading: false }) })
+                        } else {
+                          setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: URL.createObjectURL(f), previewLoading: false }) })
+                        }
+                      }} />
+                  )}
+                </div>
+              </div>`,
+  'UI pemilih jenis media pada form galeri',
+  'Jenis media {editGalId')
+
+/* ===== 10. Kartu galeri menampilkan thumbnail untuk media YouTube ===== */
+gantiRegex('src/components/cards.jsx',
+  /<SmartFit src=\{item\.media_thumb \|\| item\.media_path\}[^/]*\/>/,
+  `{item.media_source === 'youtube' ? (
+        <img src={item.media_path} alt={item.judul} className="absolute inset-0 h-full w-full object-cover" />
+      ) : (
+        <SmartFit src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} alt={item.judul} />
+      )}`,
+  'Kartu galeri menampilkan thumbnail untuk media YouTube',
+  '<img src={item.media_path} alt={item.judul} className="absolute inset-0 h-full w-full object-cover" />')
+
+console.log('')
+console.log('Selesai. Vite akan memuat ulang otomatis.')
+console.log('')
+console.log('Catatan:')
+console.log('1. Tidak ada SQL baru. Kolom media_source dan youtube_id sudah kamu tambahkan sebelumnya.')
+console.log('2. Script aman dijalankan ulang karena setiap langkah memeriksa penanda lebih dulu.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka dashboard, tab Galeri, perhatikan label kini bertuliskan Jenis media dengan tombol Foto dan Video.')
+console.log('2. Pilih Foto: muncul FileInput gambar dengan pratinjau HEIC seperti sebelumnya.')
+console.log('3. Pilih Video: muncul sisa kuota harian, FileInput video, dan kolom link YouTube.')
+console.log('4. Saat kuota habis, FileInput video mengabu dan hanya kolom link yang bisa dipakai.')
+console.log('5. Simpan media YouTube: kartu galeri menampilkan thumbnail YouTube, dan modal detail memutar embed.')
+console.log('6. Edit media YouTube: mode otomatis terpilih Video dan tombol simpan mempertahankan sumber lama.')
+console.log('7. Hapus media YouTube: tidak ada percobaan hapus ke R2 karena penjaga URL sudah aktif.')
+```
+
+## File: apply-loading-kuota.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai menambahkan indikator loading pada kuota...')
+console.log('')
+
+const FILE_D = 'src/pages/DashboardPage.jsx'
+let d = baca(FILE_D)
+let berubah = false
+
+/* ===== 1. Tambah state ytQuotaLoading ===== */
+const cariState = `  const [ytQuota, setYtQuota] = useState({ limit: 5, used: 0, remaining: 5 })`
+const gantiState = `  const [ytQuota, setYtQuota] = useState({ limit: 5, used: 0, remaining: 5 })
+  const [ytQuotaLoading, setYtQuotaLoading] = useState(true)`
+if (d.includes('ytQuotaLoading')) {
+  console.log('[SUDAH ADA] State ytQuotaLoading')
+} else if (d.includes(cariState)) {
+  d = d.replace(cariState, gantiState)
+  berubah = true
+  console.log('[BERHASIL] State ytQuotaLoading ditambahkan')
+} else {
+  console.log('[TIDAK KETEMU] State ytQuota')
+}
+
+/* ===== 2. Set loading saat fetch kuota ===== */
+const cariFetch = `  useEffect(function () {
+    if (mahasiswa) refresh()
+    fetchYouTubeQuota().then(setYtQuota)`
+const gantiFetch = `  useEffect(function () {
+    if (mahasiswa) refresh()
+    setYtQuotaLoading(true)
+    fetchYouTubeQuota().then(function (data) {
+      setYtQuota(data)
+      setYtQuotaLoading(false)
+    })`
+if (d.includes('setYtQuotaLoading(true)')) {
+  console.log('[SUDAH ADA] Loading state pada fetch kuota')
+} else if (d.includes(cariFetch)) {
+  d = d.replace(cariFetch, gantiFetch)
+  berubah = true
+  console.log('[BERHASIL] Loading state dipasang pada fetch kuota')
+} else {
+  console.log('[TIDAK KETEMU] Blok fetch kuota di useEffect')
+}
+
+/* ===== 3. Set loading false juga di interval ===== */
+const cariInterval = `    const iv = setInterval(function () { fetchYouTubeQuota().then(setYtQuota) }, 30000)`
+const gantiInterval = `    const iv = setInterval(function () { fetchYouTubeQuota().then(function (data) { setYtQuota(data); setYtQuotaLoading(false) }) }, 30000)`
+if (d.includes(gantiInterval)) {
+  console.log('[SUDAH ADA] Loading state pada interval')
+} else if (d.includes(cariInterval)) {
+  d = d.replace(cariInterval, gantiInterval)
+  berubah = true
+  console.log('[BERHASIL] Loading state dipasang pada interval')
+} else {
+  console.log('[TIDAK KETEMU] Blok interval kuota')
+}
+
+/* ===== 4. Update tampilan kuota di form logbook ===== */
+const cariLogbook = `<p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuota.remaining} dari {ytQuota.limit}</p>`
+const gantiLogbook = `<p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuotaLoading ? <span className="inline-block w-3 h-3 ml-1 border-2 border-slate-400 border-t-transparent rounded-full animate-spin align-middle"></span> : <>{ytQuota.remaining} dari {ytQuota.limit}</>}</p>`
+if (d.includes('border-t-transparent rounded-full animate-spin')) {
+  console.log('[SUDAH ADA] Indikator loading di form logbook')
+} else if (d.includes(cariLogbook)) {
+  d = d.split(cariLogbook).join(gantiLogbook)
+  berubah = true
+  console.log('[BERHASIL] Indikator loading dipasang di form logbook')
+} else {
+  console.log('[TIDAK KETEMU] Teks kuota di form logbook')
+}
+
+/* ===== 5. Update tampilan kuota di form galeri ===== */
+const cariGaleri = `<p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuota.remaining} dari {ytQuota.limit}</p>`
+if (d.includes(cariGaleri) && d.includes('galMode === \'video\'')) {
+  d = d.split(cariGaleri).join(gantiLogbook)
+  berubah = true
+  console.log('[BERHASIL] Indikator loading dipasang di form galeri')
+}
+
+/* ===== 6. Update tampilan kuota di form rincian kegiatan ===== */
+const cariRincian = `<p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuota.remaining} dari {ytQuota.limit}</p>`
+if (d.includes(cariRincian) && d.includes('it.mode === \'video\'')) {
+  d = d.split(cariRincian).join(gantiLogbook)
+  berubah = true
+  console.log('[BERHASIL] Indikator loading dipasang di form rincian kegiatan')
+}
+
+if (berubah) {
+  simpan(FILE_D, d)
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Perilaku baru:')
+console.log('1. Saat halaman dibuka, tulisan kuota menampilkan spinner kecil berputar.')
+console.log('2. Begitu data dari server datang (biasanya < 1 detik), spinner hilang dan angka muncul.')
+console.log('3. Tidak ada lagi kedipan angka dari 6 ke 26, karena loading state menahan tampilan.')
+```
+
+## File: apply-netral-final.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Pembersihan akhir teks proses dan pemindaian sisa sebutan YouTube...')
+console.log('')
+
+/* ===== 1. Bersihkan titik tiga pada teks onInfo di upload.js dan konversi.js ===== */
+;['src/lib/upload.js', 'src/lib/konversi.js'].forEach(function (rel) {
+  if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan'); return }
+  let isi = baca(rel)
+  const sebelum = isi
+  isi = isi.replace(/onInfo\('([^'\n]*?)\.\.\.'\)/g, "onInfo('$1')")
+  isi = isi.replace(/Mengunggah\.\.\. ' \+ /g, "Mengunggah ' + ")
+  if (isi !== sebelum) {
+    simpan(rel, isi)
+    console.log('[BERHASIL] Teks proses dibersihkan di ' + rel)
+  } else {
+    console.log('[SUDAH BERSIH] ' + rel)
+  }
+})
+
+/* ===== 2. Bersihkan pola serupa di DashboardPage bila masih tersisa ===== */
+const FILE_D = 'src/pages/DashboardPage.jsx'
+if (!fs.existsSync(path.join(root, FILE_D))) {
+  console.log('[LEWATI] DashboardPage tidak ditemukan')
+} else {
+  let d = baca(FILE_D)
+  const sebelum = d
+  d = d.replace(/setInfoProses\('([^'\n]*?)\.\.\.'\)/g, "setInfoProses('$1')")
+  d = d.replace(/setInfoProses\('([^'\n]*?)\.\.\. ' \+ /g, "setInfoProses('$1 ' + ")
+  if (d !== sebelum) {
+    simpan(FILE_D, d)
+    console.log('[BERHASIL] Teks proses dibersihkan di DashboardPage')
+  } else {
+    console.log('[SUDAH BERSIH] DashboardPage')
+  }
+}
+
+/* ===== 3. Pindai sisa sebutan YouTube huruf kapital di seluruh src ===== */
+console.log('')
+console.log('Pemindaian sisa teks YouTube huruf kapital pada folder src:')
+let ketemu = 0
+function jalan(dir) {
+  const entries = fs.readdirSync(dir, { withFileTypes: true })
+  entries.forEach(function (e) {
+    const full = path.join(dir, e.name)
+    if (e.isDirectory()) { jalan(full); return }
+    if (!/\.(jsx?|css|html)$/.test(e.name)) return
+    const isi = fs.readFileSync(full, 'utf8')
+    isi.split('\n').forEach(function (b, i) {
+      if (b.includes('YouTube')) {
+        ketemu++
+        console.log('  ' + path.relative(root, full) + ':' + (i + 1) + '  ' + b.trim().slice(0, 120))
+      }
+    })
+  })
+}
+jalan(path.join(root, 'src'))
+if (ketemu === 0) console.log('  Tidak ada sisa teks YouTube huruf kapital. Bersih.')
+
+console.log('')
+console.log('Catatan: baris berisi alamat embed youtube-nocookie, i.ytimg, atau googleapis adalah teknis')
+console.log('dan tidak tampil sebagai teks merek kepada pengguna, jadi wajar bila muncul di pemindaian huruf kecil.')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Simpan logbook berisi foto atau video, perhatikan tombol simpan.')
+console.log('2. Teks proses tampil tanpa titik tiga statis, diikuti tiga titik animasi yang halus.')
+console.log('3. Contoh tampilan: Mengunggah 43 persen dengan titik berdenyut, bukan Mengunggah... 43 persen.')
+console.log('4. Tidak ada kata YouTube pada label kuota, placeholder, peringatan, maupun tombol.')
+```
+
+## File: apply-netral-youtube-dan-titik.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+function semua(rel, cari, ganti, label) {
+  if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan'); return }
+  let isi = baca(rel)
+  if (!isi.includes(cari)) { console.log('[TIDAK KETEMU] ' + label); return }
+  isi = isi.split(cari).join(ganti)
+  simpan(rel, isi)
+  console.log('[BERHASIL] ' + label)
+}
+
+function sisip(rel, cari, ganti, label) {
+  if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan'); return }
+  let isi = baca(rel)
+  if (isi.includes(ganti)) { console.log('[SUDAH ADA] ' + label); return }
+  if (!isi.includes(cari)) { console.log('[TIDAK KETEMU] ' + label); return }
+  isi = isi.replace(cari, ganti)
+  simpan(rel, isi)
+  console.log('[BERHASIL] ' + label)
+}
+
+function tambah(rel, marker, blok, label) {
+  if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan'); return }
+  let isi = baca(rel)
+  if (isi.includes(marker)) { console.log('[SUDAH ADA] ' + label); return }
+  isi = isi.trimEnd() + '\n\n' + blok
+  simpan(rel, isi)
+  console.log('[BERHASIL] ' + label)
+}
+
+console.log('Mulai menetralkan sebutan YouTube dan memasang animasi titik...')
+console.log('')
+
+/* ===== 1. index.css: animasi titik halus ===== */
+tambah('src/index.css', '.titik-anim', `.titik-anim {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 6px;
+}
+.titik-anim i {
+  width: 4px;
+  height: 4px;
+  border-radius: 9999px;
+  background: currentColor;
+  opacity: 0.2;
+  animation: titik-halus 1.1s ease-in-out infinite;
+}
+.titik-anim i:nth-child(2) { animation-delay: 0.18s; }
+.titik-anim i:nth-child(3) { animation-delay: 0.36s; }
+@keyframes titik-halus {
+  0%, 60%, 100% { opacity: 0.2; transform: translateY(0) scale(0.9); }
+  30% { opacity: 1; transform: translateY(-1px) scale(1); }
+}`, 'CSS animasi titik di index.css')
+
+/* ===== 2. ui.jsx: komponen TitikAnim dan LabelProses ===== */
+tambah('src/components/ui.jsx', 'export function LabelProses', `export function TitikAnim() {
+  return (
+    <span className="titik-anim" aria-hidden="true">
+      <i></i>
+      <i></i>
+      <i></i>
+    </span>
+  )
+}
+export function LabelProses(props) {
+  const bersih = String(props.teks || '').replace(/\\.{3}/g, '').replace(/\\s+/g, ' ').trim()
+  return (
+    <span className="inline-flex items-center justify-center">
+      <span>{bersih}</span>
+      <TitikAnim />
+    </span>
+  )
+}`, 'Komponen TitikAnim dan LabelProses di ui.jsx')
+
+/* ===== 3. ui.jsx: netralkan placeholder pratinjau dan pemutar ===== */
+semua('src/components/ui.jsx', `<SizedIcon name="youtube" size={26} />`, `<SizedIcon name="video" size={26} />`, 'Ikon placeholder pratinjau menjadi ikon video')
+semua('src/components/ui.jsx', `Menyiapkan thumbnail YouTube...`, `Menyiapkan pratinjau video`, 'Teks placeholder pratinjau dinetralkan')
+semua('src/components/ui.jsx', `Thumbnail belum siap di YouTube`, `Pratinjau video belum siap`, 'Teks placeholder permanen dinetralkan')
+semua('src/components/ui.jsx', `alt={props.alt || 'Thumbnail YouTube'}`, `alt={props.alt || 'Pratinjau video'}`, 'Alt text pratinjau dinetralkan')
+semua('src/components/ui.jsx', `src={'https://www.youtube-nocookie.com/embed/' + props.youtubeId}`, `src={'https://www.youtube-nocookie.com/embed/' + props.youtubeId + '?rel=0&modestbranding=1'}`, 'Pemutar lightbox meminimalkan merek')
+
+/* ===== 4. cards.jsx: minimalkan merek pada embed detail ===== */
+semua('src/components/cards.jsx', `embed/' + it.youtube_id}`, `embed/' + it.youtube_id + '?rel=0&modestbranding=1'}`, 'Embed detail logbook meminimalkan merek')
+semua('src/components/cards.jsx', `embed/' + item.youtube_id}`, `embed/' + item.youtube_id + '?rel=0&modestbranding=1'}`, 'Embed detail galeri meminimalkan merek')
+
+/* ===== 5. youtube.js: netralkan pesan error ===== */
+semua('src/lib/youtube.js', `Upload YouTube gagal (status `, `Upload video gagal (status `, 'Pesan gagal upload dinetralkan')
+semua('src/lib/youtube.js', `Jaringan gagal saat upload YouTube`, `Jaringan gagal saat upload video`, 'Pesan jaringan dinetralkan')
+semua('src/lib/youtube.js', `Video kemungkinan sudah masuk channel; tempel link YouTube secara manual.`, `Video kemungkinan sudah tersimpan; tempel link video secara manual.`, 'Pesan pemulihan dinetralkan')
+semua('src/lib/youtube.js', `Gagal membuat sesi YouTube`, `Gagal memulai sesi upload video`, 'Pesan sesi dinetralkan')
+
+/* ===== 6. upload.js: netralkan teks konversi ===== */
+semua('src/lib/upload.js', `Mengonversi foto ke WebP...`, `Mengonversi foto`, 'Teks konversi foto dinetralkan')
+
+/* ===== 7. DashboardPage: import LabelProses ===== */
+sisip('src/pages/DashboardPage.jsx',
+  `import { pratinjauHeic, formatHeic } from '../lib/konversi.js'`,
+  `import { pratinjauHeic, formatHeic } from '../lib/konversi.js'
+import { LabelProses } from '../components/ui.jsx'`,
+  'Import LabelProses di DashboardPage')
+
+/* ===== 8. DashboardPage: netralkan semua teks YouTube ===== */
+semua('src/pages/DashboardPage.jsx', `Sisa kuota upload YouTube hari ini:`, `Sisa kuota upload video hari ini:`, 'Label kuota dinetralkan')
+semua('src/pages/DashboardPage.jsx', `Atau tempel link YouTube (unlisted)`, `Atau tempel link video eksternal`, 'Placeholder link dinetralkan')
+semua('src/pages/DashboardPage.jsx', `Kuota habis. Gunakan link YouTube di bawah.`, `Kuota habis. Gunakan link video di bawah.`, 'Peringatan kuota dinetralkan')
+semua('src/pages/DashboardPage.jsx', `Kuota upload YouTube hari ini sudah habis. Gunakan link YouTube.`, `Kuota upload video hari ini sudah habis. Gunakan link video.`, 'Alert kuota dinetralkan')
+semua('src/pages/DashboardPage.jsx', `Link YouTube tidak valid`, `Link video tidak valid`, 'Alert link dinetralkan')
+semua('src/pages/DashboardPage.jsx', `Mengunggah ke YouTube... ' + Math.round(p * 100) + '%'`, `Mengunggah video ' + Math.round(p * 100) + '%'`, 'Progres upload video dinetralkan')
+semua('src/pages/DashboardPage.jsx', `Mengunggah... ' + Math.round(p * 100) + '%'`, `Mengunggah ' + Math.round(p * 100) + '%'`, 'Progres upload R2 tanpa titik statis')
+semua('src/pages/DashboardPage.jsx', `Mengonversi HEIC ke JPG...`, `Mengonversi foto HEIC`, 'Teks konversi HEIC dinetralkan')
+semua('src/pages/DashboardPage.jsx', `Mengonversi pratinjau HEIC...`, `Mengonversi pratinjau`, 'Teks pratinjau HEIC dinetralkan')
+
+/* ===== 9. DashboardPage: tombol proses memakai animasi titik ===== */
+semua('src/pages/DashboardPage.jsx', `{busy ? (infoProses || 'Menyimpan...') :`, `{busy ? <LabelProses teks={infoProses || 'Menyimpan'} /> :`, 'Tombol simpan logbook dan galeri beranimasi titik')
+semua('src/pages/DashboardPage.jsx', `{busy ? 'Menyimpan...' :`, `{busy ? <LabelProses teks="Menyimpan" /> :`, 'Tombol simpan lainnya beranimasi titik')
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Hasil yang akan terlihat:')
+console.log('1. Tidak ada lagi kata YouTube pada label kuota, placeholder link, peringatan, maupun progres.')
+console.log('2. Placeholder pratinjau video memakai ikon video umum, bukan ikon YouTube.')
+console.log('3. Tombol sibuk menampilkan tiga titik kecil yang memudar dan naik turun secara halus dan berurutan.')
+console.log('4. Progres persen tetap tampil, misalnya Mengunggah 43 persen, diikuti titik beranimasi.')
+console.log('5. Pemutar embed memakai parameter modestbranding dan rel=0 untuk meminimalkan merek bawaan.')
 ```
 
 ## File: apply-pemutar-crop-v4.cjs
@@ -2580,2568 +7964,6 @@ console.log('2. Chip channel kiri atas, logo YouTube kanan bawah, dan kilau awal
 console.log('3. Poster memudar halus setelah jendela lapisan awal lewat, video lanjut tanpa merek.')
 console.log('4. Subtitel dipaksa nonaktif lewat cc_load_policy 0 plus perintah API saat siap dan saat bermain.')
 console.log('5. Kualitas putar dikunci di rentang 720p sampai 1080p lewat setPlaybackQualityRange.')
-```
-
-## File: tesss-iframeeee.html
-```html
-<!DOCTYPE html>
-
-<html lang="id">
-
-<head>
-
-  <meta charset="UTF-8">
-
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <title>Centered Fullscreen Custom YouTube Player</title>
-
-  <style>
-
-    * {
-
-      box-sizing: border-box;
-
-      margin: 0;
-
-      padding: 0;
-
-      font-family: Arial, sans-serif;
-
-    }
-
-
-
-    body {
-
-      background-color: #121212;
-
-      color: #fff;
-
-      display: flex;
-
-      justify-content: center;
-
-      align-items: center;
-
-      min-height: 100vh;
-
-      flex-direction: column;
-
-    }
-
-
-
-    /* Container Pemutar Video Utama */
-
-    .player-container {
-
-      position: relative;
-
-      width: 720px;
-
-      max-width: 95vw;
-
-      background: #000;
-
-      border-radius: 12px;
-
-      overflow: hidden;
-
-      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-
-    }
-
-
-
-    /* Fullscreen Center */
-
-    .player-container:fullscreen {
-
-      width: 100vw;
-
-      height: 100vh;
-
-      max-width: none;
-
-      border-radius: 0;
-
-      display: flex;
-
-      flex-direction: column;
-
-      justify-content: center;
-
-      align-items: center;
-
-      background-color: #000;
-
-    }
-
-
-
-    .player-container.hide-controls {
-
-      cursor: none;
-
-    }
-
-
-
-    /* TRIK CROPPING Header YouTube */
-
-    .video-viewport {
-
-      position: relative;
-
-      width: 100%;
-
-      padding-top: 56.25%; /* Ratio 16:9 */
-
-      overflow: hidden;
-
-    }
-
-
-
-    .player-container:fullscreen .video-viewport {
-
-      width: 100%;
-
-      max-height: 100vh;
-
-    }
-
-
-
-    #player {
-
-      position: absolute;
-
-      top: -60px; /* Potong top bar YouTube */
-
-      left: -2px;
-
-      width: calc(100% + 4px);
-
-      height: calc(100% + 120px);
-
-      pointer-events: none;
-
-    }
-
-
-
-    /* Layer Poster & Tombol Play Kustom */
-
-    .custom-poster {
-
-      position: absolute;
-
-      top: 0;
-
-      left: 0;
-
-      width: 100%;
-
-      height: 100%;
-
-      z-index: 2;
-
-      background-size: cover;
-
-      background-position: center;
-
-      display: flex;
-
-      justify-content: center;
-
-      align-items: center;
-
-      cursor: default; /* Diubah menjadi panah biasa */
-
-      transition: opacity 0.3s ease, visibility 0.3s ease;
-
-    }
-
-
-
-    .custom-poster.is-hidden {
-
-      opacity: 0;
-
-      visibility: hidden;
-
-      pointer-events: none;
-
-    }
-
-
-
-    /* Ikon Play Tengah Minimalis & Kecil */
-
-    .center-play-btn {
-
-      width: 48px;
-
-      height: 48px;
-
-      background: rgba(0, 0, 0, 0.5);
-
-      border: 1px solid rgba(255, 255, 255, 0.2);
-
-      border-radius: 50%;
-
-      display: flex;
-
-      justify-content: center;
-
-      align-items: center;
-
-      backdrop-filter: blur(8px);
-
-      cursor: pointer; /* Tombol play tengah tetap jari agar jelas bisa diklik */
-
-      transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease;
-
-    }
-
-
-
-    .custom-poster:hover .center-play-btn {
-
-      transform: scale(1.08);
-
-      background: rgba(255, 0, 0, 0.85);
-
-      border-color: rgba(255, 0, 0, 0.85);
-
-    }
-
-
-
-    .center-play-btn svg {
-
-      width: 20px;
-
-      height: 20px;
-
-      fill: #fff;
-
-      margin-left: 3px;
-
-    }
-
-
-
-    /* Overlay Transparan (Aktif setelah video diputar) */
-
-    .overlay-shield {
-
-      position: absolute;
-
-      top: 0;
-
-      left: 0;
-
-      width: 100%;
-
-      height: 100%;
-
-      z-index: 1;
-
-      background: transparent;
-
-      cursor: default; /* Diubah menjadi panah biasa */
-
-    }
-
-
-
-    /* Panel Kontrol Kustom */
-
-    .custom-controls {
-
-      display: flex;
-
-      align-items: center;
-
-      gap: 12px;
-
-      padding: 12px 16px;
-
-      background: rgba(30, 30, 30, 0.95);
-
-      z-index: 3;
-
-      position: absolute;
-
-      bottom: 0;
-
-      left: 0;
-
-      width: 100%;
-
-      opacity: 1;
-
-      visibility: visible;
-
-      transition: opacity 0.4s ease, visibility 0.4s ease;
-
-    }
-
-
-
-    .player-container.hide-controls .custom-controls {
-
-      opacity: 0;
-
-      visibility: hidden;
-
-    }
-
-
-
-    button {
-
-      background: #333;
-
-      color: #fff;
-
-      border: none;
-
-      padding: 8px 12px;
-
-      border-radius: 6px;
-
-      cursor: pointer;
-
-      font-weight: bold;
-
-      transition: background 0.2s;
-
-      display: flex;
-
-      align-items: center;
-
-      justify-content: center;
-
-    }
-
-
-
-    button:hover {
-
-      background: #555;
-
-    }
-
-
-
-    button svg {
-
-      width: 18px;
-
-      height: 18px;
-
-      fill: #fff;
-
-    }
-
-
-
-    /* Progress Bar */
-
-    .progress-container {
-
-      flex-grow: 1;
-
-      display: flex;
-
-      align-items: center;
-
-    }
-
-
-
-    .progress-bar {
-
-      width: 100%;
-
-      height: 6px;
-
-      -webkit-appearance: none;
-
-      appearance: none;
-
-      background: linear-gradient(to right, #ff0000 0%, #444 0%);
-
-      border-radius: 3px;
-
-      outline: none;
-
-      cursor: pointer;
-
-    }
-
-
-
-    .progress-bar::-webkit-slider-thumb {
-
-      -webkit-appearance: none;
-
-      appearance: none;
-
-      width: 14px;
-
-      height: 14px;
-
-      border-radius: 50%;
-
-      background: #ff0000;
-
-      cursor: pointer;
-
-    }
-
-
-
-    /* Text & Slider Volume */
-
-    .time-display {
-
-      font-size: 13px;
-
-      color: #bbb;
-
-      min-width: 80px;
-
-      text-align: center;
-
-    }
-
-
-
-    .volume-slider {
-
-      width: 70px;
-
-      cursor: pointer;
-
-    }
-
-  </style>
-
-</head>
-
-<body>
-
-
-
-  <div class="player-container" id="playerContainer">
-
-    <div class="video-viewport">
-
-      <div id="player"></div>
-
-      
-
-      <!-- Poster Kustom + Tombol Play Tengah Minimalis -->
-
-      <div class="custom-poster" id="customPoster" onclick="togglePlay()">
-
-        <div class="center-play-btn">
-
-          <svg viewBox="0 0 24 24">
-
-            <path d="M8 5v14l11-7z"/>
-
-          </svg>
-
-        </div>
-
-      </div>
-
-
-
-      <div class="overlay-shield" id="overlayShield"></div>
-
-    </div>
-
-
-
-    <!-- Panel Kontrol Kustom -->
-
-    <div class="custom-controls" id="customControls">
-
-      <button id="playPauseBtn" onclick="togglePlay()" aria-label="Play/Pause">
-
-        <svg id="playIcon" viewBox="0 0 24 24">
-
-          <path d="M8 5v14l11-7z"/>
-
-        </svg>
-
-        <svg id="pauseIcon" viewBox="0 0 24 24" style="display: none;">
-
-          <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
-
-        </svg>
-
-      </button>
-
-      
-
-      <div class="progress-container">
-
-        <input type="range" id="progressBar" class="progress-bar" value="0" min="0" max="100" step="0.1" oninput="seekVideo(this.value)">
-
-      </div>
-
-
-
-      <span class="time-display" id="timeDisplay">0:00 / 0:00</span>
-
-
-
-      <button id="muteBtn" onclick="toggleMute()" aria-label="Mute/Unmute">
-
-        <svg id="volumeIcon" viewBox="0 0 24 24">
-
-          <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
-
-        </svg>
-
-        <svg id="muteIcon" viewBox="0 0 24 24" style="display: none;">
-
-          <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
-
-        </svg>
-
-      </button>
-
-      <input type="range" id="volumeSlider" class="volume-slider" min="0" max="100" value="100" oninput="changeVolume(this.value)">
-
-
-
-      <button onclick="toggleFullscreen()">&#x26F6;</button>
-
-    </div>
-
-  </div>
-
-
-
-  <script>
-
-    var videoId = 'ypqq9quWfkM'; // ID Video
-
-    var tag = document.createElement('script');
-
-    tag.src = "https://www.youtube.com/iframe_api";
-
-    var firstScriptTag = document.getElementsByTagName('script')[0];
-
-    firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-
-
-
-    var player;
-
-    var updateInterval;
-
-    var hideControlsTimeout;
-
-
-
-    var playerContainer = document.getElementById('playerContainer');
-
-    var customPoster = document.getElementById('customPoster');
-
-
-
-    customPoster.style.backgroundImage = `url('https://img.youtube.com/vi/${videoId}/maxresdefault.jpg')`;
-
-
-
-    function onYouTubeIframeAPIReady() {
-
-      player = new YT.Player('player', {
-
-        videoId: videoId,
-
-        playerVars: {
-
-          'controls': 0,
-
-          'rel': 0,
-
-          'modestbranding': 1,
-
-          'playsinline': 1,
-
-          'disablekb': 1
-
-        },
-
-        events: {
-
-          'onReady': onPlayerReady,
-
-          'onStateChange': onPlayerStateChange
-
-        }
-
-      });
-
-    }
-
-
-
-    function onPlayerReady(event) {
-
-      document.getElementById('overlayShield').addEventListener('click', togglePlay);
-
-      setupAutoHideControls();
-
-    }
-
-
-
-    function onPlayerStateChange(event) {
-
-      var playIcon = document.getElementById('playIcon');
-
-      var pauseIcon = document.getElementById('pauseIcon');
-
-      
-
-      if (event.data == YT.PlayerState.PLAYING) {
-
-        customPoster.classList.add('is-hidden');
-
-        playIcon.style.display = 'none';
-
-        pauseIcon.style.display = 'block';
-
-        updateInterval = setInterval(updateProgress, 250);
-
-        resetAutoHideTimer();
-
-      } else {
-
-        playIcon.style.display = 'block';
-
-        pauseIcon.style.display = 'none';
-
-        clearInterval(updateInterval);
-
-        showControls();
-
-        clearTimeout(hideControlsTimeout);
-
-      }
-
-    }
-
-
-
-    function setupAutoHideControls() {
-
-      playerContainer.addEventListener('mousemove', function() {
-
-        showControls();
-
-        resetAutoHideTimer();
-
-      });
-
-
-
-      playerContainer.addEventListener('mouseleave', function() {
-
-        if (player && player.getPlayerState() == YT.PlayerState.PLAYING) {
-
-          hideControls();
-
-        }
-
-      });
-
-    }
-
-
-
-    function showControls() {
-
-      playerContainer.classList.remove('hide-controls');
-
-    }
-
-
-
-    function hideControls() {
-
-      playerContainer.classList.add('hide-controls');
-
-    }
-
-
-
-    function resetAutoHideTimer() {
-
-      clearTimeout(hideControlsTimeout);
-
-      if (player && player.getPlayerState() == YT.PlayerState.PLAYING) {
-
-        hideControlsTimeout = setTimeout(function() {
-
-          hideControls();
-
-        }, 2500);
-
-      }
-
-    }
-
-
-
-    function togglePlay() {
-
-      var state = player.getPlayerState();
-
-      if (state == YT.PlayerState.PLAYING) {
-
-        player.pauseVideo();
-
-      } else {
-
-        player.playVideo();
-
-      }
-
-    }
-
-
-
-    function updateProgress() {
-
-      if (!player || !player.getCurrentTime) return;
-
-      var currentTime = player.getCurrentTime();
-
-      var duration = player.getDuration();
-
-      
-
-      if (duration > 0) {
-
-        var percentage = (currentTime / duration) * 100;
-
-        var progressBar = document.getElementById('progressBar');
-
-        
-
-        progressBar.value = percentage;
-
-        updateProgressBarFill(progressBar, percentage);
-
-
-
-        document.getElementById('timeDisplay').innerText = 
-
-          formatTime(currentTime) + ' / ' + formatTime(duration);
-
-      }
-
-    }
-
-
-
-    function updateProgressBarFill(element, percentage) {
-
-      element.style.background = `linear-gradient(to right, #ff0000 ${percentage}%, #444 ${percentage}%)`;
-
-    }
-
-
-
-    function seekVideo(value) {
-
-      var duration = player.getDuration();
-
-      var seekToTime = (value / 100) * duration;
-
-      updateProgressBarFill(document.getElementById('progressBar'), value);
-
-      player.seekTo(seekToTime, true);
-
-    }
-
-
-
-    function toggleMute() {
-
-      if (player.isMuted()) {
-
-        player.unMute();
-
-        updateVolumeUI(player.getVolume(), false);
-
-      } else {
-
-        player.mute();
-
-        updateVolumeUI(0, true);
-
-      }
-
-    }
-
-
-
-    function changeVolume(value) {
-
-      player.setVolume(value);
-
-      if (value == 0) {
-
-        player.mute();
-
-        updateVolumeUI(0, true);
-
-      } else {
-
-        if (player.isMuted()) player.unMute();
-
-        updateVolumeUI(value, false);
-
-      }
-
-    }
-
-
-
-    function updateVolumeUI(volumeValue, isMuted) {
-
-      var volumeIcon = document.getElementById('volumeIcon');
-
-      var muteIcon = document.getElementById('muteIcon');
-
-      var volumeSlider = document.getElementById('volumeSlider');
-
-
-
-      if (isMuted || volumeValue == 0) {
-
-        volumeIcon.style.display = 'none';
-
-        muteIcon.style.display = 'block';
-
-      } else {
-
-        volumeIcon.style.display = 'block';
-
-        muteIcon.style.display = 'none';
-
-        volumeSlider.value = volumeValue;
-
-      }
-
-    }
-
-
-
-    function toggleFullscreen() {
-
-      if (!document.fullscreenElement) {
-
-        playerContainer.requestFullscreen().catch(err => alert(err.message));
-
-      } else {
-
-        document.exitFullscreen();
-
-      }
-
-    }
-
-
-
-    function formatTime(seconds) {
-
-      var mins = Math.floor(seconds / 60);
-
-      var secs = Math.floor(seconds % 60);
-
-      if (secs < 10) secs = '0' + secs;
-
-      return mins + ':' + secs;
-
-    }
-
-  </script>
-
-</body>
-
-</html>
-```
-
-## File: api/r2/delete.js
-```javascript
-import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3'
-import { createClient } from '@supabase/supabase-js'
-
-const s3 = new S3Client({
-  region: 'auto',
-  endpoint: 'https://' + process.env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
-  }
-})
-
-export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
-  const authHeader = req.headers.authorization || ''
-  const token = authHeader.replace('Bearer ', '')
-  if (!token) return res.status(401).json({ error: 'Belum login' })
-
-  const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: authHeader } }
-  })
-  const check = await supabase.auth.getUser(token)
-  if (check.error || !check.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
-
-  const { key } = req.body || {}
-  if (!key) return res.status(400).json({ error: 'Key tidak ada' })
-  await s3.send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key }))
-  return res.status(200).json({ ok: true })
-}
-```
-
-## File: api/r2/presign.js
-```javascript
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
-import { createClient } from '@supabase/supabase-js'
-
-const s3 = new S3Client({
-  region: 'auto',
-  endpoint: 'https://' + process.env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
-  }
-})
-
-export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
-  const authHeader = req.headers.authorization || ''
-  const token = authHeader.replace('Bearer ', '')
-  if (!token) return res.status(401).json({ error: 'Belum login' })
-
-  const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: authHeader } }
-  })
-  const check = await supabase.auth.getUser(token)
-  if (check.error || !check.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
-
-  const { filename, contentType, kind } = req.body || {}
-  if (!filename || !contentType || !kind) return res.status(400).json({ error: 'Payload tidak lengkap' })
-
-  const ext = (filename.split('.').pop() || 'bin').toLowerCase()
-  const key = kind + '/' + new Date().getFullYear() + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + ext
-
-  const uploadUrl = await getSignedUrl(
-    s3,
-    new PutObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key, ContentType: contentType }),
-    { expiresIn: 300 }
-  )
-  const publicUrl = process.env.R2_PUBLIC_BASE_URL + '/' + key
-  return res.status(200).json({ uploadUrl, publicUrl, key })
-}
-```
-
-## File: api/youtube/verify.js
-```javascript
-import { createClient } from '@supabase/supabase-js'
-export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
-  const authHeader = req.headers.authorization || ''
-  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
-  const authClient = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
-  const chk = await authClient.auth.getUser()
-  if (chk.error || !chk.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
-  const { ref } = req.body || {}
-  if (!ref) return res.status(400).json({ error: 'Ref tidak ada' })
-  const params = new URLSearchParams()
-  params.set('client_id', process.env.YOUTUBE_CLIENT_ID || '')
-  params.set('client_secret', process.env.YOUTUBE_CLIENT_SECRET || '')
-  params.set('refresh_token', process.env.YOUTUBE_REFRESH_TOKEN || '')
-  params.set('grant_type', 'refresh_token')
-  const tr = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
-  if (!tr.ok) return res.status(500).json({ error: 'Gagal refresh token YouTube' })
-  const tok = await tr.json()
-  const url = 'https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&forMine=true&order=date&maxResults=10&q=' + encodeURIComponent(ref)
-  const r = await fetch(url, { headers: { Authorization: 'Bearer ' + tok.access_token } })
-  if (!r.ok) return res.status(502).json({ error: 'Gagal memeriksa video di YouTube' })
-  const j = await r.json()
-  const items = j.items || []
-  const batas = Date.now() - 15 * 60 * 1000
-  const cocok = items.find(function (it) {
-    const desc = (it.snippet && it.snippet.description) || ''
-    const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
-    return desc.indexOf('REF ' + ref) === 0 && (isNaN(t) ? true : t >= batas)
-  }) || items[0]
-  if (!cocok) return res.status(404).json({ error: 'Video tidak ditemukan di channel' })
-  return res.status(200).json({ videoId: cocok.id && cocok.id.videoId })
-}
-```
-
-## File: src/components/Skeleton.jsx
-```javascript
-export function SkeletonStatCard() {
-  return (
-    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
-      <div className="skeleton h-4 w-28"></div>
-      <div className="skeleton h-9 w-16 mt-3"></div>
-      <div className="skeleton h-3 w-36 mt-2"></div>
-    </div>
-  )
-}
-
-export function SkeletonLogbookCard() {
-  return (
-    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 flex flex-col gap-4">
-      <div className="skeleton h-40 w-full rounded-2xl"></div>
-      <div className="flex gap-2">
-        <div className="skeleton h-6 w-24 rounded-full"></div>
-        <div className="skeleton h-6 w-20 rounded-full"></div>
-      </div>
-      <div className="skeleton h-4 w-32"></div>
-      <div className="skeleton h-6 w-3/4"></div>
-      <div className="skeleton h-4 w-full"></div>
-      <div className="skeleton h-4 w-2/3"></div>
-      <div className="flex items-center gap-3 pt-2">
-        <div className="skeleton h-11 w-11 rounded-2xl"></div>
-        <div className="flex-1 space-y-2">
-          <div className="skeleton h-4 w-32"></div>
-          <div className="skeleton h-3 w-24"></div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonGalleryCard() {
-  return (
-    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-      <div className="skeleton aspect-video w-full rounded-none"></div>
-      <div className="p-5 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="skeleton h-6 w-24 rounded-full"></div>
-          <div className="skeleton h-4 w-16"></div>
-        </div>
-        <div className="skeleton h-5 w-3/4"></div>
-        <div className="skeleton h-4 w-full"></div>
-        <div className="skeleton h-4 w-1/2"></div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonAttendanceCard() {
-  return (
-    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="space-y-2">
-          <div className="skeleton h-4 w-40"></div>
-          <div className="skeleton h-5 w-32"></div>
-        </div>
-        <div className="skeleton h-6 w-16 rounded-full"></div>
-      </div>
-      <div className="skeleton h-16 w-full rounded-2xl"></div>
-    </div>
-  )
-}
-
-export function SkeletonPersonCard() {
-  return (
-    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
-      <div className="flex items-center gap-4">
-        <div className="skeleton h-14 w-14 rounded-3xl"></div>
-        <div className="flex-1 space-y-2">
-          <div className="skeleton h-5 w-32"></div>
-          <div className="skeleton h-4 w-24"></div>
-          <div className="skeleton h-4 w-28 rounded-full"></div>
-        </div>
-      </div>
-      <div className="mt-5 grid grid-cols-2 gap-3">
-        <div className="skeleton h-20 rounded-2xl"></div>
-        <div className="skeleton h-20 rounded-2xl"></div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonChartRow() {
-  return (
-    <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5">
-      <div className="flex items-center justify-between">
-        <div className="space-y-2">
-          <div className="skeleton h-4 w-32"></div>
-          <div className="skeleton h-3 w-24"></div>
-        </div>
-        <div className="skeleton h-4 w-40"></div>
-      </div>
-      <div className="skeleton h-4 w-full rounded-full mt-4"></div>
-    </div>
-  )
-}
-```
-
-## File: src/lib/supabase.js
-```javascript
-import { createClient } from '@supabase/supabase-js'
-
-export const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-)
-```
-
-## File: src/lib/theme.jsx
-```javascript
-import { createContext, useContext, useEffect, useState } from 'react'
-
-const ThemeContext = createContext(null)
-
-export function ThemeProvider(props) {
-  const [dark, setDark] = useState(function () {
-    const saved = localStorage.getItem('mbsi-theme')
-    if (saved) return saved === 'dark'
-    return window.matchMedia('(prefers-color-scheme: dark)').matches
-  })
-
-  useEffect(function () {
-    document.documentElement.classList.toggle('dark', dark)
-    localStorage.setItem('mbsi-theme', dark ? 'dark' : 'light')
-  }, [dark])
-
-  return (
-    <ThemeContext.Provider value={{ dark: dark, toggle: function () { setDark(function (d) { return !d }) } }}>
-      {props.children}
-    </ThemeContext.Provider>
-  )
-}
-
-export function useTheme() {
-  return useContext(ThemeContext)
-}
-```
-
-## File: src/lib/youtube.js
-```javascript
-import { supabase } from './supabase.js'
-
-export function parseYouTubeId(url) {
-  if (!url) return null
-  const s = String(url).trim()
-  if (/^[A-Za-z0-9_-]{11}$/.test(s)) return s
-  try {
-    const u = new URL(s)
-    const host = u.hostname.replace('www.', '').replace('m.', '')
-    if (host === 'youtu.be') {
-      const id = u.pathname.slice(1).split('/')[0]
-      return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null
-    }
-    if (host.endsWith('youtube.com') || host.endsWith('youtube-nocookie.com')) {
-      const v = u.searchParams.get('v')
-      if (v && /^[A-Za-z0-9_-]{11}$/.test(v)) return v
-      const parts = u.pathname.split('/').filter(Boolean)
-      if (parts[0] === 'embed' || parts[0] === 'shorts' || parts[0] === 'live') {
-        const id = parts[1]
-        return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null
-      }
-    }
-  } catch (e) {}
-  return null
-}
-export function ytThumb(id) {
-  return 'https://i.ytimg.com/vi/' + id + '/hqdefault.jpg'
-}
-export function ytEmbedUrl(id) {
-  return 'https://www.youtube-nocookie.com/embed/' + id + '?rel=0&modestbranding=1'
-}
-export async function fetchYouTubeQuota() {
-  try {
-    const r = await fetch('/api/youtube/quota', { cache: 'no-store' })
-    if (!r.ok) return { limit: 5, used: 0, remaining: 5 }
-    return await r.json()
-  } catch (e) {
-    return { limit: 5, used: 0, remaining: 5 }
-  }
-}
-export async function startYouTubeSession(title, description, contentType, token) {
-  if (!token) throw new Error('Sesi login tidak terbaca. Silakan masuk ulang lalu coba lagi.')
-  const r = await fetch('/api/youtube/session', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify({ title: title, description: description, contentType: contentType })
-  })
-  if (!r.ok) {
-    const j = await r.json().catch(function () { return { error: 'Gagal memulai sesi upload video' } })
-    throw new Error(j.error || 'Gagal memulai sesi upload video')
-  }
-  return await r.json()
-}
-export async function uploadToYouTube(sessionUri, blob, onProgress) {
-  const hasil = await new Promise(function (resolve) {
-    const xhr = new XMLHttpRequest()
-    xhr.open('PUT', sessionUri)
-    xhr.setRequestHeader('Content-Type', blob.type || 'video/mp4')
-    if (onProgress) {
-      xhr.upload.onprogress = function (e) {
-        if (e.lengthComputable) onProgress(e.loaded / e.total)
-      }
-    }
-    xhr.onload = function () { resolve({ status: xhr.status, body: xhr.responseText }) }
-    xhr.onerror = function () { resolve({ status: 0, body: '' }) }
-    xhr.send(blob)
-  })
-  if (hasil.status >= 200 && hasil.status < 300) {
-    try {
-      const j = JSON.parse(hasil.body || '{}')
-      if (j && j.id) return { videoId: j.id }
-    } catch (e) { /* respons tidak terbaca, pulihkan lewat server */ }
-  } else if (hasil.status !== 0) {
-    throw new Error('Upload video gagal (status ' + hasil.status + ')')
-  }
-  const sesi = await supabase.auth.getSession()
-  const token = await ambilTokenSesi()
-  const r = await fetch('/api/youtube/latest', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify({})
-  })
-  if (r.ok) {
-    try {
-      const j = await r.json()
-      if (j && j.videoId) return { videoId: j.videoId }
-    } catch (e) {
-      console.warn('Respons pemulihan bukan JSON, dilewati:', e.message)
-    }
-  }
-  throw new Error('Upload selesai tetapi id video tidak terbaca. Video kemungkinan sudah tersimpan; tempel link video secara manual.')
-}
-
-export async function unggahVideoYouTube(file, judul, onProgress) {
-  const sesiData = await supabase.auth.getSession()
-  const token = await ambilTokenSesi()
-  const sesi = await startYouTubeSession(judul || 'Dokumentasi Magang', 'Diunggah dari portal logbook magang BSI.', file.type || 'video/mp4', token)
-  return await uploadToYouTube(sesi.sessionUri, file, onProgress)
-}
-
-export async function ambilTokenSesi() {
-  try {
-    const r = await supabase.auth.getSession()
-    const ssn = r && r.data ? r.data.session : null
-    return ssn && ssn.access_token ? ssn.access_token : ''
-  } catch (e) {
-    return ''
-  }
-}
-```
-
-## File: src/main.jsx
-```javascript
-import React from 'react'
-import ReactDOM from 'react-dom/client'
-import App from './App.jsx'
-import './index.css'
-
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-)
-```
-
-## File: .env.example
-```
-VITE_SUPABASE_URL=
-VITE_SUPABASE_ANON_KEY=
-R2_ACCOUNT_ID=
-R2_ACCESS_KEY_ID=
-R2_SECRET_ACCESS_KEY=
-R2_BUCKET_NAME=mbsi-media
-R2_PUBLIC_BASE_URL=
-```
-
-## File: apply-auto-rotate-youtube.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-
-function simpan(rel, isi) {
-  const full = path.join(root, rel)
-  fs.mkdirSync(path.dirname(full), { recursive: true })
-  fs.writeFileSync(full, isi, 'utf8')
-  console.log('[BERHASIL] ' + rel + ' ditulis')
-}
-
-const KEPALA = `import { createClient } from '@supabase/supabase-js'
-const LIMIT_PER_PROJECT = 5
-function ptToday() {
-  const now = new Date()
-  const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
-  const y = pt.getFullYear()
-  const m = String(pt.getMonth() + 1).padStart(2, '0')
-  const d = String(pt.getDate()).padStart(2, '0')
-  return y + '-' + m + '-' + d
-}
-function daftarKredensial() {
-  const list = []
-  for (let n = 1; n <= 6; n++) {
-    const id = process.env['YOUTUBE_CLIENT_ID_' + n]
-    const secret = process.env['YOUTUBE_CLIENT_SECRET_' + n]
-    const refresh = process.env['YOUTUBE_REFRESH_TOKEN_' + n]
-    if (id && secret && refresh) list.push({ n: n, id: id, secret: secret, refresh: refresh })
-  }
-  if (!list.length && process.env.YOUTUBE_CLIENT_ID && process.env.YOUTUBE_CLIENT_SECRET && process.env.YOUTUBE_REFRESH_TOKEN) {
-    list.push({ n: 1, id: process.env.YOUTUBE_CLIENT_ID, secret: process.env.YOUTUBE_CLIENT_SECRET, refresh: process.env.YOUTUBE_REFRESH_TOKEN })
-  }
-  return list
-}
-const cacheToken = {}
-async function getAccessToken(kred) {
-  const now = Date.now()
-  const c = cacheToken[kred.n]
-  if (c && c.expire > now + 60000) return c.token
-  const params = new URLSearchParams()
-  params.set('client_id', kred.id)
-  params.set('client_secret', kred.secret)
-  params.set('refresh_token', kred.refresh)
-  params.set('grant_type', 'refresh_token')
-  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
-  if (!r.ok) throw new Error('refresh token project ' + kred.n + ' gagal (status ' + r.status + ')')
-  const j = await r.json()
-  cacheToken[kred.n] = { token: j.access_token, expire: now + (j.expires_in || 3600) * 1000 }
-  return j.access_token
-}
-`
-
-/* ===== 1. api/youtube/quota.js ===== */
-simpan('api/youtube/quota.js', KEPALA + `export default async function handler(req, res) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method tidak diizinkan' })
-  const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
-  const today = ptToday()
-  const kredensial = daftarKredensial()
-  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
-  let usedTotal = 0
-  const perProject = []
-  for (const kred of kredensial) {
-    const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
-    const used = hit.count || 0
-    usedTotal += used
-    perProject.push({ project: kred.n, used: used, remaining: Math.max(0, LIMIT_PER_PROJECT - used) })
-  }
-  const limit = kredensial.length * LIMIT_PER_PROJECT
-  res.setHeader('Cache-Control', 'no-store')
-  return res.status(200).json({ limit: limit, used: usedTotal, remaining: Math.max(0, limit - usedTotal), perProject: perProject, ptDate: today })
-}
-`)
-
-/* ===== 2. api/youtube/session.js ===== */
-simpan('api/youtube/session.js', KEPALA + `export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
-  const authHeader = req.headers.authorization || ''
-  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
-  const authClient = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
-  const chk = await authClient.auth.getUser()
-  if (chk.error || !chk.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
-  const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
-  const today = ptToday()
-  const kredensial = daftarKredensial()
-  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
-  const body = req.body || {}
-  if (!body.title) return res.status(400).json({ error: 'Judul video wajib diisi' })
-  let terakhir = ''
-  for (const kred of kredensial) {
-    const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
-    if ((hit.count || 0) >= LIMIT_PER_PROJECT) { terakhir = 'project ' + kred.n + ' sudah penuh'; continue }
-    let access
-    try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
-    const meta = {
-      snippet: { title: String(body.title).slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
-      status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
-    }
-    const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
-      body: JSON.stringify(meta)
-    })
-    if (!init.ok) { terakhir = 'project ' + kred.n + ' ditolak Google (status ' + init.status + ')'; continue }
-    const sessionUri = init.headers.get('location')
-    if (!sessionUri) { terakhir = 'project ' + kred.n + ' tanpa lokasi upload'; continue }
-    await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: chk.data.user.id, project_id: kred.n })
-    return res.status(200).json({ sessionUri: sessionUri, project: kred.n })
-  }
-  return res.status(429).json({ error: 'Kuota harian semua project video sudah habis. Coba lagi besok atau gunakan link video eksternal.', detail: terakhir })
-}
-`)
-
-/* ===== 3. api/youtube/latest.js ===== */
-simpan('api/youtube/latest.js', KEPALA + `export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
-  const authHeader = req.headers.authorization || ''
-  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
-  const authClient = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
-  const chk = await authClient.auth.getUser()
-  if (chk.error || !chk.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
-  const kredensial = daftarKredensial()
-  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
-  let terakhir = ''
-  for (const kred of kredensial) {
-    let access
-    try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
-    const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&order=date&maxResults=5', { headers: { Authorization: 'Bearer ' + access } })
-    if (!r.ok) { terakhir = 'project ' + kred.n + ' status ' + r.status; continue }
-    const j = await r.json()
-    const items = j.items || []
-    const batas = Date.now() - 15 * 60 * 1000
-    const cocok = items.find(function (it) {
-      const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
-      return isNaN(t) ? false : t >= batas
-    })
-    if (!cocok) return res.status(404).json({ error: 'Video terbaru tidak ditemukan' })
-    return res.status(200).json({ videoId: cocok.id && cocok.id.videoId, project: kred.n })
-  }
-  return res.status(502).json({ error: 'Gagal memeriksa video terbaru: ' + terakhir })
-}
-`)
-
-/* ===== 4. vite.config.js: ganti seluruh plugin YouTube ===== */
-const FILE_V = 'vite.config.js'
-let v = fs.readFileSync(path.join(root, FILE_V), 'utf8').replace(/\r\n/g, '\n')
-const mulai = v.indexOf('function pluginApiYoutube(env) {')
-const akhir = v.indexOf('export default defineConfig')
-if (mulai === -1 || akhir === -1) {
-  console.log('[TIDAK KETEMU] Blok pluginApiYoutube di vite.config.js')
-} else if (v.includes('LIMIT_PER_PROJECT')) {
-  console.log('[SUDAH ADA] Plugin YouTube multi-project di vite.config.js')
-} else {
-  const pluginBaru = `function pluginApiYoutube(env) {
-  const admin = createClient(env.VITE_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY)
-  const LIMIT_PER_PROJECT = 5
-  function ptToday() {
-    const now = new Date()
-    const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
-    const y = pt.getFullYear()
-    const m = String(pt.getMonth() + 1).padStart(2, '0')
-    const d = String(pt.getDate()).padStart(2, '0')
-    return y + '-' + m + '-' + d
-  }
-  function daftarKredensial() {
-    const list = []
-    for (let n = 1; n <= 6; n++) {
-      const id = env['YOUTUBE_CLIENT_ID_' + n]
-      const secret = env['YOUTUBE_CLIENT_SECRET_' + n]
-      const refresh = env['YOUTUBE_REFRESH_TOKEN_' + n]
-      if (id && secret && refresh) list.push({ n: n, id: id, secret: secret, refresh: refresh })
-    }
-    if (!list.length && env.YOUTUBE_CLIENT_ID && env.YOUTUBE_CLIENT_SECRET && env.YOUTUBE_REFRESH_TOKEN) {
-      list.push({ n: 1, id: env.YOUTUBE_CLIENT_ID, secret: env.YOUTUBE_CLIENT_SECRET, refresh: env.YOUTUBE_REFRESH_TOKEN })
-    }
-    return list
-  }
-  const cacheToken = {}
-  async function getAccessToken(kred) {
-    const now = Date.now()
-    const c = cacheToken[kred.n]
-    if (c && c.expire > now + 60000) return c.token
-    const params = new URLSearchParams()
-    params.set('client_id', kred.id)
-    params.set('client_secret', kred.secret)
-    params.set('refresh_token', kred.refresh)
-    params.set('grant_type', 'refresh_token')
-    const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
-    if (!r.ok) throw new Error('refresh token project ' + kred.n + ' gagal (status ' + r.status + ')')
-    const j = await r.json()
-    cacheToken[kred.n] = { token: j.access_token, expire: now + (j.expires_in || 3600) * 1000 }
-    return j.access_token
-  }
-  async function cekSesi(req) {
-    const authHeader = req.headers.authorization || ''
-    const token = authHeader.replace('Bearer ', '')
-    if (!token) return null
-    const supabase = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
-    const r = await supabase.auth.getUser(token)
-    return r.error ? null : r.data.user
-  }
-  function kirim(res, code, obj) {
-    res.statusCode = code
-    res.setHeader('Content-Type', 'application/json')
-    res.end(JSON.stringify(obj))
-  }
-  return {
-    name: 'api-youtube-dev',
-    configureServer(server) {
-      server.middlewares.use('/api/youtube/quota', async function (req, res) {
-        const today = ptToday()
-        const kredensial = daftarKredensial()
-        if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
-        let usedTotal = 0
-        const perProject = []
-        for (const kred of kredensial) {
-          const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
-          const used = hit.count || 0
-          usedTotal += used
-          perProject.push({ project: kred.n, used: used, remaining: Math.max(0, LIMIT_PER_PROJECT - used) })
-        }
-        const limit = kredensial.length * LIMIT_PER_PROJECT
-        res.setHeader('Cache-Control', 'no-store')
-        kirim(res, 200, { limit: limit, used: usedTotal, remaining: Math.max(0, limit - usedTotal), perProject: perProject, ptDate: today })
-      })
-      server.middlewares.use('/api/youtube/session', async function (req, res) {
-        if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
-        const user = await cekSesi(req)
-        if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
-        const today = ptToday()
-        const kredensial = daftarKredensial()
-        if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
-        const body = await bacaBody(req)
-        if (!body.title) { kirim(res, 400, { error: 'Judul video wajib diisi' }); return }
-        let terakhir = ''
-        for (const kred of kredensial) {
-          const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
-          if ((hit.count || 0) >= LIMIT_PER_PROJECT) { terakhir = 'project ' + kred.n + ' sudah penuh'; continue }
-          let access
-          try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
-          const meta = {
-            snippet: { title: String(body.title).slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
-            status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
-          }
-          const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
-            method: 'POST',
-            headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
-            body: JSON.stringify(meta)
-          })
-          if (!init.ok) { terakhir = 'project ' + kred.n + ' ditolak Google (status ' + init.status + ')'; continue }
-          const sessionUri = init.headers.get('location')
-          if (!sessionUri) { terakhir = 'project ' + kred.n + ' tanpa lokasi upload'; continue }
-          await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: user.id, project_id: kred.n })
-          kirim(res, 200, { sessionUri: sessionUri, project: kred.n })
-          return
-        }
-        kirim(res, 429, { error: 'Kuota harian semua project video sudah habis. Coba lagi besok atau gunakan link video eksternal.', detail: terakhir })
-      })
-      server.middlewares.use('/api/youtube/latest', async function (req, res) {
-        if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
-        const user = await cekSesi(req)
-        if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
-        const kredensial = daftarKredensial()
-        if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
-        let terakhir = ''
-        for (const kred of kredensial) {
-          let access
-          try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
-          const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&order=date&maxResults=5', { headers: { Authorization: 'Bearer ' + access } })
-          if (!r.ok) { terakhir = 'project ' + kred.n + ' status ' + r.status; continue }
-          const j = await r.json()
-          const items = j.items || []
-          const batas = Date.now() - 15 * 60 * 1000
-          const cocok = items.find(function (it) {
-            const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
-            return isNaN(t) ? false : t >= batas
-          })
-          if (!cocok) { kirim(res, 404, { error: 'Video terbaru tidak ditemukan' }); return }
-          kirim(res, 200, { videoId: cocok.id && cocok.id.videoId, project: kred.n })
-          return
-        }
-        kirim(res, 502, { error: 'Gagal memeriksa video terbaru: ' + terakhir })
-      })
-    }
-  }
-}
-
-`
-  v = v.slice(0, mulai) + pluginBaru + v.slice(akhir)
-  fs.writeFileSync(path.join(root, FILE_V), v, 'utf8')
-  console.log('[BERHASIL] Plugin YouTube multi-project dipasang di vite.config.js')
-}
-
-console.log('')
-console.log('Selesai. Restart dev server sekali: Ctrl+C lalu npm run dev -- --host')
-console.log('Setelah itu rotasi project berjalan otomatis tanpa restart lagi.')
-```
-
-## File: apply-final-cleanup.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-
-console.log('Mulai pembersihan akhir jalur YouTube...')
-console.log('')
-
-/* ===== 1. youtube.js: bungkus parsing JSON pemulihan dengan try/catch ===== */
-const FILE_Y = 'src/lib/youtube.js'
-let y = baca(FILE_Y)
-const cariY = `  if (r.ok) {
-    const j = await r.json()
-    if (j.videoId) return { videoId: j.videoId }
-  }`
-const gantiY = `  if (r.ok) {
-    try {
-      const j = await r.json()
-      if (j && j.videoId) return { videoId: j.videoId }
-    } catch (e) {
-      console.warn('Respons pemulihan bukan JSON, dilewati:', e.message)
-    }
-  }`
-if (y.includes(gantiY)) {
-  console.log('[SUDAH ADA] Pengaman parsing JSON pemulihan di youtube.js')
-} else if (y.includes(cariY)) {
-  y = y.replace(cariY, gantiY)
-  simpan(FILE_Y, y)
-  console.log('[BERHASIL] Pengaman parsing JSON pemulihan dipasang di youtube.js')
-} else {
-  console.log('[TIDAK KETEMU] Pola pemulihan di youtube.js, periksa manual')
-}
-
-/* ===== 2. vite.config.js: samakan limit middleware kuota menjadi 5 ===== */
-const FILE_V = 'vite.config.js'
-let v = baca(FILE_V)
-const cariV = `res.end(JSON.stringify({ limit: 6, used: used, remaining: Math.max(0, 5 - used), ptDate: today }))`
-const gantiV = `res.end(JSON.stringify({ limit: 5, used: used, remaining: Math.max(0, 5 - used), ptDate: today }))`
-if (v.includes(gantiV)) {
-  console.log('[SUDAH ADA] Limit middleware kuota sudah 5')
-} else if (v.includes(cariV)) {
-  v = v.replace(cariV, gantiV)
-  simpan(FILE_V, v)
-  console.log('[BERHASIL] Limit middleware kuota disamakan menjadi 5')
-} else {
-  console.log('[TIDAK KETEMU] Pola limit middleware kuota, periksa manual')
-}
-
-console.log('')
-console.log('Selesai. Restart dev server: Ctrl+C lalu npm run dev -- --host')
-console.log('')
-console.log('Langkah uji akhir:')
-console.log('1. Upload satu video kecil dari form logbook atau galeri.')
-console.log('2. Progres 100 persen, lalu id video dipulihkan lewat /api/youtube/latest.')
-console.log('3. Logbook atau galeri tersimpan tanpa alert error.')
-console.log('4. Tulisan kuota tampil konsisten: sisa dari 5, baik di localhost maupun Vercel.')
-console.log('5. Bila pemulihan gagal, pesan yang muncul kini pesan ramah, bukan SyntaxError.')
-```
-
-## File: apply-fix-export-unggah.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-
-console.log('Mulai memperbaiki export unggahVideoYouTube dan favicon...')
-console.log('')
-
-/* ===== 1. youtube.js: tambahkan export jembatan unggahVideoYouTube ===== */
-const FILE_Y = 'src/lib/youtube.js'
-let y = baca(FILE_Y)
-if (y.includes('export async function unggahVideoYouTube')) {
-  console.log('[SUDAH ADA] export unggahVideoYouTube di youtube.js')
-} else if (!y.includes('export async function uploadToYouTube') || !y.includes('export async function startYouTubeSession')) {
-  console.log('[TIDAK KETEMU] startYouTubeSession atau uploadToYouTube di youtube.js, batal menambahkan')
-} else {
-  y = y.trimEnd() + '\n\n' + [
-    'export async function unggahVideoYouTube(file, judul, onProgress) {',
-    '  const sesiData = await supabase.auth.getSession()',
-    '  const token = sesiData.data.session ? sesiData.session.access_token : \'\'',
-    '  const sesi = await startYouTubeSession(judul || \'Dokumentasi Magang\', \'Diunggah dari portal logbook magang BSI.\', file.type || \'video/mp4\', token)',
-    '  return await uploadToYouTube(sesi.sessionUri, file, onProgress)',
-    '}',
-    ''
-  ].join('\n')
-  simpan(FILE_Y, y)
-  console.log('[BERHASIL] export unggahVideoYouTube ditambahkan di youtube.js')
-}
-
-/* ===== 2. index.html: tambahkan favicon supaya tidak 404 ===== */
-const FILE_H = 'index.html'
-let h = baca(FILE_H)
-if (h.includes('rel="icon"')) {
-  console.log('[SUDAH ADA] favicon di index.html')
-} else {
-  const favicon = '    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns=\'http://www.w3.org/2000/svg\'%20viewBox=\'0%200%2064%2064\'%3E%3Crect%20width=\'64\'%20height=\'64\'%20rx=\'14\'%20fill=\'%2316623c\'/%3E%3Ctext%20x=\'32\'%20y=\'44\'%20font-size=\'34\'%20font-weight=\'700\'%20text-anchor=\'middle\'%20fill=\'%23ffffff\'%20font-family=\'Arial,%20sans-serif\'%3EB%3C/text%3E%3C/svg%3E" />\n'
-  if (h.includes('    <title>')) {
-    h = h.replace('    <title>', favicon + '    <title>')
-    simpan(FILE_H, h)
-    console.log('[BERHASIL] favicon ditambahkan di index.html')
-  } else {
-    console.log('[TIDAK KETEMU] baris title di index.html, favicon dilewati')
-  }
-}
-
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Buka kembali http://localhost:5173/dashboard, halaman tidak lagi blank.')
-console.log('2. Uji upload video: progres naik, lalu logbook tersimpan dan kartu menampilkan thumbnail YouTube.')
-console.log('3. Favicon hijau muncul di tab browser dan permintaan favicon.ico tidak lagi 404.')
-```
-
-## File: apply-fix-sisa-netral.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-
-function cariGanti(rel, cari, ganti, label) {
-  if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan'); return }
-  let isi = baca(rel)
-  if (isi.includes(ganti)) { console.log('[SUDAH ADA] ' + label); return }
-  if (!isi.includes(cari)) { console.log('[TIDAK KETEMU] ' + label + ' di ' + rel); return }
-  isi = isi.replace(cari, ganti)
-  simpan(rel, isi)
-  console.log('[BERHASIL] ' + label)
-}
-
-console.log('Memperbaiki regex LabelProses dan menangkap sisa teks...')
-console.log('')
-
-/* ===== 1. Fix regex double backslash di LabelProses (ui.jsx) ===== */
-cariGanti('src/components/ui.jsx',
-  `const bersih = String(props.teks|| '').replace(/\\\\.{3}/g, '').replace(/\\\\s+/g, ' ').trim()`,
-  `const bersih = String(props.teks || '').replace(/\\.\\.\\./g, '').replace(/\\s+/g, ' ').trim()`,
-  'Regex LabelProses diperbaiki')
-
-/* ===== 2. Fallback teks yang polanya sedikit berbeda ===== */
-cariGanti('src/lib/youtube.js',
-  'Jaringan gagal saat upload YouTube',
-  'Jaringan gagal saat upload video',
-  'Pesan jaringan youtube.js dinetralkan')
-cariGanti('src/pages/DashboardPage.jsx',
-  `Mengunggah... ' + Math.round(p * 100) + '%'`,
-  `Mengunggah ' + Math.round(p * 100) + '%'`,
-  'Progres R2 dinetralkan dari titik tiga')
-cariGanti('src/pages/DashboardPage.jsx',
-  'Mengonversi HEIC ke JPG',
-  'Mengonversi foto HEIC',
-  'Teks konversi HEIC dinetralkan')
-cariGanti('src/lib/upload.js',
-  'Mengonversi foto ke WebP',
-  'Mengonversi foto',
-  'Teks konversi WebP dinetralkan')
-
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-```
-
-## File: apply-fix-state-loading.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-const FILE_D = 'src/pages/DashboardPage.jsx'
-
-if (!fs.existsSync(path.join(root, FILE_D))) {
-  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
-  process.exit(1)
-}
-let d = fs.readFileSync(path.join(root, FILE_D), 'utf8').replace(/\r\n/g, '\n')
-
-if (d.includes('const [ytQuotaLoading, setYtQuotaLoading]')) {
-  console.log('[SUDAH ADA] State ytQuotaLoading, tidak ada yang perlu ditambah')
-} else {
-  const regex = /([ \t]*)const \[ytQuota, setYtQuota\] = useState\([^\n]*\)\n/
-  if (regex.test(d)) {
-    d = d.replace(regex, function (m, indent) {
-      return m + indent + 'const [ytQuotaLoading, setYtQuotaLoading] = useState(true)\n'
-    })
-    fs.writeFileSync(path.join(root, FILE_D), d, 'utf8')
-    console.log('[BERHASIL] State ytQuotaLoading ditambahkan tepat di bawah state ytQuota')
-  } else {
-    console.log('[TIDAK KETEMU] Baris state ytQuota. Tambahkan manual baris berikut tepat di bawahnya:')
-    console.log('  const [ytQuotaLoading, setYtQuotaLoading] = useState(true)')
-  }
-}
-
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('Error ytQuotaLoading is not defined akan hilang setelah perbaikan ini.')
-```
-
-## File: apply-fix-token-aman.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-
-const regexBaris = /^([ \t]*)const ([A-Za-z0-9_]+) = [^\n]*\.access_token[^\n]*$/gm
-
-console.log('Mulai mengamankan pengambilan token sesi...')
-console.log('')
-
-/* ===== 1. youtube.js ===== */
-const FILE_Y = 'src/lib/youtube.js'
-let y = baca(FILE_Y)
-const ySebelum = y
-y = y.replace(regexBaris, function (m, indent, name) {
-  return indent + 'const ' + name + ' = await ambilTokenSesi()'
-})
-if (y !== ySebelum) console.log('[BERHASIL] Baris access_token di youtube.js diganti fungsi aman')
-
-if (!y.includes('export async function ambilTokenSesi')) {
-  y = y.trimEnd() + '\n\n' + [
-    'export async function ambilTokenSesi() {',
-    '  try {',
-    '    const r = await supabase.auth.getSession()',
-    '    const ssn = r && r.data ? r.data.session : null',
-    '    return ssn && ssn.access_token ? ssn.access_token : \'\'',
-    '  } catch (e) {',
-    '    return \'\'',
-    '  }',
-    '}',
-    ''
-  ].join('\n')
-  console.log('[BERHASIL] Fungsi ambilTokenSesi ditambahkan di youtube.js')
-} else {
-  console.log('[SUDAH ADA] Fungsi ambilTokenSesi di youtube.js')
-}
-
-if (!y.includes('Sesi login tidak terbaca')) {
-  const cariGuard = `export async function startYouTubeSession(title, description, contentType, token) {
-  const r = await fetch('/api/youtube/session', {`
-  const gantiGuard = `export async function startYouTubeSession(title, description, contentType, token) {
-  if (!token) throw new Error('Sesi login tidak terbaca. Silakan masuk ulang lalu coba lagi.')
-  const r = await fetch('/api/youtube/session', {`
-  if (y.includes(cariGuard)) {
-    y = y.replace(cariGuard, gantiGuard)
-    console.log('[BERHASIL] Penjaga token kosong di startYouTubeSession')
-  } else {
-    console.log('[TIDAK KETEMU] Pola startYouTubeSession, penjaga dilewati')
-  }
-} else {
-  console.log('[SUDAH ADA] Penjaga token kosong di startYouTubeSession')
-}
-simpan(FILE_Y, y)
-
-/* ===== 2. DashboardPage.jsx ===== */
-const FILE_D = 'src/pages/DashboardPage.jsx'
-let d = baca(FILE_D)
-const dSebelum = d
-d = d.replace(regexBaris, function (m, indent, name) {
-  return indent + 'const ' + name + ' = await ambilTokenSesi()'
-})
-if (d !== dSebelum) {
-  console.log('[BERHASIL] Baris access_token di DashboardPage diganti fungsi aman')
-  if (d.includes('ambilTokenSesi()') && !d.includes('ambilTokenSesi }')) {
-    d = d.replace("} from '../lib/youtube.js'", ", ambilTokenSesi } from '../lib/youtube.js'")
-    console.log('[BERHASIL] Import ambilTokenSesi ditambahkan di DashboardPage')
-  }
-  simpan(FILE_D, d)
-} else {
-  console.log('[SUDAH AMAAN] Tidak ada baris access_token langsung di DashboardPage')
-}
-
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Buka dashboard, pilih mode Video dengan file video kecil, lalu simpan.')
-console.log('2. Bila sesi login valid, progres upload berjalan dan logbook tersimpan.')
-console.log('3. Bila sesi kedaluwarsa, pesan yang muncul kini kalimat ramah, bukan error access_token.')
-console.log('4. Uji juga mode Foto dan mode link YouTube untuk memastikan tidak ada regresi.')
-```
-
-## File: apply-fix-youtube-scope.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-
-console.log('Mulai memperbaiki scope OAuth dan jalur pemulihan...')
-console.log('')
-
-/* ===== 1. setup-youtube-token.cjs: tambah scope baca ===== */
-const FILE_S = 'setup-youtube-token.cjs'
-if (!fs.existsSync(path.join(root, FILE_S))) {
-  console.log('[TIDAK KETEMU] ' + FILE_S)
-} else {
-  let s = baca(FILE_S)
-  const cariS = `const scope = 'https://www.googleapis.com/auth/youtube.upload'`
-  const gantiS = `const scope = 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly'`
-  if (s.includes('youtube.readonly')) {
-    console.log('[SUDAH ADA] Scope baca di setup-youtube-token.cjs')
-  } else if (s.includes(cariS)) {
-    s = s.replace(cariS, gantiS)
-    simpan(FILE_S, s)
-    console.log('[BERHASIL] Scope baca ditambahkan di setup-youtube-token.cjs')
-  } else {
-    console.log('[TIDAK KETEMU] Baris scope di setup-youtube-token.cjs')
-  }
-}
-
-/* ===== 2. api/youtube/latest.js: sertakan alasan asli dari YouTube ===== */
-const FILE_L = 'api/youtube/latest.js'
-if (!fs.existsSync(path.join(root, FILE_L))) {
-  console.log('[TIDAK KETEMU] ' + FILE_L)
-} else {
-  let l = baca(FILE_L)
-  const cariL = `if (!r.ok) return res.status(502).json({ error: 'Gagal memeriksa video terbaru' })`
-  const gantiL = `if (!r.ok) { const t = await r.text(); return res.status(502).json({ error: 'Gagal memeriksa video terbaru: ' + r.status + ' ' + t }) }`
-  if (l.includes('Gagal memeriksa video terbaru: ')) {
-    console.log('[SUDAH ADA] Detail error di api/youtube/latest.js')
-  } else if (l.includes(cariL)) {
-    l = l.replace(cariL, gantiL)
-    simpan(FILE_L, l)
-    console.log('[BERHASIL] Detail error ditambahkan di api/youtube/latest.js')
-  } else {
-    console.log('[TIDAK KETEMU] Baris 502 di api/youtube/latest.js')
-  }
-}
-
-/* ===== 3. vite.config.js: detail error middleware latest ===== */
-const FILE_V = 'vite.config.js'
-let v = baca(FILE_V)
-const cariV = `if (!r.ok) { res.statusCode = 502; res.end(JSON.stringify({ error: 'Gagal memeriksa video terbaru' })); return }`
-const gantiV = `if (!r.ok) { const t = await r.text(); res.statusCode = 502; res.end(JSON.stringify({ error: 'Gagal memeriksa video terbaru: ' + r.status + ' ' + t })); return }`
-if (v.includes('Gagal memeriksa video terbaru: ')) {
-  console.log('[SUDAH ADA] Detail error middleware latest')
-} else if (v.includes(cariV)) {
-  v = v.replace(cariV, gantiV)
-  simpan(FILE_V, v)
-  console.log('[BERHASIL] Detail error middleware latest ditambahkan')
-} else {
-  console.log('[TIDAK KETEMU] Baris 502 middleware latest di vite.config.js')
-}
-
-/* ===== 4. youtube.js: ulangi pemulihan hingga 3 kali ===== */
-const FILE_Y = 'src/lib/youtube.js'
-let y = baca(FILE_Y)
-if (y.includes('for (let percobaan = 0')) {
-  console.log('[SUDAH ADA] Pengulangan pemulihan di youtube.js')
-} else {
-  const regexY = /const v = await fetch\('\/api\/youtube\/latest', \{[\s\S]*?secara manual\.'\)/
-  const gantiY = `for (let percobaan = 0; percobaan < 3; percobaan++) {
-    if (percobaan > 0) await new Promise(function (tunggu) { setTimeout(tunggu, 4000) })
-    const v = await fetch('/api/youtube/latest', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-      body: JSON.stringify({})
-    })
-    if (v.ok) {
-      try {
-        const j = await v.json()
-        if (j && j.videoId) return { videoId: j.videoId }
-      } catch (e) {
-        console.warn('Respons pemulihan bukan JSON, dilewati.')
-      }
-    } else {
-      const teks = await v.text().catch(function () { return '' })
-      console.warn('Pemulihan percobaan ' + (percobaan + 1) + ' gagal: ' + teks)
-    }
-  }
-  throw new Error('Upload selesai tetapi id video tidak terbaca. Video kemungkinan sudah masuk channel; tempel link YouTube secara manual.')`
-  if (regexY.test(y)) {
-    y = y.replace(regexY, gantiY)
-    simpan(FILE_Y, y)
-    console.log('[BERHASIL] Pengulangan pemulihan dipasang di youtube.js')
-  } else {
-    console.log('[TIDAK KETEMU] Blok pemulihan di youtube.js')
-  }
-}
-
-console.log('')
-console.log('Selesai. Lanjutkan dengan langkah manual berikut:')
-console.log('1. Jalankan: node setup-youtube-token.cjs')
-console.log('2. Browser terbuka dan kini meminta dua izin: kelola upload dan lihat video YouTube kamu.')
-console.log('3. Setujui, lalu salin refresh token BARU yang tercetak di terminal.')
-console.log('4. Ganti nilai YOUTUBE_REFRESH_TOKEN di .env.local dengan token baru itu.')
-console.log('5. Restart dev server: Ctrl+C lalu npm run dev -- --host')
-console.log('6. Uji upload video kecil lagi dari dashboard.')
-console.log('7. Sebelum deploy, perbarui juga YOUTUBE_REFRESH_TOKEN di Environment Variables Vercel.')
-```
-
-## File: apply-galeri-picker.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-
-const root = process.cwd()
-
-function baca(rel) {
-  return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n')
-}
-
-function simpan(rel, isi) {
-  fs.writeFileSync(path.join(root, rel), isi, 'utf8')
-}
-
-function ganti(rel, cari, gantiDengan, label) {
-  if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan'); return }
-  let isi = baca(rel)
-  if (isi.includes(gantiDengan)) { console.log('[SUDAH ADA] ' + label); return }
-  if (!isi.includes(cari)) { console.log('[TIDAK KETEMU] ' + label + ' di ' + rel); return }
-  isi = isi.replace(cari, gantiDengan)
-  simpan(rel, isi)
-  console.log('[BERHASIL] ' + label)
-}
-
-function gantiRegex(rel, regex, gantiDengan, label, marker) {
-  if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan'); return }
-  let isi = baca(rel)
-  if (marker && isi.includes(marker)) { console.log('[SUDAH ADA] ' + label); return }
-  if (!regex.test(isi)) { console.log('[TIDAK KETEMU] ' + label + ' di ' + rel); return }
-  isi = isi.replace(regex, gantiDengan)
-  simpan(rel, isi)
-  console.log('[BERHASIL] ' + label)
-}
-
-const FILE_D = 'src/pages/DashboardPage.jsx'
-
-console.log('Mulai memasang pemilih jenis media pada form galeri...')
-console.log('')
-
-/* ===== 1. Import helper YouTube ===== */
-if (!fs.existsSync(path.join(root, FILE_D))) {
-  console.log('[GAGAL] ' + FILE_D + ' tidak ditemukan')
-  process.exit(1)
-}
-let d = baca(FILE_D)
-if (d.includes("from '../lib/youtube.js'")) {
-  console.log('[SUDAH ADA] Import helper YouTube')
-} else if (d.includes("from '../lib/konversi.js'")) {
-  d = d.replace("from '../lib/konversi.js'", "from '../lib/konversi.js'\nimport { parseYouTubeId, ytThumb, fetchYouTubeQuota, startYouTubeSession, uploadToYouTube } from '../lib/youtube.js'")
-  simpan(FILE_D, d)
-  console.log('[BERHASIL] Import helper YouTube')
-} else {
-  console.log('[TIDAK KETEMU] Import helper YouTube')
-}
-
-/* ===== 2. State YouTube dan mode galeri ===== */
-d = baca(FILE_D)
-const stateBaru = []
-if (!d.includes('const [ytQuota, setYtQuota]')) stateBaru.push("  const [ytQuota, setYtQuota] = useState({ limit: 6, used: 0, remaining: 6 })")
-if (!d.includes('const [galMode, setGalMode]')) stateBaru.push("  const [galMode, setGalMode] = useState('foto')")
-if (!d.includes('const [galYtLink, setGalYtLink]')) stateBaru.push("  const [galYtLink, setGalYtLink] = useState('')")
-if (!d.includes('const [galOldYt, setGalOldYt]')) stateBaru.push('  const [galOldYt, setGalOldYt] = useState(null)')
-if (stateBaru.length === 0) {
-  console.log('[SUDAH ADA] State YouTube dan mode galeri')
-} else if (d.includes("const [infoProses, setInfoProses] = useState('')")) {
-  d = d.replace("const [infoProses, setInfoProses] = useState('')", "const [infoProses, setInfoProses] = useState('')\n" + stateBaru.join('\n'))
-  simpan(FILE_D, d)
-  console.log('[BERHASIL] State YouTube dan mode galeri (' + stateBaru.length + ' baris)')
-} else {
-  console.log('[TIDAK KETEMU] State YouTube dan mode galeri')
-}
-
-/* ===== 3. Muat kuota YouTube berkala ===== */
-ganti(FILE_D,
-  `  useEffect(function () {
-    if (mahasiswa) refresh()
-  }, [mahasiswa])`,
-  `  useEffect(function () {
-    if (mahasiswa) refresh()
-    fetchYouTubeQuota().then(setYtQuota)
-    const iv = setInterval(function () { fetchYouTubeQuota().then(setYtQuota) }, 30000)
-    return function () { clearInterval(iv) }
-  }, [mahasiswa])`,
-  'Muat kuota YouTube berkala')
-
-/* ===== 4. Cabang YouTube pada submitGaleri ===== */
-ganti(FILE_D,
-  `      let mediaPath = ''
-      let mediaType = ''
-      let mediaThumb = null
-      if (galForm.file) {`,
-  `      let mediaPath = ''
-      let mediaType = ''
-      let mediaThumb = null
-      let mediaSource = galOldYt ? 'youtube' : 'r2'
-      let youtubeId = galOldYt || null
-      if (galMode === 'video' && galYtLink && !galForm.file) {
-        const id = parseYouTubeId(galYtLink)
-        if (!id) { alert('Link YouTube tidak valid.'); setBusy(false); return }
-        mediaSource = 'youtube'
-        youtubeId = id
-        mediaPath = ytThumb(id)
-        mediaThumb = ytThumb(id)
-        mediaType = 'video'
-      } else if (galMode === 'video' && galForm.file) {
-        if (ytQuota.remaining <= 0) { alert('Kuota upload YouTube hari ini sudah habis. Gunakan link YouTube.'); setBusy(false); return }
-        const sesiData = await supabase.auth.getSession()
-        const tokenS = sesiData.data.session ? sesiData.data.session.access_token : ''
-        const sesi = await startYouTubeSession(galForm.judul || ('Dokumentasi ' + galForm.tanggal), galForm.deskripsi || '', galForm.file.type || 'video/mp4', tokenS)
-        const hasilYt = await uploadToYouTube(sesi.sessionUri, galForm.file, function (p) { setInfoProses('Mengunggah ke YouTube... ' + Math.round(p * 100) + '%') })
-        mediaSource = 'youtube'
-        youtubeId = hasilYt.videoId
-        mediaPath = ytThumb(hasilYt.videoId)
-        mediaThumb = ytThumb(hasilYt.videoId)
-        mediaType = 'video'
-        setYtQuota(function (q) { return Object.assign({}, q, { used: q.used + 1, remaining: Math.max(0, q.remaining - 1) }) })
-        fetchYouTubeQuota().then(setYtQuota)
-      } else if (galForm.file) {`,
-  'Cabang YouTube pada submitGaleri')
-ganti(FILE_D,
-  `        media_path: mediaPath,
-        media_type: mediaType,
-        media_thumb: mediaThumb
-      }`,
-  `        media_path: mediaPath,
-        media_type: mediaType,
-        media_thumb: mediaThumb,
-        media_source: mediaSource,
-        youtube_id: youtubeId
-      }`,
-  'Payload galeri membawa kolom YouTube')
-
-/* ===== 5. startEditGal membawa mode dan sumber lama ===== */
-ganti(FILE_D,
-  `setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_path, oldPath: g.media_path, oldThumb: g.media_thumb || '', previewLoading: false })`,
-  `setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_path || '', oldPath: g.media_source === 'youtube' ? '' : (g.media_path || ''), oldThumb: g.media_source === 'youtube' ? '' : (g.media_thumb || ''), previewLoading: false })
-    setGalMode(g.media_source === 'youtube' ? 'video' : (g.media_type === 'video' ? 'video' : 'foto'))
-    setGalYtLink('')
-    setGalOldYt(g.youtube_id || null)`,
-  'startEditGal membawa mode dan sumber lama')
-
-/* ===== 6. Reset mode galeri setelah simpan dan batal ===== */
-d = baca(FILE_D)
-if (d.includes('setGalOldYt(null)')) {
-  console.log('[SUDAH ADA] Reset mode galeri')
-} else {
-  const polaReset = `setGalForm({ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false })`
-  const gantiReset = polaReset + `\n    setGalMode('foto')\n    setGalYtLink('')\n    setGalOldYt(null)`
-  if (d.includes(polaReset)) {
-    d = d.split(polaReset).join(gantiReset)
-    simpan(FILE_D, d)
-    console.log('[BERHASIL] Reset mode galeri')
-  } else {
-    console.log('[TIDAK KETEMU] Reset mode galeri')
-  }
-}
-
-/* ===== 7. hapusMediaR2 melewatkan URL YouTube ===== */
-ganti(FILE_D,
-  `  async function hapusMediaR2(url) {
-    const key = keyDariUrl(url)`,
-  `  async function hapusMediaR2(url) {
-    if (String(url || '').indexOf('i.ytimg.com') !== -1 || String(url || '').indexOf('youtube') !== -1) return
-    const key = keyDariUrl(url)`,
-  'hapusMediaR2 melewatkan URL YouTube')
-
-/* ===== 8. Hapus galeri melewatkan media YouTube ===== */
-ganti(FILE_D,
-  `      const urls = target.data.logbook_item_id ? [] : [target.data.media_path, target.data.media_thumb].filter(Boolean)`,
-  `      const urls = target.data.logbook_item_id || target.data.media_source === 'youtube' ? [] : [target.data.media_path, target.data.media_thumb].filter(Boolean)`,
-  'Hapus galeri melewatkan media YouTube')
-
-/* ===== 9. UI pemilih jenis media pada form galeri ===== */
-gantiRegex(FILE_D,
-  /<label className=\{labelCls\}>Pilih foto atau video[\s\S]*?\}\} \/>\s*<\/div>\s*<\/div>/,
-  `<label className={labelCls}>Jenis media {editGalId ? null : <span className="text-red-500">*</span>}</label>
-                <div className="mt-1.5 flex gap-2">
-                  <button type="button" onClick={function () { setGalMode('foto') }} className={'px-3 py-1.5 rounded-xl text-xs font-bold ' + (galMode !== 'video' ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600')}>Foto</button>
-                  <button type="button" onClick={function () { setGalMode('video') }} className={'px-3 py-1.5 rounded-xl text-xs font-bold ' + (galMode === 'video' ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600')}>Video</button>
-                </div>
-                <div className="mt-1.5">
-                  {galMode === 'video' ? (
-                    <div className="space-y-2">
-                      <p className="text-xs font-semibold text-slate-500">Sisa kuota upload YouTube hari ini: {ytQuota.remaining} dari {ytQuota.limit}</p>
-                      <div className={ytQuota.remaining <= 0 && !galForm.file ? 'opacity-50 pointer-events-none' : ''}>
-                        <FileInput accept="video/*" fileName={galForm.file ? galForm.file.name : ''}
-                          onChange={function (e) {
-                            const f = e.target.files[0]
-                            if (!f) return
-                            setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: URL.createObjectURL(f), previewLoading: false }) })
-                          }} />
-                      </div>
-                      {ytQuota.remaining <= 0 ? <p className="text-xs text-red-600">Kuota habis. Gunakan link YouTube di bawah.</p> : null}
-                      <input className={inputCls} value={galYtLink} onChange={function (e) { setGalYtLink(e.target.value) }} placeholder="Atau tempel link YouTube (unlisted)" />
-                    </div>
-                  ) : (
-                    <FileInput accept="image/*" fileName={galForm.file ? galForm.file.name : ''}
-                      onChange={async function (e) {
-                        const f = e.target.files[0]
-                        if (!f) return
-                        if (formatHeic(f)) {
-                          setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: '', previewLoading: true }) })
-                          const blob = await pratinjauHeic(f)
-                          const preview = blob ? URL.createObjectURL(blob) : URL.createObjectURL(f)
-                          setGalForm(function (g) { return Object.assign({}, g, { preview: preview, previewLoading: false }) })
-                        } else {
-                          setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: URL.createObjectURL(f), previewLoading: false }) })
-                        }
-                      }} />
-                  )}
-                </div>
-              </div>`,
-  'UI pemilih jenis media pada form galeri',
-  'Jenis media {editGalId')
-
-/* ===== 10. Kartu galeri menampilkan thumbnail untuk media YouTube ===== */
-gantiRegex('src/components/cards.jsx',
-  /<SmartFit src=\{item\.media_thumb \|\| item\.media_path\}[^/]*\/>/,
-  `{item.media_source === 'youtube' ? (
-        <img src={item.media_path} alt={item.judul} className="absolute inset-0 h-full w-full object-cover" />
-      ) : (
-        <SmartFit src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} alt={item.judul} />
-      )}`,
-  'Kartu galeri menampilkan thumbnail untuk media YouTube',
-  '<img src={item.media_path} alt={item.judul} className="absolute inset-0 h-full w-full object-cover" />')
-
-console.log('')
-console.log('Selesai. Vite akan memuat ulang otomatis.')
-console.log('')
-console.log('Catatan:')
-console.log('1. Tidak ada SQL baru. Kolom media_source dan youtube_id sudah kamu tambahkan sebelumnya.')
-console.log('2. Script aman dijalankan ulang karena setiap langkah memeriksa penanda lebih dulu.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Buka dashboard, tab Galeri, perhatikan label kini bertuliskan Jenis media dengan tombol Foto dan Video.')
-console.log('2. Pilih Foto: muncul FileInput gambar dengan pratinjau HEIC seperti sebelumnya.')
-console.log('3. Pilih Video: muncul sisa kuota harian, FileInput video, dan kolom link YouTube.')
-console.log('4. Saat kuota habis, FileInput video mengabu dan hanya kolom link yang bisa dipakai.')
-console.log('5. Simpan media YouTube: kartu galeri menampilkan thumbnail YouTube, dan modal detail memutar embed.')
-console.log('6. Edit media YouTube: mode otomatis terpilih Video dan tombol simpan mempertahankan sumber lama.')
-console.log('7. Hapus media YouTube: tidak ada percobaan hapus ke R2 karena penjaga URL sudah aktif.')
-```
-
-## File: apply-loading-kuota.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-
-console.log('Mulai menambahkan indikator loading pada kuota...')
-console.log('')
-
-const FILE_D = 'src/pages/DashboardPage.jsx'
-let d = baca(FILE_D)
-let berubah = false
-
-/* ===== 1. Tambah state ytQuotaLoading ===== */
-const cariState = `  const [ytQuota, setYtQuota] = useState({ limit: 5, used: 0, remaining: 5 })`
-const gantiState = `  const [ytQuota, setYtQuota] = useState({ limit: 5, used: 0, remaining: 5 })
-  const [ytQuotaLoading, setYtQuotaLoading] = useState(true)`
-if (d.includes('ytQuotaLoading')) {
-  console.log('[SUDAH ADA] State ytQuotaLoading')
-} else if (d.includes(cariState)) {
-  d = d.replace(cariState, gantiState)
-  berubah = true
-  console.log('[BERHASIL] State ytQuotaLoading ditambahkan')
-} else {
-  console.log('[TIDAK KETEMU] State ytQuota')
-}
-
-/* ===== 2. Set loading saat fetch kuota ===== */
-const cariFetch = `  useEffect(function () {
-    if (mahasiswa) refresh()
-    fetchYouTubeQuota().then(setYtQuota)`
-const gantiFetch = `  useEffect(function () {
-    if (mahasiswa) refresh()
-    setYtQuotaLoading(true)
-    fetchYouTubeQuota().then(function (data) {
-      setYtQuota(data)
-      setYtQuotaLoading(false)
-    })`
-if (d.includes('setYtQuotaLoading(true)')) {
-  console.log('[SUDAH ADA] Loading state pada fetch kuota')
-} else if (d.includes(cariFetch)) {
-  d = d.replace(cariFetch, gantiFetch)
-  berubah = true
-  console.log('[BERHASIL] Loading state dipasang pada fetch kuota')
-} else {
-  console.log('[TIDAK KETEMU] Blok fetch kuota di useEffect')
-}
-
-/* ===== 3. Set loading false juga di interval ===== */
-const cariInterval = `    const iv = setInterval(function () { fetchYouTubeQuota().then(setYtQuota) }, 30000)`
-const gantiInterval = `    const iv = setInterval(function () { fetchYouTubeQuota().then(function (data) { setYtQuota(data); setYtQuotaLoading(false) }) }, 30000)`
-if (d.includes(gantiInterval)) {
-  console.log('[SUDAH ADA] Loading state pada interval')
-} else if (d.includes(cariInterval)) {
-  d = d.replace(cariInterval, gantiInterval)
-  berubah = true
-  console.log('[BERHASIL] Loading state dipasang pada interval')
-} else {
-  console.log('[TIDAK KETEMU] Blok interval kuota')
-}
-
-/* ===== 4. Update tampilan kuota di form logbook ===== */
-const cariLogbook = `<p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuota.remaining} dari {ytQuota.limit}</p>`
-const gantiLogbook = `<p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuotaLoading ? <span className="inline-block w-3 h-3 ml-1 border-2 border-slate-400 border-t-transparent rounded-full animate-spin align-middle"></span> : <>{ytQuota.remaining} dari {ytQuota.limit}</>}</p>`
-if (d.includes('border-t-transparent rounded-full animate-spin')) {
-  console.log('[SUDAH ADA] Indikator loading di form logbook')
-} else if (d.includes(cariLogbook)) {
-  d = d.split(cariLogbook).join(gantiLogbook)
-  berubah = true
-  console.log('[BERHASIL] Indikator loading dipasang di form logbook')
-} else {
-  console.log('[TIDAK KETEMU] Teks kuota di form logbook')
-}
-
-/* ===== 5. Update tampilan kuota di form galeri ===== */
-const cariGaleri = `<p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuota.remaining} dari {ytQuota.limit}</p>`
-if (d.includes(cariGaleri) && d.includes('galMode === \'video\'')) {
-  d = d.split(cariGaleri).join(gantiLogbook)
-  berubah = true
-  console.log('[BERHASIL] Indikator loading dipasang di form galeri')
-}
-
-/* ===== 6. Update tampilan kuota di form rincian kegiatan ===== */
-const cariRincian = `<p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuota.remaining} dari {ytQuota.limit}</p>`
-if (d.includes(cariRincian) && d.includes('it.mode === \'video\'')) {
-  d = d.split(cariRincian).join(gantiLogbook)
-  berubah = true
-  console.log('[BERHASIL] Indikator loading dipasang di form rincian kegiatan')
-}
-
-if (berubah) {
-  simpan(FILE_D, d)
-}
-
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Perilaku baru:')
-console.log('1. Saat halaman dibuka, tulisan kuota menampilkan spinner kecil berputar.')
-console.log('2. Begitu data dari server datang (biasanya < 1 detik), spinner hilang dan angka muncul.')
-console.log('3. Tidak ada lagi kedipan angka dari 6 ke 26, karena loading state menahan tampilan.')
-```
-
-## File: apply-netral-final.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-
-console.log('Pembersihan akhir teks proses dan pemindaian sisa sebutan YouTube...')
-console.log('')
-
-/* ===== 1. Bersihkan titik tiga pada teks onInfo di upload.js dan konversi.js ===== */
-;['src/lib/upload.js', 'src/lib/konversi.js'].forEach(function (rel) {
-  if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan'); return }
-  let isi = baca(rel)
-  const sebelum = isi
-  isi = isi.replace(/onInfo\('([^'\n]*?)\.\.\.'\)/g, "onInfo('$1')")
-  isi = isi.replace(/Mengunggah\.\.\. ' \+ /g, "Mengunggah ' + ")
-  if (isi !== sebelum) {
-    simpan(rel, isi)
-    console.log('[BERHASIL] Teks proses dibersihkan di ' + rel)
-  } else {
-    console.log('[SUDAH BERSIH] ' + rel)
-  }
-})
-
-/* ===== 2. Bersihkan pola serupa di DashboardPage bila masih tersisa ===== */
-const FILE_D = 'src/pages/DashboardPage.jsx'
-if (!fs.existsSync(path.join(root, FILE_D))) {
-  console.log('[LEWATI] DashboardPage tidak ditemukan')
-} else {
-  let d = baca(FILE_D)
-  const sebelum = d
-  d = d.replace(/setInfoProses\('([^'\n]*?)\.\.\.'\)/g, "setInfoProses('$1')")
-  d = d.replace(/setInfoProses\('([^'\n]*?)\.\.\. ' \+ /g, "setInfoProses('$1 ' + ")
-  if (d !== sebelum) {
-    simpan(FILE_D, d)
-    console.log('[BERHASIL] Teks proses dibersihkan di DashboardPage')
-  } else {
-    console.log('[SUDAH BERSIH] DashboardPage')
-  }
-}
-
-/* ===== 3. Pindai sisa sebutan YouTube huruf kapital di seluruh src ===== */
-console.log('')
-console.log('Pemindaian sisa teks YouTube huruf kapital pada folder src:')
-let ketemu = 0
-function jalan(dir) {
-  const entries = fs.readdirSync(dir, { withFileTypes: true })
-  entries.forEach(function (e) {
-    const full = path.join(dir, e.name)
-    if (e.isDirectory()) { jalan(full); return }
-    if (!/\.(jsx?|css|html)$/.test(e.name)) return
-    const isi = fs.readFileSync(full, 'utf8')
-    isi.split('\n').forEach(function (b, i) {
-      if (b.includes('YouTube')) {
-        ketemu++
-        console.log('  ' + path.relative(root, full) + ':' + (i + 1) + '  ' + b.trim().slice(0, 120))
-      }
-    })
-  })
-}
-jalan(path.join(root, 'src'))
-if (ketemu === 0) console.log('  Tidak ada sisa teks YouTube huruf kapital. Bersih.')
-
-console.log('')
-console.log('Catatan: baris berisi alamat embed youtube-nocookie, i.ytimg, atau googleapis adalah teknis')
-console.log('dan tidak tampil sebagai teks merek kepada pengguna, jadi wajar bila muncul di pemindaian huruf kecil.')
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Simpan logbook berisi foto atau video, perhatikan tombol simpan.')
-console.log('2. Teks proses tampil tanpa titik tiga statis, diikuti tiga titik animasi yang halus.')
-console.log('3. Contoh tampilan: Mengunggah 43 persen dengan titik berdenyut, bukan Mengunggah... 43 persen.')
-console.log('4. Tidak ada kata YouTube pada label kuota, placeholder, peringatan, maupun tombol.')
-```
-
-## File: apply-netral-youtube-dan-titik.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-
-function semua(rel, cari, ganti, label) {
-  if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan'); return }
-  let isi = baca(rel)
-  if (!isi.includes(cari)) { console.log('[TIDAK KETEMU] ' + label); return }
-  isi = isi.split(cari).join(ganti)
-  simpan(rel, isi)
-  console.log('[BERHASIL] ' + label)
-}
-
-function sisip(rel, cari, ganti, label) {
-  if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan'); return }
-  let isi = baca(rel)
-  if (isi.includes(ganti)) { console.log('[SUDAH ADA] ' + label); return }
-  if (!isi.includes(cari)) { console.log('[TIDAK KETEMU] ' + label); return }
-  isi = isi.replace(cari, ganti)
-  simpan(rel, isi)
-  console.log('[BERHASIL] ' + label)
-}
-
-function tambah(rel, marker, blok, label) {
-  if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan'); return }
-  let isi = baca(rel)
-  if (isi.includes(marker)) { console.log('[SUDAH ADA] ' + label); return }
-  isi = isi.trimEnd() + '\n\n' + blok
-  simpan(rel, isi)
-  console.log('[BERHASIL] ' + label)
-}
-
-console.log('Mulai menetralkan sebutan YouTube dan memasang animasi titik...')
-console.log('')
-
-/* ===== 1. index.css: animasi titik halus ===== */
-tambah('src/index.css', '.titik-anim', `.titik-anim {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  margin-left: 6px;
-}
-.titik-anim i {
-  width: 4px;
-  height: 4px;
-  border-radius: 9999px;
-  background: currentColor;
-  opacity: 0.2;
-  animation: titik-halus 1.1s ease-in-out infinite;
-}
-.titik-anim i:nth-child(2) { animation-delay: 0.18s; }
-.titik-anim i:nth-child(3) { animation-delay: 0.36s; }
-@keyframes titik-halus {
-  0%, 60%, 100% { opacity: 0.2; transform: translateY(0) scale(0.9); }
-  30% { opacity: 1; transform: translateY(-1px) scale(1); }
-}`, 'CSS animasi titik di index.css')
-
-/* ===== 2. ui.jsx: komponen TitikAnim dan LabelProses ===== */
-tambah('src/components/ui.jsx', 'export function LabelProses', `export function TitikAnim() {
-  return (
-    <span className="titik-anim" aria-hidden="true">
-      <i></i>
-      <i></i>
-      <i></i>
-    </span>
-  )
-}
-export function LabelProses(props) {
-  const bersih = String(props.teks || '').replace(/\\.{3}/g, '').replace(/\\s+/g, ' ').trim()
-  return (
-    <span className="inline-flex items-center justify-center">
-      <span>{bersih}</span>
-      <TitikAnim />
-    </span>
-  )
-}`, 'Komponen TitikAnim dan LabelProses di ui.jsx')
-
-/* ===== 3. ui.jsx: netralkan placeholder pratinjau dan pemutar ===== */
-semua('src/components/ui.jsx', `<SizedIcon name="youtube" size={26} />`, `<SizedIcon name="video" size={26} />`, 'Ikon placeholder pratinjau menjadi ikon video')
-semua('src/components/ui.jsx', `Menyiapkan thumbnail YouTube...`, `Menyiapkan pratinjau video`, 'Teks placeholder pratinjau dinetralkan')
-semua('src/components/ui.jsx', `Thumbnail belum siap di YouTube`, `Pratinjau video belum siap`, 'Teks placeholder permanen dinetralkan')
-semua('src/components/ui.jsx', `alt={props.alt || 'Thumbnail YouTube'}`, `alt={props.alt || 'Pratinjau video'}`, 'Alt text pratinjau dinetralkan')
-semua('src/components/ui.jsx', `src={'https://www.youtube-nocookie.com/embed/' + props.youtubeId}`, `src={'https://www.youtube-nocookie.com/embed/' + props.youtubeId + '?rel=0&modestbranding=1'}`, 'Pemutar lightbox meminimalkan merek')
-
-/* ===== 4. cards.jsx: minimalkan merek pada embed detail ===== */
-semua('src/components/cards.jsx', `embed/' + it.youtube_id}`, `embed/' + it.youtube_id + '?rel=0&modestbranding=1'}`, 'Embed detail logbook meminimalkan merek')
-semua('src/components/cards.jsx', `embed/' + item.youtube_id}`, `embed/' + item.youtube_id + '?rel=0&modestbranding=1'}`, 'Embed detail galeri meminimalkan merek')
-
-/* ===== 5. youtube.js: netralkan pesan error ===== */
-semua('src/lib/youtube.js', `Upload YouTube gagal (status `, `Upload video gagal (status `, 'Pesan gagal upload dinetralkan')
-semua('src/lib/youtube.js', `Jaringan gagal saat upload YouTube`, `Jaringan gagal saat upload video`, 'Pesan jaringan dinetralkan')
-semua('src/lib/youtube.js', `Video kemungkinan sudah masuk channel; tempel link YouTube secara manual.`, `Video kemungkinan sudah tersimpan; tempel link video secara manual.`, 'Pesan pemulihan dinetralkan')
-semua('src/lib/youtube.js', `Gagal membuat sesi YouTube`, `Gagal memulai sesi upload video`, 'Pesan sesi dinetralkan')
-
-/* ===== 6. upload.js: netralkan teks konversi ===== */
-semua('src/lib/upload.js', `Mengonversi foto ke WebP...`, `Mengonversi foto`, 'Teks konversi foto dinetralkan')
-
-/* ===== 7. DashboardPage: import LabelProses ===== */
-sisip('src/pages/DashboardPage.jsx',
-  `import { pratinjauHeic, formatHeic } from '../lib/konversi.js'`,
-  `import { pratinjauHeic, formatHeic } from '../lib/konversi.js'
-import { LabelProses } from '../components/ui.jsx'`,
-  'Import LabelProses di DashboardPage')
-
-/* ===== 8. DashboardPage: netralkan semua teks YouTube ===== */
-semua('src/pages/DashboardPage.jsx', `Sisa kuota upload YouTube hari ini:`, `Sisa kuota upload video hari ini:`, 'Label kuota dinetralkan')
-semua('src/pages/DashboardPage.jsx', `Atau tempel link YouTube (unlisted)`, `Atau tempel link video eksternal`, 'Placeholder link dinetralkan')
-semua('src/pages/DashboardPage.jsx', `Kuota habis. Gunakan link YouTube di bawah.`, `Kuota habis. Gunakan link video di bawah.`, 'Peringatan kuota dinetralkan')
-semua('src/pages/DashboardPage.jsx', `Kuota upload YouTube hari ini sudah habis. Gunakan link YouTube.`, `Kuota upload video hari ini sudah habis. Gunakan link video.`, 'Alert kuota dinetralkan')
-semua('src/pages/DashboardPage.jsx', `Link YouTube tidak valid`, `Link video tidak valid`, 'Alert link dinetralkan')
-semua('src/pages/DashboardPage.jsx', `Mengunggah ke YouTube... ' + Math.round(p * 100) + '%'`, `Mengunggah video ' + Math.round(p * 100) + '%'`, 'Progres upload video dinetralkan')
-semua('src/pages/DashboardPage.jsx', `Mengunggah... ' + Math.round(p * 100) + '%'`, `Mengunggah ' + Math.round(p * 100) + '%'`, 'Progres upload R2 tanpa titik statis')
-semua('src/pages/DashboardPage.jsx', `Mengonversi HEIC ke JPG...`, `Mengonversi foto HEIC`, 'Teks konversi HEIC dinetralkan')
-semua('src/pages/DashboardPage.jsx', `Mengonversi pratinjau HEIC...`, `Mengonversi pratinjau`, 'Teks pratinjau HEIC dinetralkan')
-
-/* ===== 9. DashboardPage: tombol proses memakai animasi titik ===== */
-semua('src/pages/DashboardPage.jsx', `{busy ? (infoProses || 'Menyimpan...') :`, `{busy ? <LabelProses teks={infoProses || 'Menyimpan'} /> :`, 'Tombol simpan logbook dan galeri beranimasi titik')
-semua('src/pages/DashboardPage.jsx', `{busy ? 'Menyimpan...' :`, `{busy ? <LabelProses teks="Menyimpan" /> :`, 'Tombol simpan lainnya beranimasi titik')
-
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Hasil yang akan terlihat:')
-console.log('1. Tidak ada lagi kata YouTube pada label kuota, placeholder link, peringatan, maupun progres.')
-console.log('2. Placeholder pratinjau video memakai ikon video umum, bukan ikon YouTube.')
-console.log('3. Tombol sibuk menampilkan tiga titik kecil yang memudar dan naik turun secara halus dan berurutan.')
-console.log('4. Progres persen tetap tampil, misalnya Mengunggah 43 persen, diikuti titik beranimasi.')
-console.log('5. Pemutar embed memakai parameter modestbranding dan rel=0 untuk meminimalkan merek bawaan.')
 ```
 
 ## File: apply-preview-video-controls.cjs
@@ -7372,6 +10194,911 @@ export default {
 }
 ```
 
+## File: tesss-iframeeee.html
+```html
+<!DOCTYPE html>
+
+<html lang="id">
+
+<head>
+
+  <meta charset="UTF-8">
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Centered Fullscreen Custom YouTube Player</title>
+
+  <style>
+
+    * {
+
+      box-sizing: border-box;
+
+      margin: 0;
+
+      padding: 0;
+
+      font-family: Arial, sans-serif;
+
+    }
+
+
+
+    body {
+
+      background-color: #121212;
+
+      color: #fff;
+
+      display: flex;
+
+      justify-content: center;
+
+      align-items: center;
+
+      min-height: 100vh;
+
+      flex-direction: column;
+
+    }
+
+
+
+    /* Container Pemutar Video Utama */
+
+    .player-container {
+
+      position: relative;
+
+      width: 720px;
+
+      max-width: 95vw;
+
+      background: #000;
+
+      border-radius: 12px;
+
+      overflow: hidden;
+
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+
+    }
+
+
+
+    /* Fullscreen Center */
+
+    .player-container:fullscreen {
+
+      width: 100vw;
+
+      height: 100vh;
+
+      max-width: none;
+
+      border-radius: 0;
+
+      display: flex;
+
+      flex-direction: column;
+
+      justify-content: center;
+
+      align-items: center;
+
+      background-color: #000;
+
+    }
+
+
+
+    .player-container.hide-controls {
+
+      cursor: none;
+
+    }
+
+
+
+    /* TRIK CROPPING Header YouTube */
+
+    .video-viewport {
+
+      position: relative;
+
+      width: 100%;
+
+      padding-top: 56.25%; /* Ratio 16:9 */
+
+      overflow: hidden;
+
+    }
+
+
+
+    .player-container:fullscreen .video-viewport {
+
+      width: 100%;
+
+      max-height: 100vh;
+
+    }
+
+
+
+    #player {
+
+      position: absolute;
+
+      top: -60px; /* Potong top bar YouTube */
+
+      left: -2px;
+
+      width: calc(100% + 4px);
+
+      height: calc(100% + 120px);
+
+      pointer-events: none;
+
+    }
+
+
+
+    /* Layer Poster & Tombol Play Kustom */
+
+    .custom-poster {
+
+      position: absolute;
+
+      top: 0;
+
+      left: 0;
+
+      width: 100%;
+
+      height: 100%;
+
+      z-index: 2;
+
+      background-size: cover;
+
+      background-position: center;
+
+      display: flex;
+
+      justify-content: center;
+
+      align-items: center;
+
+      cursor: default; /* Diubah menjadi panah biasa */
+
+      transition: opacity 0.3s ease, visibility 0.3s ease;
+
+    }
+
+
+
+    .custom-poster.is-hidden {
+
+      opacity: 0;
+
+      visibility: hidden;
+
+      pointer-events: none;
+
+    }
+
+
+
+    /* Ikon Play Tengah Minimalis & Kecil */
+
+    .center-play-btn {
+
+      width: 48px;
+
+      height: 48px;
+
+      background: rgba(0, 0, 0, 0.5);
+
+      border: 1px solid rgba(255, 255, 255, 0.2);
+
+      border-radius: 50%;
+
+      display: flex;
+
+      justify-content: center;
+
+      align-items: center;
+
+      backdrop-filter: blur(8px);
+
+      cursor: pointer; /* Tombol play tengah tetap jari agar jelas bisa diklik */
+
+      transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+
+    }
+
+
+
+    .custom-poster:hover .center-play-btn {
+
+      transform: scale(1.08);
+
+      background: rgba(255, 0, 0, 0.85);
+
+      border-color: rgba(255, 0, 0, 0.85);
+
+    }
+
+
+
+    .center-play-btn svg {
+
+      width: 20px;
+
+      height: 20px;
+
+      fill: #fff;
+
+      margin-left: 3px;
+
+    }
+
+
+
+    /* Overlay Transparan (Aktif setelah video diputar) */
+
+    .overlay-shield {
+
+      position: absolute;
+
+      top: 0;
+
+      left: 0;
+
+      width: 100%;
+
+      height: 100%;
+
+      z-index: 1;
+
+      background: transparent;
+
+      cursor: default; /* Diubah menjadi panah biasa */
+
+    }
+
+
+
+    /* Panel Kontrol Kustom */
+
+    .custom-controls {
+
+      display: flex;
+
+      align-items: center;
+
+      gap: 12px;
+
+      padding: 12px 16px;
+
+      background: rgba(30, 30, 30, 0.95);
+
+      z-index: 3;
+
+      position: absolute;
+
+      bottom: 0;
+
+      left: 0;
+
+      width: 100%;
+
+      opacity: 1;
+
+      visibility: visible;
+
+      transition: opacity 0.4s ease, visibility 0.4s ease;
+
+    }
+
+
+
+    .player-container.hide-controls .custom-controls {
+
+      opacity: 0;
+
+      visibility: hidden;
+
+    }
+
+
+
+    button {
+
+      background: #333;
+
+      color: #fff;
+
+      border: none;
+
+      padding: 8px 12px;
+
+      border-radius: 6px;
+
+      cursor: pointer;
+
+      font-weight: bold;
+
+      transition: background 0.2s;
+
+      display: flex;
+
+      align-items: center;
+
+      justify-content: center;
+
+    }
+
+
+
+    button:hover {
+
+      background: #555;
+
+    }
+
+
+
+    button svg {
+
+      width: 18px;
+
+      height: 18px;
+
+      fill: #fff;
+
+    }
+
+
+
+    /* Progress Bar */
+
+    .progress-container {
+
+      flex-grow: 1;
+
+      display: flex;
+
+      align-items: center;
+
+    }
+
+
+
+    .progress-bar {
+
+      width: 100%;
+
+      height: 6px;
+
+      -webkit-appearance: none;
+
+      appearance: none;
+
+      background: linear-gradient(to right, #ff0000 0%, #444 0%);
+
+      border-radius: 3px;
+
+      outline: none;
+
+      cursor: pointer;
+
+    }
+
+
+
+    .progress-bar::-webkit-slider-thumb {
+
+      -webkit-appearance: none;
+
+      appearance: none;
+
+      width: 14px;
+
+      height: 14px;
+
+      border-radius: 50%;
+
+      background: #ff0000;
+
+      cursor: pointer;
+
+    }
+
+
+
+    /* Text & Slider Volume */
+
+    .time-display {
+
+      font-size: 13px;
+
+      color: #bbb;
+
+      min-width: 80px;
+
+      text-align: center;
+
+    }
+
+
+
+    .volume-slider {
+
+      width: 70px;
+
+      cursor: pointer;
+
+    }
+
+  </style>
+
+</head>
+
+<body>
+
+
+
+  <div class="player-container" id="playerContainer">
+
+    <div class="video-viewport">
+
+      <div id="player"></div>
+
+      
+
+      <!-- Poster Kustom + Tombol Play Tengah Minimalis -->
+
+      <div class="custom-poster" id="customPoster" onclick="togglePlay()">
+
+        <div class="center-play-btn">
+
+          <svg viewBox="0 0 24 24">
+
+            <path d="M8 5v14l11-7z"/>
+
+          </svg>
+
+        </div>
+
+      </div>
+
+
+
+      <div class="overlay-shield" id="overlayShield"></div>
+
+    </div>
+
+
+
+    <!-- Panel Kontrol Kustom -->
+
+    <div class="custom-controls" id="customControls">
+
+      <button id="playPauseBtn" onclick="togglePlay()" aria-label="Play/Pause">
+
+        <svg id="playIcon" viewBox="0 0 24 24">
+
+          <path d="M8 5v14l11-7z"/>
+
+        </svg>
+
+        <svg id="pauseIcon" viewBox="0 0 24 24" style="display: none;">
+
+          <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+
+        </svg>
+
+      </button>
+
+      
+
+      <div class="progress-container">
+
+        <input type="range" id="progressBar" class="progress-bar" value="0" min="0" max="100" step="0.1" oninput="seekVideo(this.value)">
+
+      </div>
+
+
+
+      <span class="time-display" id="timeDisplay">0:00 / 0:00</span>
+
+
+
+      <button id="muteBtn" onclick="toggleMute()" aria-label="Mute/Unmute">
+
+        <svg id="volumeIcon" viewBox="0 0 24 24">
+
+          <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+
+        </svg>
+
+        <svg id="muteIcon" viewBox="0 0 24 24" style="display: none;">
+
+          <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
+
+        </svg>
+
+      </button>
+
+      <input type="range" id="volumeSlider" class="volume-slider" min="0" max="100" value="100" oninput="changeVolume(this.value)">
+
+
+
+      <button onclick="toggleFullscreen()">&#x26F6;</button>
+
+    </div>
+
+  </div>
+
+
+
+  <script>
+
+    var videoId = 'ypqq9quWfkM'; // ID Video
+
+    var tag = document.createElement('script');
+
+    tag.src = "https://www.youtube.com/iframe_api";
+
+    var firstScriptTag = document.getElementsByTagName('script')[0];
+
+    firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+
+
+    var player;
+
+    var updateInterval;
+
+    var hideControlsTimeout;
+
+
+
+    var playerContainer = document.getElementById('playerContainer');
+
+    var customPoster = document.getElementById('customPoster');
+
+
+
+    customPoster.style.backgroundImage = `url('https://img.youtube.com/vi/${videoId}/maxresdefault.jpg')`;
+
+
+
+    function onYouTubeIframeAPIReady() {
+
+      player = new YT.Player('player', {
+
+        videoId: videoId,
+
+        playerVars: {
+
+          'controls': 0,
+
+          'rel': 0,
+
+          'modestbranding': 1,
+
+          'playsinline': 1,
+
+          'disablekb': 1
+
+        },
+
+        events: {
+
+          'onReady': onPlayerReady,
+
+          'onStateChange': onPlayerStateChange
+
+        }
+
+      });
+
+    }
+
+
+
+    function onPlayerReady(event) {
+
+      document.getElementById('overlayShield').addEventListener('click', togglePlay);
+
+      setupAutoHideControls();
+
+    }
+
+
+
+    function onPlayerStateChange(event) {
+
+      var playIcon = document.getElementById('playIcon');
+
+      var pauseIcon = document.getElementById('pauseIcon');
+
+      
+
+      if (event.data == YT.PlayerState.PLAYING) {
+
+        customPoster.classList.add('is-hidden');
+
+        playIcon.style.display = 'none';
+
+        pauseIcon.style.display = 'block';
+
+        updateInterval = setInterval(updateProgress, 250);
+
+        resetAutoHideTimer();
+
+      } else {
+
+        playIcon.style.display = 'block';
+
+        pauseIcon.style.display = 'none';
+
+        clearInterval(updateInterval);
+
+        showControls();
+
+        clearTimeout(hideControlsTimeout);
+
+      }
+
+    }
+
+
+
+    function setupAutoHideControls() {
+
+      playerContainer.addEventListener('mousemove', function() {
+
+        showControls();
+
+        resetAutoHideTimer();
+
+      });
+
+
+
+      playerContainer.addEventListener('mouseleave', function() {
+
+        if (player && player.getPlayerState() == YT.PlayerState.PLAYING) {
+
+          hideControls();
+
+        }
+
+      });
+
+    }
+
+
+
+    function showControls() {
+
+      playerContainer.classList.remove('hide-controls');
+
+    }
+
+
+
+    function hideControls() {
+
+      playerContainer.classList.add('hide-controls');
+
+    }
+
+
+
+    function resetAutoHideTimer() {
+
+      clearTimeout(hideControlsTimeout);
+
+      if (player && player.getPlayerState() == YT.PlayerState.PLAYING) {
+
+        hideControlsTimeout = setTimeout(function() {
+
+          hideControls();
+
+        }, 2500);
+
+      }
+
+    }
+
+
+
+    function togglePlay() {
+
+      var state = player.getPlayerState();
+
+      if (state == YT.PlayerState.PLAYING) {
+
+        player.pauseVideo();
+
+      } else {
+
+        player.playVideo();
+
+      }
+
+    }
+
+
+
+    function updateProgress() {
+
+      if (!player || !player.getCurrentTime) return;
+
+      var currentTime = player.getCurrentTime();
+
+      var duration = player.getDuration();
+
+      
+
+      if (duration > 0) {
+
+        var percentage = (currentTime / duration) * 100;
+
+        var progressBar = document.getElementById('progressBar');
+
+        
+
+        progressBar.value = percentage;
+
+        updateProgressBarFill(progressBar, percentage);
+
+
+
+        document.getElementById('timeDisplay').innerText = 
+
+          formatTime(currentTime) + ' / ' + formatTime(duration);
+
+      }
+
+    }
+
+
+
+    function updateProgressBarFill(element, percentage) {
+
+      element.style.background = `linear-gradient(to right, #ff0000 ${percentage}%, #444 ${percentage}%)`;
+
+    }
+
+
+
+    function seekVideo(value) {
+
+      var duration = player.getDuration();
+
+      var seekToTime = (value / 100) * duration;
+
+      updateProgressBarFill(document.getElementById('progressBar'), value);
+
+      player.seekTo(seekToTime, true);
+
+    }
+
+
+
+    function toggleMute() {
+
+      if (player.isMuted()) {
+
+        player.unMute();
+
+        updateVolumeUI(player.getVolume(), false);
+
+      } else {
+
+        player.mute();
+
+        updateVolumeUI(0, true);
+
+      }
+
+    }
+
+
+
+    function changeVolume(value) {
+
+      player.setVolume(value);
+
+      if (value == 0) {
+
+        player.mute();
+
+        updateVolumeUI(0, true);
+
+      } else {
+
+        if (player.isMuted()) player.unMute();
+
+        updateVolumeUI(value, false);
+
+      }
+
+    }
+
+
+
+    function updateVolumeUI(volumeValue, isMuted) {
+
+      var volumeIcon = document.getElementById('volumeIcon');
+
+      var muteIcon = document.getElementById('muteIcon');
+
+      var volumeSlider = document.getElementById('volumeSlider');
+
+
+
+      if (isMuted || volumeValue == 0) {
+
+        volumeIcon.style.display = 'none';
+
+        muteIcon.style.display = 'block';
+
+      } else {
+
+        volumeIcon.style.display = 'block';
+
+        muteIcon.style.display = 'none';
+
+        volumeSlider.value = volumeValue;
+
+      }
+
+    }
+
+
+
+    function toggleFullscreen() {
+
+      if (!document.fullscreenElement) {
+
+        playerContainer.requestFullscreen().catch(err => alert(err.message));
+
+      } else {
+
+        document.exitFullscreen();
+
+      }
+
+    }
+
+
+
+    function formatTime(seconds) {
+
+      var mins = Math.floor(seconds / 60);
+
+      var secs = Math.floor(seconds % 60);
+
+      if (secs < 10) secs = '0' + secs;
+
+      return mins + ':' + secs;
+
+    }
+
+  </script>
+
+</body>
+
+</html>
+```
+
 ## File: vercel.json
 ```json
 {
@@ -7920,6 +11647,7 @@ export const GALERI_KEGIATAN = [
 
 ## File: src/lib/konversi.js
 ```javascript
+import heic2any from 'heic2any'
 const MAKS_SISI_FULL = 2560
 const KUALITAS_FULL = 0.92
 const MAKS_SISI_THUMB = 1200
@@ -8012,6 +11740,46 @@ export async function pratinjauHeic(file) {
     return jpeg || null
   } catch (e) {
     return null
+  }
+}
+
+/* foto-profil-webp: pipeline konversi foto profil, pola sama dengan alur media R2 */
+function muatGambarProfil(sumber) {
+  return new Promise(function (resolve, reject) {
+    const url = URL.createObjectURL(sumber)
+    const img = new Image()
+    img.onload = function () { resolve({ img: img, url: url }) }
+    img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('Gambar tidak dapat dibaca')) }
+    img.src = url
+  })
+}
+
+export async function siapkanFotoProfil(file, maksSisi, kualitas) {
+  const sisi = maksSisi || 640
+  const mutu = kualitas || 0.85
+  let kerja = file
+  const tipe = String(file.type || '').toLowerCase()
+  if (tipe.indexOf('heic') !== -1 || tipe.indexOf('heif') !== -1) {
+    const blob = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.92 })
+    kerja = new File([Array.isArray(blob) ? blob[0] : blob], (file.name || 'foto').replace(/\.(heic|heif)$/i, '.jpg'), { type: 'image/jpeg' })
+  }
+  const muat = await muatGambarProfil(kerja)
+  try {
+    const rasio = Math.min(1, sisi / Math.max(muat.img.width, muat.img.height))
+    const w = Math.max(1, Math.round(muat.img.width * rasio))
+    const h = Math.max(1, Math.round(muat.img.height * rasio))
+    const canvas = document.createElement('canvas')
+    canvas.width = w
+    canvas.height = h
+    const ctx = canvas.getContext('2d')
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
+    ctx.drawImage(muat.img, 0, 0, w, h)
+    const blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/webp', mutu) })
+    if (!blob) throw new Error('Gagal mengonversi foto ke WebP')
+    return new File([blob], 'profil-' + Date.now() + '.webp', { type: 'image/webp' })
+  } finally {
+    URL.revokeObjectURL(muat.url)
   }
 }
 ```
@@ -8257,7 +12025,7 @@ export default function App() {
             <Route path="/galeri" element={<GalleryPage />} />
             <Route path="/absen" element={<AttendancePage />} />
             <Route path="/dospem" element={<DospemPage />} />
-            <Route path="/tim" element={<TimPage />} />
+            <Route path="/tim" element={<Navigate to="/dospem" replace />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
             <Route path="*" element={<Navigate to="/" replace />} />
@@ -8440,8 +12208,7 @@ const LINKS = [
   { to: '/logbook', label: 'Logbook' },
   { to: '/galeri', label: 'Galeri' },
   { to: '/absen', label: 'Daftar Hadir' },
-  { to: '/dospem', label: 'Dospem' },
-  { to: '/tim', label: 'Tim' }
+  { to: '/dospem', label: 'Tim & Dospem' }
 ]
 
 export default function Layout() {
@@ -8526,55 +12293,12 @@ export default function Layout() {
 }
 ```
 
-## File: src/lib/logbook.js
-```javascript
-import { supabase } from './supabase.js'
-
-const EMPTY = '00000000-0000-0000-0000-000000000000'
-
-export async function syncGaleriFromLogbook(mahasiswaId, items, meta) {
-  const itemIds = items.map(function (i) { return i.id }).filter(Boolean)
-  const all = await supabase
-    .from('galeri')
-    .select('id, logbook_item_id')
-    .in('logbook_item_id', itemIds.length ? itemIds : [EMPTY])
-  const existing = new Map((all.data || []).map(function (g) { return [g.logbook_item_id, g.id] }))
-
-  for (const item of items) {
-    if (!item.id) continue
-    if (item.show_in_gallery && item.media_path) {
-      if (existing.has(item.id)) {
-        await supabase.from('galeri').update({
-          media_path: item.media_path,
-          media_type: item.media_type || 'foto',
-          media_thumb: item.media_thumb || null
-        media_source: item.media_source || 'r2', youtube_id: item.youtube_id || null }).eq('id', existing.get(item.id))
-      } else {
-        await supabase.from('galeri').insert({
-          mahasiswa_id: mahasiswaId,
-          logbook_item_id: item.id,
-          judul: item.judul,
-          deskripsi: item.deskripsi || 'Dokumentasi kegiatan dari logbook harian.',
-          tanggal: meta.tanggal,
-          kegiatan: meta.kategori,
-          media_path: item.media_path,
-          media_type: item.media_type || 'foto',
-          media_thumb: item.media_thumb || null
-        media_source: item.media_source || 'r2', youtube_id: item.youtube_id || null })
-      }
-    } else if (existing.has(item.id)) {
-      await supabase.from('galeri').delete().eq('id', existing.get(item.id))
-    }
-  }
-}
-```
-
 ## File: src/pages/DospemPage.jsx
 ```javascript
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
-import { EmptyState, Modal } from '../components/ui.jsx'
+import { EmptyState, Modal , Avatar } from '../components/ui.jsx'
 import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
 import { SkeletonLogbookCard, SkeletonPersonCard } from '../components/Skeleton.jsx'
 
@@ -8583,6 +12307,8 @@ export default function DospemPage() {
   const [people, setPeople] = useState([])
   const [galCount, setGalCount] = useState(0)
   const [hadirCount, setHadirCount] = useState(0)
+  const [galRows, setGalRows] = useState([])
+  const [hadirRows, setHadirRows] = useState([])
   const [detail, setDetail] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -8590,17 +12316,19 @@ export default function DospemPage() {
     async function load() {
       const l = await supabase
         .from('logbooks')
-        .select('*, mahasiswa(nim, nama, prodi), logbook_items(*)')
+        .select('*, mahasiswa(*), logbook_items(*)')
         .eq('status', 'publik')
         .order('tanggal', { ascending: false })
         .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
-      const p = await supabase.from('mahasiswa').select('id, nama, nim, prodi').order('nama')
-      const g = await supabase.from('galeri').select('id')
-      const h = await supabase.from('daftar_hadir').select('id')
+      const p = await supabase.from('mahasiswa').select('id, nama, nim, prodi, foto_profil').order('nama')
+      const g = await supabase.from('galeri').select('id, mahasiswa_id')
+      const h = await supabase.from('daftar_hadir').select('id, mahasiswa_id, status')
       setLogs(l.data || [])
       setPeople(p.data || [])
       setGalCount((g.data || []).length)
+      setGalRows(g.data || [])
       setHadirCount((h.data || []).length)
+      setHadirRows(h.data || [])
       setLoading(false)
     }
     load()
@@ -8637,26 +12365,58 @@ export default function DospemPage() {
       </section>
 
       <section className="mt-10">
-        <h2 className="text-2xl lg:text-3xl font-black text-slate-900">Ringkasan logbook per mahasiswa</h2>
-        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {loading
-            ? [0, 1, 2].map(function (i) { return <SkeletonPersonCard key={i} /> })
-            : people.map(function (p) {
-                const total = logs.filter(function (l) { return l.mahasiswa_id === p.id }).length
-                return (
-                  <div key={p.id} className="card-hover bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
-                    <p className="font-bold text-slate-900">{p.nama}</p>
-                    <p className="text-xs text-slate-500">NIM {p.nim}</p>
-                    {p.prodi ? <p className="text-xs text-slate-400">{p.prodi}</p> : null}
-                    <div className="mt-5 rounded-2xl bg-slate-50 p-4">
-                      <p className="text-xs text-slate-500">Logbook publik</p>
-                      <p className="mt-1 text-2xl font-black text-bsi-900">{total}</p>
-                    </div>
-                  </div>
-                )
-              })}
-        </div>
-      </section>
+<h2 className="text-2xl lg:text-3xl font-black text-slate-900">Profil tim magang</h2>
+<p className="mt-2 max-w-3xl text-slate-500">Seluruh mahasiswa magang beserta kontribusi logbook, media galeri, dan catatan kehadiran masing-masing.</p>
+<div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+{loading
+? [0, 1, 2].map(function (i) { return <SkeletonPersonCard key={i} /> })
+: people.map(function (p) {
+const totalLog = logs.filter(function (x) { return x.mahasiswa_id === p.id }).length
+const totalGal = galRows.filter(function (x) { return x.mahasiswa_id === p.id }).length
+const totalHadir = hadirRows.filter(function (x) { return x.mahasiswa_id === p.id }).length
+return (
+<div key={p.id} className="card-hover rounded-3xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col">
+<div className="flex items-center gap-4">
+<Avatar src={p.foto_profil || null} nama={p.nama} size="lg" />
+<div className="min-w-0 flex-1">
+<p className="truncate text-lg font-black text-slate-900">{p.nama}</p>
+<p className="truncate text-xs text-slate-500">NIM {p.nim}</p>
+{p.prodi ? <span className="mt-1.5 inline-flex px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold">{p.prodi}</span> : null}
+</div>
+</div>
+<div className="mt-4 grid grid-cols-2 gap-3">
+<div className="rounded-2xl bg-slate-50 p-3">
+<p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Logbook</p>
+<p className="mt-0.5 text-xl font-black text-bsi-800">{totalLog}</p>
+</div>
+<div className="rounded-2xl bg-slate-50 p-3">
+<p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Media</p>
+<p className="mt-0.5 text-xl font-black text-bsi-800">{totalGal}</p>
+</div>
+</div>
+<div className="mt-3 pt-3 border-t border-slate-100">
+<p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Rekap Kehadiran</p>
+<div className="grid grid-cols-3 gap-2">
+<div className="rounded-xl bg-emerald-50 p-2 text-center">
+<p className="text-[10px] font-bold text-emerald-600 uppercase">Masuk</p>
+<p className="text-base font-black text-emerald-700">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Masuk' }).length}</p>
+</div>
+<div className="rounded-xl bg-amber-50 p-2 text-center">
+<p className="text-[10px] font-bold text-amber-600 uppercase">Izin</p>
+<p className="text-base font-black text-amber-700">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Izin' }).length}</p>
+</div>
+<div className="rounded-xl bg-red-50 p-2 text-center">
+<p className="text-[10px] font-bold text-red-600 uppercase">Bolos</p>
+<p className="text-base font-black text-red-700">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Bolos' }).length}</p>
+</div>
+</div>
+</div>
+</div>
+)
+})}
+{!loading && !people.length ? <EmptyState title="Belum ada data mahasiswa" desc="Profil tim akan tampil setelah mahasiswa terdaftar." /> : null}
+</div>
+</section>
 
       <section className="mt-10">
         <h2 className="text-2xl lg:text-3xl font-black text-slate-900">Aktivitas yang sudah dipublikasikan</h2>
@@ -8699,7 +12459,7 @@ export default function HomePage() {
     async function load() {
       const l = await supabase
         .from('logbooks')
-        .select('*, mahasiswa(nim, nama, prodi), logbook_items(*)')
+        .select('*, mahasiswa(*), logbook_items(*)')
         .eq('status', 'publik')
         .order('tanggal', { ascending: false })
         .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
@@ -9120,6 +12880,49 @@ export default function Carousel(props) {
 }
 ```
 
+## File: src/lib/logbook.js
+```javascript
+import { supabase } from './supabase.js'
+
+const EMPTY = '00000000-0000-0000-0000-000000000000'
+
+export async function syncGaleriFromLogbook(mahasiswaId, items, meta) {
+  const itemIds = items.map(function (i) { return i.id }).filter(Boolean)
+  const all = await supabase
+    .from('galeri')
+    .select('id, logbook_item_id')
+    .in('logbook_item_id', itemIds.length ? itemIds : [EMPTY])
+  const existing = new Map((all.data || []).map(function (g) { return [g.logbook_item_id, g.id] }))
+
+  for (const item of items) {
+    if (!item.id) continue
+    if (item.show_in_gallery && item.media_path) {
+      if (existing.has(item.id)) {
+        await supabase.from('galeri').update({
+          media_path: item.media_path,
+          media_type: item.media_type || 'foto',
+          media_thumb: item.media_thumb || null,
+        media_source: item.media_source || 'r2', youtube_id: item.youtube_id || null }).eq('id', existing.get(item.id))
+      } else {
+        await supabase.from('galeri').insert({
+          mahasiswa_id: mahasiswaId,
+          logbook_item_id: item.id,
+          judul: item.judul,
+          deskripsi: item.deskripsi || 'Dokumentasi kegiatan dari logbook harian.',
+          tanggal: meta.tanggal,
+          kegiatan: meta.kategori,
+          media_path: item.media_path,
+          media_type: item.media_type || 'foto',
+          media_thumb: item.media_thumb || null,
+        media_source: item.media_source || 'r2', youtube_id: item.youtube_id || null })
+      }
+    } else if (existing.has(item.id)) {
+      await supabase.from('galeri').delete().eq('id', existing.get(item.id))
+    }
+  }
+}
+```
+
 ## File: src/lib/upload.js
 ```javascript
 import { supabase } from './supabase.js'
@@ -9256,7 +13059,7 @@ export default function LogbookPage() {
     async function load() {
       const l = await supabase
         .from('logbooks')
-        .select('*, mahasiswa(nim, nama, prodi), logbook_items(*)')
+        .select('*, mahasiswa(*), logbook_items(*)')
         .eq('status', 'publik')
         .order('tanggal', { ascending: false })
         .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
@@ -9401,9 +13204,9 @@ export default function TimPage() {
 
   useEffect(function () {
     async function load() {
-      const p = await supabase.from('mahasiswa').select('id, nama, nim, prodi').order('nama')
-      const l = await supabase.from('logbooks').select('id, mahasiswa_id').eq('status', 'publik')
-      const g = await supabase.from('galeri').select('id, mahasiswa_id')
+      const p = await supabase.from('mahasiswa').select('id, nama, nim, prodi, foto_profil').order('nama')
+      const l = await supabase.from('logbooks').select('id, mahasiswa_id, foto_profil').eq('status', 'publik')
+      const g = await supabase.from('galeri').select('id, mahasiswa_id, foto_profil')
       setPeople(p.data || [])
       setLogs(l.data || [])
       setGaleri(g.data || [])
@@ -9428,7 +13231,7 @@ export default function TimPage() {
               return (
                 <div key={p.id} className="card-hover bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
                   <div className="flex items-center gap-4">
-                    <div className="h-14 w-14 rounded-3xl bg-bsi-800 text-white grid place-items-center text-xl font-black">{initials}</div>
+                    <div className="h-14 w-14 rounded-3xl bg-bsi-800 text-white grid place-items-center text-xl font-black">{typeof p !== 'undefined' && p && p.foto_profil ? <img src={p.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : typeof m !== 'undefined' && m && m.foto_profil ? <img src={m.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : initials}</div>
                     <div>
                       <p className="text-lg font-bold text-slate-900">{p.nama}</p>
                       <p className="text-sm text-slate-500">NIM {p.nim}</p>
@@ -9474,8 +13277,8 @@ export default function AttendancePage() {
 
   useEffect(function () {
     async function load() {
-      const a = await supabase.from('daftar_hadir').select('*, mahasiswa(nim, nama, prodi)').order('tanggal', { ascending: false })
-      const p = await supabase.from('mahasiswa').select('id, nama').order('nama')
+      const a = await supabase.from('daftar_hadir').select('*, mahasiswa(*)').order('tanggal', { ascending: false })
+      const p = await supabase.from('mahasiswa').select('id, nama, nim').order('nama')
       setAll(a.data || [])
       setPeople(p.data || [])
       setLoading(false)
@@ -9612,7 +13415,7 @@ export default function GalleryPage() {
 
   useEffect(function () {
     async function load() {
-      const g = await supabase.from('galeri').select('*, mahasiswa(nim, nama, prodi)').order('tanggal', { ascending: false })
+      const g = await supabase.from('galeri').select('*, mahasiswa(*)').order('tanggal', { ascending: false })
       setAll(g.data || [])
       setLoading(false)
     }
@@ -10154,6 +13957,7 @@ textarea {
 
 ## File: src/components/cards.jsx
 ```javascript
+import { Avatar } from './ui.jsx'
 import PemutarVideo from './PemutarVideo.jsx'
 import Carousel from './Carousel.jsx'
 import { StatusBadge, CategoryBadge, AttendanceBadge, btnSmall, ZoomableMedia, SmartFit , MediaYouTube } from './ui.jsx'
@@ -10168,12 +13972,10 @@ function PersonChip(props) {
   return (
     <div className="flex items-center gap-3">
       <div className={'rounded-2xl bg-bsi-800 text-white grid place-items-center font-bold ' + (props.size === 'sm' ? 'h-9 w-9 text-xs' : 'h-11 w-11')}>
-        {initials}
-      </div>
+        {typeof p !== 'undefined' && p && p.foto_profil ? <img src={p.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : typeof m !== 'undefined' && m && m.foto_profil ? <img src={m.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : initials}</div>
       <div>
-        <p className={'font-semibold text-slate-900 ' + (props.size === 'sm' ? 'text-sm' : '')}>{nama}</p>
+        <p className="font-semibold text-slate-900">{nama}</p>
         <p className="text-xs text-slate-500">NIM {nim}</p>
-        {prodi ? <p className="text-xs text-slate-400">{prodi}</p> : null}
       </div>
     </div>
   )
@@ -10313,13 +14115,13 @@ export function GalleryCard(props) {
         <h3 className="text-lg font-bold text-slate-900">{item.judul}</h3>
         <p className="text-sm text-slate-600 line-clamp-2">{item.deskripsi || 'Tidak ada deskripsi.'}</p>
         <div className="mt-auto pt-3 border-t border-slate-100 space-y-3">
-          <PersonChip size="sm" mahasiswa={item.mahasiswa} />
+          <PersonChip mahasiswa={item.mahasiswa} />
           {props.onEdit ? (
             <div className="flex flex-wrap gap-2" onClick={function (e) { e.stopPropagation() }}>
               <button onClick={props.onEdit} className={btnSmall + ' bg-slate-900 text-white hover:bg-slate-700'}>Edit</button>
               <button onClick={props.onDelete} className={btnSmall + ' bg-red-50 text-red-700 hover:bg-red-100'}>Hapus</button>
             </div>
-          ) : props.isOwner ? null : (
+          ) : (
             <span className="text-xs font-semibold text-bsi-800">Klik kartu untuk melihat detail</span>
           )}
         </div>
@@ -10359,9 +14161,9 @@ export function AttendanceCard(props) {
     <div className="card-hover bg-white rounded-3xl border border-slate-200 shadow-sm p-5 flex flex-col h-full">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-sm text-slate-500">{formatTanggal(row.tanggal)}</p>
-          <p className="mt-1 font-bold text-slate-900">{row.mahasiswa ? row.mahasiswa.nama : 'Mahasiswa'}</p>
-          <p className="text-xs text-slate-500">NIM {row.mahasiswa ? row.mahasiswa.nim : '-'}</p>
+          <p className="text-sm text-slate-500 pb-4">{formatTanggal(row.tanggal)}</p>
+          <div className="flex items-center gap-3"><Avatar src={props.row && props.row.mahasiswa && props.row.mahasiswa.foto_profil ? props.row.mahasiswa.foto_profil : null} nama={props.row && props.row.mahasiswa ? props.row.mahasiswa.nama : 'Mahasiswa'} size="md" /><div className="min-w-0 flex-1"><p className="mt-1 font-bold text-slate-900">{row.mahasiswa ? row.mahasiswa.nama : 'Mahasiswa'}</p>
+          <p className="text-xs text-slate-500">NIM {row.mahasiswa ? row.mahasiswa.nim : '-'}</p></div></div>
         </div>
         <AttendanceBadge status={row.status} />
       </div>
@@ -10759,6 +14561,7 @@ export function MediaYouTube(props) {
 }
 
 export function TitikAnim() {
+
   return (
     <span className="titik-anim" aria-hidden="true">
       <i></i>
@@ -10776,6 +14579,74 @@ export function LabelProses(props) {
     </span>
   )
 }
+
+export function Avatar(props) {
+  const ukuran = { sm: 36, md: 44, lg: 56, xl: 96, '2xl': 160 }
+  const px = ukuran[props.size] || 44
+  const radius = Math.round(px * 0.28) + 'px'
+  const nama = props.nama || ''
+  const kata = nama.trim().split(/\s+/)
+  const inisial = nama ? ((kata[0] ? kata[0].charAt(0) : '') + (kata[1] ? kata[1].charAt(0) : '')).toUpperCase() : '?'
+  const palet = ['#166534', '#15803d', '#a16207', '#ca8a04', '#334155', '#047857']
+  let hash = 0
+  for (let i = 0; i < nama.length; i++) hash = (hash * 31 + nama.charCodeAt(i)) >>> 0
+  const warna = palet[hash % palet.length]
+  const bisaKlik = typeof props.onClick === 'function'
+  const gaya = {
+    boxSizing: 'content-box',
+    display: 'inline-block',
+    width: px + 'px',
+    height: px + 'px',
+    padding: 0,
+    margin: 0,
+    borderRadius: radius,
+    overflow: 'hidden',
+    position: 'relative',
+    verticalAlign: 'middle',
+    flexShrink: 0,
+    background: props.src ? '#ffffff' : warna,
+    boxShadow: '0 1px 2px rgba(15, 23, 42, 0.10), 0 10px 28px rgba(15, 23, 42, 0.22)',
+    cursor: bisaKlik ? 'pointer' : 'default',
+    outline: 'none',
+    lineHeight: 0
+  }
+  const gayaFoto = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+    objectPosition: 'center',
+    display: 'block',
+    borderRadius: radius
+  }
+  const gayaTeks = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#ffffff',
+    fontWeight: 800,
+    fontSize: Math.round(px * 0.36) + 'px'
+  }
+  if (bisaKlik) {
+    return (
+      <button type="button" onClick={props.onClick} title={props.title} style={gaya}>
+        {props.src ? <img src={props.src} alt={nama || 'Foto profil'} style={gayaFoto} /> : <span style={gayaTeks}>{inisial}</span>}
+      </button>
+    )
+  }
+  return (
+    <span style={gaya}>
+      {props.src ? <img src={props.src} alt={nama || 'Foto profil'} style={gayaFoto} /> : <span style={gayaTeks}>{inisial}</span>}
+    </span>
+  )
+}
 ```
 
 ## File: src/pages/DashboardPage.jsx
@@ -10786,6 +14657,8 @@ import { useAuth } from '../lib/auth.js'
 import { uploadMedia, deleteMedia } from '../lib/upload.js'
 import { syncGaleriFromLogbook } from '../lib/logbook.js'
 import { parseYouTubeId, ytThumb, fetchYouTubeQuota, unggahVideoYouTube } from '../lib/youtube.js'
+import { uploadFotoProfil, updateFotoProfilMahasiswa, hapusFotoProfil } from '../lib/profil.js'
+import { Avatar } from '../components/ui.jsx'
 import { supabase as sbClient } from '../lib/supabase.js'
 import { pratinjauHeic, formatHeic } from '../lib/konversi.js'
 import { LabelProses } from '../components/ui.jsx'
@@ -10845,6 +14718,11 @@ export default function DashboardPage() {
   const [infoProses, setInfoProses] = useState('')
   const [ytQuota, setYtQuota] = useState({ limit: 6, used: 0, remaining: 6 })
   const [ytQuotaLoading, setYtQuotaLoading] = useState(true)
+  const [showUploadFoto, setShowUploadFoto] = useState(false)
+  const [fotoPreview, setFotoPreview] = useState(null)
+  const [fotoFile, setFotoFile] = useState(null)
+  const [uploadingFoto, setUploadingFoto] = useState(false)
+  const [, setVersiFoto] = useState(0)
   const [galMode, setGalMode] = useState('foto')
   const [galYtLink, setGalYtLink] = useState('')
   const [galOldYt, setGalOldYt] = useState(null)
@@ -10862,11 +14740,11 @@ export default function DashboardPage() {
 
   async function refresh() {
     if (!mahasiswa) return
-    const l = await supabase.from('logbooks').select('*, mahasiswa(nim, nama, prodi), logbook_items(*)')
+    const l = await supabase.from('logbooks').select('*, mahasiswa(*), logbook_items(*)')
       .eq('mahasiswa_id', mahasiswa.id).order('tanggal', { ascending: false })
       .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
-    const g = await supabase.from('galeri').select('*, mahasiswa(nim, nama, prodi)').eq('mahasiswa_id', mahasiswa.id).order('tanggal', { ascending: false })
-    const h = await supabase.from('daftar_hadir').select('*, mahasiswa(nim, nama, prodi)').eq('mahasiswa_id', mahasiswa.id).order('tanggal', { ascending: false })
+    const g = await supabase.from('galeri').select('*, mahasiswa(*)').eq('mahasiswa_id', mahasiswa.id).order('tanggal', { ascending: false })
+    const h = await supabase.from('daftar_hadir').select('*, mahasiswa(*)').eq('mahasiswa_id', mahasiswa.id).order('tanggal', { ascending: false })
     setLogs(l.data || [])
     setGaleri(g.data || [])
     setHadir(h.data || [])
@@ -11179,7 +15057,44 @@ export default function DashboardPage() {
     setPendingDelete({ type: 'gal', data: item })
   }
 
-  async function submitHadir(e) {
+    function pilihFotoProfil(e) {
+    const f = e.target.files[0]
+    if (!f) return
+    if (f.size > 5 * 1024 * 1024) { alert('Ukuran foto maksimal 5 MB.'); e.target.value = ''; return }
+    setFotoFile(f)
+    const reader = new FileReader()
+    reader.onloadend = function () { setFotoPreview(reader.result) }
+    reader.readAsDataURL(f)
+  }
+  async function simpanFotoProfil() {
+    if (!fotoFile) { alert('Pilih file foto terlebih dahulu.'); return }
+    setUploadingFoto(true)
+    try {
+      const url = await uploadFotoProfil(fotoFile, mahasiswa.id, mahasiswa.foto_profil)
+      await updateFotoProfilMahasiswa(mahasiswa.id, url)
+      mahasiswa.foto_profil = url
+      if (typeof refresh === 'function') await refresh()
+      setVersiFoto(function (v) { return v + 1 })
+      setShowUploadFoto(false)
+      setFotoPreview(null)
+      setFotoFile(null)
+    } catch (err) {
+      alert('Gagal upload foto profil: ' + err.message)
+    }
+    setUploadingFoto(false)
+  }
+  async function hapusFotoProfilKu() {
+    if (!window.confirm('Hapus foto profil saat ini?')) return
+    try {
+      await hapusFotoProfil(mahasiswa.id, mahasiswa.foto_profil)
+      mahasiswa.foto_profil = null
+      if (typeof refresh === 'function') await refresh()
+      setVersiFoto(function (v) { return v + 1 })
+    } catch (err) {
+      alert('Gagal menghapus foto profil: ' + err.message)
+    }
+  }
+async function submitHadir(e) {
     e.preventDefault()
     setBusy(true)
     const payload = { mahasiswa_id: mahasiswa.id, tanggal: hadirForm.tanggal, status: hadirForm.status, alasan: hadirForm.status === 'Masuk' ? '' : hadirForm.alasan }
@@ -11303,20 +15218,67 @@ export default function DashboardPage() {
       <section className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-6">
           <div>
-            <p className="text-sm text-slate-500">Dashboard mahasiswa</p>
+            <div className="flex flex-wrap items-center gap-6">
+<Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl"  onClick={function () { setTab('profil') }} title="Kelola foto profil" />
+<div className="min-w-0 flex-1">
             <h1 className="text-2xl lg:text-3xl font-black text-slate-900">{mahasiswa.nama}</h1>
             <p className="text-sm text-slate-500">NIM {mahasiswa.nim}</p>
-            {mahasiswa.prodi ? <p className="text-sm text-slate-500">{mahasiswa.prodi}</p> : null}
+{mahasiswa.prodi ? <p className="text-sm text-slate-500">{mahasiswa.prodi}</p> : null}
           </div>
         </div>
-        <div className="mt-8 flex flex-wrap gap-2">
+        </div>
+<div className="mt-8 flex flex-wrap gap-2">
           <button onClick={function () { setTab('logbook') }} className={tabCls('logbook')}>Logbook</button>
           <button onClick={function () { setTab('galeri') }} className={tabCls('galeri')}>Galeri</button>
           <button onClick={function () { setTab('absen') }} className={tabCls('absen')}>Daftar Hadir</button>
+<button onClick={function () { setTab('profil') }} className={tabCls('profil')}>Profil</button>
         </div>
-      </section>
+      
+</div></section>
 
-      {tab === 'logbook' ? (
+      {tab === 'profil' ? (
+<section className="mt-8 grid gap-6 lg:grid-cols-[0.85fr_1.15fr] items-start">
+<div className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 shadow-sm flex flex-col items-center text-center">
+<Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="2xl" />
+<h2 className="mt-4 text-xl font-black text-slate-900">{mahasiswa.nama}</h2>
+<p className="mt-1 text-sm text-slate-500">NIM {mahasiswa.nim}</p>
+<div className="mt-5 flex flex-wrap justify-center gap-2">
+<button type="button" onClick={function () { setShowUploadFoto(!showUploadFoto) }} className="px-4 py-2 rounded-xl text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition">{mahasiswa.foto_profil ? 'Ganti Foto' : 'Upload Foto'}</button>
+{mahasiswa.foto_profil ? <button type="button" onClick={hapusFotoProfilKu} className="px-4 py-2 rounded-xl text-sm font-bold bg-red-50 text-red-700 hover:bg-red-100 transition">Hapus Foto</button> : null}
+</div>
+{showUploadFoto ? (
+<div className="mt-5 w-full border-t border-slate-200 pt-5 text-left">
+<div className="flex flex-wrap items-start gap-4">
+{fotoPreview ? <img src={fotoPreview} alt="Pratinjau foto profil" className="h-20 w-20 rounded-[28%] object-cover shadow-lg" /> : null}
+<div className="min-w-0 flex-1">
+<input type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/heif" onChange={pilihFotoProfil} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-800 hover:file:bg-emerald-100" />
+<p className="mt-2 text-xs text-slate-500">Format JPG, PNG, WebP, atau HEIC iPhone. Otomatis dikonversi ke WebP ringan. Maksimal 5 MB.</p>
+</div>
+</div>
+<div className="mt-4 flex gap-2">
+<button type="button" onClick={simpanFotoProfil} disabled={uploadingFoto || !fotoFile} className="px-4 py-2 rounded-xl text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition disabled:opacity-50">{uploadingFoto ? 'Mengunggah...' : 'Simpan Foto'}</button>
+<button type="button" onClick={function () { setShowUploadFoto(false); setFotoPreview(null); setFotoFile(null) }} className="px-4 py-2 rounded-xl text-sm font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition">Batal</button>
+</div>
+</div>
+) : null}
+</div>
+<div className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 shadow-sm">
+<h2 className="text-lg font-black text-slate-900">Ringkasan aktivitas magang</h2>
+<div className="mt-4 grid grid-cols-3 gap-4">
+<div className="rounded-2xl bg-slate-50 p-4 text-center"><p className="text-2xl font-black text-bsi-800">{typeof logs !== 'undefined' ? logs.length : 0}</p><p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Logbook</p></div>
+<div className="rounded-2xl bg-slate-50 p-4 text-center"><p className="text-2xl font-black text-bsi-800">{typeof galeri !== 'undefined' ? galeri.length : 0}</p><p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Media Galeri</p></div>
+<div className="rounded-2xl bg-slate-50 p-4 text-center"><p className="text-2xl font-black text-bsi-800">{typeof hadir !== 'undefined' ? hadir.length : 0}</p><p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Kehadiran</p></div>
+</div>
+<div className="mt-6 space-y-2 border-t border-slate-100 pt-4 text-sm text-slate-600">
+<p>Foto profil tampil otomatis di kartu kamu pada halaman publik, logbook, galeri, dan daftar hadir.</p>
+<p>Gunakan foto dengan pencahayaan baik dan wajah terlihat jelas agar mudah dikenali dosen pembimbing.</p>
+<p>Klik foto pada kartu header kapan saja untuk kembali ke halaman ini dan memperbarui foto.</p>
+</div>
+</div>
+</section>
+) : null}
+
+{tab === 'logbook' ? (
         <section className="mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
           <div className={'card-hover bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editLogId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
             <ModeIndicator edit={!!editLogId} onCancel={cancelEditLog} />

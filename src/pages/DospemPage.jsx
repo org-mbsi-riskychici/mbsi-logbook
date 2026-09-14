@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
-import { EmptyState, Modal } from '../components/ui.jsx'
+import { EmptyState, Modal , Avatar } from '../components/ui.jsx'
 import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
 import { SkeletonLogbookCard, SkeletonPersonCard } from '../components/Skeleton.jsx'
 
@@ -10,6 +10,8 @@ export default function DospemPage() {
   const [people, setPeople] = useState([])
   const [galCount, setGalCount] = useState(0)
   const [hadirCount, setHadirCount] = useState(0)
+  const [galRows, setGalRows] = useState([])
+  const [hadirRows, setHadirRows] = useState([])
   const [detail, setDetail] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -17,17 +19,19 @@ export default function DospemPage() {
     async function load() {
       const l = await supabase
         .from('logbooks')
-        .select('*, mahasiswa(nim, nama, prodi), logbook_items(*)')
+        .select('*, mahasiswa(*), logbook_items(*)')
         .eq('status', 'publik')
         .order('tanggal', { ascending: false })
         .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
-      const p = await supabase.from('mahasiswa').select('id, nama, nim, prodi').order('nama')
-      const g = await supabase.from('galeri').select('id')
-      const h = await supabase.from('daftar_hadir').select('id')
+      const p = await supabase.from('mahasiswa').select('id, nama, nim, prodi, foto_profil').order('nama')
+      const g = await supabase.from('galeri').select('id, mahasiswa_id')
+      const h = await supabase.from('daftar_hadir').select('id, mahasiswa_id, status')
       setLogs(l.data || [])
       setPeople(p.data || [])
       setGalCount((g.data || []).length)
+      setGalRows(g.data || [])
       setHadirCount((h.data || []).length)
+      setHadirRows(h.data || [])
       setLoading(false)
     }
     load()
@@ -64,26 +68,58 @@ export default function DospemPage() {
       </section>
 
       <section className="mt-10">
-        <h2 className="text-2xl lg:text-3xl font-black text-slate-900">Ringkasan logbook per mahasiswa</h2>
-        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {loading
-            ? [0, 1, 2].map(function (i) { return <SkeletonPersonCard key={i} /> })
-            : people.map(function (p) {
-                const total = logs.filter(function (l) { return l.mahasiswa_id === p.id }).length
-                return (
-                  <div key={p.id} className="card-hover bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
-                    <p className="font-bold text-slate-900">{p.nama}</p>
-                    <p className="text-xs text-slate-500">NIM {p.nim}</p>
-                    {p.prodi ? <p className="text-xs text-slate-400">{p.prodi}</p> : null}
-                    <div className="mt-5 rounded-2xl bg-slate-50 p-4">
-                      <p className="text-xs text-slate-500">Logbook publik</p>
-                      <p className="mt-1 text-2xl font-black text-bsi-900">{total}</p>
-                    </div>
-                  </div>
-                )
-              })}
-        </div>
-      </section>
+<h2 className="text-2xl lg:text-3xl font-black text-slate-900">Profil tim magang</h2>
+<p className="mt-2 max-w-3xl text-slate-500">Seluruh mahasiswa magang beserta kontribusi logbook, media galeri, dan catatan kehadiran masing-masing.</p>
+<div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+{loading
+? [0, 1, 2].map(function (i) { return <SkeletonPersonCard key={i} /> })
+: people.map(function (p) {
+const totalLog = logs.filter(function (x) { return x.mahasiswa_id === p.id }).length
+const totalGal = galRows.filter(function (x) { return x.mahasiswa_id === p.id }).length
+const totalHadir = hadirRows.filter(function (x) { return x.mahasiswa_id === p.id }).length
+return (
+<div key={p.id} className="card-hover rounded-3xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col">
+<div className="flex items-center gap-4">
+<Avatar src={p.foto_profil || null} nama={p.nama} size="lg" />
+<div className="min-w-0 flex-1">
+<p className="truncate text-lg font-black text-slate-900">{p.nama}</p>
+<p className="truncate text-xs text-slate-500">NIM {p.nim}</p>
+{p.prodi ? <span className="mt-1.5 inline-flex px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold">{p.prodi}</span> : null}
+</div>
+</div>
+<div className="mt-4 grid grid-cols-2 gap-3">
+<div className="rounded-2xl bg-slate-50 p-3">
+<p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Logbook</p>
+<p className="mt-0.5 text-xl font-black text-bsi-800">{totalLog}</p>
+</div>
+<div className="rounded-2xl bg-slate-50 p-3">
+<p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Media</p>
+<p className="mt-0.5 text-xl font-black text-bsi-800">{totalGal}</p>
+</div>
+</div>
+<div className="mt-3 pt-3 border-t border-slate-100">
+<p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Rekap Kehadiran</p>
+<div className="grid grid-cols-3 gap-2">
+<div className="rounded-xl bg-emerald-50 p-2 text-center">
+<p className="text-[10px] font-bold text-emerald-600 uppercase">Masuk</p>
+<p className="text-base font-black text-emerald-700">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Masuk' }).length}</p>
+</div>
+<div className="rounded-xl bg-amber-50 p-2 text-center">
+<p className="text-[10px] font-bold text-amber-600 uppercase">Izin</p>
+<p className="text-base font-black text-amber-700">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Izin' }).length}</p>
+</div>
+<div className="rounded-xl bg-red-50 p-2 text-center">
+<p className="text-[10px] font-bold text-red-600 uppercase">Bolos</p>
+<p className="text-base font-black text-red-700">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Bolos' }).length}</p>
+</div>
+</div>
+</div>
+</div>
+)
+})}
+{!loading && !people.length ? <EmptyState title="Belum ada data mahasiswa" desc="Profil tim akan tampil setelah mahasiswa terdaftar." /> : null}
+</div>
+</section>
 
       <section className="mt-10">
         <h2 className="text-2xl lg:text-3xl font-black text-slate-900">Aktivitas yang sudah dipublikasikan</h2>

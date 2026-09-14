@@ -25,7 +25,7 @@ export default function LogbookPage() {
     async function load() {
       const l = await supabase
         .from('logbooks')
-        .select('*, mahasiswa(nim, nama, prodi), logbook_items(*)')
+        .select('*, mahasiswa(*), logbook_items(*)')
         .eq('status', 'publik')
         .order('tanggal', { ascending: false })
         .order('urutan', { ascending: true, referencedTable: 'logbook_items' })

@@ -10,9 +10,9 @@ export default function TimPage() {
 
   useEffect(function () {
     async function load() {
-      const p = await supabase.from('mahasiswa').select('id, nama, nim, prodi').order('nama')
-      const l = await supabase.from('logbooks').select('id, mahasiswa_id').eq('status', 'publik')
-      const g = await supabase.from('galeri').select('id, mahasiswa_id')
+      const p = await supabase.from('mahasiswa').select('id, nama, nim, prodi, foto_profil').order('nama')
+      const l = await supabase.from('logbooks').select('id, mahasiswa_id, foto_profil').eq('status', 'publik')
+      const g = await supabase.from('galeri').select('id, mahasiswa_id, foto_profil')
       setPeople(p.data || [])
       setLogs(l.data || [])
       setGaleri(g.data || [])
@@ -37,7 +37,7 @@ export default function TimPage() {
               return (
                 <div key={p.id} className="card-hover bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
                   <div className="flex items-center gap-4">
-                    <div className="h-14 w-14 rounded-3xl bg-bsi-800 text-white grid place-items-center text-xl font-black">{initials}</div>
+                    <div className="h-14 w-14 rounded-3xl bg-bsi-800 text-white grid place-items-center text-xl font-black">{typeof p !== 'undefined' && p && p.foto_profil ? <img src={p.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : typeof m !== 'undefined' && m && m.foto_profil ? <img src={m.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : initials}</div>
                     <div>
                       <p className="text-lg font-bold text-slate-900">{p.nama}</p>
                       <p className="text-sm text-slate-500">NIM {p.nim}</p>

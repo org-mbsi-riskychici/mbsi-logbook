@@ -1,3 +1,4 @@
+import heic2any from 'heic2any'
 const MAKS_SISI_FULL = 2560
 const KUALITAS_FULL = 0.92
 const MAKS_SISI_THUMB = 1200
@@ -90,5 +91,45 @@ export async function pratinjauHeic(file) {
     return jpeg || null
   } catch (e) {
     return null
+  }
+}
+
+/* foto-profil-webp: pipeline konversi foto profil, pola sama dengan alur media R2 */
+function muatGambarProfil(sumber) {
+  return new Promise(function (resolve, reject) {
+    const url = URL.createObjectURL(sumber)
+    const img = new Image()
+    img.onload = function () { resolve({ img: img, url: url }) }
+    img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('Gambar tidak dapat dibaca')) }
+    img.src = url
+  })
+}
+
+export async function siapkanFotoProfil(file, maksSisi, kualitas) {
+  const sisi = maksSisi || 640
+  const mutu = kualitas || 0.85
+  let kerja = file
+  const tipe = String(file.type || '').toLowerCase()
+  if (tipe.indexOf('heic') !== -1 || tipe.indexOf('heif') !== -1) {
+    const blob = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.92 })
+    kerja = new File([Array.isArray(blob) ? blob[0] : blob], (file.name || 'foto').replace(/\.(heic|heif)$/i, '.jpg'), { type: 'image/jpeg' })
+  }
+  const muat = await muatGambarProfil(kerja)
+  try {
+    const rasio = Math.min(1, sisi / Math.max(muat.img.width, muat.img.height))
+    const w = Math.max(1, Math.round(muat.img.width * rasio))
+    const h = Math.max(1, Math.round(muat.img.height * rasio))
+    const canvas = document.createElement('canvas')
+    canvas.width = w
+    canvas.height = h
+    const ctx = canvas.getContext('2d')
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
+    ctx.drawImage(muat.img, 0, 0, w, h)
+    const blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/webp', mutu) })
+    if (!blob) throw new Error('Gagal mengonversi foto ke WebP')
+    return new File([blob], 'profil-' + Date.now() + '.webp', { type: 'image/webp' })
+  } finally {
+    URL.revokeObjectURL(muat.url)
   }
 }

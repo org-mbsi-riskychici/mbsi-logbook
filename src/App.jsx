@@ -29,7 +29,7 @@ export default function App() {
             <Route path="/galeri" element={<GalleryPage />} />
             <Route path="/absen" element={<AttendancePage />} />
             <Route path="/dospem" element={<DospemPage />} />
-            <Route path="/tim" element={<TimPage />} />
+            <Route path="/tim" element={<Navigate to="/dospem" replace />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
             <Route path="*" element={<Navigate to="/" replace />} />
