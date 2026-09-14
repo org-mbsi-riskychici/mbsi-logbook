@@ -795,7 +795,7 @@ async function submitHadir(e) {
               <TimeFilter filter={logFilter} set={setLogFilter} />
               <SortSelect value={sort} onChange={setSort} />
             </FilterBar>
-            <p className="text-sm text-slate-500">Menampilkan {filteredLogs.length} dari {logs.length} logbook{logTotalPages > 1 ? ' • Halaman ' + logPageAman + ' dari ' + logTotalPages : ''}</p>
+            <p className="text-sm text-slate-500">Total {filteredLogs.length} logbook{logTotalPages > 1 ? ' • Halaman ' + logPageAman + ' dari ' + logTotalPages : ''}</p>
             <div className="grid gap-5 md:grid-cols-2">
               {paginatedLogs.map(function (l) {
                 return <LogbookCard key={l.id} log={l} isOwner
@@ -907,7 +907,7 @@ async function submitHadir(e) {
               <TimeFilter filter={galFilter} set={setGalFilter} />
               <SortSelect value={sort} onChange={setSort} />
             </FilterBar>
-            <p className="text-sm text-slate-500">Menampilkan {filteredGaleri.length} dari {galeri.length} media{galTotalPages > 1 ? ' • Halaman ' + galPageAman + ' dari ' + galTotalPages : ''}</p>
+            <p className="text-sm text-slate-500">Total {filteredGaleri.length} media{galTotalPages > 1 ? ' • Halaman ' + galPageAman + ' dari ' + galTotalPages : ''}</p>
             <div className="grid gap-5 md:grid-cols-2">
               {paginatedGaleri.map(function (g) {
                 return <GalleryCard key={g.id} item={g} isOwner
@@ -968,7 +968,7 @@ async function submitHadir(e) {
               <TimeFilter filter={hadirFilter} set={setHadirFilter} />
               <SortSelect value={sort} onChange={setHadirFilterOpen && setSort ? setSort : setSort} />
             </FilterBar>
-            <p className="text-sm text-slate-500">Menampilkan {filteredHadir.length} dari {hadir.length} catatan{hadirTotalPages > 1 ? ' • Halaman ' + hadirPageAman + ' dari ' + hadirTotalPages : ''}</p>
+            <p className="text-sm text-slate-500">Total {filteredHadir.length} catatan{hadirTotalPages > 1 ? ' • Halaman ' + hadirPageAman + ' dari ' + hadirTotalPages : ''}</p>
             <div className="grid gap-5 md:grid-cols-2">
             {paginatedHadir.map(function (h) {
               return <AttendanceCard key={h.id} row={h} isOwner

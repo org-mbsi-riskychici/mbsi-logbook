@@ -100,11 +100,13 @@ apply-fix-dospem-syntax.cjs
 apply-fix-export-unggah.cjs
 apply-fix-ganti-foto.cjs
 apply-fix-nim-text.cjs
+apply-fix-pagination-galeri.cjs
 apply-fix-prodi-final.cjs
 apply-fix-setmahasiswa.cjs
 apply-fix-sisa-netral.cjs
 apply-fix-state-loading.cjs
 apply-fix-syntax-logbook.cjs
+apply-fix-teks-pagination.cjs
 apply-fix-tiga-masalah.cjs
 apply-fix-token-aman.cjs
 apply-fix-video-galeri.cjs
@@ -165,668 +167,7 @@ vite.config.js
 
 # Files
 
-## File: apply-fix-dospem-pusat.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-
-console.log('Mulai memperbaiki sisa pemasangan di DospemPage...')
-console.log('')
-
-const FILE_D = 'src/pages/DospemPage.jsx'
-if (!fs.existsSync(path.join(root, FILE_D))) {
-  console.log('[GAGAL] DospemPage.jsx tidak ditemukan')
-  process.exit(1)
-}
-let d = baca(FILE_D)
-let berubah = false
-
-/* ===== 1. Seimbangkan penutup kartu profil tim (tambah satu </div> pembungkus kolom) ===== */
-const TUTUP_BENAR = '</div>\n</div>\n</div>\n</div>\n)\n})}'
-const TUTUP_LAMA = '</div>\n</div>\n</div>\n)\n})}'
-if (d.includes(TUTUP_BENAR)) {
-  console.log('[SUDAH ADA] Penutup kartu profil tim sudah seimbang')
-} else if (d.includes(TUTUP_LAMA)) {
-  d = d.replace(TUTUP_LAMA, TUTUP_BENAR)
-  berubah = true
-  console.log('[BERHASIL] Penutup kartu profil tim diseimbangkan, error sintaks hilang')
-} else {
-  console.log('[TIDAK KETEMU] Pola penutup kartu profil tim')
-}
-
-/* ===== 2. Wadah grid logbook dospem menjadi grid-pusat ===== */
-const CONT_LAMA = '<div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">'
-const CONT_BARU = '<div className="grid-pusat mt-6">'
-if (d.includes(CONT_BARU)) {
-  console.log('[SUDAH ADA] Wadah grid logbook dospem sudah grid-pusat')
-} else if (d.includes(CONT_LAMA)) {
-  d = d.replace(CONT_LAMA, CONT_BARU)
-  berubah = true
-  console.log('[BERHASIL] Wadah grid logbook dospem menjadi grid-pusat')
-} else {
-  console.log('[TIDAK KETEMU] Wadah grid logbook dospem')
-}
-
-/* ===== 3. Skeleton logbook dospem dibungkus kolom ===== */
-const SKEL_LAMA = '? [0, 1, 2].map(function (i) { return <SkeletonLogbookCard key={i} /> })'
-const SKEL_BARU = '? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })'
-if (d.includes('kolom-kartu"><SkeletonLogbookCard')) {
-  console.log('[SUDAH ADA] Skeleton logbook dospem dibungkus kolom')
-} else if (d.includes(SKEL_LAMA)) {
-  d = d.replace(SKEL_LAMA, SKEL_BARU)
-  berubah = true
-  console.log('[BERHASIL] Skeleton logbook dospem dibungkus kolom')
-} else {
-  console.log('[TIDAK KETEMU] Skeleton logbook dospem')
-}
-
-/* ===== 4. Grid logbook dospem: 6 terbaru dibungkus kolom (regex tahan indentasi) ===== */
-const RE_MAP = /: logs\.map\(function \(l\) \{\s*return <LogbookCard key=\{l\.id\} log=\{l\} onDetail=\{function \(\) \{ setDetail\(l\) \}\} \/>\s*\}\)\}/
-if (d.includes('logs.slice(0, 6)')) {
-  console.log('[SUDAH ADA] Grid logbook dospem sudah 6 terbaru')
-} else if (RE_MAP.test(d)) {
-  d = d.replace(RE_MAP, `: logs.slice(0, 6).map(function (l) {
-                return (
-                  <div key={l.id} className="kolom-kartu">
-                    <LogbookCard log={l} onDetail={function () { setDetail(l) }} />
-                  </div>
-                )
-              })}`)
-  berubah = true
-  console.log('[BERHASIL] Grid logbook dospem menampilkan 6 terbaru rata tengah')
-} else {
-  console.log('[TIDAK KETEMU] Pola map logbook dospem')
-}
-
-/* ===== 5. EmptyState logbook dospem melebar penuh ===== */
-const EMPTY_LAMA = '{!loading && !logs.length ? <EmptyState title="Belum ada logbook publik" desc="Logbook akan tampil setelah mahasiswa mengatur status siap dilihat." /> : null}'
-const EMPTY_BARU = '{!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum ada logbook publik" desc="Logbook akan tampil setelah mahasiswa mengatur status siap dilihat." /></div> : null}'
-if (d.includes('<div className="w-full"><EmptyState title="Belum ada logbook publik"')) {
-  console.log('[SUDAH ADA] EmptyState logbook dospem melebar penuh')
-} else if (d.includes(EMPTY_LAMA)) {
-  d = d.replace(EMPTY_LAMA, EMPTY_BARU)
-  berubah = true
-  console.log('[BERHASIL] EmptyState logbook dospem melebar penuh')
-} else {
-  console.log('[TIDAK KETEMU] EmptyState logbook dospem')
-}
-
-/* ===== 6. Tombol lihat semua sebelum penutup section logbook dospem ===== */
-const RE_TOMBOL = /<\/div>\s*<\/section>\s*(<Modal open=\{!!detail\})/
-if (d.includes('Lihat semua logbook')) {
-  console.log('[SUDAH ADA] Tombol lihat semua di section logbook dospem')
-} else if (RE_TOMBOL.test(d)) {
-  d = d.replace(RE_TOMBOL, `</div>
-        <div className="mt-8 flex justify-center">
-          <Link to="/logbook" className="rounded-2xl bg-bsi-800 px-6 py-3 text-sm font-bold text-white hover:bg-bsi-900">Lihat semua logbook</Link>
-        </div>
-      </section>
-      $1`)
-  berubah = true
-  console.log('[BERHASIL] Tombol lihat semua dipasang di section logbook dospem')
-} else {
-  console.log('[TIDAK KETEMU] Anchor tombol lihat semua di dospem')
-}
-
-if (berubah) simpan(FILE_D, d)
-
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Perbaikan yang diterapkan:')
-console.log('1. Penutup kartu profil tim kembali seimbang sehingga error sintaks dari langkah sebelumnya hilang.')
-console.log('2. Grid logbook di Tim & Dospem memakai wadah grid-pusat dan hanya menampilkan 6 logbook terbaru.')
-console.log('3. Tombol hijau Lihat semua logbook tampil di tengah bawah section aktivitas, menuju halaman Logbook.')
-console.log('4. Kartu profil tim yang kurang dari satu baris penuh tetap berdiri di tengah karena pembungkus kolom.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Dev server tidak lagi menampilkan error sintaks setelah file tersimpan.')
-console.log('2. Buka Tim & Dospem: kartu profil tim tampil rata tengah dan tidak ada kartu yang rusak.')
-console.log('3. Section aktivitas menampilkan maksimal 6 kartu logbook terbaru dengan tombol lihat semua di bawahnya.')
-console.log('4. Klik tombol tersebut: browser berpindah ke halaman Logbook lengkap dengan pagination 12 data.')
-```
-
-## File: apply-fix-dospem-syntax.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-
-const FILE_D = 'src/pages/DospemPage.jsx'
-if (!fs.existsSync(path.join(root, FILE_D))) {
-  console.log('[GAGAL] DospemPage.jsx tidak ditemukan')
-  process.exit(1)
-}
-let d = fs.readFileSync(path.join(root, FILE_D), 'utf8').replace(/\r\n/g, '\n')
-let berubah = false
-
-console.log('Mulai memperbaiki struktur JSX yang tidak seimbang di DospemPage...')
-console.log('')
-
-/* ===== 1. Tulis ulang section Profil tim magang agar tag pembuka dan penutup seimbang ===== */
-const startSection = '<section className="mt-10">\n<h2 className="text-2xl lg:text-3xl font-black text-slate-900">Profil tim magang</h2>'
-const endSection = '</section>\n      <section className="mt-10">\n        <h2 className="text-2xl lg:text-3xl font-black text-slate-900">Aktivitas yang sudah dipublikasikan</h2>'
-
-const startIdx = d.indexOf(startSection)
-const endIdx = d.indexOf(endSection)
-
-if (startIdx !== -1 && endIdx !== -1) {
-  const newSection = `<section className="mt-10">
-<h2 className="text-2xl lg:text-3xl font-black text-slate-900">Profil tim magang</h2>
-<p className="mt-2 max-w-3xl text-slate-500">Seluruh mahasiswa magang beserta kontribusi logbook, media galeri, dan catatan kehadiran masing-masing.</p>
-<div className="grid-pusat-rapat mt-6">
-{loading
-? [0, 1, 2].map(function (i) { return <div key={i} className="kolom-kartu-rapat"><SkeletonPersonCard /></div> })
-: people.map(function (p) {
-const totalLog = logs.filter(function (x) { return x.mahasiswa_id === p.id }).length
-const totalGal = galRows.filter(function (x) { return x.mahasiswa_id === p.id }).length
-const totalHadir = hadirRows.filter(function (x) { return x.mahasiswa_id === p.id }).length
-return (
-<div key={p.id} className="kolom-kartu-rapat">
-<div className="card-hover rounded-3xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col h-full">
-<div className="flex items-center gap-4">
-<Avatar src={p.foto_profil || null} nama={p.nama} size="lg" />
-<div className="min-w-0 flex-1">
-<p className="truncate text-lg font-black text-slate-900">{p.nama}</p>
-<p className="truncate text-xs text-slate-500">NIM {p.nim}</p>
-{p.prodi ? <span className="mt-1.5 inline-flex px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold">{p.prodi}</span> : null}
-</div>
-</div>
-<div className="mt-4 grid grid-cols-2 gap-3">
-<div className="rounded-2xl bg-slate-50 p-3">
-<p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Logbook</p>
-<p className="mt-0.5 text-xl font-black text-bsi-800">{totalLog}</p>
-</div>
-<div className="rounded-2xl bg-slate-50 p-3">
-<p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Media</p>
-<p className="mt-0.5 text-xl font-black text-bsi-800">{totalGal}</p>
-</div>
-</div>
-<div className="mt-3 pt-3 border-t border-slate-100">
-<p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Rekap Kehadiran</p>
-<div className="grid grid-cols-3 gap-2">
-<div className="rounded-xl bg-emerald-50 p-2 text-center">
-<p className="text-[10px] font-bold text-emerald-600 uppercase">Masuk</p>
-<p className="text-base font-black text-emerald-700">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Masuk' }).length}</p>
-</div>
-<div className="rounded-xl bg-amber-50 p-2 text-center">
-<p className="text-[10px] font-bold text-amber-600 uppercase">Izin</p>
-<p className="text-base font-black text-amber-700">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Izin' }).length}</p>
-</div>
-<div className="rounded-xl bg-red-50 p-2 text-center">
-<p className="text-[10px] font-bold text-red-600 uppercase">Bolos</p>
-<p className="text-base font-black text-red-700">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Bolos' }).length}</p>
-</div>
-</div>
-</div>
-</div>
-</div>
-)
-})}
-{!loading && !people.length ? <div className="w-full"><EmptyState title="Belum ada data mahasiswa" desc="Profil tim akan tampil setelah mahasiswa terdaftar." /></div> : null}
-</div>
-</section>
-      `
-  d = d.substring(0, startIdx) + newSection + d.substring(endIdx)
-  berubah = true
-  console.log('[BERHASIL] Section Profil tim magang ditulis ulang dengan struktur JSX yang seimbang')
-} else {
-  console.log('[TIDAK KETEMU] Batas section Profil tim magang, mencoba fallback...')
-  const fallbackRegex = /(<div className="card-hover rounded-3xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col h-full">[\s\S]*?)<\/div>(\s*\)\s*\}\)\})/
-  if (fallbackRegex.test(d)) {
-    d = d.replace(fallbackRegex, '$1</div>\n </div>$2')
-    berubah = true
-    console.log('[BERHASIL] Penutup kolom-kartu-rapat ditambahkan (fallback)')
-  }
-}
-
-/* ===== 2. Pastikan section logbook dospem memiliki grid-pusat ===== */
-const regexLogbook = /<section className="mt-10">\s*<h2 className="text-2xl lg:text-3xl font-black text-slate-900">Aktivitas yang sudah dipublikasikan<\/h2>\s*<div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">/
-if (regexLogbook.test(d)) {
-  d = d.replace(regexLogbook, `<section className="mt-10">
-        <h2 className="text-2xl lg:text-3xl font-black text-slate-900">Aktivitas yang sudah dipublikasikan</h2>
-        <div className="grid-pusat mt-6">`)
-  berubah = true
-  console.log('[BERHASIL] Wadah grid logbook dospem diubah menjadi grid-pusat')
-}
-
-/* ===== 3. Pastikan ada tombol Lihat semua logbook sebelum Modal ===== */
-if (!d.includes('Lihat semua logbook') && d.includes('<Modal open={!!detail}')) {
-  d = d.replace(/<\/div>\s*<\/section>\s*(<Modal open=\{!!detail\})/, `</div>
-        <div className="mt-8 flex justify-center">
-          <Link to="/logbook" className="rounded-2xl bg-bsi-800 px-6 py-3 text-sm font-bold text-white hover:bg-bsi-900">Lihat semua logbook</Link>
-        </div>
-      </section>
-      $1`)
-  berubah = true
-  console.log('[BERHASIL] Tombol Lihat semua logbook ditambahkan')
-}
-
-if (berubah) {
-  fs.writeFileSync(path.join(root, FILE_D), d, 'utf8')
-}
-
-console.log('')
-console.log('Selesai. Vite akan otomatis memuat ulang (atau restart dev server: Ctrl+C lalu npm run dev -- --host).')
-console.log('')
-console.log('Penjelasan perbaikan:')
-console.log('1. Script sebelumnya gagal menambahkan </div> penutup untuk pembungkus kolom kartu profil tim.')
-console.log('2. Akibatnya, parser JSX mengira section berikutnya (Aktivitas yang sudah dipublikasikan) masih berada di dalam kartu, sehingga memicu error "Adjacent JSX elements".')
-console.log('3. Script ini membuang section Profil tim magang yang rusak dan menulis ulangnya dari nol dengan tag pembuka dan penutup yang dijamin seimbang.')
-console.log('4. Section logbook di bawahnya juga dipastikan memakai wadah rata tengah (grid-pusat) dan memiliki tombol Lihat semua logbook.')
-```
-
-## File: apply-pagination-dashboard.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-
-const FILE_D = 'src/pages/DashboardPage.jsx'
-if (!fs.existsSync(path.join(root, FILE_D))) {
-  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
-  process.exit(1)
-}
-
-function tempel(cari, ekor, marker, label) {
-  let isi = baca(FILE_D)
-  if (isi.includes(marker)) { console.log('[SUDAH ADA] ' + label); return }
-  const cocok = (cari instanceof RegExp) ? cari.test(isi) : isi.includes(cari)
-  if (!cocok) { console.log('[TIDAK KETEMU] ' + label); return }
-  isi = isi.replace(cari, function (m) { return m + ekor })
-  simpan(FILE_D, isi)
-  console.log('[BERHASIL] ' + label)
-}
-
-function ganti(cari, gantiDengan, marker, label) {
-  let isi = baca(FILE_D)
-  if (isi.includes(marker)) { console.log('[SUDAH ADA] ' + label); return }
-  if (!isi.includes(cari)) { console.log('[TIDAK KETEMU] ' + label); return }
-  isi = isi.replace(cari, gantiDengan)
-  simpan(FILE_D, isi)
-  console.log('[BERHASIL] ' + label)
-}
-
-console.log('Mulai memasang pagination 6 data per index di dashboard...')
-console.log('')
-
-/* ===== 1. Import useRef dan komponen Pagination ===== */
-ganti(
-  "import { useEffect, useState } from 'react'",
-  "import { useEffect, useRef, useState } from 'react'",
-  'useRef',
-  'Import useRef ditambahkan'
-)
-ganti(
-  "import { EmptyState, Modal, ConfirmModal, inputCls, labelCls, btnPrimary, btnSmall, AutoTextArea } from '../components/ui.jsx'",
-  "import { EmptyState, Modal, ConfirmModal, inputCls, labelCls, btnPrimary, btnSmall, AutoTextArea, Pagination } from '../components/ui.jsx'",
-  'AutoTextArea, Pagination',
-  'Import Pagination ditambahkan'
-)
-
-/* ===== 2. Konstanta jumlah data per halaman ===== */
-tempel(
-  "const HADIR_INITIAL = { status: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }",
-  '\nconst PER_PAGE_DASH = 6',
-  'const PER_PAGE_DASH = 6',
-  'Konstanta PER_PAGE_DASH = 6'
-)
-
-/* ===== 3. State halaman dan ref judul daftar ===== */
-tempel(
-  'const [sort, setSort] = useState(\'terbaru\')',
-  '\n   const [logPage, setLogPage] = useState(1)\n   const [galPage, setGalPage] = useState(1)\n   const [hadirPage, setHadirPage] = useState(1)\n   const refListLog = useRef(null)\n   const refListGal = useRef(null)\n   const refListHadir = useRef(null)',
-  'const [logPage, setLogPage] = useState(1)',
-  'State halaman dan ref daftar'
-)
-
-/* ===== 4. Reset halaman saat filter atau urutan berubah ===== */
-tempel(
-  '}, [mahasiswa])',
-  '\n\n   useEffect(function () {\n     setLogPage(1)\n     setGalPage(1)\n     setHadirPage(1)\n   }, [logFilter, galFilter, hadirFilter, sort])',
-  '}, [logFilter, galFilter, hadirFilter, sort])',
-  'Effect reset halaman saat filter berubah'
-)
-
-/* ===== 5. Perhitungan pagination dan fungsi pindah halaman ===== */
-tempel(
-  'const hadirFilterActive = countActiveFilters(hadirFilter)',
-  '\n   const logTotal = filteredLogs.length\n' +
-  '   const logTotalPages = Math.max(1, Math.ceil(logTotal / PER_PAGE_DASH))\n' +
-  '   const logPageAman = Math.min(logPage, logTotalPages)\n' +
-  '   const paginatedLogs = sortedLogs.slice((logPageAman - 1) * PER_PAGE_DASH, logPageAman * PER_PAGE_DASH)\n' +
-  '   const galTotal = filteredGaleri.length\n' +
-  '   const galTotalPages = Math.max(1, Math.ceil(galTotal / PER_PAGE_DASH))\n' +
-  '   const galPageAman = Math.min(galPage, galTotalPages)\n' +
-  '   const paginatedGaleri = sortedGaleri.slice((galPageAman - 1) * PER_PAGE_DASH, galPageAman * PER_PAGE_DASH)\n' +
-  '   const hadirTotal = filteredHadir.length\n' +
-  '   const hadirTotalPages = Math.max(1, Math.ceil(hadirTotal / PER_PAGE_DASH))\n' +
-  '   const hadirPageAman = Math.min(hadirPage, hadirTotalPages)\n' +
-  '   const paginatedHadir = sortedHadir.slice((hadirPageAman - 1) * PER_PAGE_DASH, hadirPageAman * PER_PAGE_DASH)\n' +
-  '   function gantiHalamanLog(p) {\n     setLogPage(p)\n     if (refListLog.current) refListLog.current.scrollIntoView({ behavior: \'smooth\', block: \'start\' })\n   }\n' +
-  '   function gantiHalamanGal(p) {\n     setGalPage(p)\n     if (refListGal.current) refListGal.current.scrollIntoView({ behavior: \'smooth\', block: \'start\' })\n   }\n' +
-  '   function gantiHalamanHadir(p) {\n     setHadirPage(p)\n     if (refListHadir.current) refListHadir.current.scrollIntoView({ behavior: \'smooth\', block: \'start\' })\n   }',
-  'const paginatedLogs = sortedLogs.slice(',
-  'Perhitungan pagination dan fungsi pindah halaman'
-)
-
-/* ===== 6. Setelah menambah data baru, kembali ke halaman 1 ===== */
-tempel(
-  /async function submitLogbook\(e\) \{\s*\n\s*e\.preventDefault\(\)\s*\n\s*setBusy\(true\)/,
-  '\n     const menambahLog = !editLogId',
-  'const menambahLog = !editLogId',
-  'Penanda tambah logbook baru'
-)
-tempel(
-  /setItems\(\[newItem\(\)\]\)\s*\n\s*await refresh\(\)/,
-  '\n       if (menambahLog) setLogPage(1)',
-  'if (menambahLog) setLogPage(1)',
-  'Reset halaman logbook setelah tambah baru'
-)
-tempel(
-  /async function submitGaleri\(e\) \{\s*\n\s*e\.preventDefault\(\)\s*\n\s*setBusy\(true\)/,
-  '\n     const menambahGal = !editGalId',
-  'const menambahGal = !editGalId',
-  'Penanda tambah galeri baru'
-)
-tempel(
-  /setGalOldYt\(null\)\s*\n\s*await refresh\(\)/,
-  '\n       if (menambahGal) setGalPage(1)',
-  'if (menambahGal) setGalPage(1)',
-  'Reset halaman galeri setelah tambah baru'
-)
-tempel(
-  /async function submitHadir\(e\) \{\s*\n\s*e\.preventDefault\(\)\s*\n\s*setBusy\(true\)/,
-  '\n     const menambahHadir = !editHadirId',
-  'const menambahHadir = !editHadirId',
-  'Penanda tambah hadir baru'
-)
-tempel(
-  /setHadirForm\(\{ tanggal: todayInput\(\), status: 'Masuk', alasan: '' \}\)\s*\n\s*await refresh\(\)/,
-  '\n     if (menambahHadir) setHadirPage(1)',
-  'if (menambahHadir) setHadirPage(1)',
-  'Reset halaman hadir setelah tambah baru'
-)
-
-/* ===== 7. Tab Logbook: judul, info, sumber data, dan Pagination ===== */
-ganti(
-  '<h2 className="text-2xl font-black text-slate-900">Logbook kamu</h2>',
-  '<h2 ref={refListLog} className="text-2xl font-black text-slate-900 scroll-mt-24">Logbook kamu</h2>',
-  'ref={refListLog}',
-  'Ref judul daftar logbook'
-)
-ganti(
-  '<p className="text-sm text-slate-500">Menampilkan {filteredLogs.length} dari {logs.length} logbook</p>',
-  '<p className="text-sm text-slate-500">Menampilkan {filteredLogs.length} dari {logs.length} logbook{logTotalPages > 1 ? \' • Halaman \' + logPageAman + \' dari \' + logTotalPages : \'\'}</p>',
-  "' • Halaman ' + logPageAman",
-  'Info halaman daftar logbook'
-)
-ganti(
-  '{sortedLogs.map(function (l) {',
-  '{paginatedLogs.map(function (l) {',
-  '{paginatedLogs.map(function (l) {',
-  'Daftar logbook memakai potongan halaman'
-)
-tempel(
-  "{!filteredLogs.length ? <EmptyState title={logs.length ? 'Logbook tidak ditemukan' : 'Belum ada logbook'} desc={logs.length ? 'Coba reset filter atau pilih filter lain.' : 'Tambahkan logbook harian pertama kamu.'} /> : null}",
-  '\n             <Pagination totalItems={logTotal} perPage={PER_PAGE_DASH} page={logPageAman} onPageChange={gantiHalamanLog} />',
-  'onPageChange={gantiHalamanLog}',
-  'Pagination daftar logbook'
-)
-
-/* ===== 8. Tab Galeri: judul, info, sumber data, dan Pagination ===== */
-ganti(
-  '<h2 className="text-2xl font-black text-slate-900">Galeri kamu</h2>',
-  '<h2 ref={refListGal} className="text-2xl font-black text-slate-900 scroll-mt-24">Galeri kamu</h2>',
-  'ref={refListGal}',
-  'Ref judul daftar galeri'
-)
-ganti(
-  '<p className="text-sm text-slate-500">Menampilkan {filteredGaleri.length} dari {galeri.length} media</p>',
-  '<p className="text-sm text-slate-500">Menampilkan {filteredGaleri.length} dari {galeri.length} media{galTotalPages > 1 ? \' • Halaman \' + galPageAman + \' dari \' + galTotalPages : \'\'}</p>',
-  "' • Halaman ' + galPageAman",
-  'Info halaman daftar galeri'
-)
-ganti(
-  '{sortedGaleri.map(function (g) {',
-  '{paginatedGaleri.map(function (g) {',
-  '{paginatedGaleri.map(function (g) {',
-  'Daftar galeri memakai potongan halaman'
-)
-tempel(
-  "{!filteredGaleri.length ? <EmptyState icon=\"camera\" title={galeri.length ? 'Media tidak ditemukan' : 'Belum ada media galeri'} desc={galeri.length ? 'Coba reset filter atau pilih filter lain.' : 'Unggah foto atau video pertama kamu.'} /> : null}\n             </div>",
-  '\n             <Pagination totalItems={galTotal} perPage={PER_PAGE_DASH} page={galPageAman} onPageChange={gantiHalamanGal} />',
-  'onPageChange={gantiHalamanGal}',
-  'Pagination daftar galeri'
-)
-
-/* ===== 9. Tab Daftar Hadir: judul, info, sumber data, dan Pagination ===== */
-ganti(
-  '<h2 className="text-2xl font-black text-slate-900">Daftar hadir kamu</h2>',
-  '<h2 ref={refListHadir} className="text-2xl font-black text-slate-900 scroll-mt-24">Daftar hadir kamu</h2>',
-  'ref={refListHadir}',
-  'Ref judul daftar hadir'
-)
-ganti(
-  '<p className="text-sm text-slate-500">Menampilkan {filteredHadir.length} dari {hadir.length} catatan</p>',
-  '<p className="text-sm text-slate-500">Menampilkan {filteredHadir.length} dari {hadir.length} catatan{hadirTotalPages > 1 ? \' • Halaman \' + hadirPageAman + \' dari \' + hadirTotalPages : \'\'}</p>',
-  "' • Halaman ' + hadirPageAman",
-  'Info halaman daftar hadir'
-)
-ganti(
-  '{sortedHadir.map(function (h) {',
-  '{paginatedHadir.map(function (h) {',
-  '{paginatedHadir.map(function (h) {',
-  'Daftar hadir memakai potongan halaman'
-)
-tempel(
-  "{!filteredHadir.length ? <EmptyState icon=\"clipboard\" title={hadir.length ? 'Catatan tidak ditemukan' : 'Belum ada data kehadiran'} desc={hadir.length ? 'Coba reset filter atau pilih filter lain.' : 'Isi daftar hadir pertama kamu.'} /> : null}",
-  '\n             <Pagination totalItems={hadirTotal} perPage={PER_PAGE_DASH} page={hadirPageAman} onPageChange={gantiHalamanHadir} />',
-  'onPageChange={gantiHalamanHadir}',
-  'Pagination daftar hadir'
-)
-
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Perilaku baru di dashboard:')
-console.log('1. Daftar Logbook, Galeri, dan Daftar Hadir di kolom kanan masing-masing menampilkan maksimal 6 data per halaman.')
-console.log('2. Tombol pagination memakai komponen yang sama dengan halaman publik, jadi gaya hijau BSI tetap konsisten.')
-console.log('3. Teks info kini menambahkan keterangan halaman hanya bila halamannya lebih dari satu, misalnya Menampilkan 8 dari 8 logbook • Halaman 2 dari 2.')
-console.log('4. Ganti filter atau urutan otomatis kembali ke halaman 1 supaya hasil filter selalu terlihat dari awal.')
-console.log('5. Setelah menambah data baru, halaman kembali ke 1 sehingga data yang baru disimpan langsung terlihat.')
-console.log('6. Setelah menghapus data sampai halaman terakhir kosong, tampilan otomatis dijepit ke halaman yang masih berisi.')
-console.log('7. Klik nomor halaman membuat tampilan menggulir halus ke judul daftar, bukan terpaku di posisi bawah.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Buka dashboard tab Logbook: bila data lebih dari 6, tombol nomor muncul di bawah daftar kartu.')
-console.log('2. Klik halaman 2: hanya 6 data berikutnya yang tampil dan layar menggulir ke judul Logbook kamu.')
-console.log('3. Ulangi pengecekan di tab Galeri dan Daftar Hadir.')
-console.log('4. Tambah logbook baru saat berada di halaman 2: setelah tersimpan, tampilan kembali ke halaman 1 dan data baru terlihat.')
-console.log('5. Hapus data sampai tersisa 6 atau kurang: tombol pagination hilang dengan rapi karena hanya ada satu halaman.')
-```
-
-## File: apply-pagination-v2.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-function ada(rel) { return fs.existsSync(path.join(root, rel)) }
-function batasFungsi(isi, mulai) {
-  let brace = 0, akhir = -1, inStr = false, strCh = ''
-  for (let i = mulai; i < isi.length; i++) {
-    const ch = isi[i]
-    const prev = i > 0 ? isi[i - 1] : ''
-    if (inStr) { if (ch === strCh && prev !== '\\') inStr = false; continue }
-    if (ch === '"' || ch === "'" || ch === '`') { inStr = true; strCh = ch; continue }
-    if (ch === '{') brace++
-    if (ch === '}') { brace--; if (brace === 0) { akhir = i + 1; break } }
-  }
-  return akhir
-}
-
-console.log('Mulai memperbarui pagination versi 2: teks lebih jelas dan tombol nomor bertema...')
-console.log('')
-
-/* =====================================================
-   KOMPONEN PAGINATION VERSI 2
-   ===================================================== */
-const PAGINATION_V2 = `export function Pagination(props) {
-  /* pagination-v2: tombol nomor halaman sesuai tema BSI */
-  const totalItems = props.totalItems || 0
-  const perPage = props.perPage || 10
-  const page = props.page || 1
-  const onPageChange = props.onPageChange || function () {}
-  const totalPages = Math.ceil(totalItems / perPage)
-  if (!totalItems) return null
-  const halaman = []
-  if (totalPages <= 7) {
-    for (let i = 1; i <= totalPages; i++) halaman.push(i)
-  } else {
-    for (let i = 1; i <= totalPages; i++) {
-      if (i === 1 || i === totalPages || (i >= page - 1 && i <= page + 1)) {
-        halaman.push(i)
-      } else if (halaman[halaman.length - 1] !== '...') {
-        halaman.push('...')
-      }
-    }
-  }
-  const clsAngka = 'grid h-10 min-w-10 place-items-center rounded-xl px-3 text-sm font-bold transition '
-  const clsNav = 'flex h-10 items-center rounded-xl px-4 text-sm font-semibold transition '
-  const clsNetral = 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 hover:text-bsi-800'
-  return (
-    <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
-      {totalPages > 1 ? (
-        <button
-          type="button"
-          disabled={page <= 1}
-          onClick={function () { onPageChange(page - 1) }}
-          className={clsNav + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}
-        >
-          Sebelumnya
-        </button>
-      ) : null}
-      {halaman.map(function (h, idx) {
-        if (h === '...') {
-          return <span key={'lompat' + idx} className="px-1 text-sm font-bold text-slate-400">...</span>
-        }
-        const aktif = h === page
-        return (
-          <button
-            key={'hal' + h}
-            type="button"
-            onClick={function () { onPageChange(h) }}
-            className={clsAngka + (aktif
-              ? 'bg-bsi-800 text-white shadow-lg shadow-bsi-900/25'
-              : clsNetral)}
-          >
-            {h}
-          </button>
-        )
-      })}
-      {totalPages > 1 ? (
-        <button
-          type="button"
-          disabled={page >= totalPages}
-          onClick={function () { onPageChange(page + 1) }}
-          className={clsNav + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}
-        >
-          Berikutnya
-        </button>
-      ) : null}
-    </div>
-  )
-}`
-
-/* =====================================================
-   LANGKAH 1: GANTI KOMPONEN PAGINATION DI ui.jsx
-   ===================================================== */
-const FILE_U = 'src/components/ui.jsx'
-if (!ada(FILE_U)) {
-  console.log('[GAGAL] ui.jsx tidak ditemukan')
-  process.exit(1)
-}
-let u = baca(FILE_U)
-if (u.includes('/* pagination-v2')) {
-  console.log('[SUDAH ADA] Komponen Pagination versi 2 di ui.jsx')
-} else {
-  const mulai = u.indexOf('export function Pagination(props) {')
-  if (mulai === -1) {
-    u = u.trimEnd() + '\n\n' + PAGINATION_V2 + '\n'
-    simpan(FILE_U, u)
-    console.log('[BERHASIL] Komponen Pagination ditambahkan di ui.jsx')
-  } else {
-    const akhir = batasFungsi(u, mulai)
-    if (akhir === -1) {
-      console.log('[GAGAL] Batas fungsi Pagination lama tidak terbaca')
-    } else {
-      u = u.slice(0, mulai) + PAGINATION_V2 + u.slice(akhir)
-      simpan(FILE_U, u)
-      console.log('[BERHASIL] Komponen Pagination lama diganti versi 2 di ui.jsx')
-    }
-  }
-}
-
-/* =====================================================
-   LANGKAH 2: GANTI TEKS INFO DI TIGA HALAMAN
-   ===================================================== */
-const TARGET = [
-  {
-    rel: 'src/pages/LogbookPage.jsx',
-    lama: 'Menampilkan {mulai} sampai {akhir} dari {totalData} logbook',
-    baru: 'Halaman {pageAman} dari {totalPages} • {totalData} logbook'
-  },
-  {
-    rel: 'src/pages/GalleryPage.jsx',
-    lama: 'Menampilkan {mulai} sampai {akhir} dari {totalData} media',
-    baru: 'Halaman {pageAman} dari {totalPages} • {totalData} media'
-  },
-  {
-    rel: 'src/pages/AttendancePage.jsx',
-    lama: 'Menampilkan {mulai} sampai {akhir} dari {totalData} catatan',
-    baru: 'Halaman {pageAman} dari {totalPages} • {totalData} catatan'
-  }
-]
-TARGET.forEach(function (t) {
-  if (!ada(t.rel)) { console.log('[LEWATI] ' + t.rel + ' tidak ditemukan'); return }
-  let isi = baca(t.rel)
-  if (isi.includes('Halaman {pageAman} dari {totalPages}')) {
-    console.log('[SUDAH ADA] Teks info baru di ' + t.rel)
-  } else if (isi.includes(t.lama)) {
-    isi = isi.split(t.lama).join(t.baru)
-    simpan(t.rel, isi)
-    console.log('[BERHASIL] Teks info diperbarui di ' + t.rel)
-  } else {
-    console.log('[TIDAK KETEMU] Teks info lama di ' + t.rel)
-  }
-})
-
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Perubahan versi 2:')
-console.log('1. Teks info kini berbunyi Halaman 1 dari 1 • 4 logbook, jauh lebih mudah dipahami daripada rentang angka.')
-console.log('2. Nomor halaman tampil sebagai tombol persegi membulat bertema: halaman aktif hijau BSI dengan bayangan lembut, halaman lain putih dengan border tipis.')
-console.log('3. Tombol nomor hanya dibuat sebanyak halaman yang benar-benar ada. Data 7 buah berarti 1 halaman, jadi hanya tombol 1.')
-console.log('4. Bila hanya ada 1 halaman, tombol Sebelumnya dan Berikutnya tidak ditampilkan sama sekali supaya tidak membingungkan.')
-console.log('5. Bila halaman lebih dari 7, nomor di tengah diringkas dengan titik tiga, misalnya 1 ... 4 5 6 ... 10, supaya baris tombol tetap rapi.')
-console.log('6. Mode gelap otomatis mengikuti karena kelas yang dipakai sama dengan komponen lain di proyek ini.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Buka halaman Logbook dengan 4 data: terlihat teks Halaman 1 dari 1 • 4 logbook dan satu tombol nomor 1.')
-console.log('2. Tambahkan data sampai lebih dari 10: tombol 2 muncul beserta Sebelumnya dan Berikutnya.')
-console.log('3. Klik tombol 2: tombol berubah hijau dan teks info menjadi Halaman 2 dari 2.')
-console.log('4. Ulangi pengecekan di halaman Galeri dan Daftar Hadir.')
-```
-
-## File: apply-pagination-v3.cjs
+## File: apply-fix-teks-pagination.cjs
 ```javascript
 const fs = require('fs')
 const path = require('path')
@@ -844,570 +185,50 @@ function ganti(rel, cari, gantiDengan, label) {
   console.log('[BERHASIL] ' + label)
 }
 
-console.log('Mulai revisi pagination: 12 data per halaman, limit 6 terbaru, dan kartu rata tengah...')
+console.log('Mulai mengganti teks info pagination ke Opsi 2 (Total X • Halaman A dari B)...')
 console.log('')
 
-/* ===== 1. Ubah isi setiap halaman dari 10 menjadi 12 data ===== */
-;['src/pages/LogbookPage.jsx', 'src/pages/GalleryPage.jsx', 'src/pages/AttendancePage.jsx'].forEach(function (rel) {
-  ganti(rel, 'const PER_PAGE = 10', 'const PER_PAGE = 12', 'PER_PAGE menjadi 12')
-})
-
-/* ===== 2. CSS wadah fleksibel yang meratakan tengah baris kartu tidak penuh ===== */
-const FILE_CSS = 'src/index.css'
-const CSS_PUSAT = `/* grid-pusat: baris kartu yang tidak penuh otomatis rata tengah */
-.grid-pusat { display: flex; flex-wrap: wrap; justify-content: center; gap: 1.25rem; }
-.grid-pusat-rapat { display: flex; flex-wrap: wrap; justify-content: center; gap: 1rem; }
-.kolom-kartu, .kolom-kartu-rapat { width: 100%; display: flex; }
-.kolom-kartu > *, .kolom-kartu-rapat > * { width: 100%; }
-@media (min-width: 768px) {
-  .kolom-kartu { width: calc(50% - 0.625rem); }
-  .kolom-kartu-rapat { width: calc(50% - 0.5rem); }
-}
-@media (min-width: 1280px) {
-  .kolom-kartu { width: calc(33.3333% - 0.83333rem); }
-  .kolom-kartu-rapat { width: calc(33.3333% - 0.66667rem); }
-}
-`
-if (!ada(FILE_CSS)) {
-  console.log('[LEWATI] index.css tidak ditemukan')
-} else {
-  let css = baca(FILE_CSS)
-  if (css.includes('/* grid-pusat */')) {
-    console.log('[SUDAH ADA] CSS grid-pusat di index.css')
-  } else {
-    simpan(FILE_CSS, css.trimEnd() + '\n\n' + CSS_PUSAT)
-    console.log('[BERHASIL] CSS grid-pusat ditambahkan di index.css')
-  }
-}
-
-/* ===== 3. LogbookPage: grid rata tengah ===== */
+/* ===== 1. Halaman publik: Logbook, Galeri, Daftar Hadir ===== */
 ganti('src/pages/LogbookPage.jsx',
-`      <section className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-        {loading
-          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <SkeletonLogbookCard key={i} /> })
-          : paginatedLogs.map(function (l) {
-              return <LogbookCard key={l.id} log={l} isOwner={mahasiswa && mahasiswa.id === l.mahasiswa_id}
-                onDetail={function () { setDetail(l) }} />
-            })}
-        {!loading && !logs.length ? <EmptyState title="Logbook tidak ditemukan" desc="Coba reset filter atau pilih filter lain." /> : null}
-      </section>`,
-`      <section className="grid-pusat mt-8">
-        {loading
-          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
-          : paginatedLogs.map(function (l) {
-              return (
-                <div key={l.id} className="kolom-kartu">
-                  <LogbookCard log={l} isOwner={mahasiswa && mahasiswa.id === l.mahasiswa_id}
-                    onDetail={function () { setDetail(l) }} />
-                </div>
-              )
-            })}
-        {!loading && !logs.length ? <div className="w-full"><EmptyState title="Logbook tidak ditemukan" desc="Coba reset filter atau pilih filter lain." /></div> : null}
-      </section>`,
-'Grid LogbookPage rata tengah')
-
-/* ===== 4. GalleryPage: grid rata tengah ===== */
+  `Halaman {pageAman} dari {totalPages} • {totalData} logbook`,
+  `Total {totalData} logbook{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}`,
+  'Teks info LogbookPage')
 ganti('src/pages/GalleryPage.jsx',
-`      <section className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-        {loading
-          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <SkeletonGalleryCard key={i} /> })
-          : paginatedItems.map(function (i) {
-              return <GalleryCard key={i.id} item={i} isOwner={mahasiswa && mahasiswa.id === i.mahasiswa_id}
-                onDetail={function () { setDetail(i) }} />
-            })}
-        {!loading && !items.length ? <EmptyState icon="camera" title="Belum ada media galeri" desc="Media galeri yang diunggah mahasiswa akan tampil di sini." /> : null}
-      </section>`,
-`      <section className="grid-pusat mt-8">
-        {loading
-          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonGalleryCard /></div> })
-          : paginatedItems.map(function (i) {
-              return (
-                <div key={i.id} className="kolom-kartu">
-                  <GalleryCard item={i} isOwner={mahasiswa && mahasiswa.id === i.mahasiswa_id}
-                    onDetail={function () { setDetail(i) }} />
-                </div>
-              )
-            })}
-        {!loading && !items.length ? <div className="w-full"><EmptyState icon="camera" title="Belum ada media galeri" desc="Media galeri yang diunggah mahasiswa akan tampil di sini." /></div> : null}
-      </section>`,
-'Grid GalleryPage rata tengah')
-
-/* ===== 5. AttendancePage: grid rata tengah ===== */
+  `Halaman {pageAman} dari {totalPages} • {totalData} media`,
+  `Total {totalData} media{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}`,
+  'Teks info GalleryPage')
 ganti('src/pages/AttendancePage.jsx',
-`        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {loading
-            ? [0, 1, 2].map(function (i) { return <SkeletonAttendanceCard key={i} /> })
-            : paginatedRows.map(function (r) {
-                return <AttendanceCard key={r.id} row={r} isOwner={mahasiswa && mahasiswa.id === r.mahasiswa_id}
-                  onDetail={function () { setDetail(r) }} />
-              })}
-          {!loading && !rows.length ? <EmptyState icon="clipboard" title="Belum ada data kehadiran" desc="Data kehadiran akan tampil setelah mahasiswa mengisi daftar hadir." /> : null}
-        </div>`,
-`        <div className="grid-pusat-rapat mt-6">
-          {loading
-            ? [0, 1, 2].map(function (i) { return <div key={i} className="kolom-kartu-rapat"><SkeletonAttendanceCard /></div> })
-            : paginatedRows.map(function (r) {
-                return (
-                  <div key={r.id} className="kolom-kartu-rapat">
-                    <AttendanceCard row={r} isOwner={mahasiswa && mahasiswa.id === r.mahasiswa_id}
-                      onDetail={function () { setDetail(r) }} />
-                  </div>
-                )
-              })}
-          {!loading && !rows.length ? <div className="w-full"><EmptyState icon="clipboard" title="Belum ada data kehadiran" desc="Data kehadiran akan tampil setelah mahasiswa mengisi daftar hadir." /></div> : null}
-        </div>`,
-'Grid AttendancePage rata tengah')
+  `Halaman {pageAman} dari {totalPages} • {totalData} catatan`,
+  `Total {totalData} catatan{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}`,
+  'Teks info AttendancePage')
 
-/* ===== 6. HomePage: 6 logbook terbaru plus tombol lihat semua dan rata tengah ===== */
-ganti('src/pages/HomePage.jsx',
-`        <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {loading
-            ? [0, 1, 2].map(function (i) { return <SkeletonLogbookCard key={i} /> })
-            : logs.slice(0, 3).map(function (l) {
-                return <LogbookCard key={l.id} log={l} onDetail={function () { setDetail(l) }} />
-              })}
-          {!loading && !logs.length ? <EmptyState title="Belum ada logbook publik" desc="Logbook yang sudah diatur sebagai siap dilihat akan tampil di sini." /> : null}
-        </div>
-      </section>`,
-`        <div className="grid-pusat mt-6">
-          {loading
-            ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
-            : logs.slice(0, 6).map(function (l) {
-                return (
-                  <div key={l.id} className="kolom-kartu">
-                    <LogbookCard log={l} onDetail={function () { setDetail(l) }} />
-                  </div>
-                )
-              })}
-          {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum ada logbook publik" desc="Logbook yang sudah diatur sebagai siap dilihat akan tampil di sini." /></div> : null}
-        </div>
-        <div className="mt-8 flex justify-center">
-          <Link to="/logbook" className="rounded-2xl bg-bsi-800 px-6 py-3 text-sm font-bold text-white hover:bg-bsi-900">Lihat semua logbook</Link>
-        </div>
-      </section>`,
-'Beranda menampilkan 6 logbook terbaru dengan tombol lihat semua')
-
-/* ===== 7. DospemPage: 6 logbook terbaru plus tombol lihat semua dan rata tengah ===== */
-ganti('src/pages/DospemPage.jsx',
-`         <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-           {loading
-             ? [0, 1, 2].map(function (i) { return <SkeletonLogbookCard key={i} /> })
-             : logs.map(function (l) {
-                 return <LogbookCard key={l.id} log={l} onDetail={function () { setDetail(l) }} />
-               })}
-           {!loading && !logs.length ? <EmptyState title="Belum ada logbook publik" desc="Logbook akan tampil setelah mahasiswa mengatur status siap dilihat." /> : null}
-         </div>
-       </section>`,
-`         <div className="grid-pusat mt-6">
-           {loading
-             ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
-             : logs.slice(0, 6).map(function (l) {
-                 return (
-                   <div key={l.id} className="kolom-kartu">
-                     <LogbookCard log={l} onDetail={function () { setDetail(l) }} />
-                   </div>
-                 )
-               })}
-           {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum ada logbook publik" desc="Logbook akan tampil setelah mahasiswa mengatur status siap dilihat." /></div> : null}
-         </div>
-         <div className="mt-8 flex justify-center">
-           <Link to="/logbook" className="rounded-2xl bg-bsi-800 px-6 py-3 text-sm font-bold text-white hover:bg-bsi-900">Lihat semua logbook</Link>
-         </div>
-       </section>`,
-'Tim & Dospem menampilkan 6 logbook terbaru dengan tombol lihat semua')
-
-/* ===== 8. DospemPage: kartu profil tim ikut rata tengah ===== */
-ganti('src/pages/DospemPage.jsx',
-`<div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">`,
-`<div className="grid-pusat-rapat mt-6">`,
-'Wadah kartu profil tim menjadi grid-pusat-rapat')
-ganti('src/pages/DospemPage.jsx',
-`? [0, 1, 2].map(function (i) { return <SkeletonPersonCard key={i} /> })`,
-`? [0, 1, 2].map(function (i) { return <div key={i} className="kolom-kartu-rapat"><SkeletonPersonCard /></div> })`,
-'Skeleton profil tim dibungkus kolom')
-ganti('src/pages/DospemPage.jsx',
-`<div key={p.id} className="card-hover rounded-3xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col">`,
-`<div key={p.id} className="kolom-kartu-rapat">
-<div className="card-hover rounded-3xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col h-full">`,
-'Kartu profil tim dibungkus kolom')
-ganti('src/pages/DospemPage.jsx',
-`</div>
- )
- })}`,
-`</div>
- </div>
- )
- })}`,
-'Penutup kartu profil tim disesuaikan')
-ganti('src/pages/DospemPage.jsx',
-`{!loading && !people.length ? <EmptyState title="Belum ada data mahasiswa" desc="Profil tim akan tampil setelah mahasiswa terdaftar." /> : null}`,
-`{!loading && !people.length ? <div className="w-full"><EmptyState title="Belum ada data mahasiswa" desc="Profil tim akan tampil setelah mahasiswa terdaftar." /></div> : null}`,
-'EmptyState profil tim melebar penuh')
+/* ===== 2. Dashboard: tab Logbook, Galeri, Daftar Hadir ===== */
+ganti('src/pages/DashboardPage.jsx',
+  `Menampilkan {filteredLogs.length} dari {logs.length} logbook{logTotalPages > 1 ? ' • Halaman ' + logPageAman + ' dari ' + logTotalPages : ''}`,
+  `Total {filteredLogs.length} logbook{logTotalPages > 1 ? ' • Halaman ' + logPageAman + ' dari ' + logTotalPages : ''}`,
+  'Teks info tab Logbook dashboard')
+ganti('src/pages/DashboardPage.jsx',
+  `Menampilkan {filteredGaleri.length} dari {galeri.length} media{galTotalPages > 1 ? ' • Halaman ' + galPageAman + ' dari ' + galTotalPages : ''}`,
+  `Total {filteredGaleri.length} media{galTotalPages > 1 ? ' • Halaman ' + galPageAman + ' dari ' + galTotalPages : ''}`,
+  'Teks info tab Galeri dashboard')
+ganti('src/pages/DashboardPage.jsx',
+  `Menampilkan {filteredHadir.length} dari {hadir.length} catatan{hadirTotalPages > 1 ? ' • Halaman ' + hadirPageAman + ' dari ' + hadirTotalPages : ''}`,
+  `Total {filteredHadir.length} catatan{hadirTotalPages > 1 ? ' • Halaman ' + hadirPageAman + ' dari ' + hadirTotalPages : ''}`,
+  'Teks info tab Daftar Hadir dashboard')
 
 console.log('')
 console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
 console.log('')
-console.log('Isi revisi yang diterapkan:')
-console.log('1. Setiap halaman pagination kini memuat 12 data per index, jadi satu baris penuh terdiri dari 4 baris kartu di layar lebar.')
-console.log('2. Beranda menampilkan 6 logbook paling terbaru tanpa pagination, ditambah tombol Lihat semua logbook yang menuju halaman Logbook.')
-console.log('3. Halaman Tim & Dospem menampilkan 6 logbook paling terbaru tanpa pagination, ditambah tombol Lihat semua logbook yang menuju halaman Logbook.')
-console.log('4. Semua grid kartu memakai wadah fleksibel berpusat: bila kartu dalam satu baris hanya 1 atau 2, kartu tersebut berdiri di tengah, bukan menempel di kiri.')
-console.log('5. Tinggi kartu dalam satu baris tetap sejajar karena pembungkus kolom meregangkan kartu secara otomatis.')
+console.log('Format teks baru (Opsi 2):')
+console.log('1. Bila halaman lebih dari satu: Total 25 logbook • Halaman 1 dari 3.')
+console.log('2. Bila hanya satu halaman: Total 7 logbook (tanpa keterangan halaman supaya tidak redundan).')
+console.log('3. Angka total merujuk jumlah data sesuai filter aktif, bukan jumlah kartu yang tampil di halaman tersebut, sehingga tidak lagi membingungkan.')
 console.log('')
 console.log('Langkah uji:')
-console.log('1. Buka Logbook dengan 4 data: keempat kartu tetap 3 di baris pertama dan 1 kartu sisa berada tepat di tengah baris kedua.')
-console.log('2. Tambah data sampai 13: halaman menampilkan 12 kartu dan tombol nomor 1 serta 2 muncul.')
-console.log('3. Buka Beranda: maksimal 6 kartu terbaru tampil dan tombol hijau Lihat semua logbook berada di tengah bawah.')
-console.log('4. Buka Tim & Dospem: kartu profil tim rata tengah bila jumlahnya kurang dari 3, dan section aktivitas hanya 6 logbook terbaru dengan tombol lihat semua.')
-console.log('5. Uji mode gelap: tata letak pusat tidak berubah dan warna tetap mengikuti tema.')
-```
-
-## File: apply-pagination.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-function ada(rel) { return fs.existsSync(path.join(root, rel)) }
-
-console.log('Mulai memasang pagination 10 data per halaman pada Logbook, Galeri, dan Daftar Hadir...')
-console.log('')
-
-/* =====================================================
-   KOMPONEN PAGINATION REUSABLE UNTUK ui.jsx
-   ===================================================== */
-const PAGINATION_COMPONENT = `export function Pagination(props) {
-  const totalItems = props.totalItems || 0
-  const perPage = props.perPage || 10
-  const page = props.page || 1
-  const onPageChange = props.onPageChange || function () {}
-  const totalPages = Math.ceil(totalItems / perPage)
-  if (totalPages <= 1) return null
-  const halaman = []
-  for (let i = 1; i <= totalPages; i++) {
-    if (i === 1 || i === totalPages || (i >= page - 1 && i <= page + 1)) {
-      halaman.push(i)
-    } else if (halaman[halaman.length - 1] !== '...') {
-      halaman.push('...')
-    }
-  }
-  const dasar = 'grid h-10 min-w-10 place-items-center rounded-xl px-3 text-sm font-semibold transition '
-  return (
-    <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
-      <button
-        type="button"
-        disabled={page <= 1}
-        onClick={function () { onPageChange(page - 1) }}
-        className={dasar + 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40'}
-      >
-        Sebelumnya
-      </button>
-      {halaman.map(function (h, idx) {
-        if (h === '...') {
-          return <span key={'lompat' + idx} className="px-1 text-slate-400">...</span>
-        }
-        const aktif = h === page
-        return (
-          <button
-            key={'hal' + h}
-            type="button"
-            onClick={function () { onPageChange(h) }}
-            className={dasar + (aktif ? 'bg-bsi-800 text-white' : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-100')}
-          >
-            {h}
-          </button>
-        )
-      })}
-      <button
-        type="button"
-        disabled={page >= totalPages}
-        onClick={function () { onPageChange(page + 1) }}
-        className={dasar + 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40'}
-      >
-        Berikutnya
-      </button>
-    </div>
-  )
-}`
-
-/* =====================================================
-   BLOK KODE YANG DISISIPKAN KE SETIAP HALAMAN
-   ===================================================== */
-const BLOK_EFFECT = `  useEffect(function () {
-    setPage(1)
-  }, [filter, sort])
-  function gantiHalaman(p) {
-    setPage(p)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }`
-
-function buatBlokPagination(ns, np) {
-  return '  const totalData = ' + ns + '.length\n' +
-    '  const totalPages = Math.ceil(totalData / PER_PAGE)\n' +
-    '  const pageAman = Math.min(page, Math.max(1, totalPages))\n' +
-    '  const mulai = totalData === 0 ? 0 : (pageAman - 1) * PER_PAGE + 1\n' +
-    '  const akhir = Math.min(pageAman * PER_PAGE, totalData)\n' +
-    '  const ' + np + ' = ' + ns + '.slice((pageAman - 1) * PER_PAGE, pageAman * PER_PAGE)'
-}
-
-function buatBlokAkhir(label) {
-  return '      {!loading && totalData > 0 ? (\n' +
-    '        <div className="mt-6 text-center text-sm text-slate-500">\n' +
-    '          Menampilkan {mulai} sampai {akhir} dari {totalData} ' + label + '\n' +
-    '        </div>\n' +
-    '      ) : null}\n' +
-    '      {!loading ? <Pagination totalItems={totalData} perPage={PER_PAGE} page={pageAman} onPageChange={gantiHalaman} /> : null}'
-}
-
-/* =====================================================
-   LANGKAH 1: PASANG KOMPONEN PAGINATION DI ui.jsx
-   ===================================================== */
-const FILE_U = 'src/components/ui.jsx'
-if (!ada(FILE_U)) {
-  console.log('[GAGAL] ui.jsx tidak ditemukan')
-  process.exit(1)
-}
-let u = baca(FILE_U)
-if (u.includes('export function Pagination')) {
-  console.log('[SUDAH ADA] Komponen Pagination di ui.jsx')
-} else {
-  u = u.trimEnd() + '\n\n' + PAGINATION_COMPONENT + '\n'
-  simpan(FILE_U, u)
-  console.log('[BERHASIL] Komponen Pagination ditambahkan di ui.jsx')
-}
-
-/* =====================================================
-   FUNGSI TRANSFORMASI SATU HALAMAN
-   ===================================================== */
-function transformHalaman(cfg) {
-  const rel = cfg.rel
-  if (!ada(rel)) { console.log('[LEWATI] ' + rel + ' tidak ditemukan'); return }
-  let isi = baca(rel)
-  let berubah = false
-
-  if (isi.includes(', Pagination }') || isi.includes('Pagination,')) {
-    console.log('[SUDAH ADA] Import Pagination di ' + rel)
-  } else if (isi.includes(cfg.importAsli)) {
-    isi = isi.replace(cfg.importAsli, cfg.importBaru)
-    berubah = true
-    console.log('[BERHASIL] Import Pagination di ' + rel)
-  } else {
-    console.log('[TIDAK KETEMU] Anchor import di ' + rel)
-  }
-
-  if (isi.includes('const PER_PAGE')) {
-    console.log('[SUDAH ADA] Konstanta PER_PAGE di ' + rel)
-  } else if (isi.includes(cfg.initialAnchor)) {
-    isi = isi.replace(cfg.initialAnchor, cfg.initialAnchor + '\nconst PER_PAGE = 10')
-    berubah = true
-    console.log('[BERHASIL] Konstanta PER_PAGE di ' + rel)
-  } else {
-    console.log('[TIDAK KETEMU] Anchor PER_PAGE di ' + rel)
-  }
-
-  if (isi.includes('const [page, setPage]')) {
-    console.log('[SUDAH ADA] State page di ' + rel)
-  } else if (isi.includes(cfg.loadingAnchor)) {
-    isi = isi.replace(cfg.loadingAnchor, cfg.loadingAnchor + '\n  const [page, setPage] = useState(1)')
-    berubah = true
-    console.log('[BERHASIL] State page di ' + rel)
-  } else {
-    console.log('[TIDAK KETEMU] Anchor state page di ' + rel)
-  }
-
-  if (isi.includes('function gantiHalaman')) {
-    console.log('[SUDAH ADA] Logika gantiHalaman di ' + rel)
-  } else if (isi.includes(cfg.filterAnchor)) {
-    isi = isi.replace(cfg.filterAnchor, BLOK_EFFECT + '\n' + cfg.filterAnchor)
-    berubah = true
-    console.log('[BERHASIL] Logika gantiHalaman di ' + rel)
-  } else {
-    console.log('[TIDAK KETEMU] Anchor gantiHalaman di ' + rel)
-  }
-
-  if (isi.includes(cfg.namaPaginated)) {
-    console.log('[SUDAH ADA] Logika pagination di ' + rel)
-  } else if (isi.includes(cfg.sortedAnchor)) {
-    isi = isi.replace(cfg.sortedAnchor, cfg.sortedAnchor + '\n' + buatBlokPagination(cfg.namaSorted, cfg.namaPaginated))
-    berubah = true
-    console.log('[BERHASIL] Logika pagination di ' + rel)
-  } else {
-    console.log('[TIDAK KETEMU] Anchor logika pagination di ' + rel)
-  }
-
-  if (isi.includes(cfg.namaPaginated + '.map')) {
-    console.log('[SUDAH ADA] Grid memakai ' + cfg.namaPaginated + ' di ' + rel)
-  } else if (isi.includes(cfg.mapAsli)) {
-    isi = isi.replace(cfg.mapAsli, cfg.mapBaru)
-    berubah = true
-    console.log('[BERHASIL] Grid memakai ' + cfg.namaPaginated + ' di ' + rel)
-  } else {
-    console.log('[TIDAK KETEMU] Anchor map grid di ' + rel)
-  }
-
-  if (isi.includes('<Pagination totalItems={totalData}')) {
-    console.log('[SUDAH ADA] Komponen Pagination di grid ' + rel)
-  } else if (isi.includes(cfg.gridAnchor)) {
-    isi = isi.replace(cfg.gridAnchor, cfg.gridAnchor + '\n' + buatBlokAkhir(cfg.labelData))
-    berubah = true
-    console.log('[BERHASIL] Komponen Pagination di grid ' + rel)
-  } else {
-    console.log('[TIDAK KETEMU] Anchor grid untuk Pagination di ' + rel)
-  }
-
-  if (berubah) simpan(rel, isi)
-}
-
-/* =====================================================
-   LANGKAH 2: TERAPKAN KE TIGA HALAMAN
-   ===================================================== */
-transformHalaman({
-  rel: 'src/pages/LogbookPage.jsx',
-  importAsli: "import { EmptyState, Modal } from '../components/ui.jsx'",
-  importBaru: "import { EmptyState, Modal, Pagination } from '../components/ui.jsx'",
-  initialAnchor: "const INITIAL = { mahasiswa: '', kategori: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }",
-  loadingAnchor: 'const [loading, setLoading] = useState(true)',
-  filterAnchor: '  const logs = all.filter(function (l) {',
-  sortedAnchor: '  const sortedLogs = urutkanTanggal(logs, sort)',
-  namaSorted: 'sortedLogs',
-  namaPaginated: 'paginatedLogs',
-  mapAsli: ': sortedLogs.map(function (l) {',
-  mapBaru: ': paginatedLogs.map(function (l) {',
-  gridAnchor: '        {!loading && !logs.length ? <EmptyState title="Logbook tidak ditemukan" desc="Coba reset filter atau pilih filter lain." /> : null}\n      </section>',
-  labelData: 'logbook'
-})
-console.log('')
-transformHalaman({
-  rel: 'src/pages/GalleryPage.jsx',
-  importAsli: "import { EmptyState, Modal } from '../components/ui.jsx'",
-  importBaru: "import { EmptyState, Modal, Pagination } from '../components/ui.jsx'",
-  initialAnchor: "const INITIAL = { kegiatan: '', tipe: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }",
-  loadingAnchor: 'const [loading, setLoading] = useState(true)',
-  filterAnchor: '  const items = all.filter(function (i) {',
-  sortedAnchor: '  const sortedItems = urutkanTanggal(items, sort)',
-  namaSorted: 'sortedItems',
-  namaPaginated: 'paginatedItems',
-  mapAsli: ': sortedItems.map(function (i) {',
-  mapBaru: ': paginatedItems.map(function (i) {',
-  gridAnchor: '        {!loading && !items.length ? <EmptyState icon="camera" title="Belum ada media galeri" desc="Media galeri yang diunggah mahasiswa akan tampil di sini." /> : null}\n      </section>',
-  labelData: 'media'
-})
-console.log('')
-transformHalaman({
-  rel: 'src/pages/AttendancePage.jsx',
-  importAsli: "import { StatCard, EmptyState, Modal } from '../components/ui.jsx'",
-  importBaru: "import { StatCard, EmptyState, Modal, Pagination } from '../components/ui.jsx'",
-  initialAnchor: "const INITIAL = { mahasiswa: '', status: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }",
-  loadingAnchor: 'const [loading, setLoading] = useState(true)',
-  filterAnchor: '  const rows = all.filter(function (r) {',
-  sortedAnchor: '  const sortedRows = urutkanTanggal(rows, sort)',
-  namaSorted: 'sortedRows',
-  namaPaginated: 'paginatedRows',
-  mapAsli: ': sortedRows.map(function (r) {',
-  mapBaru: ': paginatedRows.map(function (r) {',
-  gridAnchor: '          {!loading && !rows.length ? <EmptyState icon="clipboard" title="Belum ada data kehadiran" desc="Data kehadiran akan tampil setelah mahasiswa mengisi daftar hadir." /> : null}\n        </div>\n      </section>',
-  labelData: 'catatan'
-})
-
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Yang dipasang oleh script ini:')
-console.log('1. Komponen Pagination reusable di ui.jsx dengan tombol Sebelumnya, nomor halaman, dan Berikutnya.')
-console.log('2. Setiap halaman menampilkan 10 data per index sesuai konstanta PER_PAGE.')
-console.log('3. Halaman otomatis kembali ke index pertama saat filter atau urutan berubah.')
-console.log('4. Info rentang data tampil di bawah grid, misalnya Menampilkan 1 sampai 10 dari 25 logbook.')
-console.log('5. Ada pengaman pageAman agar tidak error bila index aktif melebihi total halaman setelah filter berubah.')
-console.log('6. Tampilan otomatis bergeser halus ke atas setiap kali pindah halaman.')
-console.log('')
-console.log('Bila ada baris TIDAK KETEMU, kirim baris tersebut ke chat supaya polanya disesuaikan.')
-```
-
-## File: apply-scroll-top.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-
-console.log('Mulai memasang ScrollToTop agar pindah halaman selalu mulai dari atas...')
-console.log('')
-
-const FILE_A = 'src/App.jsx'
-if (!fs.existsSync(path.join(root, FILE_A))) {
-  console.log('[GAGAL] App.jsx tidak ditemukan')
-  process.exit(1)
-}
-let a = baca(FILE_A)
-let berubah = false
-
-/* ===== 1. Tambah import useEffect dan useLocation ===== */
-const IMP_LAMA = "import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'"
-const IMP_BARU = "import { useEffect } from 'react'\nimport { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'"
-if (a.includes('useLocation')) {
-  console.log('[SUDAH ADA] Import useLocation di App.jsx')
-} else if (a.includes(IMP_LAMA)) {
-  a = a.replace(IMP_LAMA, IMP_BARU)
-  berubah = true
-  console.log('[BERHASIL] Import useEffect dan useLocation ditambahkan')
-} else {
-  console.log('[TIDAK KETEMU] Pola import react-router di App.jsx')
-}
-
-/* ===== 2. Tambah komponen ScrollToTop sebelum RequireAuth ===== */
-const KOMPONEN = `function ScrollToTop() {
-  const { pathname } = useLocation()
-  useEffect(function () {
-    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
-  }, [pathname])
-  return null
-}
-`
-if (a.includes('function ScrollToTop(')) {
-  console.log('[SUDAH ADA] Komponen ScrollToTop di App.jsx')
-} else if (a.includes('function RequireAuth(props) {')) {
-  a = a.replace('function RequireAuth(props) {', KOMPONEN + 'function RequireAuth(props) {')
-  berubah = true
-  console.log('[BERHASIL] Komponen ScrollToTop ditambahkan')
-} else {
-  console.log('[TIDAK KETEMU] Anchor RequireAuth di App.jsx')
-}
-
-/* ===== 3. Render ScrollToTop di dalam BrowserRouter ===== */
-const ROUTER_FUTURE = '<BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>'
-if (a.includes('<ScrollToTop />')) {
-  console.log('[SUDAH ADA] ScrollToTop sudah dirender')
-} else if (a.includes(ROUTER_FUTURE)) {
-  a = a.replace(ROUTER_FUTURE, ROUTER_FUTURE + '\n        <ScrollToTop />')
-  berubah = true
-  console.log('[BERHASIL] ScrollToTop dirender di dalam BrowserRouter')
-} else if (a.includes('<BrowserRouter>')) {
-  a = a.replace('<BrowserRouter>', '<BrowserRouter>\n        <ScrollToTop />')
-  berubah = true
-  console.log('[BERHASIL] ScrollToTop dirender di dalam BrowserRouter polos')
-} else {
-  console.log('[TIDAK KETEMU] Pola BrowserRouter di App.jsx')
-}
-
-if (berubah) simpan(FILE_A, a)
-
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Cara kerja perbaikan:')
-console.log('1. Komponen ScrollToTop memantau perubahan pathname dari useLocation.')
-console.log('2. Setiap kali route berpindah, misalnya dari Beranda atau Tim & Dospem ke Logbook, scroll langsung dikunci ke puncak secara instan.')
-console.log('3. Perpindahan akibat redirect /tim ke /dospem juga ikut mulai dari atas.')
-console.log('4. Scroll halus pada tombol nomor pagination di dalam halaman Logbook, Galeri, dan Daftar Hadir tidak terpengaruh karena pathnya tidak berubah.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Buka Beranda, gulir ke bawah sampai tombol Lihat semua logbook, lalu klik.')
-console.log('2. Halaman Logbook terbuka langsung dari posisi paling atas, bukan dari tengah.')
-console.log('3. Ulangi dari halaman Tim & Dospem: hasil sama, mulai dari atas.')
-console.log('4. Klik tombol nomor 2 pada pagination Logbook: perilaku scroll halus antar halaman tetap normal.')
+console.log('1. Buka dashboard tab Logbook dengan 7 data: teks berbunyi Total 7 logbook • Halaman 1 dari 2.')
+console.log('2. Klik tombol halaman 2: teks berubah menjadi Total 7 logbook • Halaman 2 dari 2.')
+console.log('3. Aktifkan filter sehingga hasil kurang dari 6: teks cukup Total X logbook tanpa keterangan halaman.')
+console.log('4. Ulangi pengecekan di tab Galeri, Daftar Hadir, serta halaman publik Logbook, Galeri, dan Daftar Hadir.')
 ```
 
 ## File: api/r2/delete.js
@@ -3829,6 +2650,260 @@ console.log('3. Buka tab Galeri di dashboard: kartu milik sendiri menampilkan to
 console.log('4. Buka modal detail galeri: chip di dalam modal tetap rapi dengan ukuran teks yang sama.')
 ```
 
+## File: apply-fix-dospem-pusat.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai memperbaiki sisa pemasangan di DospemPage...')
+console.log('')
+
+const FILE_D = 'src/pages/DospemPage.jsx'
+if (!fs.existsSync(path.join(root, FILE_D))) {
+  console.log('[GAGAL] DospemPage.jsx tidak ditemukan')
+  process.exit(1)
+}
+let d = baca(FILE_D)
+let berubah = false
+
+/* ===== 1. Seimbangkan penutup kartu profil tim (tambah satu </div> pembungkus kolom) ===== */
+const TUTUP_BENAR = '</div>\n</div>\n</div>\n</div>\n)\n})}'
+const TUTUP_LAMA = '</div>\n</div>\n</div>\n)\n})}'
+if (d.includes(TUTUP_BENAR)) {
+  console.log('[SUDAH ADA] Penutup kartu profil tim sudah seimbang')
+} else if (d.includes(TUTUP_LAMA)) {
+  d = d.replace(TUTUP_LAMA, TUTUP_BENAR)
+  berubah = true
+  console.log('[BERHASIL] Penutup kartu profil tim diseimbangkan, error sintaks hilang')
+} else {
+  console.log('[TIDAK KETEMU] Pola penutup kartu profil tim')
+}
+
+/* ===== 2. Wadah grid logbook dospem menjadi grid-pusat ===== */
+const CONT_LAMA = '<div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">'
+const CONT_BARU = '<div className="grid-pusat mt-6">'
+if (d.includes(CONT_BARU)) {
+  console.log('[SUDAH ADA] Wadah grid logbook dospem sudah grid-pusat')
+} else if (d.includes(CONT_LAMA)) {
+  d = d.replace(CONT_LAMA, CONT_BARU)
+  berubah = true
+  console.log('[BERHASIL] Wadah grid logbook dospem menjadi grid-pusat')
+} else {
+  console.log('[TIDAK KETEMU] Wadah grid logbook dospem')
+}
+
+/* ===== 3. Skeleton logbook dospem dibungkus kolom ===== */
+const SKEL_LAMA = '? [0, 1, 2].map(function (i) { return <SkeletonLogbookCard key={i} /> })'
+const SKEL_BARU = '? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })'
+if (d.includes('kolom-kartu"><SkeletonLogbookCard')) {
+  console.log('[SUDAH ADA] Skeleton logbook dospem dibungkus kolom')
+} else if (d.includes(SKEL_LAMA)) {
+  d = d.replace(SKEL_LAMA, SKEL_BARU)
+  berubah = true
+  console.log('[BERHASIL] Skeleton logbook dospem dibungkus kolom')
+} else {
+  console.log('[TIDAK KETEMU] Skeleton logbook dospem')
+}
+
+/* ===== 4. Grid logbook dospem: 6 terbaru dibungkus kolom (regex tahan indentasi) ===== */
+const RE_MAP = /: logs\.map\(function \(l\) \{\s*return <LogbookCard key=\{l\.id\} log=\{l\} onDetail=\{function \(\) \{ setDetail\(l\) \}\} \/>\s*\}\)\}/
+if (d.includes('logs.slice(0, 6)')) {
+  console.log('[SUDAH ADA] Grid logbook dospem sudah 6 terbaru')
+} else if (RE_MAP.test(d)) {
+  d = d.replace(RE_MAP, `: logs.slice(0, 6).map(function (l) {
+                return (
+                  <div key={l.id} className="kolom-kartu">
+                    <LogbookCard log={l} onDetail={function () { setDetail(l) }} />
+                  </div>
+                )
+              })}`)
+  berubah = true
+  console.log('[BERHASIL] Grid logbook dospem menampilkan 6 terbaru rata tengah')
+} else {
+  console.log('[TIDAK KETEMU] Pola map logbook dospem')
+}
+
+/* ===== 5. EmptyState logbook dospem melebar penuh ===== */
+const EMPTY_LAMA = '{!loading && !logs.length ? <EmptyState title="Belum ada logbook publik" desc="Logbook akan tampil setelah mahasiswa mengatur status siap dilihat." /> : null}'
+const EMPTY_BARU = '{!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum ada logbook publik" desc="Logbook akan tampil setelah mahasiswa mengatur status siap dilihat." /></div> : null}'
+if (d.includes('<div className="w-full"><EmptyState title="Belum ada logbook publik"')) {
+  console.log('[SUDAH ADA] EmptyState logbook dospem melebar penuh')
+} else if (d.includes(EMPTY_LAMA)) {
+  d = d.replace(EMPTY_LAMA, EMPTY_BARU)
+  berubah = true
+  console.log('[BERHASIL] EmptyState logbook dospem melebar penuh')
+} else {
+  console.log('[TIDAK KETEMU] EmptyState logbook dospem')
+}
+
+/* ===== 6. Tombol lihat semua sebelum penutup section logbook dospem ===== */
+const RE_TOMBOL = /<\/div>\s*<\/section>\s*(<Modal open=\{!!detail\})/
+if (d.includes('Lihat semua logbook')) {
+  console.log('[SUDAH ADA] Tombol lihat semua di section logbook dospem')
+} else if (RE_TOMBOL.test(d)) {
+  d = d.replace(RE_TOMBOL, `</div>
+        <div className="mt-8 flex justify-center">
+          <Link to="/logbook" className="rounded-2xl bg-bsi-800 px-6 py-3 text-sm font-bold text-white hover:bg-bsi-900">Lihat semua logbook</Link>
+        </div>
+      </section>
+      $1`)
+  berubah = true
+  console.log('[BERHASIL] Tombol lihat semua dipasang di section logbook dospem')
+} else {
+  console.log('[TIDAK KETEMU] Anchor tombol lihat semua di dospem')
+}
+
+if (berubah) simpan(FILE_D, d)
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Perbaikan yang diterapkan:')
+console.log('1. Penutup kartu profil tim kembali seimbang sehingga error sintaks dari langkah sebelumnya hilang.')
+console.log('2. Grid logbook di Tim & Dospem memakai wadah grid-pusat dan hanya menampilkan 6 logbook terbaru.')
+console.log('3. Tombol hijau Lihat semua logbook tampil di tengah bawah section aktivitas, menuju halaman Logbook.')
+console.log('4. Kartu profil tim yang kurang dari satu baris penuh tetap berdiri di tengah karena pembungkus kolom.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Dev server tidak lagi menampilkan error sintaks setelah file tersimpan.')
+console.log('2. Buka Tim & Dospem: kartu profil tim tampil rata tengah dan tidak ada kartu yang rusak.')
+console.log('3. Section aktivitas menampilkan maksimal 6 kartu logbook terbaru dengan tombol lihat semua di bawahnya.')
+console.log('4. Klik tombol tersebut: browser berpindah ke halaman Logbook lengkap dengan pagination 12 data.')
+```
+
+## File: apply-fix-dospem-syntax.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+const FILE_D = 'src/pages/DospemPage.jsx'
+if (!fs.existsSync(path.join(root, FILE_D))) {
+  console.log('[GAGAL] DospemPage.jsx tidak ditemukan')
+  process.exit(1)
+}
+let d = fs.readFileSync(path.join(root, FILE_D), 'utf8').replace(/\r\n/g, '\n')
+let berubah = false
+
+console.log('Mulai memperbaiki struktur JSX yang tidak seimbang di DospemPage...')
+console.log('')
+
+/* ===== 1. Tulis ulang section Profil tim magang agar tag pembuka dan penutup seimbang ===== */
+const startSection = '<section className="mt-10">\n<h2 className="text-2xl lg:text-3xl font-black text-slate-900">Profil tim magang</h2>'
+const endSection = '</section>\n      <section className="mt-10">\n        <h2 className="text-2xl lg:text-3xl font-black text-slate-900">Aktivitas yang sudah dipublikasikan</h2>'
+
+const startIdx = d.indexOf(startSection)
+const endIdx = d.indexOf(endSection)
+
+if (startIdx !== -1 && endIdx !== -1) {
+  const newSection = `<section className="mt-10">
+<h2 className="text-2xl lg:text-3xl font-black text-slate-900">Profil tim magang</h2>
+<p className="mt-2 max-w-3xl text-slate-500">Seluruh mahasiswa magang beserta kontribusi logbook, media galeri, dan catatan kehadiran masing-masing.</p>
+<div className="grid-pusat-rapat mt-6">
+{loading
+? [0, 1, 2].map(function (i) { return <div key={i} className="kolom-kartu-rapat"><SkeletonPersonCard /></div> })
+: people.map(function (p) {
+const totalLog = logs.filter(function (x) { return x.mahasiswa_id === p.id }).length
+const totalGal = galRows.filter(function (x) { return x.mahasiswa_id === p.id }).length
+const totalHadir = hadirRows.filter(function (x) { return x.mahasiswa_id === p.id }).length
+return (
+<div key={p.id} className="kolom-kartu-rapat">
+<div className="card-hover rounded-3xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col h-full">
+<div className="flex items-center gap-4">
+<Avatar src={p.foto_profil || null} nama={p.nama} size="lg" />
+<div className="min-w-0 flex-1">
+<p className="truncate text-lg font-black text-slate-900">{p.nama}</p>
+<p className="truncate text-xs text-slate-500">NIM {p.nim}</p>
+{p.prodi ? <span className="mt-1.5 inline-flex px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold">{p.prodi}</span> : null}
+</div>
+</div>
+<div className="mt-4 grid grid-cols-2 gap-3">
+<div className="rounded-2xl bg-slate-50 p-3">
+<p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Logbook</p>
+<p className="mt-0.5 text-xl font-black text-bsi-800">{totalLog}</p>
+</div>
+<div className="rounded-2xl bg-slate-50 p-3">
+<p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Media</p>
+<p className="mt-0.5 text-xl font-black text-bsi-800">{totalGal}</p>
+</div>
+</div>
+<div className="mt-3 pt-3 border-t border-slate-100">
+<p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Rekap Kehadiran</p>
+<div className="grid grid-cols-3 gap-2">
+<div className="rounded-xl bg-emerald-50 p-2 text-center">
+<p className="text-[10px] font-bold text-emerald-600 uppercase">Masuk</p>
+<p className="text-base font-black text-emerald-700">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Masuk' }).length}</p>
+</div>
+<div className="rounded-xl bg-amber-50 p-2 text-center">
+<p className="text-[10px] font-bold text-amber-600 uppercase">Izin</p>
+<p className="text-base font-black text-amber-700">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Izin' }).length}</p>
+</div>
+<div className="rounded-xl bg-red-50 p-2 text-center">
+<p className="text-[10px] font-bold text-red-600 uppercase">Bolos</p>
+<p className="text-base font-black text-red-700">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Bolos' }).length}</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+)
+})}
+{!loading && !people.length ? <div className="w-full"><EmptyState title="Belum ada data mahasiswa" desc="Profil tim akan tampil setelah mahasiswa terdaftar." /></div> : null}
+</div>
+</section>
+      `
+  d = d.substring(0, startIdx) + newSection + d.substring(endIdx)
+  berubah = true
+  console.log('[BERHASIL] Section Profil tim magang ditulis ulang dengan struktur JSX yang seimbang')
+} else {
+  console.log('[TIDAK KETEMU] Batas section Profil tim magang, mencoba fallback...')
+  const fallbackRegex = /(<div className="card-hover rounded-3xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col h-full">[\s\S]*?)<\/div>(\s*\)\s*\}\)\})/
+  if (fallbackRegex.test(d)) {
+    d = d.replace(fallbackRegex, '$1</div>\n </div>$2')
+    berubah = true
+    console.log('[BERHASIL] Penutup kolom-kartu-rapat ditambahkan (fallback)')
+  }
+}
+
+/* ===== 2. Pastikan section logbook dospem memiliki grid-pusat ===== */
+const regexLogbook = /<section className="mt-10">\s*<h2 className="text-2xl lg:text-3xl font-black text-slate-900">Aktivitas yang sudah dipublikasikan<\/h2>\s*<div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">/
+if (regexLogbook.test(d)) {
+  d = d.replace(regexLogbook, `<section className="mt-10">
+        <h2 className="text-2xl lg:text-3xl font-black text-slate-900">Aktivitas yang sudah dipublikasikan</h2>
+        <div className="grid-pusat mt-6">`)
+  berubah = true
+  console.log('[BERHASIL] Wadah grid logbook dospem diubah menjadi grid-pusat')
+}
+
+/* ===== 3. Pastikan ada tombol Lihat semua logbook sebelum Modal ===== */
+if (!d.includes('Lihat semua logbook') && d.includes('<Modal open={!!detail}')) {
+  d = d.replace(/<\/div>\s*<\/section>\s*(<Modal open=\{!!detail\})/, `</div>
+        <div className="mt-8 flex justify-center">
+          <Link to="/logbook" className="rounded-2xl bg-bsi-800 px-6 py-3 text-sm font-bold text-white hover:bg-bsi-900">Lihat semua logbook</Link>
+        </div>
+      </section>
+      $1`)
+  berubah = true
+  console.log('[BERHASIL] Tombol Lihat semua logbook ditambahkan')
+}
+
+if (berubah) {
+  fs.writeFileSync(path.join(root, FILE_D), d, 'utf8')
+}
+
+console.log('')
+console.log('Selesai. Vite akan otomatis memuat ulang (atau restart dev server: Ctrl+C lalu npm run dev -- --host).')
+console.log('')
+console.log('Penjelasan perbaikan:')
+console.log('1. Script sebelumnya gagal menambahkan </div> penutup untuk pembungkus kolom kartu profil tim.')
+console.log('2. Akibatnya, parser JSX mengira section berikutnya (Aktivitas yang sudah dipublikasikan) masih berada di dalam kartu, sehingga memicu error "Adjacent JSX elements".')
+console.log('3. Script ini membuang section Profil tim magang yang rusak dan menulis ulangnya dari nol dengan tag pembuka dan penutup yang dijamin seimbang.')
+console.log('4. Section logbook di bawahnya juga dipastikan memakai wadah rata tengah (grid-pusat) dan memiliki tombol Lihat semua logbook.')
+```
+
 ## File: apply-fix-export-unggah.cjs
 ```javascript
 const fs = require('fs')
@@ -4038,6 +3113,48 @@ console.log('Langkah uji:')
 console.log('1. Buka menu Tim & Dospem, lihat section Profil tim magang.')
 console.log('2. Perhatikan urutan tipografi: nama besar tebal, NIM kecil tipis, pil prodi mungil berwarna.')
 console.log('3. Pastikan tidak ada teks yang saling bertumpuk atau keluar dari batas kartu.')
+```
+
+## File: apply-fix-pagination-galeri.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+const FILE_D = 'src/pages/DashboardPage.jsx'
+if (!fs.existsSync(path.join(root, FILE_D))) {
+  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
+  process.exit(1)
+}
+let d = fs.readFileSync(path.join(root, FILE_D), 'utf8').replace(/\r\n/g, '\n')
+console.log('Mulai memasang ulang Pagination daftar galeri di dashboard...')
+console.log('')
+const MARK = 'onPageChange={gantiHalamanGal}'
+if (d.includes(MARK)) {
+  console.log('[SUDAH ADA] Pagination daftar galeri sudah terpasang')
+} else {
+  const re = /(\{!filteredGaleri\.length \? <EmptyState icon="camera"[^\n]*\n[ \t]*<\/div>)/
+  if (re.test(d)) {
+    d = d.replace(re, '$1\n            <Pagination totalItems={galTotal} perPage={PER_PAGE_DASH} page={galPageAman} onPageChange={gantiHalamanGal} />')
+    fs.writeFileSync(path.join(root, FILE_D), d, 'utf8')
+    console.log('[BERHASIL] Pagination daftar galeri dipasang')
+  } else {
+    console.log('[TIDAK KETEMU] Pola grid galeri untuk menyisipkan Pagination')
+    console.log('Kirim isi blok tab galeri di DashboardPage.jsx supaya polanya dikunci manual.')
+  }
+}
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Catatan perbaikan:')
+console.log('1. Penyebab gagal sebelumnya adalah anchor penutup </div> grid galeri berbeda satu spasi, jadi pola lama tidak cocok.')
+console.log('2. Script ini memakai regex longgar yang tidak peduli jumlah spasi, sehingga posisinya pasti ketemu.')
+console.log('3. Setelah terpasang, tab Galeri dashboard punya tombol nomor halaman yang sama seperti tab Logbook dan Daftar Hadir.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka dashboard tab Galeri dengan data lebih dari 6: tombol nomor muncul di bawah daftar kartu.')
+console.log('2. Klik halaman 2: hanya 6 data berikutnya yang tampil dan layar menggulir ke judul Galeri kamu.')
+console.log('3. Ganti filter atau urutan: halaman otomatis kembali ke 1.')
+console.log('4. Tab Logbook dan Daftar Hadir tetap berfungsi normal seperti sebelumnya.')
 ```
 
 ## File: apply-fix-prodi-final.cjs
@@ -6475,6 +5592,912 @@ console.log('4. Progres persen tetap tampil, misalnya Mengunggah 43 persen, diik
 console.log('5. Pemutar embed memakai parameter modestbranding dan rel=0 untuk meminimalkan merek bawaan.')
 ```
 
+## File: apply-pagination-dashboard.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+const FILE_D = 'src/pages/DashboardPage.jsx'
+if (!fs.existsSync(path.join(root, FILE_D))) {
+  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
+  process.exit(1)
+}
+
+function tempel(cari, ekor, marker, label) {
+  let isi = baca(FILE_D)
+  if (isi.includes(marker)) { console.log('[SUDAH ADA] ' + label); return }
+  const cocok = (cari instanceof RegExp) ? cari.test(isi) : isi.includes(cari)
+  if (!cocok) { console.log('[TIDAK KETEMU] ' + label); return }
+  isi = isi.replace(cari, function (m) { return m + ekor })
+  simpan(FILE_D, isi)
+  console.log('[BERHASIL] ' + label)
+}
+
+function ganti(cari, gantiDengan, marker, label) {
+  let isi = baca(FILE_D)
+  if (isi.includes(marker)) { console.log('[SUDAH ADA] ' + label); return }
+  if (!isi.includes(cari)) { console.log('[TIDAK KETEMU] ' + label); return }
+  isi = isi.replace(cari, gantiDengan)
+  simpan(FILE_D, isi)
+  console.log('[BERHASIL] ' + label)
+}
+
+console.log('Mulai memasang pagination 6 data per index di dashboard...')
+console.log('')
+
+/* ===== 1. Import useRef dan komponen Pagination ===== */
+ganti(
+  "import { useEffect, useState } from 'react'",
+  "import { useEffect, useRef, useState } from 'react'",
+  'useRef',
+  'Import useRef ditambahkan'
+)
+ganti(
+  "import { EmptyState, Modal, ConfirmModal, inputCls, labelCls, btnPrimary, btnSmall, AutoTextArea } from '../components/ui.jsx'",
+  "import { EmptyState, Modal, ConfirmModal, inputCls, labelCls, btnPrimary, btnSmall, AutoTextArea, Pagination } from '../components/ui.jsx'",
+  'AutoTextArea, Pagination',
+  'Import Pagination ditambahkan'
+)
+
+/* ===== 2. Konstanta jumlah data per halaman ===== */
+tempel(
+  "const HADIR_INITIAL = { status: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }",
+  '\nconst PER_PAGE_DASH = 6',
+  'const PER_PAGE_DASH = 6',
+  'Konstanta PER_PAGE_DASH = 6'
+)
+
+/* ===== 3. State halaman dan ref judul daftar ===== */
+tempel(
+  'const [sort, setSort] = useState(\'terbaru\')',
+  '\n   const [logPage, setLogPage] = useState(1)\n   const [galPage, setGalPage] = useState(1)\n   const [hadirPage, setHadirPage] = useState(1)\n   const refListLog = useRef(null)\n   const refListGal = useRef(null)\n   const refListHadir = useRef(null)',
+  'const [logPage, setLogPage] = useState(1)',
+  'State halaman dan ref daftar'
+)
+
+/* ===== 4. Reset halaman saat filter atau urutan berubah ===== */
+tempel(
+  '}, [mahasiswa])',
+  '\n\n   useEffect(function () {\n     setLogPage(1)\n     setGalPage(1)\n     setHadirPage(1)\n   }, [logFilter, galFilter, hadirFilter, sort])',
+  '}, [logFilter, galFilter, hadirFilter, sort])',
+  'Effect reset halaman saat filter berubah'
+)
+
+/* ===== 5. Perhitungan pagination dan fungsi pindah halaman ===== */
+tempel(
+  'const hadirFilterActive = countActiveFilters(hadirFilter)',
+  '\n   const logTotal = filteredLogs.length\n' +
+  '   const logTotalPages = Math.max(1, Math.ceil(logTotal / PER_PAGE_DASH))\n' +
+  '   const logPageAman = Math.min(logPage, logTotalPages)\n' +
+  '   const paginatedLogs = sortedLogs.slice((logPageAman - 1) * PER_PAGE_DASH, logPageAman * PER_PAGE_DASH)\n' +
+  '   const galTotal = filteredGaleri.length\n' +
+  '   const galTotalPages = Math.max(1, Math.ceil(galTotal / PER_PAGE_DASH))\n' +
+  '   const galPageAman = Math.min(galPage, galTotalPages)\n' +
+  '   const paginatedGaleri = sortedGaleri.slice((galPageAman - 1) * PER_PAGE_DASH, galPageAman * PER_PAGE_DASH)\n' +
+  '   const hadirTotal = filteredHadir.length\n' +
+  '   const hadirTotalPages = Math.max(1, Math.ceil(hadirTotal / PER_PAGE_DASH))\n' +
+  '   const hadirPageAman = Math.min(hadirPage, hadirTotalPages)\n' +
+  '   const paginatedHadir = sortedHadir.slice((hadirPageAman - 1) * PER_PAGE_DASH, hadirPageAman * PER_PAGE_DASH)\n' +
+  '   function gantiHalamanLog(p) {\n     setLogPage(p)\n     if (refListLog.current) refListLog.current.scrollIntoView({ behavior: \'smooth\', block: \'start\' })\n   }\n' +
+  '   function gantiHalamanGal(p) {\n     setGalPage(p)\n     if (refListGal.current) refListGal.current.scrollIntoView({ behavior: \'smooth\', block: \'start\' })\n   }\n' +
+  '   function gantiHalamanHadir(p) {\n     setHadirPage(p)\n     if (refListHadir.current) refListHadir.current.scrollIntoView({ behavior: \'smooth\', block: \'start\' })\n   }',
+  'const paginatedLogs = sortedLogs.slice(',
+  'Perhitungan pagination dan fungsi pindah halaman'
+)
+
+/* ===== 6. Setelah menambah data baru, kembali ke halaman 1 ===== */
+tempel(
+  /async function submitLogbook\(e\) \{\s*\n\s*e\.preventDefault\(\)\s*\n\s*setBusy\(true\)/,
+  '\n     const menambahLog = !editLogId',
+  'const menambahLog = !editLogId',
+  'Penanda tambah logbook baru'
+)
+tempel(
+  /setItems\(\[newItem\(\)\]\)\s*\n\s*await refresh\(\)/,
+  '\n       if (menambahLog) setLogPage(1)',
+  'if (menambahLog) setLogPage(1)',
+  'Reset halaman logbook setelah tambah baru'
+)
+tempel(
+  /async function submitGaleri\(e\) \{\s*\n\s*e\.preventDefault\(\)\s*\n\s*setBusy\(true\)/,
+  '\n     const menambahGal = !editGalId',
+  'const menambahGal = !editGalId',
+  'Penanda tambah galeri baru'
+)
+tempel(
+  /setGalOldYt\(null\)\s*\n\s*await refresh\(\)/,
+  '\n       if (menambahGal) setGalPage(1)',
+  'if (menambahGal) setGalPage(1)',
+  'Reset halaman galeri setelah tambah baru'
+)
+tempel(
+  /async function submitHadir\(e\) \{\s*\n\s*e\.preventDefault\(\)\s*\n\s*setBusy\(true\)/,
+  '\n     const menambahHadir = !editHadirId',
+  'const menambahHadir = !editHadirId',
+  'Penanda tambah hadir baru'
+)
+tempel(
+  /setHadirForm\(\{ tanggal: todayInput\(\), status: 'Masuk', alasan: '' \}\)\s*\n\s*await refresh\(\)/,
+  '\n     if (menambahHadir) setHadirPage(1)',
+  'if (menambahHadir) setHadirPage(1)',
+  'Reset halaman hadir setelah tambah baru'
+)
+
+/* ===== 7. Tab Logbook: judul, info, sumber data, dan Pagination ===== */
+ganti(
+  '<h2 className="text-2xl font-black text-slate-900">Logbook kamu</h2>',
+  '<h2 ref={refListLog} className="text-2xl font-black text-slate-900 scroll-mt-24">Logbook kamu</h2>',
+  'ref={refListLog}',
+  'Ref judul daftar logbook'
+)
+ganti(
+  '<p className="text-sm text-slate-500">Menampilkan {filteredLogs.length} dari {logs.length} logbook</p>',
+  '<p className="text-sm text-slate-500">Menampilkan {filteredLogs.length} dari {logs.length} logbook{logTotalPages > 1 ? \' • Halaman \' + logPageAman + \' dari \' + logTotalPages : \'\'}</p>',
+  "' • Halaman ' + logPageAman",
+  'Info halaman daftar logbook'
+)
+ganti(
+  '{sortedLogs.map(function (l) {',
+  '{paginatedLogs.map(function (l) {',
+  '{paginatedLogs.map(function (l) {',
+  'Daftar logbook memakai potongan halaman'
+)
+tempel(
+  "{!filteredLogs.length ? <EmptyState title={logs.length ? 'Logbook tidak ditemukan' : 'Belum ada logbook'} desc={logs.length ? 'Coba reset filter atau pilih filter lain.' : 'Tambahkan logbook harian pertama kamu.'} /> : null}",
+  '\n             <Pagination totalItems={logTotal} perPage={PER_PAGE_DASH} page={logPageAman} onPageChange={gantiHalamanLog} />',
+  'onPageChange={gantiHalamanLog}',
+  'Pagination daftar logbook'
+)
+
+/* ===== 8. Tab Galeri: judul, info, sumber data, dan Pagination ===== */
+ganti(
+  '<h2 className="text-2xl font-black text-slate-900">Galeri kamu</h2>',
+  '<h2 ref={refListGal} className="text-2xl font-black text-slate-900 scroll-mt-24">Galeri kamu</h2>',
+  'ref={refListGal}',
+  'Ref judul daftar galeri'
+)
+ganti(
+  '<p className="text-sm text-slate-500">Menampilkan {filteredGaleri.length} dari {galeri.length} media</p>',
+  '<p className="text-sm text-slate-500">Menampilkan {filteredGaleri.length} dari {galeri.length} media{galTotalPages > 1 ? \' • Halaman \' + galPageAman + \' dari \' + galTotalPages : \'\'}</p>',
+  "' • Halaman ' + galPageAman",
+  'Info halaman daftar galeri'
+)
+ganti(
+  '{sortedGaleri.map(function (g) {',
+  '{paginatedGaleri.map(function (g) {',
+  '{paginatedGaleri.map(function (g) {',
+  'Daftar galeri memakai potongan halaman'
+)
+tempel(
+  "{!filteredGaleri.length ? <EmptyState icon=\"camera\" title={galeri.length ? 'Media tidak ditemukan' : 'Belum ada media galeri'} desc={galeri.length ? 'Coba reset filter atau pilih filter lain.' : 'Unggah foto atau video pertama kamu.'} /> : null}\n             </div>",
+  '\n             <Pagination totalItems={galTotal} perPage={PER_PAGE_DASH} page={galPageAman} onPageChange={gantiHalamanGal} />',
+  'onPageChange={gantiHalamanGal}',
+  'Pagination daftar galeri'
+)
+
+/* ===== 9. Tab Daftar Hadir: judul, info, sumber data, dan Pagination ===== */
+ganti(
+  '<h2 className="text-2xl font-black text-slate-900">Daftar hadir kamu</h2>',
+  '<h2 ref={refListHadir} className="text-2xl font-black text-slate-900 scroll-mt-24">Daftar hadir kamu</h2>',
+  'ref={refListHadir}',
+  'Ref judul daftar hadir'
+)
+ganti(
+  '<p className="text-sm text-slate-500">Menampilkan {filteredHadir.length} dari {hadir.length} catatan</p>',
+  '<p className="text-sm text-slate-500">Menampilkan {filteredHadir.length} dari {hadir.length} catatan{hadirTotalPages > 1 ? \' • Halaman \' + hadirPageAman + \' dari \' + hadirTotalPages : \'\'}</p>',
+  "' • Halaman ' + hadirPageAman",
+  'Info halaman daftar hadir'
+)
+ganti(
+  '{sortedHadir.map(function (h) {',
+  '{paginatedHadir.map(function (h) {',
+  '{paginatedHadir.map(function (h) {',
+  'Daftar hadir memakai potongan halaman'
+)
+tempel(
+  "{!filteredHadir.length ? <EmptyState icon=\"clipboard\" title={hadir.length ? 'Catatan tidak ditemukan' : 'Belum ada data kehadiran'} desc={hadir.length ? 'Coba reset filter atau pilih filter lain.' : 'Isi daftar hadir pertama kamu.'} /> : null}",
+  '\n             <Pagination totalItems={hadirTotal} perPage={PER_PAGE_DASH} page={hadirPageAman} onPageChange={gantiHalamanHadir} />',
+  'onPageChange={gantiHalamanHadir}',
+  'Pagination daftar hadir'
+)
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Perilaku baru di dashboard:')
+console.log('1. Daftar Logbook, Galeri, dan Daftar Hadir di kolom kanan masing-masing menampilkan maksimal 6 data per halaman.')
+console.log('2. Tombol pagination memakai komponen yang sama dengan halaman publik, jadi gaya hijau BSI tetap konsisten.')
+console.log('3. Teks info kini menambahkan keterangan halaman hanya bila halamannya lebih dari satu, misalnya Menampilkan 8 dari 8 logbook • Halaman 2 dari 2.')
+console.log('4. Ganti filter atau urutan otomatis kembali ke halaman 1 supaya hasil filter selalu terlihat dari awal.')
+console.log('5. Setelah menambah data baru, halaman kembali ke 1 sehingga data yang baru disimpan langsung terlihat.')
+console.log('6. Setelah menghapus data sampai halaman terakhir kosong, tampilan otomatis dijepit ke halaman yang masih berisi.')
+console.log('7. Klik nomor halaman membuat tampilan menggulir halus ke judul daftar, bukan terpaku di posisi bawah.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka dashboard tab Logbook: bila data lebih dari 6, tombol nomor muncul di bawah daftar kartu.')
+console.log('2. Klik halaman 2: hanya 6 data berikutnya yang tampil dan layar menggulir ke judul Logbook kamu.')
+console.log('3. Ulangi pengecekan di tab Galeri dan Daftar Hadir.')
+console.log('4. Tambah logbook baru saat berada di halaman 2: setelah tersimpan, tampilan kembali ke halaman 1 dan data baru terlihat.')
+console.log('5. Hapus data sampai tersisa 6 atau kurang: tombol pagination hilang dengan rapi karena hanya ada satu halaman.')
+```
+
+## File: apply-pagination-v2.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+function ada(rel) { return fs.existsSync(path.join(root, rel)) }
+function batasFungsi(isi, mulai) {
+  let brace = 0, akhir = -1, inStr = false, strCh = ''
+  for (let i = mulai; i < isi.length; i++) {
+    const ch = isi[i]
+    const prev = i > 0 ? isi[i - 1] : ''
+    if (inStr) { if (ch === strCh && prev !== '\\') inStr = false; continue }
+    if (ch === '"' || ch === "'" || ch === '`') { inStr = true; strCh = ch; continue }
+    if (ch === '{') brace++
+    if (ch === '}') { brace--; if (brace === 0) { akhir = i + 1; break } }
+  }
+  return akhir
+}
+
+console.log('Mulai memperbarui pagination versi 2: teks lebih jelas dan tombol nomor bertema...')
+console.log('')
+
+/* =====================================================
+   KOMPONEN PAGINATION VERSI 2
+   ===================================================== */
+const PAGINATION_V2 = `export function Pagination(props) {
+  /* pagination-v2: tombol nomor halaman sesuai tema BSI */
+  const totalItems = props.totalItems || 0
+  const perPage = props.perPage || 10
+  const page = props.page || 1
+  const onPageChange = props.onPageChange || function () {}
+  const totalPages = Math.ceil(totalItems / perPage)
+  if (!totalItems) return null
+  const halaman = []
+  if (totalPages <= 7) {
+    for (let i = 1; i <= totalPages; i++) halaman.push(i)
+  } else {
+    for (let i = 1; i <= totalPages; i++) {
+      if (i === 1 || i === totalPages || (i >= page - 1 && i <= page + 1)) {
+        halaman.push(i)
+      } else if (halaman[halaman.length - 1] !== '...') {
+        halaman.push('...')
+      }
+    }
+  }
+  const clsAngka = 'grid h-10 min-w-10 place-items-center rounded-xl px-3 text-sm font-bold transition '
+  const clsNav = 'flex h-10 items-center rounded-xl px-4 text-sm font-semibold transition '
+  const clsNetral = 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 hover:text-bsi-800'
+  return (
+    <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
+      {totalPages > 1 ? (
+        <button
+          type="button"
+          disabled={page <= 1}
+          onClick={function () { onPageChange(page - 1) }}
+          className={clsNav + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}
+        >
+          Sebelumnya
+        </button>
+      ) : null}
+      {halaman.map(function (h, idx) {
+        if (h === '...') {
+          return <span key={'lompat' + idx} className="px-1 text-sm font-bold text-slate-400">...</span>
+        }
+        const aktif = h === page
+        return (
+          <button
+            key={'hal' + h}
+            type="button"
+            onClick={function () { onPageChange(h) }}
+            className={clsAngka + (aktif
+              ? 'bg-bsi-800 text-white shadow-lg shadow-bsi-900/25'
+              : clsNetral)}
+          >
+            {h}
+          </button>
+        )
+      })}
+      {totalPages > 1 ? (
+        <button
+          type="button"
+          disabled={page >= totalPages}
+          onClick={function () { onPageChange(page + 1) }}
+          className={clsNav + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}
+        >
+          Berikutnya
+        </button>
+      ) : null}
+    </div>
+  )
+}`
+
+/* =====================================================
+   LANGKAH 1: GANTI KOMPONEN PAGINATION DI ui.jsx
+   ===================================================== */
+const FILE_U = 'src/components/ui.jsx'
+if (!ada(FILE_U)) {
+  console.log('[GAGAL] ui.jsx tidak ditemukan')
+  process.exit(1)
+}
+let u = baca(FILE_U)
+if (u.includes('/* pagination-v2')) {
+  console.log('[SUDAH ADA] Komponen Pagination versi 2 di ui.jsx')
+} else {
+  const mulai = u.indexOf('export function Pagination(props) {')
+  if (mulai === -1) {
+    u = u.trimEnd() + '\n\n' + PAGINATION_V2 + '\n'
+    simpan(FILE_U, u)
+    console.log('[BERHASIL] Komponen Pagination ditambahkan di ui.jsx')
+  } else {
+    const akhir = batasFungsi(u, mulai)
+    if (akhir === -1) {
+      console.log('[GAGAL] Batas fungsi Pagination lama tidak terbaca')
+    } else {
+      u = u.slice(0, mulai) + PAGINATION_V2 + u.slice(akhir)
+      simpan(FILE_U, u)
+      console.log('[BERHASIL] Komponen Pagination lama diganti versi 2 di ui.jsx')
+    }
+  }
+}
+
+/* =====================================================
+   LANGKAH 2: GANTI TEKS INFO DI TIGA HALAMAN
+   ===================================================== */
+const TARGET = [
+  {
+    rel: 'src/pages/LogbookPage.jsx',
+    lama: 'Menampilkan {mulai} sampai {akhir} dari {totalData} logbook',
+    baru: 'Halaman {pageAman} dari {totalPages} • {totalData} logbook'
+  },
+  {
+    rel: 'src/pages/GalleryPage.jsx',
+    lama: 'Menampilkan {mulai} sampai {akhir} dari {totalData} media',
+    baru: 'Halaman {pageAman} dari {totalPages} • {totalData} media'
+  },
+  {
+    rel: 'src/pages/AttendancePage.jsx',
+    lama: 'Menampilkan {mulai} sampai {akhir} dari {totalData} catatan',
+    baru: 'Halaman {pageAman} dari {totalPages} • {totalData} catatan'
+  }
+]
+TARGET.forEach(function (t) {
+  if (!ada(t.rel)) { console.log('[LEWATI] ' + t.rel + ' tidak ditemukan'); return }
+  let isi = baca(t.rel)
+  if (isi.includes('Halaman {pageAman} dari {totalPages}')) {
+    console.log('[SUDAH ADA] Teks info baru di ' + t.rel)
+  } else if (isi.includes(t.lama)) {
+    isi = isi.split(t.lama).join(t.baru)
+    simpan(t.rel, isi)
+    console.log('[BERHASIL] Teks info diperbarui di ' + t.rel)
+  } else {
+    console.log('[TIDAK KETEMU] Teks info lama di ' + t.rel)
+  }
+})
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Perubahan versi 2:')
+console.log('1. Teks info kini berbunyi Halaman 1 dari 1 • 4 logbook, jauh lebih mudah dipahami daripada rentang angka.')
+console.log('2. Nomor halaman tampil sebagai tombol persegi membulat bertema: halaman aktif hijau BSI dengan bayangan lembut, halaman lain putih dengan border tipis.')
+console.log('3. Tombol nomor hanya dibuat sebanyak halaman yang benar-benar ada. Data 7 buah berarti 1 halaman, jadi hanya tombol 1.')
+console.log('4. Bila hanya ada 1 halaman, tombol Sebelumnya dan Berikutnya tidak ditampilkan sama sekali supaya tidak membingungkan.')
+console.log('5. Bila halaman lebih dari 7, nomor di tengah diringkas dengan titik tiga, misalnya 1 ... 4 5 6 ... 10, supaya baris tombol tetap rapi.')
+console.log('6. Mode gelap otomatis mengikuti karena kelas yang dipakai sama dengan komponen lain di proyek ini.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka halaman Logbook dengan 4 data: terlihat teks Halaman 1 dari 1 • 4 logbook dan satu tombol nomor 1.')
+console.log('2. Tambahkan data sampai lebih dari 10: tombol 2 muncul beserta Sebelumnya dan Berikutnya.')
+console.log('3. Klik tombol 2: tombol berubah hijau dan teks info menjadi Halaman 2 dari 2.')
+console.log('4. Ulangi pengecekan di halaman Galeri dan Daftar Hadir.')
+```
+
+## File: apply-pagination-v3.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+function ada(rel) { return fs.existsSync(path.join(root, rel)) }
+function ganti(rel, cari, gantiDengan, label) {
+  if (!ada(rel)) { console.log('[LEWATI] ' + rel + ' tidak ditemukan (' + label + ')'); return }
+  let isi = baca(rel)
+  if (isi.includes(gantiDengan)) { console.log('[SUDAH ADA] ' + label); return }
+  if (!isi.includes(cari)) { console.log('[TIDAK KETEMU] ' + label + ' di ' + rel); return }
+  isi = isi.replace(cari, gantiDengan)
+  simpan(rel, isi)
+  console.log('[BERHASIL] ' + label)
+}
+
+console.log('Mulai revisi pagination: 12 data per halaman, limit 6 terbaru, dan kartu rata tengah...')
+console.log('')
+
+/* ===== 1. Ubah isi setiap halaman dari 10 menjadi 12 data ===== */
+;['src/pages/LogbookPage.jsx', 'src/pages/GalleryPage.jsx', 'src/pages/AttendancePage.jsx'].forEach(function (rel) {
+  ganti(rel, 'const PER_PAGE = 10', 'const PER_PAGE = 12', 'PER_PAGE menjadi 12')
+})
+
+/* ===== 2. CSS wadah fleksibel yang meratakan tengah baris kartu tidak penuh ===== */
+const FILE_CSS = 'src/index.css'
+const CSS_PUSAT = `/* grid-pusat: baris kartu yang tidak penuh otomatis rata tengah */
+.grid-pusat { display: flex; flex-wrap: wrap; justify-content: center; gap: 1.25rem; }
+.grid-pusat-rapat { display: flex; flex-wrap: wrap; justify-content: center; gap: 1rem; }
+.kolom-kartu, .kolom-kartu-rapat { width: 100%; display: flex; }
+.kolom-kartu > *, .kolom-kartu-rapat > * { width: 100%; }
+@media (min-width: 768px) {
+  .kolom-kartu { width: calc(50% - 0.625rem); }
+  .kolom-kartu-rapat { width: calc(50% - 0.5rem); }
+}
+@media (min-width: 1280px) {
+  .kolom-kartu { width: calc(33.3333% - 0.83333rem); }
+  .kolom-kartu-rapat { width: calc(33.3333% - 0.66667rem); }
+}
+`
+if (!ada(FILE_CSS)) {
+  console.log('[LEWATI] index.css tidak ditemukan')
+} else {
+  let css = baca(FILE_CSS)
+  if (css.includes('/* grid-pusat */')) {
+    console.log('[SUDAH ADA] CSS grid-pusat di index.css')
+  } else {
+    simpan(FILE_CSS, css.trimEnd() + '\n\n' + CSS_PUSAT)
+    console.log('[BERHASIL] CSS grid-pusat ditambahkan di index.css')
+  }
+}
+
+/* ===== 3. LogbookPage: grid rata tengah ===== */
+ganti('src/pages/LogbookPage.jsx',
+`      <section className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        {loading
+          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <SkeletonLogbookCard key={i} /> })
+          : paginatedLogs.map(function (l) {
+              return <LogbookCard key={l.id} log={l} isOwner={mahasiswa && mahasiswa.id === l.mahasiswa_id}
+                onDetail={function () { setDetail(l) }} />
+            })}
+        {!loading && !logs.length ? <EmptyState title="Logbook tidak ditemukan" desc="Coba reset filter atau pilih filter lain." /> : null}
+      </section>`,
+`      <section className="grid-pusat mt-8">
+        {loading
+          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
+          : paginatedLogs.map(function (l) {
+              return (
+                <div key={l.id} className="kolom-kartu">
+                  <LogbookCard log={l} isOwner={mahasiswa && mahasiswa.id === l.mahasiswa_id}
+                    onDetail={function () { setDetail(l) }} />
+                </div>
+              )
+            })}
+        {!loading && !logs.length ? <div className="w-full"><EmptyState title="Logbook tidak ditemukan" desc="Coba reset filter atau pilih filter lain." /></div> : null}
+      </section>`,
+'Grid LogbookPage rata tengah')
+
+/* ===== 4. GalleryPage: grid rata tengah ===== */
+ganti('src/pages/GalleryPage.jsx',
+`      <section className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        {loading
+          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <SkeletonGalleryCard key={i} /> })
+          : paginatedItems.map(function (i) {
+              return <GalleryCard key={i.id} item={i} isOwner={mahasiswa && mahasiswa.id === i.mahasiswa_id}
+                onDetail={function () { setDetail(i) }} />
+            })}
+        {!loading && !items.length ? <EmptyState icon="camera" title="Belum ada media galeri" desc="Media galeri yang diunggah mahasiswa akan tampil di sini." /> : null}
+      </section>`,
+`      <section className="grid-pusat mt-8">
+        {loading
+          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonGalleryCard /></div> })
+          : paginatedItems.map(function (i) {
+              return (
+                <div key={i.id} className="kolom-kartu">
+                  <GalleryCard item={i} isOwner={mahasiswa && mahasiswa.id === i.mahasiswa_id}
+                    onDetail={function () { setDetail(i) }} />
+                </div>
+              )
+            })}
+        {!loading && !items.length ? <div className="w-full"><EmptyState icon="camera" title="Belum ada media galeri" desc="Media galeri yang diunggah mahasiswa akan tampil di sini." /></div> : null}
+      </section>`,
+'Grid GalleryPage rata tengah')
+
+/* ===== 5. AttendancePage: grid rata tengah ===== */
+ganti('src/pages/AttendancePage.jsx',
+`        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {loading
+            ? [0, 1, 2].map(function (i) { return <SkeletonAttendanceCard key={i} /> })
+            : paginatedRows.map(function (r) {
+                return <AttendanceCard key={r.id} row={r} isOwner={mahasiswa && mahasiswa.id === r.mahasiswa_id}
+                  onDetail={function () { setDetail(r) }} />
+              })}
+          {!loading && !rows.length ? <EmptyState icon="clipboard" title="Belum ada data kehadiran" desc="Data kehadiran akan tampil setelah mahasiswa mengisi daftar hadir." /> : null}
+        </div>`,
+`        <div className="grid-pusat-rapat mt-6">
+          {loading
+            ? [0, 1, 2].map(function (i) { return <div key={i} className="kolom-kartu-rapat"><SkeletonAttendanceCard /></div> })
+            : paginatedRows.map(function (r) {
+                return (
+                  <div key={r.id} className="kolom-kartu-rapat">
+                    <AttendanceCard row={r} isOwner={mahasiswa && mahasiswa.id === r.mahasiswa_id}
+                      onDetail={function () { setDetail(r) }} />
+                  </div>
+                )
+              })}
+          {!loading && !rows.length ? <div className="w-full"><EmptyState icon="clipboard" title="Belum ada data kehadiran" desc="Data kehadiran akan tampil setelah mahasiswa mengisi daftar hadir." /></div> : null}
+        </div>`,
+'Grid AttendancePage rata tengah')
+
+/* ===== 6. HomePage: 6 logbook terbaru plus tombol lihat semua dan rata tengah ===== */
+ganti('src/pages/HomePage.jsx',
+`        <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          {loading
+            ? [0, 1, 2].map(function (i) { return <SkeletonLogbookCard key={i} /> })
+            : logs.slice(0, 3).map(function (l) {
+                return <LogbookCard key={l.id} log={l} onDetail={function () { setDetail(l) }} />
+              })}
+          {!loading && !logs.length ? <EmptyState title="Belum ada logbook publik" desc="Logbook yang sudah diatur sebagai siap dilihat akan tampil di sini." /> : null}
+        </div>
+      </section>`,
+`        <div className="grid-pusat mt-6">
+          {loading
+            ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
+            : logs.slice(0, 6).map(function (l) {
+                return (
+                  <div key={l.id} className="kolom-kartu">
+                    <LogbookCard log={l} onDetail={function () { setDetail(l) }} />
+                  </div>
+                )
+              })}
+          {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum ada logbook publik" desc="Logbook yang sudah diatur sebagai siap dilihat akan tampil di sini." /></div> : null}
+        </div>
+        <div className="mt-8 flex justify-center">
+          <Link to="/logbook" className="rounded-2xl bg-bsi-800 px-6 py-3 text-sm font-bold text-white hover:bg-bsi-900">Lihat semua logbook</Link>
+        </div>
+      </section>`,
+'Beranda menampilkan 6 logbook terbaru dengan tombol lihat semua')
+
+/* ===== 7. DospemPage: 6 logbook terbaru plus tombol lihat semua dan rata tengah ===== */
+ganti('src/pages/DospemPage.jsx',
+`         <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+           {loading
+             ? [0, 1, 2].map(function (i) { return <SkeletonLogbookCard key={i} /> })
+             : logs.map(function (l) {
+                 return <LogbookCard key={l.id} log={l} onDetail={function () { setDetail(l) }} />
+               })}
+           {!loading && !logs.length ? <EmptyState title="Belum ada logbook publik" desc="Logbook akan tampil setelah mahasiswa mengatur status siap dilihat." /> : null}
+         </div>
+       </section>`,
+`         <div className="grid-pusat mt-6">
+           {loading
+             ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
+             : logs.slice(0, 6).map(function (l) {
+                 return (
+                   <div key={l.id} className="kolom-kartu">
+                     <LogbookCard log={l} onDetail={function () { setDetail(l) }} />
+                   </div>
+                 )
+               })}
+           {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum ada logbook publik" desc="Logbook akan tampil setelah mahasiswa mengatur status siap dilihat." /></div> : null}
+         </div>
+         <div className="mt-8 flex justify-center">
+           <Link to="/logbook" className="rounded-2xl bg-bsi-800 px-6 py-3 text-sm font-bold text-white hover:bg-bsi-900">Lihat semua logbook</Link>
+         </div>
+       </section>`,
+'Tim & Dospem menampilkan 6 logbook terbaru dengan tombol lihat semua')
+
+/* ===== 8. DospemPage: kartu profil tim ikut rata tengah ===== */
+ganti('src/pages/DospemPage.jsx',
+`<div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">`,
+`<div className="grid-pusat-rapat mt-6">`,
+'Wadah kartu profil tim menjadi grid-pusat-rapat')
+ganti('src/pages/DospemPage.jsx',
+`? [0, 1, 2].map(function (i) { return <SkeletonPersonCard key={i} /> })`,
+`? [0, 1, 2].map(function (i) { return <div key={i} className="kolom-kartu-rapat"><SkeletonPersonCard /></div> })`,
+'Skeleton profil tim dibungkus kolom')
+ganti('src/pages/DospemPage.jsx',
+`<div key={p.id} className="card-hover rounded-3xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col">`,
+`<div key={p.id} className="kolom-kartu-rapat">
+<div className="card-hover rounded-3xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col h-full">`,
+'Kartu profil tim dibungkus kolom')
+ganti('src/pages/DospemPage.jsx',
+`</div>
+ )
+ })}`,
+`</div>
+ </div>
+ )
+ })}`,
+'Penutup kartu profil tim disesuaikan')
+ganti('src/pages/DospemPage.jsx',
+`{!loading && !people.length ? <EmptyState title="Belum ada data mahasiswa" desc="Profil tim akan tampil setelah mahasiswa terdaftar." /> : null}`,
+`{!loading && !people.length ? <div className="w-full"><EmptyState title="Belum ada data mahasiswa" desc="Profil tim akan tampil setelah mahasiswa terdaftar." /></div> : null}`,
+'EmptyState profil tim melebar penuh')
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Isi revisi yang diterapkan:')
+console.log('1. Setiap halaman pagination kini memuat 12 data per index, jadi satu baris penuh terdiri dari 4 baris kartu di layar lebar.')
+console.log('2. Beranda menampilkan 6 logbook paling terbaru tanpa pagination, ditambah tombol Lihat semua logbook yang menuju halaman Logbook.')
+console.log('3. Halaman Tim & Dospem menampilkan 6 logbook paling terbaru tanpa pagination, ditambah tombol Lihat semua logbook yang menuju halaman Logbook.')
+console.log('4. Semua grid kartu memakai wadah fleksibel berpusat: bila kartu dalam satu baris hanya 1 atau 2, kartu tersebut berdiri di tengah, bukan menempel di kiri.')
+console.log('5. Tinggi kartu dalam satu baris tetap sejajar karena pembungkus kolom meregangkan kartu secara otomatis.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka Logbook dengan 4 data: keempat kartu tetap 3 di baris pertama dan 1 kartu sisa berada tepat di tengah baris kedua.')
+console.log('2. Tambah data sampai 13: halaman menampilkan 12 kartu dan tombol nomor 1 serta 2 muncul.')
+console.log('3. Buka Beranda: maksimal 6 kartu terbaru tampil dan tombol hijau Lihat semua logbook berada di tengah bawah.')
+console.log('4. Buka Tim & Dospem: kartu profil tim rata tengah bila jumlahnya kurang dari 3, dan section aktivitas hanya 6 logbook terbaru dengan tombol lihat semua.')
+console.log('5. Uji mode gelap: tata letak pusat tidak berubah dan warna tetap mengikuti tema.')
+```
+
+## File: apply-pagination.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+function ada(rel) { return fs.existsSync(path.join(root, rel)) }
+
+console.log('Mulai memasang pagination 10 data per halaman pada Logbook, Galeri, dan Daftar Hadir...')
+console.log('')
+
+/* =====================================================
+   KOMPONEN PAGINATION REUSABLE UNTUK ui.jsx
+   ===================================================== */
+const PAGINATION_COMPONENT = `export function Pagination(props) {
+  const totalItems = props.totalItems || 0
+  const perPage = props.perPage || 10
+  const page = props.page || 1
+  const onPageChange = props.onPageChange || function () {}
+  const totalPages = Math.ceil(totalItems / perPage)
+  if (totalPages <= 1) return null
+  const halaman = []
+  for (let i = 1; i <= totalPages; i++) {
+    if (i === 1 || i === totalPages || (i >= page - 1 && i <= page + 1)) {
+      halaman.push(i)
+    } else if (halaman[halaman.length - 1] !== '...') {
+      halaman.push('...')
+    }
+  }
+  const dasar = 'grid h-10 min-w-10 place-items-center rounded-xl px-3 text-sm font-semibold transition '
+  return (
+    <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
+      <button
+        type="button"
+        disabled={page <= 1}
+        onClick={function () { onPageChange(page - 1) }}
+        className={dasar + 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40'}
+      >
+        Sebelumnya
+      </button>
+      {halaman.map(function (h, idx) {
+        if (h === '...') {
+          return <span key={'lompat' + idx} className="px-1 text-slate-400">...</span>
+        }
+        const aktif = h === page
+        return (
+          <button
+            key={'hal' + h}
+            type="button"
+            onClick={function () { onPageChange(h) }}
+            className={dasar + (aktif ? 'bg-bsi-800 text-white' : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-100')}
+          >
+            {h}
+          </button>
+        )
+      })}
+      <button
+        type="button"
+        disabled={page >= totalPages}
+        onClick={function () { onPageChange(page + 1) }}
+        className={dasar + 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40'}
+      >
+        Berikutnya
+      </button>
+    </div>
+  )
+}`
+
+/* =====================================================
+   BLOK KODE YANG DISISIPKAN KE SETIAP HALAMAN
+   ===================================================== */
+const BLOK_EFFECT = `  useEffect(function () {
+    setPage(1)
+  }, [filter, sort])
+  function gantiHalaman(p) {
+    setPage(p)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }`
+
+function buatBlokPagination(ns, np) {
+  return '  const totalData = ' + ns + '.length\n' +
+    '  const totalPages = Math.ceil(totalData / PER_PAGE)\n' +
+    '  const pageAman = Math.min(page, Math.max(1, totalPages))\n' +
+    '  const mulai = totalData === 0 ? 0 : (pageAman - 1) * PER_PAGE + 1\n' +
+    '  const akhir = Math.min(pageAman * PER_PAGE, totalData)\n' +
+    '  const ' + np + ' = ' + ns + '.slice((pageAman - 1) * PER_PAGE, pageAman * PER_PAGE)'
+}
+
+function buatBlokAkhir(label) {
+  return '      {!loading && totalData > 0 ? (\n' +
+    '        <div className="mt-6 text-center text-sm text-slate-500">\n' +
+    '          Menampilkan {mulai} sampai {akhir} dari {totalData} ' + label + '\n' +
+    '        </div>\n' +
+    '      ) : null}\n' +
+    '      {!loading ? <Pagination totalItems={totalData} perPage={PER_PAGE} page={pageAman} onPageChange={gantiHalaman} /> : null}'
+}
+
+/* =====================================================
+   LANGKAH 1: PASANG KOMPONEN PAGINATION DI ui.jsx
+   ===================================================== */
+const FILE_U = 'src/components/ui.jsx'
+if (!ada(FILE_U)) {
+  console.log('[GAGAL] ui.jsx tidak ditemukan')
+  process.exit(1)
+}
+let u = baca(FILE_U)
+if (u.includes('export function Pagination')) {
+  console.log('[SUDAH ADA] Komponen Pagination di ui.jsx')
+} else {
+  u = u.trimEnd() + '\n\n' + PAGINATION_COMPONENT + '\n'
+  simpan(FILE_U, u)
+  console.log('[BERHASIL] Komponen Pagination ditambahkan di ui.jsx')
+}
+
+/* =====================================================
+   FUNGSI TRANSFORMASI SATU HALAMAN
+   ===================================================== */
+function transformHalaman(cfg) {
+  const rel = cfg.rel
+  if (!ada(rel)) { console.log('[LEWATI] ' + rel + ' tidak ditemukan'); return }
+  let isi = baca(rel)
+  let berubah = false
+
+  if (isi.includes(', Pagination }') || isi.includes('Pagination,')) {
+    console.log('[SUDAH ADA] Import Pagination di ' + rel)
+  } else if (isi.includes(cfg.importAsli)) {
+    isi = isi.replace(cfg.importAsli, cfg.importBaru)
+    berubah = true
+    console.log('[BERHASIL] Import Pagination di ' + rel)
+  } else {
+    console.log('[TIDAK KETEMU] Anchor import di ' + rel)
+  }
+
+  if (isi.includes('const PER_PAGE')) {
+    console.log('[SUDAH ADA] Konstanta PER_PAGE di ' + rel)
+  } else if (isi.includes(cfg.initialAnchor)) {
+    isi = isi.replace(cfg.initialAnchor, cfg.initialAnchor + '\nconst PER_PAGE = 10')
+    berubah = true
+    console.log('[BERHASIL] Konstanta PER_PAGE di ' + rel)
+  } else {
+    console.log('[TIDAK KETEMU] Anchor PER_PAGE di ' + rel)
+  }
+
+  if (isi.includes('const [page, setPage]')) {
+    console.log('[SUDAH ADA] State page di ' + rel)
+  } else if (isi.includes(cfg.loadingAnchor)) {
+    isi = isi.replace(cfg.loadingAnchor, cfg.loadingAnchor + '\n  const [page, setPage] = useState(1)')
+    berubah = true
+    console.log('[BERHASIL] State page di ' + rel)
+  } else {
+    console.log('[TIDAK KETEMU] Anchor state page di ' + rel)
+  }
+
+  if (isi.includes('function gantiHalaman')) {
+    console.log('[SUDAH ADA] Logika gantiHalaman di ' + rel)
+  } else if (isi.includes(cfg.filterAnchor)) {
+    isi = isi.replace(cfg.filterAnchor, BLOK_EFFECT + '\n' + cfg.filterAnchor)
+    berubah = true
+    console.log('[BERHASIL] Logika gantiHalaman di ' + rel)
+  } else {
+    console.log('[TIDAK KETEMU] Anchor gantiHalaman di ' + rel)
+  }
+
+  if (isi.includes(cfg.namaPaginated)) {
+    console.log('[SUDAH ADA] Logika pagination di ' + rel)
+  } else if (isi.includes(cfg.sortedAnchor)) {
+    isi = isi.replace(cfg.sortedAnchor, cfg.sortedAnchor + '\n' + buatBlokPagination(cfg.namaSorted, cfg.namaPaginated))
+    berubah = true
+    console.log('[BERHASIL] Logika pagination di ' + rel)
+  } else {
+    console.log('[TIDAK KETEMU] Anchor logika pagination di ' + rel)
+  }
+
+  if (isi.includes(cfg.namaPaginated + '.map')) {
+    console.log('[SUDAH ADA] Grid memakai ' + cfg.namaPaginated + ' di ' + rel)
+  } else if (isi.includes(cfg.mapAsli)) {
+    isi = isi.replace(cfg.mapAsli, cfg.mapBaru)
+    berubah = true
+    console.log('[BERHASIL] Grid memakai ' + cfg.namaPaginated + ' di ' + rel)
+  } else {
+    console.log('[TIDAK KETEMU] Anchor map grid di ' + rel)
+  }
+
+  if (isi.includes('<Pagination totalItems={totalData}')) {
+    console.log('[SUDAH ADA] Komponen Pagination di grid ' + rel)
+  } else if (isi.includes(cfg.gridAnchor)) {
+    isi = isi.replace(cfg.gridAnchor, cfg.gridAnchor + '\n' + buatBlokAkhir(cfg.labelData))
+    berubah = true
+    console.log('[BERHASIL] Komponen Pagination di grid ' + rel)
+  } else {
+    console.log('[TIDAK KETEMU] Anchor grid untuk Pagination di ' + rel)
+  }
+
+  if (berubah) simpan(rel, isi)
+}
+
+/* =====================================================
+   LANGKAH 2: TERAPKAN KE TIGA HALAMAN
+   ===================================================== */
+transformHalaman({
+  rel: 'src/pages/LogbookPage.jsx',
+  importAsli: "import { EmptyState, Modal } from '../components/ui.jsx'",
+  importBaru: "import { EmptyState, Modal, Pagination } from '../components/ui.jsx'",
+  initialAnchor: "const INITIAL = { mahasiswa: '', kategori: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }",
+  loadingAnchor: 'const [loading, setLoading] = useState(true)',
+  filterAnchor: '  const logs = all.filter(function (l) {',
+  sortedAnchor: '  const sortedLogs = urutkanTanggal(logs, sort)',
+  namaSorted: 'sortedLogs',
+  namaPaginated: 'paginatedLogs',
+  mapAsli: ': sortedLogs.map(function (l) {',
+  mapBaru: ': paginatedLogs.map(function (l) {',
+  gridAnchor: '        {!loading && !logs.length ? <EmptyState title="Logbook tidak ditemukan" desc="Coba reset filter atau pilih filter lain." /> : null}\n      </section>',
+  labelData: 'logbook'
+})
+console.log('')
+transformHalaman({
+  rel: 'src/pages/GalleryPage.jsx',
+  importAsli: "import { EmptyState, Modal } from '../components/ui.jsx'",
+  importBaru: "import { EmptyState, Modal, Pagination } from '../components/ui.jsx'",
+  initialAnchor: "const INITIAL = { kegiatan: '', tipe: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }",
+  loadingAnchor: 'const [loading, setLoading] = useState(true)',
+  filterAnchor: '  const items = all.filter(function (i) {',
+  sortedAnchor: '  const sortedItems = urutkanTanggal(items, sort)',
+  namaSorted: 'sortedItems',
+  namaPaginated: 'paginatedItems',
+  mapAsli: ': sortedItems.map(function (i) {',
+  mapBaru: ': paginatedItems.map(function (i) {',
+  gridAnchor: '        {!loading && !items.length ? <EmptyState icon="camera" title="Belum ada media galeri" desc="Media galeri yang diunggah mahasiswa akan tampil di sini." /> : null}\n      </section>',
+  labelData: 'media'
+})
+console.log('')
+transformHalaman({
+  rel: 'src/pages/AttendancePage.jsx',
+  importAsli: "import { StatCard, EmptyState, Modal } from '../components/ui.jsx'",
+  importBaru: "import { StatCard, EmptyState, Modal, Pagination } from '../components/ui.jsx'",
+  initialAnchor: "const INITIAL = { mahasiswa: '', status: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }",
+  loadingAnchor: 'const [loading, setLoading] = useState(true)',
+  filterAnchor: '  const rows = all.filter(function (r) {',
+  sortedAnchor: '  const sortedRows = urutkanTanggal(rows, sort)',
+  namaSorted: 'sortedRows',
+  namaPaginated: 'paginatedRows',
+  mapAsli: ': sortedRows.map(function (r) {',
+  mapBaru: ': paginatedRows.map(function (r) {',
+  gridAnchor: '          {!loading && !rows.length ? <EmptyState icon="clipboard" title="Belum ada data kehadiran" desc="Data kehadiran akan tampil setelah mahasiswa mengisi daftar hadir." /> : null}\n        </div>\n      </section>',
+  labelData: 'catatan'
+})
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Yang dipasang oleh script ini:')
+console.log('1. Komponen Pagination reusable di ui.jsx dengan tombol Sebelumnya, nomor halaman, dan Berikutnya.')
+console.log('2. Setiap halaman menampilkan 10 data per index sesuai konstanta PER_PAGE.')
+console.log('3. Halaman otomatis kembali ke index pertama saat filter atau urutan berubah.')
+console.log('4. Info rentang data tampil di bawah grid, misalnya Menampilkan 1 sampai 10 dari 25 logbook.')
+console.log('5. Ada pengaman pageAman agar tidak error bila index aktif melebihi total halaman setelah filter berubah.')
+console.log('6. Tampilan otomatis bergeser halus ke atas setiap kali pindah halaman.')
+console.log('')
+console.log('Bila ada baris TIDAK KETEMU, kirim baris tersebut ke chat supaya polanya disesuaikan.')
+```
+
 ## File: apply-pemutar-crop-v4.cjs
 ```javascript
 const fs = require('fs')
@@ -8776,6 +8799,91 @@ console.log('1. Buka dashboard: avatar muncul di kiri teks header dan section fo
 console.log('2. Klik tab Profil: form upload foto muncul lengkap dengan pratinjau dan tombol simpan.')
 console.log('3. Upload atau ganti foto, lalu kembali ke tab Logbook: avatar header sudah memakai foto baru.')
 console.log('4. Hapus foto dari tab Profil: avatar header kembali ke inisial berwarna tema.')
+```
+
+## File: apply-scroll-top.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai memasang ScrollToTop agar pindah halaman selalu mulai dari atas...')
+console.log('')
+
+const FILE_A = 'src/App.jsx'
+if (!fs.existsSync(path.join(root, FILE_A))) {
+  console.log('[GAGAL] App.jsx tidak ditemukan')
+  process.exit(1)
+}
+let a = baca(FILE_A)
+let berubah = false
+
+/* ===== 1. Tambah import useEffect dan useLocation ===== */
+const IMP_LAMA = "import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'"
+const IMP_BARU = "import { useEffect } from 'react'\nimport { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'"
+if (a.includes('useLocation')) {
+  console.log('[SUDAH ADA] Import useLocation di App.jsx')
+} else if (a.includes(IMP_LAMA)) {
+  a = a.replace(IMP_LAMA, IMP_BARU)
+  berubah = true
+  console.log('[BERHASIL] Import useEffect dan useLocation ditambahkan')
+} else {
+  console.log('[TIDAK KETEMU] Pola import react-router di App.jsx')
+}
+
+/* ===== 2. Tambah komponen ScrollToTop sebelum RequireAuth ===== */
+const KOMPONEN = `function ScrollToTop() {
+  const { pathname } = useLocation()
+  useEffect(function () {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+  }, [pathname])
+  return null
+}
+`
+if (a.includes('function ScrollToTop(')) {
+  console.log('[SUDAH ADA] Komponen ScrollToTop di App.jsx')
+} else if (a.includes('function RequireAuth(props) {')) {
+  a = a.replace('function RequireAuth(props) {', KOMPONEN + 'function RequireAuth(props) {')
+  berubah = true
+  console.log('[BERHASIL] Komponen ScrollToTop ditambahkan')
+} else {
+  console.log('[TIDAK KETEMU] Anchor RequireAuth di App.jsx')
+}
+
+/* ===== 3. Render ScrollToTop di dalam BrowserRouter ===== */
+const ROUTER_FUTURE = '<BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>'
+if (a.includes('<ScrollToTop />')) {
+  console.log('[SUDAH ADA] ScrollToTop sudah dirender')
+} else if (a.includes(ROUTER_FUTURE)) {
+  a = a.replace(ROUTER_FUTURE, ROUTER_FUTURE + '\n        <ScrollToTop />')
+  berubah = true
+  console.log('[BERHASIL] ScrollToTop dirender di dalam BrowserRouter')
+} else if (a.includes('<BrowserRouter>')) {
+  a = a.replace('<BrowserRouter>', '<BrowserRouter>\n        <ScrollToTop />')
+  berubah = true
+  console.log('[BERHASIL] ScrollToTop dirender di dalam BrowserRouter polos')
+} else {
+  console.log('[TIDAK KETEMU] Pola BrowserRouter di App.jsx')
+}
+
+if (berubah) simpan(FILE_A, a)
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Cara kerja perbaikan:')
+console.log('1. Komponen ScrollToTop memantau perubahan pathname dari useLocation.')
+console.log('2. Setiap kali route berpindah, misalnya dari Beranda atau Tim & Dospem ke Logbook, scroll langsung dikunci ke puncak secara instan.')
+console.log('3. Perpindahan akibat redirect /tim ke /dospem juga ikut mulai dari atas.')
+console.log('4. Scroll halus pada tombol nomor pagination di dalam halaman Logbook, Galeri, dan Daftar Hadir tidak terpengaruh karena pathnya tidak berubah.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka Beranda, gulir ke bawah sampai tombol Lihat semua logbook, lalu klik.')
+console.log('2. Halaman Logbook terbuka langsung dari posisi paling atas, bukan dari tengah.')
+console.log('3. Ulangi dari halaman Tim & Dospem: hasil sama, mulai dari atas.')
+console.log('4. Klik tombol nomor 2 pada pagination Logbook: perilaku scroll halus antar halaman tetap normal.')
 ```
 
 ## File: apply-thumb-youtube-fallback.cjs
@@ -13402,60 +13510,6 @@ export function countActiveFilters(o) {
 }
 ```
 
-## File: src/App.jsx
-```javascript
-import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import { ThemeProvider } from './lib/theme.jsx'
-import { useAuth } from './lib/auth.js'
-import Layout from './components/Layout.jsx'
-import HomePage from './pages/HomePage.jsx'
-import LogbookPage from './pages/LogbookPage.jsx'
-import GalleryPage from './pages/GalleryPage.jsx'
-import AttendancePage from './pages/AttendancePage.jsx'
-import DospemPage from './pages/DospemPage.jsx'
-import TimPage from './pages/TimPage.jsx'
-import LoginPage from './pages/LoginPage.jsx'
-import DashboardPage from './pages/DashboardPage.jsx'
-
-function ScrollToTop() {
-  const { pathname } = useLocation()
-  useEffect(function () {
-    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
-  }, [pathname])
-  return null
-}
-function RequireAuth(props) {
-  const { mahasiswa, loading } = useAuth()
-  if (loading) return <div className="p-10 text-center text-slate-500">Memuat sesi...</div>
-  if (!mahasiswa) return <Navigate to="/login" replace />
-  return props.children
-}
-
-export default function App() {
-  return (
-    <ThemeProvider>
-      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <ScrollToTop />
-        <Routes>
-          <Route element={<Layout />}>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/logbook" element={<LogbookPage />} />
-            <Route path="/galeri" element={<GalleryPage />} />
-            <Route path="/absen" element={<AttendancePage />} />
-            <Route path="/dospem" element={<DospemPage />} />
-            <Route path="/tim" element={<Navigate to="/dospem" replace />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-    </ThemeProvider>
-  )
-}
-```
-
 ## File: vite.config.js
 ```javascript
 import { defineConfig, loadEnv } from 'vite'
@@ -14055,6 +14109,133 @@ export async function deleteMedia(key) {
 }
 ```
 
+## File: src/pages/LoginPage.jsx
+```javascript
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { loginWithNim } from '../lib/auth.js'
+import { inputCls, labelCls, btnPrimary } from '../components/ui.jsx'
+import { EyeToggle } from '../components/icons.jsx'
+
+export default function LoginPage() {
+  const navigate = useNavigate()
+  const [nim, setNim] = useState('')
+  const [kode, setKode] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [lihatKode, setLihatKode] = useState(false)
+
+  async function submit(e) {
+    e.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+  await loginWithNim(nim, kode)
+  navigate('/dashboard')
+} catch (err) {
+  setError(err.message)
+}
+    setBusy(false)
+  }
+
+  return (
+    <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr] items-start">
+      <div className="card-hover rounded-[2rem] bg-bsi-900 text-white p-8 lg:p-10">
+        <span className="inline-flex px-4 py-2 rounded-full bg-white/10 text-xs font-semibold uppercase tracking-wide">Area Intern</span>
+        <h1 className="mt-6 text-3xl lg:text-4xl font-black leading-tight">Masuk untuk mengisi logbook, galeri, dan daftar hadir</h1>
+        <p className="mt-4 text-white/80 leading-relaxed">Halaman ini hanya digunakan oleh mahasiswa magang. Dosen pembimbing dan kaprodi tidak perlu login untuk melihat halaman publik.</p>
+      </div>
+      <div className="card-hover bg-white rounded-[2rem] border border-slate-200 shadow-sm p-8 lg:p-10">
+        <h2 className="text-2xl font-black text-slate-900">Login mahasiswa magang</h2>
+        {error ? <p className="mt-3 rounded-2xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</p> : null}
+        <form onSubmit={submit} className="mt-6 space-y-5">
+          <div>
+            <label className={labelCls}>NIM <span className="text-red-500">*</span></label>
+            <input className={inputCls} value={nim} onChange={function (e) { setNim(e.target.value) }} placeholder="Contoh: 20260001" required />
+          </div>
+          <div>
+            <label className={labelCls}>Kode akses <span className="text-red-500">*</span></label>
+            <div className="relative mt-1.5">
+              <input
+                type={lihatKode ? 'text' : 'password'}
+                className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 pr-12 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+                value={kode}
+                onChange={function (e) { setKode(e.target.value) }}
+                placeholder="Masukkan kode akses"
+                required
+              />
+              <button
+                type="button"
+                onClick={function () { setLihatKode(function (v) { return !v }) }}
+                title={lihatKode ? 'Sembunyikan kode akses' : 'Lihat kode akses'}
+                className="absolute right-2 top-0 bottom-0 my-auto grid h-9 w-9 place-items-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              >
+                <EyeToggle open={lihatKode} size={18} />
+              </button>
+            </div>
+          </div>
+          <button type="submit" disabled={busy} className={btnPrimary}>{busy ? 'Memproses...' : 'Masuk ke dashboard'}</button>
+        </form>
+      </div>
+    </section>
+  )
+}
+```
+
+## File: src/App.jsx
+```javascript
+import { useEffect } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { ThemeProvider } from './lib/theme.jsx'
+import { useAuth } from './lib/auth.js'
+import Layout from './components/Layout.jsx'
+import HomePage from './pages/HomePage.jsx'
+import LogbookPage from './pages/LogbookPage.jsx'
+import GalleryPage from './pages/GalleryPage.jsx'
+import AttendancePage from './pages/AttendancePage.jsx'
+import DospemPage from './pages/DospemPage.jsx'
+import TimPage from './pages/TimPage.jsx'
+import LoginPage from './pages/LoginPage.jsx'
+import DashboardPage from './pages/DashboardPage.jsx'
+
+function ScrollToTop() {
+  const { pathname } = useLocation()
+  useEffect(function () {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+  }, [pathname])
+  return null
+}
+function RequireAuth(props) {
+  const { mahasiswa, loading } = useAuth()
+  if (loading) return <div className="p-10 text-center text-slate-500">Memuat sesi...</div>
+  if (!mahasiswa) return <Navigate to="/login" replace />
+  return props.children
+}
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ScrollToTop />
+        <Routes>
+          <Route element={<Layout />}>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/logbook" element={<LogbookPage />} />
+            <Route path="/galeri" element={<GalleryPage />} />
+            <Route path="/absen" element={<AttendancePage />} />
+            <Route path="/dospem" element={<DospemPage />} />
+            <Route path="/tim" element={<Navigate to="/dospem" replace />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </ThemeProvider>
+  )
+}
+```
+
 ## File: src/pages/DospemPage.jsx
 ```javascript
 import { useEffect, useState } from 'react'
@@ -14306,75 +14487,63 @@ export default function HomePage() {
 }
 ```
 
-## File: src/pages/LoginPage.jsx
+## File: src/pages/TimPage.jsx
 ```javascript
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { loginWithNim } from '../lib/auth.js'
-import { inputCls, labelCls, btnPrimary } from '../components/ui.jsx'
-import { EyeToggle } from '../components/icons.jsx'
+import { useEffect, useState } from 'react'
+import { supabase } from '../lib/supabase.js'
+import { SkeletonPersonCard } from '../components/Skeleton.jsx'
 
-export default function LoginPage() {
-  const navigate = useNavigate()
-  const [nim, setNim] = useState('')
-  const [kode, setKode] = useState('')
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [lihatKode, setLihatKode] = useState(false)
+export default function TimPage() {
+  const [people, setPeople] = useState([])
+  const [logs, setLogs] = useState([])
+  const [galeri, setGaleri] = useState([])
+  const [loading, setLoading] = useState(true)
 
-  async function submit(e) {
-    e.preventDefault()
-    setBusy(true)
-    setError('')
-    try {
-  await loginWithNim(nim, kode)
-  navigate('/dashboard')
-} catch (err) {
-  setError(err.message)
-}
-    setBusy(false)
-  }
+  useEffect(function () {
+    async function load() {
+      const p = await supabase.from('mahasiswa').select('id, nama, nim, prodi, foto_profil').order('nama')
+      const l = await supabase.from('logbooks').select('id, mahasiswa_id, foto_profil').eq('status', 'publik')
+      const g = await supabase.from('galeri').select('id, mahasiswa_id, foto_profil')
+      setPeople(p.data || [])
+      setLogs(l.data || [])
+      setGaleri(g.data || [])
+      setLoading(false)
+    }
+    load()
+  }, [])
 
   return (
-    <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr] items-start">
-      <div className="card-hover rounded-[2rem] bg-bsi-900 text-white p-8 lg:p-10">
-        <span className="inline-flex px-4 py-2 rounded-full bg-white/10 text-xs font-semibold uppercase tracking-wide">Area Intern</span>
-        <h1 className="mt-6 text-3xl lg:text-4xl font-black leading-tight">Masuk untuk mengisi logbook, galeri, dan daftar hadir</h1>
-        <p className="mt-4 text-white/80 leading-relaxed">Halaman ini hanya digunakan oleh mahasiswa magang. Dosen pembimbing dan kaprodi tidak perlu login untuk melihat halaman publik.</p>
-      </div>
-      <div className="card-hover bg-white rounded-[2rem] border border-slate-200 shadow-sm p-8 lg:p-10">
-        <h2 className="text-2xl font-black text-slate-900">Login mahasiswa magang</h2>
-        {error ? <p className="mt-3 rounded-2xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</p> : null}
-        <form onSubmit={submit} className="mt-6 space-y-5">
-          <div>
-            <label className={labelCls}>NIM <span className="text-red-500">*</span></label>
-            <input className={inputCls} value={nim} onChange={function (e) { setNim(e.target.value) }} placeholder="Contoh: 20260001" required />
-          </div>
-          <div>
-            <label className={labelCls}>Kode akses <span className="text-red-500">*</span></label>
-            <div className="relative mt-1.5">
-              <input
-                type={lihatKode ? 'text' : 'password'}
-                className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 pr-12 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
-                value={kode}
-                onChange={function (e) { setKode(e.target.value) }}
-                placeholder="Masukkan kode akses"
-                required
-              />
-              <button
-                type="button"
-                onClick={function () { setLihatKode(function (v) { return !v }) }}
-                title={lihatKode ? 'Sembunyikan kode akses' : 'Lihat kode akses'}
-                className="absolute right-2 top-0 bottom-0 my-auto grid h-9 w-9 place-items-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-              >
-                <EyeToggle open={lihatKode} size={18} />
-              </button>
-            </div>
-          </div>
-          <button type="submit" disabled={busy} className={btnPrimary}>{busy ? 'Memproses...' : 'Masuk ke dashboard'}</button>
-        </form>
-      </div>
-    </section>
+    <div>
+      <section className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Profil Mahasiswa</p>
+        <h1 className="mt-2 text-3xl lg:text-4xl font-black text-slate-900">Mahasiswa magang Bank BSI</h1>
+      </section>
+      <section className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        {loading
+          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <SkeletonPersonCard key={i} /> })
+          : people.map(function (p) {
+              const totalLog = logs.filter(function (l) { return l.mahasiswa_id === p.id }).length
+              const totalGal = galeri.filter(function (g) { return g.mahasiswa_id === p.id }).length
+              const initials = p.nama.split(' ').slice(0, 2).map(function (w) { return w.charAt(0) || '' }).join('').toUpperCase()
+              return (
+                <div key={p.id} className="card-hover bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
+                  <div className="flex items-center gap-4">
+                    <div className="h-14 w-14 rounded-3xl bg-bsi-800 text-white grid place-items-center text-xl font-black">{typeof p !== 'undefined' && p && p.foto_profil ? <img src={p.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : typeof m !== 'undefined' && m && m.foto_profil ? <img src={m.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : initials}</div>
+                    <div>
+                      <p className="text-lg font-bold text-slate-900">{p.nama}</p>
+                      <p className="text-sm text-slate-500">NIM {p.nim}</p>
+                      {p.prodi ? <span className="mt-1 inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-bsi-100 text-bsi-900">{p.prodi}</span> : null}
+                    </div>
+                  </div>
+                  <div className="mt-5 grid grid-cols-2 gap-3">
+                    <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Logbook publik</p><p className="mt-1 text-2xl font-black text-bsi-900">{totalLog}</p></div>
+                    <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Media galeri</p><p className="mt-1 text-2xl font-black text-bsi-900">{totalGal}</p></div>
+                  </div>
+                </div>
+              )
+            })}
+      </section>
+    </div>
   )
 }
 ```
@@ -14478,237 +14647,13 @@ export default function LogbookPage() {
       </section>
       {!loading && totalData > 0 ? (
         <div className="mt-6 text-center text-sm text-slate-500">
-          Halaman {pageAman} dari {totalPages} • {totalData} logbook
+          Total {totalData} logbook{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}
         </div>
       ) : null}
       {!loading ? <Pagination totalItems={totalData} perPage={PER_PAGE} page={pageAman} onPageChange={gantiHalaman} /> : null}
 
       <Modal open={!!detail} onClose={function () { setDetail(null) }}>
         {detail ? <LogbookDetail log={detail} /> : null}
-      </Modal>
-    </div>
-  )
-}
-```
-
-## File: src/pages/TimPage.jsx
-```javascript
-import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase.js'
-import { SkeletonPersonCard } from '../components/Skeleton.jsx'
-
-export default function TimPage() {
-  const [people, setPeople] = useState([])
-  const [logs, setLogs] = useState([])
-  const [galeri, setGaleri] = useState([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(function () {
-    async function load() {
-      const p = await supabase.from('mahasiswa').select('id, nama, nim, prodi, foto_profil').order('nama')
-      const l = await supabase.from('logbooks').select('id, mahasiswa_id, foto_profil').eq('status', 'publik')
-      const g = await supabase.from('galeri').select('id, mahasiswa_id, foto_profil')
-      setPeople(p.data || [])
-      setLogs(l.data || [])
-      setGaleri(g.data || [])
-      setLoading(false)
-    }
-    load()
-  }, [])
-
-  return (
-    <div>
-      <section className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Profil Mahasiswa</p>
-        <h1 className="mt-2 text-3xl lg:text-4xl font-black text-slate-900">Mahasiswa magang Bank BSI</h1>
-      </section>
-      <section className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-        {loading
-          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <SkeletonPersonCard key={i} /> })
-          : people.map(function (p) {
-              const totalLog = logs.filter(function (l) { return l.mahasiswa_id === p.id }).length
-              const totalGal = galeri.filter(function (g) { return g.mahasiswa_id === p.id }).length
-              const initials = p.nama.split(' ').slice(0, 2).map(function (w) { return w.charAt(0) || '' }).join('').toUpperCase()
-              return (
-                <div key={p.id} className="card-hover bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
-                  <div className="flex items-center gap-4">
-                    <div className="h-14 w-14 rounded-3xl bg-bsi-800 text-white grid place-items-center text-xl font-black">{typeof p !== 'undefined' && p && p.foto_profil ? <img src={p.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : typeof m !== 'undefined' && m && m.foto_profil ? <img src={m.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : initials}</div>
-                    <div>
-                      <p className="text-lg font-bold text-slate-900">{p.nama}</p>
-                      <p className="text-sm text-slate-500">NIM {p.nim}</p>
-                      {p.prodi ? <span className="mt-1 inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-bsi-100 text-bsi-900">{p.prodi}</span> : null}
-                    </div>
-                  </div>
-                  <div className="mt-5 grid grid-cols-2 gap-3">
-                    <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Logbook publik</p><p className="mt-1 text-2xl font-black text-bsi-900">{totalLog}</p></div>
-                    <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Media galeri</p><p className="mt-1 text-2xl font-black text-bsi-900">{totalGal}</p></div>
-                  </div>
-                </div>
-              )
-            })}
-      </section>
-    </div>
-  )
-}
-```
-
-## File: src/pages/AttendancePage.jsx
-```javascript
-import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase.js'
-import { useAuth } from '../lib/auth.js'
-import { StatCard, EmptyState, Modal, Pagination } from '../components/ui.jsx'
-import { AttendanceCard, AttendanceDetail } from '../components/cards.jsx'
-import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
-import { ICONS } from '../components/icons.jsx'
-import { matchesDateFilters, urutkanTanggal } from '../lib/format.js'
-import { SkeletonStatCard, SkeletonChartRow, SkeletonAttendanceCard } from '../components/Skeleton.jsx'
-
-const INITIAL = { mahasiswa: '', status: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
-const PER_PAGE = 12
-
-export default function AttendancePage() {
-  const { mahasiswa } = useAuth()
-  const [all, setAll] = useState([])
-  const [people, setPeople] = useState([])
-  const [filter, setFilter] = useState(INITIAL)
-  const [sort, setSort] = useState('terbaru')
-  const [open, setOpen] = useState(false)
-  const [detail, setDetail] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [page, setPage] = useState(1)
-
-  useEffect(function () {
-    async function load() {
-      const a = await supabase.from('daftar_hadir').select('*, mahasiswa(*)').order('tanggal', { ascending: false })
-      const p = await supabase.from('mahasiswa').select('id, nama, nim').order('nama')
-      setAll(a.data || [])
-      setPeople(p.data || [])
-      setLoading(false)
-    }
-    load()
-  }, [])
-
-  useEffect(function () {
-    setPage(1)
-  }, [filter, sort])
-  function gantiHalaman(p) {
-    setPage(p)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-  const rows = all.filter(function (r) {
-    if (filter.mahasiswa && r.mahasiswa_id !== filter.mahasiswa) return false
-    if (filter.status && r.status !== filter.status) return false
-    return matchesDateFilters(r.tanggal, filter)
-  })
-  const active = countActiveFilters(filter)
-  const sortedRows = urutkanTanggal(rows, sort)
-  const totalData = sortedRows.length
-  const totalPages = Math.ceil(totalData / PER_PAGE)
-  const pageAman = Math.min(page, Math.max(1, totalPages))
-  const mulai = totalData === 0 ? 0 : (pageAman - 1) * PER_PAGE + 1
-  const akhir = Math.min(pageAman * PER_PAGE, totalData)
-  const paginatedRows = sortedRows.slice((pageAman - 1) * PER_PAGE, pageAman * PER_PAGE)
-
-  const counts = rows.reduce(function (acc, r) {
-    acc[r.status] = (acc[r.status] || 0) + 1
-    return acc
-  }, {})
-
-  const perPerson = people.map(function (p) {
-    const mine = rows.filter(function (r) { return r.mahasiswa_id === p.id })
-    const c = mine.reduce(function (acc, r) { acc[r.status] = (acc[r.status] || 0) + 1; return acc }, {})
-    return { nama: p.nama, nim: p.nim, Masuk: c.Masuk || 0, Izin: c.Izin || 0, Bolos: c.Bolos || 0, total: mine.length }
-  })
-  const maxTotal = Math.max.apply(null, perPerson.map(function (p) { return p.total }).concat([1]))
-
-  return (
-    <div>
-      <section className="rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Daftar hadir</p>
-        <h1 className="mt-2 text-3xl lg:text-4xl font-black text-slate-900">Monitoring kehadiran tim magang</h1>
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {loading
-            ? [0, 1, 2, 3].map(function (i) { return <SkeletonStatCard key={i} /> })
-            : [
-                <StatCard key="total" label="Total catatan hadir" value={rows.length} sub="Sesuai filter aktif" />,
-                <StatCard key="masuk" label="Masuk" value={counts.Masuk || 0} sub="Mahasiswa hadir" />,
-                <StatCard key="izin" label="Izin" value={counts.Izin || 0} sub="Dengan keterangan" />,
-                <StatCard key="bolos" label="Bolos" value={counts.Bolos || 0} sub="Tanpa keterangan" />
-              ]}
-        </div>
-      </section>
-
-      <section className="mt-6">
-        <FilterBar open={open} onToggle={function () { setOpen(function (o) { return !o }) }} activeCount={active}
-          onReset={function () { setFilter(INITIAL) }}>
-          <FilterSelect icon={ICONS.user} value={filter.mahasiswa} onChange={function (v) { setFilter(Object.assign({}, filter, { mahasiswa: v })) }}
-            options={[{ value: '', label: 'Semua mahasiswa' }].concat(people.map(function (p) { return { value: p.id, label: p.nama } }))} />
-          <FilterSelect icon={ICONS.check} value={filter.status} onChange={function (v) { setFilter(Object.assign({}, filter, { status: v })) }}
-            options={[{ value: '', label: 'Semua status' }, { value: 'Masuk', label: 'Masuk' }, { value: 'Izin', label: 'Izin' }, { value: 'Bolos', label: 'Bolos' }]} />
-          <TimeFilter filter={filter} set={setFilter} />
-          <SortSelect value={sort} onChange={setSort} />
-        </FilterBar>
-      </section>
-
-      <section className="mt-8 card-hover rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <h2 className="text-2xl font-black text-slate-900">Grafik kehadiran per mahasiswa</h2>
-          <div className="flex flex-wrap gap-3 text-xs font-semibold">
-            <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-emerald-500" />Masuk</span>
-            <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-amber-500" />Izin</span>
-            <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-red-500" />Bolos</span>
-          </div>
-        </div>
-        <div className="mt-6 space-y-4">
-          {loading
-            ? [0, 1, 2].map(function (i) { return <SkeletonChartRow key={i} /> })
-            : perPerson.map(function (p) {
-                return (
-                  <div key={p.nim} className="card-hover rounded-[1.5rem] border border-slate-200 p-5">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <p className="font-bold text-slate-900">{p.nama}</p>
-                        <p className="text-xs text-slate-500">NIM {p.nim}</p>
-                      </div>
-                      <div className="text-xs text-slate-500">Masuk: {p.Masuk} | Izin: {p.Izin} | Bolos: {p.Bolos}</div>
-                    </div>
-                    <div className="mt-4 flex h-4 w-full overflow-hidden rounded-full bg-slate-100">
-                      <div className="bg-emerald-500 transition-all duration-500" style={{ width: (p.Masuk / maxTotal) * 100 + '%' }} />
-                      <div className="bg-amber-500 transition-all duration-500" style={{ width: (p.Izin / maxTotal) * 100 + '%' }} />
-                      <div className="bg-red-500 transition-all duration-500" style={{ width: (p.Bolos / maxTotal) * 100 + '%' }} />
-                    </div>
-                  </div>
-                )
-              })}
-        </div>
-      </section>
-
-      <section className="mt-8">
-        <h2 className="text-2xl lg:text-3xl font-black text-slate-900">Daftar kehadiran sesuai filter</h2>
-        <div className="grid-pusat-rapat mt-6">
-          {loading
-            ? [0, 1, 2].map(function (i) { return <div key={i} className="kolom-kartu-rapat"><SkeletonAttendanceCard /></div> })
-            : paginatedRows.map(function (r) {
-                return (
-                  <div key={r.id} className="kolom-kartu-rapat">
-                    <AttendanceCard row={r} isOwner={mahasiswa && mahasiswa.id === r.mahasiswa_id}
-                      onDetail={function () { setDetail(r) }} />
-                  </div>
-                )
-              })}
-          {!loading && !rows.length ? <div className="w-full"><EmptyState icon="clipboard" title="Belum ada data kehadiran" desc="Data kehadiran akan tampil setelah mahasiswa mengisi daftar hadir." /></div> : null}
-        </div>
-      </section>
-      {!loading && totalData > 0 ? (
-        <div className="mt-6 text-center text-sm text-slate-500">
-          Halaman {pageAman} dari {totalPages} • {totalData} catatan
-        </div>
-      ) : null}
-      {!loading ? <Pagination totalItems={totalData} perPage={PER_PAGE} page={pageAman} onPageChange={gantiHalaman} /> : null}
-
-      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
-        {detail ? <AttendanceDetail row={detail} /> : null}
       </Modal>
     </div>
   )
@@ -14927,6 +14872,169 @@ export function EyeToggle(props) {
 }
 ```
 
+## File: src/pages/AttendancePage.jsx
+```javascript
+import { useEffect, useState } from 'react'
+import { supabase } from '../lib/supabase.js'
+import { useAuth } from '../lib/auth.js'
+import { StatCard, EmptyState, Modal, Pagination } from '../components/ui.jsx'
+import { AttendanceCard, AttendanceDetail } from '../components/cards.jsx'
+import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
+import { ICONS } from '../components/icons.jsx'
+import { matchesDateFilters, urutkanTanggal } from '../lib/format.js'
+import { SkeletonStatCard, SkeletonChartRow, SkeletonAttendanceCard } from '../components/Skeleton.jsx'
+
+const INITIAL = { mahasiswa: '', status: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
+const PER_PAGE = 12
+
+export default function AttendancePage() {
+  const { mahasiswa } = useAuth()
+  const [all, setAll] = useState([])
+  const [people, setPeople] = useState([])
+  const [filter, setFilter] = useState(INITIAL)
+  const [sort, setSort] = useState('terbaru')
+  const [open, setOpen] = useState(false)
+  const [detail, setDetail] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
+
+  useEffect(function () {
+    async function load() {
+      const a = await supabase.from('daftar_hadir').select('*, mahasiswa(*)').order('tanggal', { ascending: false })
+      const p = await supabase.from('mahasiswa').select('id, nama, nim').order('nama')
+      setAll(a.data || [])
+      setPeople(p.data || [])
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  useEffect(function () {
+    setPage(1)
+  }, [filter, sort])
+  function gantiHalaman(p) {
+    setPage(p)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+  const rows = all.filter(function (r) {
+    if (filter.mahasiswa && r.mahasiswa_id !== filter.mahasiswa) return false
+    if (filter.status && r.status !== filter.status) return false
+    return matchesDateFilters(r.tanggal, filter)
+  })
+  const active = countActiveFilters(filter)
+  const sortedRows = urutkanTanggal(rows, sort)
+  const totalData = sortedRows.length
+  const totalPages = Math.ceil(totalData / PER_PAGE)
+  const pageAman = Math.min(page, Math.max(1, totalPages))
+  const mulai = totalData === 0 ? 0 : (pageAman - 1) * PER_PAGE + 1
+  const akhir = Math.min(pageAman * PER_PAGE, totalData)
+  const paginatedRows = sortedRows.slice((pageAman - 1) * PER_PAGE, pageAman * PER_PAGE)
+
+  const counts = rows.reduce(function (acc, r) {
+    acc[r.status] = (acc[r.status] || 0) + 1
+    return acc
+  }, {})
+
+  const perPerson = people.map(function (p) {
+    const mine = rows.filter(function (r) { return r.mahasiswa_id === p.id })
+    const c = mine.reduce(function (acc, r) { acc[r.status] = (acc[r.status] || 0) + 1; return acc }, {})
+    return { nama: p.nama, nim: p.nim, Masuk: c.Masuk || 0, Izin: c.Izin || 0, Bolos: c.Bolos || 0, total: mine.length }
+  })
+  const maxTotal = Math.max.apply(null, perPerson.map(function (p) { return p.total }).concat([1]))
+
+  return (
+    <div>
+      <section className="rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Daftar hadir</p>
+        <h1 className="mt-2 text-3xl lg:text-4xl font-black text-slate-900">Monitoring kehadiran tim magang</h1>
+        <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {loading
+            ? [0, 1, 2, 3].map(function (i) { return <SkeletonStatCard key={i} /> })
+            : [
+                <StatCard key="total" label="Total catatan hadir" value={rows.length} sub="Sesuai filter aktif" />,
+                <StatCard key="masuk" label="Masuk" value={counts.Masuk || 0} sub="Mahasiswa hadir" />,
+                <StatCard key="izin" label="Izin" value={counts.Izin || 0} sub="Dengan keterangan" />,
+                <StatCard key="bolos" label="Bolos" value={counts.Bolos || 0} sub="Tanpa keterangan" />
+              ]}
+        </div>
+      </section>
+
+      <section className="mt-6">
+        <FilterBar open={open} onToggle={function () { setOpen(function (o) { return !o }) }} activeCount={active}
+          onReset={function () { setFilter(INITIAL) }}>
+          <FilterSelect icon={ICONS.user} value={filter.mahasiswa} onChange={function (v) { setFilter(Object.assign({}, filter, { mahasiswa: v })) }}
+            options={[{ value: '', label: 'Semua mahasiswa' }].concat(people.map(function (p) { return { value: p.id, label: p.nama } }))} />
+          <FilterSelect icon={ICONS.check} value={filter.status} onChange={function (v) { setFilter(Object.assign({}, filter, { status: v })) }}
+            options={[{ value: '', label: 'Semua status' }, { value: 'Masuk', label: 'Masuk' }, { value: 'Izin', label: 'Izin' }, { value: 'Bolos', label: 'Bolos' }]} />
+          <TimeFilter filter={filter} set={setFilter} />
+          <SortSelect value={sort} onChange={setSort} />
+        </FilterBar>
+      </section>
+
+      <section className="mt-8 card-hover rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <h2 className="text-2xl font-black text-slate-900">Grafik kehadiran per mahasiswa</h2>
+          <div className="flex flex-wrap gap-3 text-xs font-semibold">
+            <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-emerald-500" />Masuk</span>
+            <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-amber-500" />Izin</span>
+            <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-red-500" />Bolos</span>
+          </div>
+        </div>
+        <div className="mt-6 space-y-4">
+          {loading
+            ? [0, 1, 2].map(function (i) { return <SkeletonChartRow key={i} /> })
+            : perPerson.map(function (p) {
+                return (
+                  <div key={p.nim} className="card-hover rounded-[1.5rem] border border-slate-200 p-5">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="font-bold text-slate-900">{p.nama}</p>
+                        <p className="text-xs text-slate-500">NIM {p.nim}</p>
+                      </div>
+                      <div className="text-xs text-slate-500">Masuk: {p.Masuk} | Izin: {p.Izin} | Bolos: {p.Bolos}</div>
+                    </div>
+                    <div className="mt-4 flex h-4 w-full overflow-hidden rounded-full bg-slate-100">
+                      <div className="bg-emerald-500 transition-all duration-500" style={{ width: (p.Masuk / maxTotal) * 100 + '%' }} />
+                      <div className="bg-amber-500 transition-all duration-500" style={{ width: (p.Izin / maxTotal) * 100 + '%' }} />
+                      <div className="bg-red-500 transition-all duration-500" style={{ width: (p.Bolos / maxTotal) * 100 + '%' }} />
+                    </div>
+                  </div>
+                )
+              })}
+        </div>
+      </section>
+
+      <section className="mt-8">
+        <h2 className="text-2xl lg:text-3xl font-black text-slate-900">Daftar kehadiran sesuai filter</h2>
+        <div className="grid-pusat-rapat mt-6">
+          {loading
+            ? [0, 1, 2].map(function (i) { return <div key={i} className="kolom-kartu-rapat"><SkeletonAttendanceCard /></div> })
+            : paginatedRows.map(function (r) {
+                return (
+                  <div key={r.id} className="kolom-kartu-rapat">
+                    <AttendanceCard row={r} isOwner={mahasiswa && mahasiswa.id === r.mahasiswa_id}
+                      onDetail={function () { setDetail(r) }} />
+                  </div>
+                )
+              })}
+          {!loading && !rows.length ? <div className="w-full"><EmptyState icon="clipboard" title="Belum ada data kehadiran" desc="Data kehadiran akan tampil setelah mahasiswa mengisi daftar hadir." /></div> : null}
+        </div>
+      </section>
+      {!loading && totalData > 0 ? (
+        <div className="mt-6 text-center text-sm text-slate-500">
+          Total {totalData} catatan{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}
+        </div>
+      ) : null}
+      {!loading ? <Pagination totalItems={totalData} perPage={PER_PAGE} page={pageAman} onPageChange={gantiHalaman} /> : null}
+
+      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
+        {detail ? <AttendanceDetail row={detail} /> : null}
+      </Modal>
+    </div>
+  )
+}
+```
+
 ## File: src/pages/GalleryPage.jsx
 ```javascript
 import { useEffect, useState } from 'react'
@@ -15018,7 +15126,7 @@ export default function GalleryPage() {
       </section>
       {!loading && totalData > 0 ? (
         <div className="mt-6 text-center text-sm text-slate-500">
-          Halaman {pageAman} dari {totalPages} • {totalData} media
+          Total {totalData} media{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}
         </div>
       ) : null}
       {!loading ? <Pagination totalItems={totalData} perPage={PER_PAGE} page={pageAman} onPageChange={gantiHalaman} /> : null}
@@ -16880,7 +16988,7 @@ async function submitHadir(e) {
               <TimeFilter filter={logFilter} set={setLogFilter} />
               <SortSelect value={sort} onChange={setSort} />
             </FilterBar>
-            <p className="text-sm text-slate-500">Menampilkan {filteredLogs.length} dari {logs.length} logbook{logTotalPages > 1 ? ' • Halaman ' + logPageAman + ' dari ' + logTotalPages : ''}</p>
+            <p className="text-sm text-slate-500">Total {filteredLogs.length} logbook{logTotalPages > 1 ? ' • Halaman ' + logPageAman + ' dari ' + logTotalPages : ''}</p>
             <div className="grid gap-5 md:grid-cols-2">
               {paginatedLogs.map(function (l) {
                 return <LogbookCard key={l.id} log={l} isOwner
@@ -16992,7 +17100,7 @@ async function submitHadir(e) {
               <TimeFilter filter={galFilter} set={setGalFilter} />
               <SortSelect value={sort} onChange={setSort} />
             </FilterBar>
-            <p className="text-sm text-slate-500">Menampilkan {filteredGaleri.length} dari {galeri.length} media{galTotalPages > 1 ? ' • Halaman ' + galPageAman + ' dari ' + galTotalPages : ''}</p>
+            <p className="text-sm text-slate-500">Total {filteredGaleri.length} media{galTotalPages > 1 ? ' • Halaman ' + galPageAman + ' dari ' + galTotalPages : ''}</p>
             <div className="grid gap-5 md:grid-cols-2">
               {paginatedGaleri.map(function (g) {
                 return <GalleryCard key={g.id} item={g} isOwner
@@ -17002,6 +17110,7 @@ async function submitHadir(e) {
               })}
               {!filteredGaleri.length ? <EmptyState icon="camera" title={galeri.length ? 'Media tidak ditemukan' : 'Belum ada media galeri'} desc={galeri.length ? 'Coba reset filter atau pilih filter lain.' : 'Unggah foto atau video pertama kamu.'} /> : null}
             </div>
+            <Pagination totalItems={galTotal} perPage={PER_PAGE_DASH} page={galPageAman} onPageChange={gantiHalamanGal} />
           </div>
         </section>
       ) : null}
@@ -17052,7 +17161,7 @@ async function submitHadir(e) {
               <TimeFilter filter={hadirFilter} set={setHadirFilter} />
               <SortSelect value={sort} onChange={setHadirFilterOpen && setSort ? setSort : setSort} />
             </FilterBar>
-            <p className="text-sm text-slate-500">Menampilkan {filteredHadir.length} dari {hadir.length} catatan{hadirTotalPages > 1 ? ' • Halaman ' + hadirPageAman + ' dari ' + hadirTotalPages : ''}</p>
+            <p className="text-sm text-slate-500">Total {filteredHadir.length} catatan{hadirTotalPages > 1 ? ' • Halaman ' + hadirPageAman + ' dari ' + hadirTotalPages : ''}</p>
             <div className="grid gap-5 md:grid-cols-2">
             {paginatedHadir.map(function (h) {
               return <AttendanceCard key={h.id} row={h} isOwner

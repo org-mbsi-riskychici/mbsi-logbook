@@ -95,7 +95,7 @@ export default function LogbookPage() {
       </section>
       {!loading && totalData > 0 ? (
         <div className="mt-6 text-center text-sm text-slate-500">
-          Halaman {pageAman} dari {totalPages} • {totalData} logbook
+          Total {totalData} logbook{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}
         </div>
       ) : null}
       {!loading ? <Pagination totalItems={totalData} perPage={PER_PAGE} page={pageAman} onPageChange={gantiHalaman} /> : null}

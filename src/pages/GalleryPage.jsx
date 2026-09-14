@@ -87,7 +87,7 @@ export default function GalleryPage() {
       </section>
       {!loading && totalData > 0 ? (
         <div className="mt-6 text-center text-sm text-slate-500">
-          Halaman {pageAman} dari {totalPages} • {totalData} media
+          Total {totalData} media{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}
         </div>
       ) : null}
       {!loading ? <Pagination totalItems={totalData} perPage={PER_PAGE} page={pageAman} onPageChange={gantiHalaman} /> : null}
