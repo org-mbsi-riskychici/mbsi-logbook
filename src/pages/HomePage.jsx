@@ -69,13 +69,20 @@ export default function HomePage() {
           </div>
           <Link to="/logbook" className="text-sm font-semibold text-bsi-800 hover:text-bsi-950">Lihat semua logbook</Link>
         </div>
-        <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid-pusat mt-6">
           {loading
-            ? [0, 1, 2].map(function (i) { return <SkeletonLogbookCard key={i} /> })
-            : logs.slice(0, 3).map(function (l) {
-                return <LogbookCard key={l.id} log={l} onDetail={function () { setDetail(l) }} />
+            ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
+            : logs.slice(0, 6).map(function (l) {
+                return (
+                  <div key={l.id} className="kolom-kartu">
+                    <LogbookCard log={l} onDetail={function () { setDetail(l) }} />
+                  </div>
+                )
               })}
-          {!loading && !logs.length ? <EmptyState title="Belum ada logbook publik" desc="Logbook yang sudah diatur sebagai siap dilihat akan tampil di sini." /> : null}
+          {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum ada logbook publik" desc="Logbook yang sudah diatur sebagai siap dilihat akan tampil di sini." /></div> : null}
+        </div>
+        <div className="mt-8 flex justify-center">
+          <Link to="/logbook" className="rounded-2xl bg-bsi-800 px-6 py-3 text-sm font-bold text-white hover:bg-bsi-900">Lihat semua logbook</Link>
         </div>
       </section>
 

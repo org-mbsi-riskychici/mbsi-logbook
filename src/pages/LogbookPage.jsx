@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../lib/auth.js'
-import { EmptyState, Modal } from '../components/ui.jsx'
+import { EmptyState, Modal, Pagination } from '../components/ui.jsx'
 import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
 import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
 import { ICONS } from '../components/icons.jsx'
@@ -10,6 +10,7 @@ import { KATEGORI } from '../lib/constants.js'
 import { SkeletonLogbookCard } from '../components/Skeleton.jsx'
 
 const INITIAL = { mahasiswa: '', kategori: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
+const PER_PAGE = 12
 
 export default function LogbookPage() {
   const { mahasiswa } = useAuth()
@@ -20,6 +21,7 @@ export default function LogbookPage() {
   const [open, setOpen] = useState(false)
   const [detail, setDetail] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
 
   useEffect(function () {
     async function load() {
@@ -37,6 +39,13 @@ export default function LogbookPage() {
     load()
   }, [])
 
+  useEffect(function () {
+    setPage(1)
+  }, [filter, sort])
+  function gantiHalaman(p) {
+    setPage(p)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
   const logs = all.filter(function (l) {
     if (filter.mahasiswa && l.mahasiswa_id !== filter.mahasiswa) return false
     if (filter.kategori && l.kategori !== filter.kategori) return false
@@ -44,6 +53,12 @@ export default function LogbookPage() {
   })
   const active = countActiveFilters(filter)
   const sortedLogs = urutkanTanggal(logs, sort)
+  const totalData = sortedLogs.length
+  const totalPages = Math.ceil(totalData / PER_PAGE)
+  const pageAman = Math.min(page, Math.max(1, totalPages))
+  const mulai = totalData === 0 ? 0 : (pageAman - 1) * PER_PAGE + 1
+  const akhir = Math.min(pageAman * PER_PAGE, totalData)
+  const paginatedLogs = sortedLogs.slice((pageAman - 1) * PER_PAGE, pageAman * PER_PAGE)
 
   return (
     <div>
@@ -65,15 +80,25 @@ export default function LogbookPage() {
         </FilterBar>
       </section>
 
-      <section className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+      <section className="grid-pusat mt-8">
         {loading
-          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <SkeletonLogbookCard key={i} /> })
-          : sortedLogs.map(function (l) {
-              return <LogbookCard key={l.id} log={l} isOwner={mahasiswa && mahasiswa.id === l.mahasiswa_id}
-                onDetail={function () { setDetail(l) }} />
+          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
+          : paginatedLogs.map(function (l) {
+              return (
+                <div key={l.id} className="kolom-kartu">
+                  <LogbookCard log={l} isOwner={mahasiswa && mahasiswa.id === l.mahasiswa_id}
+                    onDetail={function () { setDetail(l) }} />
+                </div>
+              )
             })}
-        {!loading && !logs.length ? <EmptyState title="Logbook tidak ditemukan" desc="Coba reset filter atau pilih filter lain." /> : null}
+        {!loading && !logs.length ? <div className="w-full"><EmptyState title="Logbook tidak ditemukan" desc="Coba reset filter atau pilih filter lain." /></div> : null}
       </section>
+      {!loading && totalData > 0 ? (
+        <div className="mt-6 text-center text-sm text-slate-500">
+          Halaman {pageAman} dari {totalPages} • {totalData} logbook
+        </div>
+      ) : null}
+      {!loading ? <Pagination totalItems={totalData} perPage={PER_PAGE} page={pageAman} onPageChange={gantiHalaman} /> : null}
 
       <Modal open={!!detail} onClose={function () { setDetail(null) }}>
         {detail ? <LogbookDetail log={detail} /> : null}

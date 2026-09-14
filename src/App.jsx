@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { useEffect } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { ThemeProvider } from './lib/theme.jsx'
 import { useAuth } from './lib/auth.js'
 import Layout from './components/Layout.jsx'
@@ -11,6 +12,13 @@ import TimPage from './pages/TimPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import DashboardPage from './pages/DashboardPage.jsx'
 
+function ScrollToTop() {
+  const { pathname } = useLocation()
+  useEffect(function () {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+  }, [pathname])
+  return null
+}
 function RequireAuth(props) {
   const { mahasiswa, loading } = useAuth()
   if (loading) return <div className="p-10 text-center text-slate-500">Memuat sesi...</div>
@@ -22,6 +30,7 @@ export default function App() {
   return (
     <ThemeProvider>
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ScrollToTop />
         <Routes>
           <Route element={<Layout />}>
             <Route path="/" element={<HomePage />} />

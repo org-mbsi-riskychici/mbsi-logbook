@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../lib/auth.js'
 import { uploadMedia, deleteMedia } from '../lib/upload.js'
@@ -11,7 +11,7 @@ import { pratinjauHeic, formatHeic } from '../lib/konversi.js'
 import { LabelProses } from '../components/ui.jsx'
 import { todayInput, detectMediaType, matchesDateFilters, urutkanTanggal } from '../lib/format.js'
 import { KATEGORI, UNIT, GALERI_KEGIATAN } from '../lib/constants.js'
-import { EmptyState, Modal, ConfirmModal, inputCls, labelCls, btnPrimary, btnSmall, AutoTextArea } from '../components/ui.jsx'
+import { EmptyState, Modal, ConfirmModal, inputCls, labelCls, btnPrimary, btnSmall, AutoTextArea, Pagination } from '../components/ui.jsx'
 import { LogbookCard, LogbookDetail, GalleryCard, GalleryDetail, AttendanceCard, AttendanceDetail } from '../components/cards.jsx'
 import { CustomSelect, CustomDateInput, FileInput } from '../components/controls.jsx'
 import { SizedIcon, ICONS } from '../components/icons.jsx'
@@ -24,6 +24,7 @@ function newItem() {
 const LOG_INITIAL = { kategori: '', status: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
 const GAL_INITIAL = { kegiatan: '', tipe: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
 const HADIR_INITIAL = { status: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
+const PER_PAGE_DASH = 6
 
 function ModeIndicator(props) {
   return (
@@ -84,6 +85,12 @@ export default function DashboardPage() {
   const [hadirFilter, setHadirFilter] = useState(HADIR_INITIAL)
   const [hadirFilterOpen, setHadirFilterOpen] = useState(false)
   const [sort, setSort] = useState('terbaru')
+   const [logPage, setLogPage] = useState(1)
+   const [galPage, setGalPage] = useState(1)
+   const [hadirPage, setHadirPage] = useState(1)
+   const refListLog = useRef(null)
+   const refListGal = useRef(null)
+   const refListHadir = useRef(null)
 
   async function refresh() {
     if (!mahasiswa) return
@@ -107,6 +114,12 @@ export default function DashboardPage() {
     const iv = setInterval(function () { fetchYouTubeQuota().then(function (data) { setYtQuota(data); setYtQuotaLoading(false) }) }, 30000)
     return function () { clearInterval(iv) }
   }, [mahasiswa])
+
+   useEffect(function () {
+     setLogPage(1)
+     setGalPage(1)
+     setHadirPage(1)
+   }, [logFilter, galFilter, hadirFilter, sort])
 
   if (loading || !mahasiswa) {
     return <div className="p-10 text-center text-slate-500">Memuat sesi...</div>
@@ -162,6 +175,7 @@ export default function DashboardPage() {
   async function submitLogbook(e) {
     e.preventDefault()
     setBusy(true)
+     const menambahLog = !editLogId
     try {
       const clean = []
       for (let i = 0; i < items.length; i++) {
@@ -257,6 +271,7 @@ export default function DashboardPage() {
       setForm({ tanggal: todayInput(), unit: '', kategori: '', judul: '', kendala: '', solusi: '', pembelajaran: '', status: 'draft' })
       setItems([newItem()])
       await refresh()
+       if (menambahLog) setLogPage(1)
     } catch (err) {
       alert('Gagal menyimpan logbook: ' + err.message)
     }
@@ -319,6 +334,7 @@ export default function DashboardPage() {
   async function submitGaleri(e) {
     e.preventDefault()
     setBusy(true)
+     const menambahGal = !editGalId
     try {
       let mediaPath = ''
       let mediaType = ''
@@ -393,6 +409,7 @@ export default function DashboardPage() {
      setGalYtLink('')
      setGalOldYt(null)
       await refresh()
+       if (menambahGal) setGalPage(1)
     } catch (err) {
       alert('Gagal menyimpan galeri: ' + err.message)
     }
@@ -444,6 +461,7 @@ export default function DashboardPage() {
 async function submitHadir(e) {
     e.preventDefault()
     setBusy(true)
+     const menambahHadir = !editHadirId
     const payload = { mahasiswa_id: mahasiswa.id, tanggal: hadirForm.tanggal, status: hadirForm.status, alasan: hadirForm.status === 'Masuk' ? '' : hadirForm.alasan }
     if (editHadirId) {
       await supabase.from('daftar_hadir').update(payload).eq('id', editHadirId)
@@ -454,6 +472,7 @@ async function submitHadir(e) {
     setEditHadirId(null)
     setHadirForm({ tanggal: todayInput(), status: 'Masuk', alasan: '' })
     await refresh()
+     if (menambahHadir) setHadirPage(1)
     setInfoProses('')
     setBusy(false)
   }
@@ -553,6 +572,30 @@ async function submitHadir(e) {
   })
   const sortedHadir = urutkanTanggal(filteredHadir, sort)
   const hadirFilterActive = countActiveFilters(hadirFilter)
+   const logTotal = filteredLogs.length
+   const logTotalPages = Math.max(1, Math.ceil(logTotal / PER_PAGE_DASH))
+   const logPageAman = Math.min(logPage, logTotalPages)
+   const paginatedLogs = sortedLogs.slice((logPageAman - 1) * PER_PAGE_DASH, logPageAman * PER_PAGE_DASH)
+   const galTotal = filteredGaleri.length
+   const galTotalPages = Math.max(1, Math.ceil(galTotal / PER_PAGE_DASH))
+   const galPageAman = Math.min(galPage, galTotalPages)
+   const paginatedGaleri = sortedGaleri.slice((galPageAman - 1) * PER_PAGE_DASH, galPageAman * PER_PAGE_DASH)
+   const hadirTotal = filteredHadir.length
+   const hadirTotalPages = Math.max(1, Math.ceil(hadirTotal / PER_PAGE_DASH))
+   const hadirPageAman = Math.min(hadirPage, hadirTotalPages)
+   const paginatedHadir = sortedHadir.slice((hadirPageAman - 1) * PER_PAGE_DASH, hadirPageAman * PER_PAGE_DASH)
+   function gantiHalamanLog(p) {
+     setLogPage(p)
+     if (refListLog.current) refListLog.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+   }
+   function gantiHalamanGal(p) {
+     setGalPage(p)
+     if (refListGal.current) refListGal.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+   }
+   function gantiHalamanHadir(p) {
+     setHadirPage(p)
+     if (refListHadir.current) refListHadir.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+   }
 
   const editGalDerived = editGalId ? ((galeri.find(function (g) { return g.id === editGalId }) || {}).logbook_item_id || null) : null
 
@@ -742,7 +785,7 @@ async function submitHadir(e) {
           </div>
 
           <div className="space-y-5 min-w-0">
-            <h2 className="text-2xl font-black text-slate-900">Logbook kamu</h2>
+            <h2 ref={refListLog} className="text-2xl font-black text-slate-900 scroll-mt-24">Logbook kamu</h2>
             <FilterBar open={logFilterOpen} onToggle={function () { setLogFilterOpen(function (o) { return !o }) }} activeCount={logFilterActive}
               onReset={function () { setLogFilter(LOG_INITIAL) }}>
               <FilterSelect icon={ICONS.tag} value={logFilter.kategori} onChange={function (v) { setLogFilter(Object.assign({}, logFilter, { kategori: v })) }}
@@ -752,9 +795,9 @@ async function submitHadir(e) {
               <TimeFilter filter={logFilter} set={setLogFilter} />
               <SortSelect value={sort} onChange={setSort} />
             </FilterBar>
-            <p className="text-sm text-slate-500">Menampilkan {filteredLogs.length} dari {logs.length} logbook</p>
+            <p className="text-sm text-slate-500">Menampilkan {filteredLogs.length} dari {logs.length} logbook{logTotalPages > 1 ? ' • Halaman ' + logPageAman + ' dari ' + logTotalPages : ''}</p>
             <div className="grid gap-5 md:grid-cols-2">
-              {sortedLogs.map(function (l) {
+              {paginatedLogs.map(function (l) {
                 return <LogbookCard key={l.id} log={l} isOwner
                   onDetail={function () { setDetail({ type: 'log', data: l }) }}
                   onEdit={function () { startEditLog(l) }}
@@ -762,6 +805,7 @@ async function submitHadir(e) {
               })}
             </div>
             {!filteredLogs.length ? <EmptyState title={logs.length ? 'Logbook tidak ditemukan' : 'Belum ada logbook'} desc={logs.length ? 'Coba reset filter atau pilih filter lain.' : 'Tambahkan logbook harian pertama kamu.'} /> : null}
+             <Pagination totalItems={logTotal} perPage={PER_PAGE_DASH} page={logPageAman} onPageChange={gantiHalamanLog} />
           </div>
         </section>
       ) : null}
@@ -853,7 +897,7 @@ async function submitHadir(e) {
           </div>
 
           <div className="space-y-5 min-w-0">
-            <h2 className="text-2xl font-black text-slate-900">Galeri kamu</h2>
+            <h2 ref={refListGal} className="text-2xl font-black text-slate-900 scroll-mt-24">Galeri kamu</h2>
             <FilterBar open={galFilterOpen} onToggle={function () { setGalFilterOpen(function (o) { return !o }) }} activeCount={galFilterActive}
               onReset={function () { setGalFilter(GAL_INITIAL) }}>
               <FilterSelect icon={ICONS.tag} value={galFilter.kegiatan} onChange={function (v) { setGalFilter(Object.assign({}, galFilter, { kegiatan: v })) }}
@@ -863,9 +907,9 @@ async function submitHadir(e) {
               <TimeFilter filter={galFilter} set={setGalFilter} />
               <SortSelect value={sort} onChange={setSort} />
             </FilterBar>
-            <p className="text-sm text-slate-500">Menampilkan {filteredGaleri.length} dari {galeri.length} media</p>
+            <p className="text-sm text-slate-500">Menampilkan {filteredGaleri.length} dari {galeri.length} media{galTotalPages > 1 ? ' • Halaman ' + galPageAman + ' dari ' + galTotalPages : ''}</p>
             <div className="grid gap-5 md:grid-cols-2">
-              {sortedGaleri.map(function (g) {
+              {paginatedGaleri.map(function (g) {
                 return <GalleryCard key={g.id} item={g} isOwner
                   onDetail={function () { setDetail({ type: 'gal', data: g }) }}
                   onEdit={function () { startEditGal(g) }}
@@ -873,6 +917,7 @@ async function submitHadir(e) {
               })}
               {!filteredGaleri.length ? <EmptyState icon="camera" title={galeri.length ? 'Media tidak ditemukan' : 'Belum ada media galeri'} desc={galeri.length ? 'Coba reset filter atau pilih filter lain.' : 'Unggah foto atau video pertama kamu.'} /> : null}
             </div>
+            <Pagination totalItems={galTotal} perPage={PER_PAGE_DASH} page={galPageAman} onPageChange={gantiHalamanGal} />
           </div>
         </section>
       ) : null}
@@ -915,7 +960,7 @@ async function submitHadir(e) {
           </div>
 
           <div className="space-y-5 min-w-0">
-            <h2 className="text-2xl font-black text-slate-900">Daftar hadir kamu</h2>
+            <h2 ref={refListHadir} className="text-2xl font-black text-slate-900 scroll-mt-24">Daftar hadir kamu</h2>
             <FilterBar open={hadirFilterOpen} onToggle={function () { setHadirFilterOpen(function (o) { return !o }) }} activeCount={hadirFilterActive}
               onReset={function () { setHadirFilter(HADIR_INITIAL) }}>
               <FilterSelect icon={ICONS.check} value={hadirFilter.status} onChange={function (v) { setHadirFilter(Object.assign({}, hadirFilter, { status: v })) }}
@@ -923,9 +968,9 @@ async function submitHadir(e) {
               <TimeFilter filter={hadirFilter} set={setHadirFilter} />
               <SortSelect value={sort} onChange={setHadirFilterOpen && setSort ? setSort : setSort} />
             </FilterBar>
-            <p className="text-sm text-slate-500">Menampilkan {filteredHadir.length} dari {hadir.length} catatan</p>
+            <p className="text-sm text-slate-500">Menampilkan {filteredHadir.length} dari {hadir.length} catatan{hadirTotalPages > 1 ? ' • Halaman ' + hadirPageAman + ' dari ' + hadirTotalPages : ''}</p>
             <div className="grid gap-5 md:grid-cols-2">
-            {sortedHadir.map(function (h) {
+            {paginatedHadir.map(function (h) {
               return <AttendanceCard key={h.id} row={h} isOwner
                 onDetail={function () { setDetail({ type: 'hadir', data: h }) }}
                 onEdit={function () { startEditHadir(h) }}
@@ -933,6 +978,7 @@ async function submitHadir(e) {
             })}
             </div>
             {!filteredHadir.length ? <EmptyState icon="clipboard" title={hadir.length ? 'Catatan tidak ditemukan' : 'Belum ada data kehadiran'} desc={hadir.length ? 'Coba reset filter atau pilih filter lain.' : 'Isi daftar hadir pertama kamu.'} /> : null}
+             <Pagination totalItems={hadirTotal} perPage={PER_PAGE_DASH} page={hadirPageAman} onPageChange={gantiHalamanHadir} />
           </div>
         </section>
       ) : null}

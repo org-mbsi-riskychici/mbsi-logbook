@@ -70,15 +70,16 @@ export default function DospemPage() {
       <section className="mt-10">
 <h2 className="text-2xl lg:text-3xl font-black text-slate-900">Profil tim magang</h2>
 <p className="mt-2 max-w-3xl text-slate-500">Seluruh mahasiswa magang beserta kontribusi logbook, media galeri, dan catatan kehadiran masing-masing.</p>
-<div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+<div className="grid-pusat-rapat mt-6">
 {loading
-? [0, 1, 2].map(function (i) { return <SkeletonPersonCard key={i} /> })
+? [0, 1, 2].map(function (i) { return <div key={i} className="kolom-kartu-rapat"><SkeletonPersonCard /></div> })
 : people.map(function (p) {
 const totalLog = logs.filter(function (x) { return x.mahasiswa_id === p.id }).length
 const totalGal = galRows.filter(function (x) { return x.mahasiswa_id === p.id }).length
 const totalHadir = hadirRows.filter(function (x) { return x.mahasiswa_id === p.id }).length
 return (
-<div key={p.id} className="card-hover rounded-3xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col">
+<div key={p.id} className="kolom-kartu-rapat">
+<div className="card-hover rounded-3xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col h-full">
 <div className="flex items-center gap-4">
 <Avatar src={p.foto_profil || null} nama={p.nama} size="lg" />
 <div className="min-w-0 flex-1">
@@ -115,24 +116,31 @@ return (
 </div>
 </div>
 </div>
+ </div>
 )
 })}
-{!loading && !people.length ? <EmptyState title="Belum ada data mahasiswa" desc="Profil tim akan tampil setelah mahasiswa terdaftar." /> : null}
+{!loading && !people.length ? <div className="w-full"><EmptyState title="Belum ada data mahasiswa" desc="Profil tim akan tampil setelah mahasiswa terdaftar." /></div> : null}
 </div>
 </section>
 
       <section className="mt-10">
         <h2 className="text-2xl lg:text-3xl font-black text-slate-900">Aktivitas yang sudah dipublikasikan</h2>
-        <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid-pusat mt-6">
           {loading
-            ? [0, 1, 2].map(function (i) { return <SkeletonLogbookCard key={i} /> })
-            : logs.map(function (l) {
-                return <LogbookCard key={l.id} log={l} onDetail={function () { setDetail(l) }} />
+            ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
+            : logs.slice(0, 6).map(function (l) {
+                return (
+                  <div key={l.id} className="kolom-kartu">
+                    <LogbookCard log={l} onDetail={function () { setDetail(l) }} />
+                  </div>
+                )
               })}
-          {!loading && !logs.length ? <EmptyState title="Belum ada logbook publik" desc="Logbook akan tampil setelah mahasiswa mengatur status siap dilihat." /> : null}
+          {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum ada logbook publik" desc="Logbook akan tampil setelah mahasiswa mengatur status siap dilihat." /></div> : null}
+        </div>
+        <div className="mt-8 flex justify-center">
+          <Link to="/logbook" className="rounded-2xl bg-bsi-800 px-6 py-3 text-sm font-bold text-white hover:bg-bsi-900">Lihat semua logbook</Link>
         </div>
       </section>
-
       <Modal open={!!detail} onClose={function () { setDetail(null) }}>
         {detail ? <LogbookDetail log={detail} /> : null}
       </Modal>

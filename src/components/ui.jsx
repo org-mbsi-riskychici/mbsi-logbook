@@ -444,3 +444,70 @@ export function Avatar(props) {
     </span>
   )
 }
+
+export function Pagination(props) {
+  /* pagination-v2: tombol nomor halaman sesuai tema BSI */
+  const totalItems = props.totalItems || 0
+  const perPage = props.perPage || 10
+  const page = props.page || 1
+  const onPageChange = props.onPageChange || function () {}
+  const totalPages = Math.ceil(totalItems / perPage)
+  if (!totalItems) return null
+  const halaman = []
+  if (totalPages <= 7) {
+    for (let i = 1; i <= totalPages; i++) halaman.push(i)
+  } else {
+    for (let i = 1; i <= totalPages; i++) {
+      if (i === 1 || i === totalPages || (i >= page - 1 && i <= page + 1)) {
+        halaman.push(i)
+      } else if (halaman[halaman.length - 1] !== '...') {
+        halaman.push('...')
+      }
+    }
+  }
+  const clsAngka = 'grid h-10 min-w-10 place-items-center rounded-xl px-3 text-sm font-bold transition '
+  const clsNav = 'flex h-10 items-center rounded-xl px-4 text-sm font-semibold transition '
+  const clsNetral = 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 hover:text-bsi-800'
+  return (
+    <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
+      {totalPages > 1 ? (
+        <button
+          type="button"
+          disabled={page <= 1}
+          onClick={function () { onPageChange(page - 1) }}
+          className={clsNav + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}
+        >
+          Sebelumnya
+        </button>
+      ) : null}
+      {halaman.map(function (h, idx) {
+        if (h === '...') {
+          return <span key={'lompat' + idx} className="px-1 text-sm font-bold text-slate-400">...</span>
+        }
+        const aktif = h === page
+        return (
+          <button
+            key={'hal' + h}
+            type="button"
+            onClick={function () { onPageChange(h) }}
+            className={clsAngka + (aktif
+              ? 'bg-bsi-800 text-white shadow-lg shadow-bsi-900/25'
+              : clsNetral)}
+          >
+            {h}
+          </button>
+        )
+      })}
+      {totalPages > 1 ? (
+        <button
+          type="button"
+          disabled={page >= totalPages}
+          onClick={function () { onPageChange(page + 1) }}
+          className={clsNav + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}
+        >
+          Berikutnya
+        </button>
+      ) : null}
+    </div>
+  )
+}

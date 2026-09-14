@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../lib/auth.js'
-import { StatCard, EmptyState, Modal } from '../components/ui.jsx'
+import { StatCard, EmptyState, Modal, Pagination } from '../components/ui.jsx'
 import { AttendanceCard, AttendanceDetail } from '../components/cards.jsx'
 import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
 import { ICONS } from '../components/icons.jsx'
@@ -9,6 +9,7 @@ import { matchesDateFilters, urutkanTanggal } from '../lib/format.js'
 import { SkeletonStatCard, SkeletonChartRow, SkeletonAttendanceCard } from '../components/Skeleton.jsx'
 
 const INITIAL = { mahasiswa: '', status: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
+const PER_PAGE = 12
 
 export default function AttendancePage() {
   const { mahasiswa } = useAuth()
@@ -19,6 +20,7 @@ export default function AttendancePage() {
   const [open, setOpen] = useState(false)
   const [detail, setDetail] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
 
   useEffect(function () {
     async function load() {
@@ -31,6 +33,13 @@ export default function AttendancePage() {
     load()
   }, [])
 
+  useEffect(function () {
+    setPage(1)
+  }, [filter, sort])
+  function gantiHalaman(p) {
+    setPage(p)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
   const rows = all.filter(function (r) {
     if (filter.mahasiswa && r.mahasiswa_id !== filter.mahasiswa) return false
     if (filter.status && r.status !== filter.status) return false
@@ -38,6 +47,12 @@ export default function AttendancePage() {
   })
   const active = countActiveFilters(filter)
   const sortedRows = urutkanTanggal(rows, sort)
+  const totalData = sortedRows.length
+  const totalPages = Math.ceil(totalData / PER_PAGE)
+  const pageAman = Math.min(page, Math.max(1, totalPages))
+  const mulai = totalData === 0 ? 0 : (pageAman - 1) * PER_PAGE + 1
+  const akhir = Math.min(pageAman * PER_PAGE, totalData)
+  const paginatedRows = sortedRows.slice((pageAman - 1) * PER_PAGE, pageAman * PER_PAGE)
 
   const counts = rows.reduce(function (acc, r) {
     acc[r.status] = (acc[r.status] || 0) + 1
@@ -115,16 +130,26 @@ export default function AttendancePage() {
 
       <section className="mt-8">
         <h2 className="text-2xl lg:text-3xl font-black text-slate-900">Daftar kehadiran sesuai filter</h2>
-        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid-pusat-rapat mt-6">
           {loading
-            ? [0, 1, 2].map(function (i) { return <SkeletonAttendanceCard key={i} /> })
-            : sortedRows.map(function (r) {
-                return <AttendanceCard key={r.id} row={r} isOwner={mahasiswa && mahasiswa.id === r.mahasiswa_id}
-                  onDetail={function () { setDetail(r) }} />
+            ? [0, 1, 2].map(function (i) { return <div key={i} className="kolom-kartu-rapat"><SkeletonAttendanceCard /></div> })
+            : paginatedRows.map(function (r) {
+                return (
+                  <div key={r.id} className="kolom-kartu-rapat">
+                    <AttendanceCard row={r} isOwner={mahasiswa && mahasiswa.id === r.mahasiswa_id}
+                      onDetail={function () { setDetail(r) }} />
+                  </div>
+                )
               })}
-          {!loading && !rows.length ? <EmptyState icon="clipboard" title="Belum ada data kehadiran" desc="Data kehadiran akan tampil setelah mahasiswa mengisi daftar hadir." /> : null}
+          {!loading && !rows.length ? <div className="w-full"><EmptyState icon="clipboard" title="Belum ada data kehadiran" desc="Data kehadiran akan tampil setelah mahasiswa mengisi daftar hadir." /></div> : null}
         </div>
       </section>
+      {!loading && totalData > 0 ? (
+        <div className="mt-6 text-center text-sm text-slate-500">
+          Halaman {pageAman} dari {totalPages} • {totalData} catatan
+        </div>
+      ) : null}
+      {!loading ? <Pagination totalItems={totalData} perPage={PER_PAGE} page={pageAman} onPageChange={gantiHalaman} /> : null}
 
       <Modal open={!!detail} onClose={function () { setDetail(null) }}>
         {detail ? <AttendanceDetail row={detail} /> : null}
