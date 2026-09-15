@@ -38,8 +38,10 @@ export function TimeFilter(props) {
           onClick={function () { set(Object.assign({}, f, { timeMode: 'rentang', bulan: '', dari: '', sampai: '' })) }}>Rentang Waktu</button>
       </div>
       {f.timeMode === 'bulan'
-        ? <FilterDate mode="month" value={f.bulan} onChange={function (v) { set(Object.assign({}, f, { bulan: v })) }} />
-        : <div className="flex flex-wrap items-center gap-2">
+        ? <div key="bulan" className="anim-ganti-bulan flex flex-wrap items-center gap-2">
+<FilterDate mode="month" value={f.bulan} onChange={function (v) { set(Object.assign({}, f, { bulan: v })) }} />
+</div>
+        : <div key="rentang" className="anim-ganti-rentang flex flex-wrap items-center gap-2">
             <FilterDate value={f.dari} onChange={function (v) { set(Object.assign({}, f, { dari: v })) }} />
             <span className="text-slate-400 text-sm">sampai</span>
             <FilterDate value={f.sampai} onChange={function (v) { set(Object.assign({}, f, { sampai: v })) }} />

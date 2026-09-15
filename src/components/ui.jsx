@@ -580,3 +580,16 @@ const ToastContext = createContext(null)
  export function useToast() {
    return useContext(ToastContext)
  }
+
+export function SelubungPanel(props) {
+  const [tampil, setTampil] = useState(props.open)
+  const tutup = tampil && !props.open
+  useEffect(function () {
+    if (props.open) { setTampil(true); return undefined }
+    if (!tampil) return undefined
+    const t = setTimeout(function () { setTampil(false) }, 180)
+    return function () { clearTimeout(t) }
+  }, [props.open, tampil])
+  if (!tampil) return null
+  return <div className={'selubung-panel' + (tutup ? ' panel-tutup' : '')}>{props.children}</div>
+}

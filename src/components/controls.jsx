@@ -1,3 +1,4 @@
+import { SelubungPanel } from './ui.jsx'
 import { useEffect, useRef, useState } from 'react'
 import { ICONS } from './icons.jsx'
 
@@ -60,8 +61,8 @@ export function CustomSelect(props) {
         </span>
         <span className={'shrink-0 text-slate-400 transition-transform duration-200 ' + (open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
       </button>
-      {open ? (
-        <div className="anim-modal absolute z-30 mt-2 max-h-64 w-full overflow-y-auto rounded-2xl border border-slate-200 bg-white py-1 shadow-xl">
+      <SelubungPanel open={open}>
+<div className="anim-modal absolute z-30 mt-2 max-h-64 w-full overflow-y-auto rounded-2xl border border-slate-200 bg-white py-1 shadow-xl">
           {options.map(function (o) {
             const active = o.value === props.value
             return (
@@ -77,7 +78,7 @@ export function CustomSelect(props) {
             )
           })}
         </div>
-      ) : null}
+</SelubungPanel>
     </div>
   )
 }
@@ -151,8 +152,8 @@ export function CustomDateInput(props) {
         </span>
         <span className={'shrink-0 text-slate-400 transition-transform duration-200 ' + (open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
       </button>
-      {open ? (
-        <div className="anim-modal absolute z-30 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
+      <SelubungPanel open={open}>
+<div className="anim-modal absolute z-30 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
           <div className="flex items-center justify-between">
             <button type="button" onClick={function () { shift(-1) }} className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-100">&#8249;</button>
             <p className="text-sm font-bold text-slate-800">
@@ -206,7 +207,7 @@ export function CustomDateInput(props) {
             <button type="button" onClick={pickToday} className="text-sm font-semibold text-bsi-700 hover:text-bsi-900">Hari ini</button>
           </div>
         </div>
-      ) : null}
+</SelubungPanel>
     </div>
   )
 }

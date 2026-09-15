@@ -429,3 +429,36 @@ html { scroll-behavior: smooth; }
   background: rgba(100, 116, 139, 0.55);
 }
 .dark #scroll-thumb { background: rgba(148, 163, 184, 0.55); }
+
+/* panel-keluar: animasi keluar dropdown, date picker, dan panel filter */
+@keyframes panelOut {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(-6px) scale(0.98); }
+}
+.panel-tutup { pointer-events: none; }
+.panel-tutup .anim-modal, .panel-tutup .anim-filter { animation: panelOut 0.18s ease-in forwards; }
+
+/* ganti-mode-waktu: animasi halus saat berpindah antara pilihan bulan dan rentang waktu */
+@keyframes gantiBulan {
+from { opacity: 0; transform: translateX(-10px) scale(0.98); }
+to { opacity: 1; transform: translateX(0) scale(1); }
+}
+@keyframes gantiRentang {
+from { opacity: 0; transform: translateX(10px) scale(0.98); }
+to { opacity: 1; transform: translateX(0) scale(1); }
+}
+.anim-ganti-bulan { animation: gantiBulan 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
+.anim-ganti-rentang { animation: gantiRentang 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
+
+/* mode-smooth-v2: easing lebih lembut untuk masuk, bayangan cabang untuk keluar, tetangga bergeser mulus */
+@keyframes gantiBulan {
+from { opacity: 0; transform: translateX(-12px) scale(0.99); }
+to { opacity: 1; transform: translateX(0) scale(1); }
+}
+@keyframes gantiRentang {
+from { opacity: 0; transform: translateX(12px) scale(0.99); }
+to { opacity: 1; transform: translateX(0) scale(1); }
+}
+.anim-ganti-bulan { animation: gantiBulan 0.32s cubic-bezier(0.22, 1, 0.36, 1); }
+.anim-ganti-rentang { animation: gantiRentang 0.32s cubic-bezier(0.22, 1, 0.36, 1); }
+.hantu-cabang { pointer-events: none; }
