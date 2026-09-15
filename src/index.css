@@ -400,3 +400,32 @@ html { scroll-behavior: smooth; }
   z-index: 1;
   isolation: isolate;
 }
+
+/* scrollbar-otohide: scrollbar bawaan dinolkan lebarnya, indikator overlay muncul hanya saat menggulir */
+* {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+*::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+}
+#scroll-indicator {
+  position: fixed;
+  right: 3px;
+  top: 0;
+  width: 8px;
+  z-index: 95;
+  border-radius: 9999px;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+#scroll-indicator.aktif { opacity: 1; }
+#scroll-thumb {
+  width: 6px;
+  margin-left: 1px;
+  border-radius: 9999px;
+  background: rgba(100, 116, 139, 0.55);
+}
+.dark #scroll-thumb { background: rgba(148, 163, 184, 0.55); }
