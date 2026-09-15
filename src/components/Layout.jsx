@@ -2,7 +2,7 @@ import { Outlet, Link, NavLink } from 'react-router-dom'
 import { useTheme } from '../lib/theme.jsx'
 import { useAuth, logoutMahasiswa } from '../lib/auth.js'
 import { SizedIcon } from './icons.jsx'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 const LINKS = [
   { to: '/', label: 'Beranda' },
@@ -12,6 +12,17 @@ const LINKS = [
   { to: '/dospem', label: 'Tim & Dospem' }
 ]
 
+function MenuMobile(props) {
+  return (
+    <div className={'menu-mobile-wrap xl:hidden' + (props.open ? ' menu-mobile-buka' : '')}>
+      <div className="menu-mobile-dalam">
+        <div className="menu-mobile-isi border-t border-slate-200 bg-white px-4 py-4 space-y-2">
+          {props.children}
+        </div>
+      </div>
+    </div>
+  )
+}
 export default function Layout() {
   const theme = useTheme()
   const { mahasiswa } = useAuth()
@@ -63,8 +74,7 @@ export default function Layout() {
             </div>
           </div>
         </div>
-        {open ? (
-          <div className="xl:hidden border-t border-slate-200 bg-white px-4 py-4 space-y-2">
+        <MenuMobile open={open}>
             {LINKS.map(function (l) {
               return <Link key={l.to} to={l.to} onClick={function () { setOpen(false) }} className="block px-4 py-3 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100">{l.label}</Link>
             })}
@@ -76,8 +86,7 @@ export default function Layout() {
             ) : (
               <Link to="/login" onClick={function () { setOpen(false) }} className="block px-4 py-3 rounded-xl bg-slate-900 text-white text-sm font-semibold">Masuk Intern</Link>
             )}
-          </div>
-        ) : null}
+        </MenuMobile>
       </header>
 
       <main className="anim-page max-w-7xl mx-auto px-4 py-8 lg:py-10 flex-1 w-full">

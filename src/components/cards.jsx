@@ -1,8 +1,9 @@
 import { Avatar } from './ui.jsx'
 import PemutarVideo from './PemutarVideo.jsx'
 import Carousel from './Carousel.jsx'
-import { StatusBadge, CategoryBadge, AttendanceBadge, btnSmall, ZoomableMedia, SmartFit , MediaYouTube } from './ui.jsx'
+import { StatusBadge, CategoryBadge, AttendanceBadge, btnSmall, ZoomableMedia, SmartFit , MediaYouTube, MediaDrive } from './ui.jsx'
 import { formatTanggal, formatTanggalShort } from '../lib/format.js'
+import { drivePreviewUrl, driveThumbUrl } from '../lib/drive.js'
 
 function PersonChip(props) {
   const p = props.mahasiswa
@@ -38,7 +39,7 @@ function ActionButtons(props) {
 
 export function slidesFromItems(items) {
   return (items || []).filter(function (i) { return i.media_path }).map(function (i) {
-    return { src: i.media_thumb || i.media_path, full: i.media_path, type: i.media_source === 'youtube' ? 'foto' : i.media_type, title: i.judul, yt: i.youtube_id || null }
+    return { src: i.media_thumb || i.media_path, full: i.media_path, type: i.media_source === 'youtube' ? 'foto' : i.media_type, title: i.judul, yt: i.youtube_id || null, drive: i.drive_id || null }
   })
 }
 
@@ -100,12 +101,14 @@ export function LogbookDetail(props) {
                 {i < items.length - 1 ? <span className="absolute left-4 top-9 bottom-0 w-px bg-slate-200 dark:bg-slate-700" /> : null}
                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                    {it.media_path ? (
-                     it.media_source === 'youtube' ? (
-                       <PemutarVideo key={it.youtube_id} youtubeId={it.youtube_id} title={it.judul} className="aspect-video w-full rounded-2xl mb-3" />
-                     ) : (
-                       <ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3" />
-                     )
-                   ) : null}
+                      it.media_source === 'youtube' ? (
+                        <PemutarVideo key={it.youtube_id} youtubeId={it.youtube_id} title={it.judul} className="aspect-video w-full rounded-2xl mb-3" />
+                      ) : it.media_source === 'drive' ? (
+                        <iframe key={it.media_path} src={drivePreviewUrl(it.media_path)} title={it.judul} allow="autoplay; encrypted-media; fullscreen" allowFullScreen className="aspect-video w-full rounded-2xl border-0 bg-black mb-3" />
+                      ) : (
+                        <ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3" />
+                      )
+                    ) : null}
                   <p className="font-bold text-slate-900">
                     {it.judul}
                     {it.show_in_gallery && it.media_path ? <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gold-500/15 text-gold-600">Di galeri</span> : null}
@@ -141,6 +144,8 @@ export function GalleryCard(props) {
       <div className="relative aspect-video w-full overflow-hidden bg-slate-900">
         {item.media_source === 'youtube' ? (
         <MediaYouTube src={item.media_path} alt={item.judul} />
+      ) : item.media_source === 'drive' ? (
+        <MediaDrive driveId={item.media_path} alt={item.judul} />
       ) : (
         <SmartFit src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} alt={item.judul} />
       )}
@@ -177,6 +182,8 @@ export function GalleryDetail(props) {
     <div className="space-y-4">
       {item.media_source === 'youtube' ? (
         <PemutarVideo key={item.youtube_id} youtubeId={item.youtube_id} title={item.judul} className="aspect-video w-full rounded-2xl" />
+      ) : item.media_source === 'drive' ? (
+        <iframe src={drivePreviewUrl(item.media_path)} title={item.judul} allow="autoplay; encrypted-media; fullscreen" allowFullScreen className="aspect-video w-full rounded-2xl border-0 bg-black" />
       ) : (
         <ZoomableMedia src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} title={item.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900" />
       )}

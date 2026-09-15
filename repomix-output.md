@@ -57,6 +57,7 @@ src/
   lib/
     auth.js
     constants.js
+    drive.js
     format.js
     konversi.js
     logbook.js
@@ -78,14 +79,27 @@ src/
   index.css
   main.jsx
 supabase/
+  migrasi-drive-download.sql
   schema.sql
 .env.example
 .gitignore
+apply-animasi-filter-mobile.cjs
+apply-animasi-menu-mobile.cjs
+apply-batal-edit-pindah-tab.cjs
+apply-fitur-drive-download.cjs
+apply-fitur-video-drive.cjs
+apply-fix-galeri-drive.cjs
+apply-fix-logbookdetail-drive.cjs
 apply-fix-skeleton-ekspor.cjs
 apply-fix-tahun-footer.cjs
+apply-fix-toggle-dark.cjs
 apply-footer-ramping.cjs
+apply-menu-mobile-halus-v2.cjs
+apply-placeholder-drive.cjs
 apply-scroll-ke-form.cjs
+apply-scrollbar-tipis.cjs
 apply-skeleton-ui-baru.cjs
+apply-status-published.cjs
 apply-transisi-tema-v3.cjs
 index.html
 package.json
@@ -99,6 +113,1939 @@ vite.config.js
 ```
 
 # Files
+
+## File: src/lib/drive.js
+```javascript
+export function parseDriveId(url) {
+  if (!url) return null
+  const s = String(url).trim()
+
+  if (/^[a-zA-Z0-9_-]{20,}$/.test(s) && s.indexOf('/') === -1 && s.indexOf('.') === -1) return s
+
+  try {
+    const u = new URL(s)
+    const host = u.hostname.replace('www.', '')
+
+    if (host === 'drive.google.com' || host === 'drive.usercontent.google.com') {
+      const m = u.pathname.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)
+      if (m) return m[1]
+      const id = u.searchParams.get('id')
+      if (id) return id
+    }
+  } catch (e) {}
+
+  return null
+}
+
+export function drivePreviewUrl(id) {
+  return 'https://drive.google.com/file/d/' + id + '/preview'
+}
+
+export function driveThumbUrl(id) {
+  return 'https://drive.google.com/thumbnail?id=' + id + '&sz=w1280'
+}
+
+export function driveDownloadUrl(id) {
+  return 'https://drive.usercontent.google.com/download?id=' + id + '&export=download&confirm=t'
+}
+
+export function driveViewUrl(id) {
+  return 'https://drive.google.com/file/d/' + id + '/view'
+}
+```
+
+## File: supabase/migrasi-drive-download.sql
+```sql
+-- Migrasi fitur download Google Drive
+-- Jalankan SQL ini di Supabase Dashboard > SQL Editor
+-- jika kolom drive_id belum ada.
+
+alter table public.logbook_items add column if not exists drive_id text;
+alter table public.galeri add column if not exists drive_id text;
+```
+
+## File: apply-animasi-filter-mobile.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+function ada(rel) { return fs.existsSync(path.join(root, rel)) }
+
+console.log('Mulai memasang animasi panel filter mobile dan tablet...')
+console.log('')
+
+/* ===== 1. FilterBar.jsx: bungkus panel dengan struktur filter-wrap, filter-dalam, filter-isi ===== */
+const FILE_F = 'src/components/FilterBar.jsx'
+if (!ada(FILE_F)) {
+  console.log('[GAGAL] FilterBar.jsx tidak ditemukan')
+  process.exit(1)
+}
+let f = baca(FILE_F)
+
+const BLOK_BARU = `      <div className={'filter-wrap' + (props.open ? ' filter-wrap-buka' : '')}>
+        <div className="filter-dalam">
+          <div className="filter-isi flex flex-wrap items-center gap-3">
+            {props.children}
+            {props.activeCount > 0 ? (
+              <button onClick={props.onReset}
+                className="inline-flex items-center gap-2 rounded-2xl bg-red-50 border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100">
+                {ICONS.close}<span>Reset</span>
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+`
+
+if (f.includes('filter-wrap')) {
+  console.log('[SUDAH ADA] Struktur filter-wrap di FilterBar.jsx')
+} else {
+  const mulai = f.indexOf("<div className={props.open ? 'anim-page mt-4' : 'hidden xl:block xl:mt-4'}>")
+  const akhir = f.indexOf('export function SortSelect', mulai)
+  if (mulai !== -1 && akhir !== -1) {
+    f = f.slice(0, mulai) + BLOK_BARU + f.slice(akhir)
+    simpan(FILE_F, f)
+    console.log('[BERHASIL] Panel filter dibungkus struktur animasi filter-wrap')
+  } else {
+    console.log('[TIDAK KETEMU] Blok panel filter di FilterBar.jsx')
+  }
+}
+
+/* ===== 2. index.css: aturan expand collapse plus kemunculan berurutan tiap kontrol ===== */
+const FILE_CSS = 'src/index.css'
+const CSS_BLOK = `/* filter-mobile-v1: panel filter mengembang dan merapat mulus di mobile dan tablet, tiap kontrol muncul berurutan */
+.filter-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.36s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.filter-wrap-buka { grid-template-rows: 1fr; }
+.filter-dalam {
+  overflow: hidden;
+  min-height: 0;
+  visibility: hidden;
+  transition: visibility 0.36s;
+}
+.filter-wrap-buka .filter-dalam { visibility: visible; }
+.filter-isi {
+  margin-top: 1rem;
+  opacity: 0;
+  transform: translateY(-8px);
+  transition: opacity 0.2s ease, transform 0.24s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.filter-wrap-buka .filter-isi {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.34s ease 0.06s, transform 0.4s cubic-bezier(0.32, 0.72, 0, 1) 0.04s;
+}
+.filter-isi > * {
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity 0.16s ease, transform 0.2s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.filter-wrap-buka .filter-isi > * {
+  opacity: 1;
+  transform: translateY(0);
+}
+.filter-wrap-buka .filter-isi > *:nth-child(1) { transition-delay: 0.08s; }
+.filter-wrap-buka .filter-isi > *:nth-child(2) { transition-delay: 0.14s; }
+.filter-wrap-buka .filter-isi > *:nth-child(3) { transition-delay: 0.2s; }
+.filter-wrap-buka .filter-isi > *:nth-child(4) { transition-delay: 0.26s; }
+.filter-wrap-buka .filter-isi > *:nth-child(5) { transition-delay: 0.32s; }
+.filter-wrap-buka .filter-isi > *:nth-child(6) { transition-delay: 0.38s; }
+@media (min-width: 1280px) {
+  .filter-wrap { grid-template-rows: 1fr; }
+  .filter-dalam { visibility: visible; }
+  .filter-isi { opacity: 1; transform: none; }
+  .filter-isi > * { opacity: 1; transform: none; transition: none; }
+}
+`
+if (!ada(FILE_CSS)) {
+  console.log('[LEWATI] index.css tidak ditemukan')
+} else {
+  let css = baca(FILE_CSS)
+  if (css.includes('filter-mobile-v1')) {
+    console.log('[SUDAH ADA] CSS filter-mobile-v1 di index.css')
+  } else {
+    simpan(FILE_CSS, css.trimEnd() + '\n\n' + CSS_BLOK)
+    console.log('[BERHASIL] CSS animasi panel filter ditambahkan di index.css')
+  }
+}
+
+/* ===== 3. Verifikasi ===== */
+console.log('')
+console.log('Verifikasi:')
+const f2 = baca(FILE_F)
+const c2 = ada(FILE_CSS) ? baca(FILE_CSS) : ''
+console.log((f2.includes('filter-wrap') ? '[OK] ' : '[BELUM] ') + 'Struktur filter-wrap terpasang di FilterBar.jsx')
+console.log((f2.includes('filter-dalam') && f2.includes('filter-isi') ? '[OK] ' : '[BELUM] ') + 'Lapisan dalam dan isi panel tersedia')
+console.log((!f2.includes("anim-page mt-4") ? '[OK] ' : '[BELUM] ') + 'Kelas lama anim-page dan hidden xl:block sudah diganti')
+console.log((c2.includes('filter-mobile-v1') ? '[OK] ' : '[BELUM] ') + 'CSS filter-mobile-v1 tersedia')
+console.log((c2.includes('.filter-wrap-buka .filter-isi > *:nth-child(1)') ? '[OK] ' : '[BELUM] ') + 'Kemunculan berurutan tiap kontrol tersedia')
+console.log((c2.includes('@media (min-width: 1280px)') ? '[OK] ' : '[BELUM] ') + 'Desktop tetap terbuka penuh tanpa animasi')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Cara kerja animasi baru:')
+console.log('1. Div pembungkus panel kini memakai grid rows 0fr ke 1fr, jadi saat tombol Filter diketuk panel mengembang dari tinggi nol sampai tinggi aslinya dengan perlambatan alami, bukan muncul sekonyongkonyong.')
+console.log('2. Saat ditutup, tinggi panel merapat kembali ke nol sambil isi memudar, sehingga tidak ada lompatan layout pada kartu di bawahnya.')
+console.log('3. Seluruh isi panel memudar dan bergeser turun lembut sebagai satu kesatuan dengan kurva yang sama seperti menu mobile yang kamu suka.')
+console.log('4. Setiap kontrol di dalamnya, yaitu filter mahasiswa atau kegiatan, filter kategori, pilihan bulan atau rentang waktu, sortir, sampai tombol Reset, muncul berurutan dengan jeda 60 milidetik sehingga terasa mengalir dari kiri ke kanan.')
+console.log('5. Saat panel menutup, semua kontrol memudar cepat dalam 160 milidetik tanpa jeda, jadi gerakan keluar terasa tegas dan tidak bertele tele.')
+console.log('6. Transisi bisa dipotong di tengah: mengetuk tombol Filter saat panel masih setengah terbuka akan membalikkan gerakan dari posisi terakhir, persis seperti menu mobile v2.')
+console.log('7. Di layar lebar 1280 piksel ke atas, panel tetap selalu terbuka dan seluruh animasi dimatikan lewat media query, jadi tampilan desktop tidak berubah sama sekali.')
+console.log('8. Pengguna dengan preferensi reduce motion tetap mendapat perilaku instan karena aturan global proyek memotong durasi transisi.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Persempit jendela di bawah 1280 piksel lalu buka halaman Logbook, Galeri, Daftar Hadir, atau dashboard.')
+console.log('2. Ketuk tombol Filter: panel mengembang mulus dan kontrol filter serta sortir muncul berurutan dari kiri ke kanan.')
+console.log('3. Ketuk tombol Filter lagi saat panel masih bergerak: gerakan berbalik mulus dari posisi terakhir tanpa lompatan.')
+console.log('4. Tutup panel sepenuhnya: tinggi merapat ke nol dan kontrol memudar cepat, kartu di bawahnya tidak melompat.')
+console.log('5. Ganti mode waktu antara Bulan dan Rentang Waktu saat panel terbuka: animasi FLIP yang sudah ada tetap bekerja normal di dalam panel.')
+console.log('6. Lebarkan jendela ke ukuran desktop: panel langsung terbuka penuh tanpa animasi dan tanpa jarak yang berubah.')
+```
+
+## File: apply-animasi-menu-mobile.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+function ada(rel) { return fs.existsSync(path.join(root, rel)) }
+
+console.log('Mulai memasang animasi smooth untuk menu navigasi mobile dan tablet...')
+console.log('')
+
+/* ===== 1. Layout.jsx: komponen MenuMobile dengan mount bertahan saat animasi keluar ===== */
+const FILE_L = 'src/components/Layout.jsx'
+if (!ada(FILE_L)) {
+  console.log('[GAGAL] Layout.jsx tidak ditemukan')
+  process.exit(1)
+}
+let l = baca(FILE_L)
+let berubahL = false
+
+if (l.includes("import { useEffect, useState } from 'react'")) {
+  console.log('[SUDAH ADA] Impor useEffect di Layout.jsx')
+} else if (l.includes("import { useState } from 'react'")) {
+  l = l.replace("import { useState } from 'react'", "import { useEffect, useState } from 'react'")
+  berubahL = true
+  console.log('[BERHASIL] Impor useEffect ditambahkan di Layout.jsx')
+} else {
+  console.log('[TIDAK KETEMU] Impor useState di Layout.jsx')
+}
+
+const KOMPONEN = `function MenuMobile(props) {
+  const [tampil, setTampil] = useState(props.open)
+  const tutup = tampil && !props.open
+  useEffect(function () {
+    if (props.open) { setTampil(true); return undefined }
+    if (!tampil) return undefined
+    const t = setTimeout(function () { setTampil(false) }, 240)
+    return function () { clearTimeout(t) }
+  }, [props.open, tampil])
+  if (!tampil) return null
+  return (
+    <div className={'menu-mobile xl:hidden border-t border-slate-200 bg-white px-4 py-4 space-y-2' + (tutup ? ' menu-mobile-tutup' : '')}>
+      {props.children}
+    </div>
+  )
+}
+`
+
+if (l.includes('function MenuMobile(')) {
+  console.log('[SUDAH ADA] Komponen MenuMobile di Layout.jsx')
+} else if (l.includes('export default function Layout() {')) {
+  l = l.replace('export default function Layout() {', KOMPONEN + 'export default function Layout() {')
+  berubahL = true
+  console.log('[BERHASIL] Komponen MenuMobile ditambahkan di Layout.jsx')
+} else {
+  console.log('[TIDAK KETEMU] Anchor export default function Layout')
+}
+
+const BUKA_LAMA = "        {open ? (\n          <div className=\"xl:hidden border-t border-slate-200 bg-white px-4 py-4 space-y-2\">"
+const BUKA_BARU = "        <MenuMobile open={open}>"
+if (l.includes('<MenuMobile open={open}>')) {
+  console.log('[SUDAH ADA] Pembuka menu memakai MenuMobile')
+} else if (l.includes(BUKA_LAMA)) {
+  l = l.replace(BUKA_LAMA, BUKA_BARU)
+  berubahL = true
+  console.log('[BERHASIL] Pembuka menu mobile diganti menjadi MenuMobile')
+} else {
+  console.log('[TIDAK KETEMU] Pola pembuka menu mobile di Layout.jsx')
+}
+
+const TUTUP_LAMA = "          </div>\n        ) : null}\n      </header>"
+const TUTUP_BARU = "        </MenuMobile>\n      </header>"
+if (l.includes('</MenuMobile>')) {
+  console.log('[SUDAH ADA] Penutup menu memakai MenuMobile')
+} else if (l.includes(TUTUP_LAMA)) {
+  l = l.replace(TUTUP_LAMA, TUTUP_BARU)
+  berubahL = true
+  console.log('[BERHASIL] Penutup menu mobile diganti menjadi MenuMobile')
+} else {
+  console.log('[TIDAK KETEMU] Pola penutup menu mobile di Layout.jsx')
+}
+
+if (berubahL) simpan(FILE_L, l)
+
+/* ===== 2. index.css: keyframes animasi masuk dan keluar menu ===== */
+const FILE_CSS = 'src/index.css'
+const CSS_BLOK = `/* menu-mobile-v1: animasi buka tutup menu navigasi mobile dan tablet, tinggi ikut mengembang dan merapat */
+@keyframes menuMobileIn {
+  from { opacity: 0; transform: translateY(-12px); max-height: 0; }
+  to { opacity: 1; transform: translateY(0); max-height: 30rem; }
+}
+@keyframes menuMobileOut {
+  from { opacity: 1; transform: translateY(0); max-height: 30rem; }
+  to { opacity: 0; transform: translateY(-12px); max-height: 0; }
+}
+.menu-mobile {
+  overflow: hidden;
+  animation: menuMobileIn 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.menu-mobile-tutup {
+  pointer-events: none;
+  animation: menuMobileOut 0.24s ease-in forwards;
+}
+@keyframes menuMobileItem {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.menu-mobile > * { animation: menuMobileItem 0.3s cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+.menu-mobile > *:nth-child(1) { animation-delay: 0.04s; }
+.menu-mobile > *:nth-child(2) { animation-delay: 0.08s; }
+.menu-mobile > *:nth-child(3) { animation-delay: 0.12s; }
+.menu-mobile > *:nth-child(4) { animation-delay: 0.16s; }
+.menu-mobile > *:nth-child(5) { animation-delay: 0.2s; }
+.menu-mobile > *:nth-child(6) { animation-delay: 0.24s; }
+.menu-mobile > *:nth-child(7) { animation-delay: 0.28s; }
+.menu-mobile-tutup > * { animation: none; }
+`
+if (!ada(FILE_CSS)) {
+  console.log('[LEWATI] index.css tidak ditemukan')
+} else {
+  let css = baca(FILE_CSS)
+  if (css.includes('menu-mobile-v1')) {
+    console.log('[SUDAH ADA] CSS animasi menu mobile di index.css')
+  } else {
+    simpan(FILE_CSS, css.trimEnd() + '\n\n' + CSS_BLOK)
+    console.log('[BERHASIL] CSS animasi menu mobile ditambahkan di index.css')
+  }
+}
+
+/* ===== 3. Verifikasi ===== */
+console.log('')
+console.log('Verifikasi:')
+const l2 = baca(FILE_L)
+const css2 = ada(FILE_CSS) ? baca(FILE_CSS) : ''
+console.log((l2.includes("import { useEffect, useState } from 'react'") ? '[OK] ' : '[BELUM] ') + 'Impor useEffect tersedia di Layout.jsx')
+console.log((l2.includes('function MenuMobile(') ? '[OK] ' : '[BELUM] ') + 'Komponen MenuMobile tersedia')
+console.log((l2.includes('<MenuMobile open={open}>') ? '[OK] ' : '[BELUM] ') + 'Menu mobile dibungkus MenuMobile')
+console.log((l2.includes('</MenuMobile>') ? '[OK] ' : '[BELUM] ') + 'Penutup MenuMobile terpasang')
+console.log((css2.includes('menu-mobile-v1') ? '[OK] ' : '[BELUM] ') + 'Keyframes animasi menu tersedia di index.css')
+console.log((css2.includes('.menu-mobile-tutup') ? '[OK] ' : '[BELUM] ') + 'Kelas animasi keluar tersedia')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Cara kerja animasi baru:')
+console.log('1. Saat tombol Menu diketuk, wadah menu mengembang dari tinggi nol sambil memudar masuk dan bergeser turun lembut, sehingga tidak lagi muncul sekonyongkonyong.')
+console.log('2. Tiap tautan di dalamnya muncul berurutan dengan jeda 40 milidetik, memberi efek mengalir dari atas ke bawah seperti menu aplikasi modern.')
+console.log('3. Saat menu ditutup, tinggi wadah merapat kembali ke nol sambil memudar keluar, jadi konten halaman di bawah header tidak melompat tiba tiba.')
+console.log('4. Elemen menu sengaja dibiarkan terpasang 240 milidetik selama animasi keluar lewat komponen MenuMobile, pola yang sama dengan Modal dan panel dropdown yang sudah ada.')
+console.log('5. Selama animasi keluar, pointer events dimatikan supaya tautan tidak sengaja terklik saat menu sedang menghilang.')
+console.log('6. Pengguna dengan preferensi reduce motion tetap mendapat perilaku instan karena aturan global proyek sudah memotong durasi semua animasi.')
+console.log('7. Mode gelap tidak terpengaruh karena warna latar dan garis pemisah menu tetap memakai kelas bawaan yang sudah punya pengganti gelap.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Persempit jendela browser di bawah 1280 piksel atau buka di ponsel sehingga tombol Menu terlihat.')
+console.log('2. Ketuk tombol Menu: panel navigasi mengembang mulus dengan tautan muncul berurutan.')
+console.log('3. Ketuk tombol Menu lagi: panel merapat ke atas sambil memudar, lalu hilang tanpa membuat halaman melompat.')
+console.log('4. Buka tutup berulang dengan cepat: animasi tidak menumpuk karena state tampil dikendalikan satu timer.')
+console.log('5. Uji dalam mode gelap: warna menu menyesuaikan dan animasinya tetap sama halusnya.')
+```
+
+## File: apply-fitur-drive-download.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+function ada(rel) { return fs.existsSync(path.join(root, rel)) }
+
+console.log('Mulai memasang fitur: YouTube untuk tampilan, Google Drive untuk download...')
+console.log('')
+
+/* ============================================================
+   1. Buat file SQL migrasi sebagai pengingat
+   ============================================================ */
+const SQL_MIGRASI = `-- Migrasi fitur download Google Drive
+-- Jalankan SQL ini di Supabase Dashboard > SQL Editor
+-- jika kolom drive_id belum ada.
+
+alter table public.logbook_items add column if not exists drive_id text;
+alter table public.galeri add column if not exists drive_id text;
+`
+simpan('supabase/migrasi-drive-download.sql', SQL_MIGRASI)
+console.log('[BERHASIL] File supabase/migrasi-drive-download.sql dibuat')
+console.log('[PENTING] Jalankan SQL tersebut di Supabase SQL Editor untuk menambah kolom drive_id')
+console.log('')
+
+/* ============================================================
+   2. Pastikan src/lib/drive.js tersedia
+   ============================================================ */
+const FILE_DRIVE = 'src/lib/drive.js'
+if (!ada(FILE_DRIVE)) {
+  const ISI_DRIVE = String.raw`export function parseDriveId(url) {
+  if (!url) return null
+  const s = String(url).trim()
+  if (/^[a-zA-Z0-9_-]{20,}$/.test(s) && s.indexOf('/') === -1 && s.indexOf('.') === -1) return s
+  try {
+    const u = new URL(s)
+    const host = u.hostname.replace('www.', '')
+    if (host === 'drive.google.com' || host === 'drive.usercontent.google.com') {
+      const m = u.pathname.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)
+      if (m) return m[1]
+      const id = u.searchParams.get('id')
+      if (id) return id
+    }
+  } catch (e) {}
+  return null
+}
+
+export function driveDownloadUrl(id) {
+  return 'https://drive.usercontent.google.com/download?id=' + id + '&export=download&confirm=t'
+}
+
+export function driveViewUrl(id) {
+  return 'https://drive.google.com/file/d/' + id + '/view'
+}
+`
+  simpan(FILE_DRIVE, ISI_DRIVE)
+  console.log('[BERHASIL] src/lib/drive.js dibuat')
+} else {
+  console.log('[SUDAH ADA] src/lib/drive.js')
+}
+
+/* ============================================================
+   3. cards.jsx: slidesFromItems meneruskan drive_id
+   ============================================================ */
+const FILE_CARDS = 'src/components/cards.jsx'
+if (ada(FILE_CARDS)) {
+  let c = baca(FILE_CARDS)
+  let berubah = false
+
+  // Cari fungsi slidesFromItems dan ganti seluruhnya
+  const mulaiFn = c.indexOf('export function slidesFromItems(items) {')
+  if (mulaiFn !== -1) {
+    // Cari akhir fungsi (tanda } yang menutup fungsi)
+    let brace = 0
+    let akhir = -1
+    let mulaiBrace = false
+    for (let i = mulaiFn; i < c.length; i++) {
+      if (c[i] === '{') { brace++; mulaiBrace = true }
+      if (c[i] === '}') { brace--; if (mulaiBrace && brace === 0) { akhir = i + 1; break } }
+    }
+    if (akhir !== -1) {
+      const baru = `export function slidesFromItems(items) {
+  return (items || []).filter(function (i) { return i.media_path }).map(function (i) {
+    return { src: i.media_thumb || i.media_path, full: i.media_path, type: i.media_source === 'youtube' ? 'foto' : i.media_type, title: i.judul, yt: i.youtube_id || null, drive: i.drive_id || null }
+  })
+}`
+      c = c.slice(0, mulaiFn) + baru + c.slice(akhir)
+      berubah = true
+      console.log('[BERHASIL] slidesFromItems meneruskan drive_id dari database')
+    } else {
+      console.log('[TIDAK KETEMU] Akhir fungsi slidesFromItems')
+    }
+  } else {
+    console.log('[TIDAK KETEMU] Fungsi slidesFromItems')
+  }
+
+  if (berubah) simpan(FILE_CARDS, c)
+} else {
+  console.log('[GAGAL] cards.jsx tidak ditemukan')
+}
+
+/* ============================================================
+   4. ui.jsx: Lightbox memakai driveId untuk download
+   ============================================================ */
+const FILE_UI = 'src/components/ui.jsx'
+if (ada(FILE_UI)) {
+  let u = baca(FILE_UI)
+  let berubah = false
+
+  // Pastikan import drive ada
+  if (u.indexOf("from '../lib/drive.js'") === -1) {
+    const anchor = "import PemutarVideo from './PemutarVideo.jsx'"
+    const idx = u.indexOf(anchor)
+    if (idx !== -1) {
+      u = u.slice(0, idx) + anchor + "\nimport { driveDownloadUrl } from '../lib/drive.js'" + u.slice(idx + anchor.length)
+      berubah = true
+      console.log('[BERHASIL] Import driveDownloadUrl ditambahkan di ui.jsx')
+    }
+  } else {
+    console.log('[SUDAH ADA] Import helper Drive di ui.jsx')
+  }
+
+  // Ganti Lightbox agar driveId dipakai untuk download, bukan preview
+  const mulaiLightbox = u.indexOf('export function Lightbox(props) {')
+  const mulaiZoom = u.indexOf('export function ZoomableMedia(props) {')
+  if (mulaiLightbox !== -1 && mulaiZoom !== -1 && mulaiZoom > mulaiLightbox) {
+    const LIGHTBOX_BARU = String.raw`export function Lightbox(props) {
+  useBodyScrollLock(true)
+  const [busyUnduh, setBusyUnduh] = useState(false)
+  useEffect(function () {
+    function onKey(e) {
+      if (e.key === 'Escape') props.onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    return function () { document.removeEventListener('keydown', onKey) }
+  }, [])
+  async function unduh() {
+    if (busyUnduh) return
+    setBusyUnduh(true)
+    if (props.driveId) {
+      try {
+        const nama = (props.title ? props.title.replace(/[\/\\:*?"<>|]/g, '').replace(/\s+/g, '-').substring(0, 60) : 'video-' + props.driveId) + '.mp4'
+        const a = document.createElement('a')
+        a.href = driveDownloadUrl(props.driveId)
+        a.download = nama
+        a.target = '_blank'
+        a.rel = 'noopener noreferrer'
+        a.style.display = 'none'
+        document.body.appendChild(a)
+        a.click()
+        setTimeout(function () { a.remove() }, 1000)
+      } catch (err) {
+        window.open(driveDownloadUrl(props.driveId), '_blank')
+      }
+      setBusyUnduh(false)
+      return
+    }
+    let nama = 'media'
+    try {
+      const urlAsli = new URL(props.src)
+      const ekstensi = urlAsli.pathname.split('.').pop().split('?')[0] || 'jpg'
+      if (props.title && props.title.trim()) {
+        const judulAman = props.title.trim().replace(/[\/\\:*?"<>|]/g, '').replace(/\s+/g, '-').substring(0, 60)
+        nama = judulAman + '.' + ekstensi
+      } else {
+        nama = urlAsli.pathname.split('/').pop() || ('media.' + ekstensi)
+      }
+    } catch (e) {
+      nama = (props.title || 'media') + '.jpg'
+    }
+    try {
+      const urlUnduh = props.src + (props.src.includes('?') ? '&' : '?') + 'unduh=1'
+      const res = await fetch(urlUnduh, { cache: 'no-store' })
+      if (!res.ok) throw new Error('status ' + res.status)
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = nama
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(function () { URL.revokeObjectURL(url) }, 2000)
+    } catch (err) {
+      window.open(props.src, '_blank')
+    }
+    setBusyUnduh(false)
+  }
+  const tombolUnduhTerlihat = !!props.driveId || !props.youtubeId
+  return createPortal(
+    <div className="anim-overlay fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/95 p-4" onClick={props.onClose}>
+      <div className="relative w-full max-w-5xl" onClick={function (e) { e.stopPropagation() }}>
+        {props.youtubeId ? (
+          <PemutarVideo key={props.youtubeId} youtubeId={props.youtubeId} title={props.title || 'Video'} className="mx-auto aspect-video w-full rounded-2xl" />
+        ) : props.type === 'video' ? (
+          <video src={props.src} controls autoPlay className="mx-auto max-h-[85vh] w-full rounded-2xl bg-slate-900 object-contain" />
+        ) : (
+          <img
+            src={props.src}
+            alt={props.title || 'Media'}
+            onClick={props.onClose}
+            className="mx-auto max-h-[85vh] w-auto max-w-full cursor-zoom-out rounded-2xl object-contain"
+          />
+        )}
+        {props.title ? <p className="mt-3 truncate text-center text-sm text-slate-300">{props.title}</p> : null}
+      </div>
+      <div className="absolute right-4 top-4 flex gap-2">
+        <button
+          type="button"
+          title={busyUnduh ? 'Menyiapkan unduhan...' : (props.driveId ? 'Unduh video dari Google Drive' : 'Unduh media')}
+          onClick={unduh}
+          disabled={busyUnduh}
+          style={tombolUnduhTerlihat ? undefined : { display: 'none' }}
+          className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20 disabled:opacity-50"
+        >
+          <SizedIcon name="download" size={18} />
+        </button>
+        <button
+          type="button"
+          title="Tutup (Esc)"
+          onClick={props.onClose}
+          className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
+        >
+          <SizedIcon name="close" size={18} />
+        </button>
+      </div>
+      <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-slate-400">
+        {props.driveId ? 'Video diputar dari YouTube, unduhan diambil dari Google Drive' : 'Klik media atau tekan Esc untuk menutup'}
+      </p>
+    </div>
+  , document.body)
+}
+`
+    u = u.slice(0, mulaiLightbox) + LIGHTBOX_BARU + u.slice(mulaiZoom)
+    berubah = true
+    console.log('[BERHASIL] Lightbox memakai driveId untuk download, preview tetap YouTube')
+  } else {
+    console.log('[TIDAK KETEMU] Blok Lightbox di ui.jsx')
+  }
+
+  if (berubah) simpan(FILE_UI, u)
+} else {
+  console.log('[GAGAL] ui.jsx tidak ditemukan')
+}
+
+/* ============================================================
+   5. DashboardPage.jsx: simpan dan muat drive_id
+   ============================================================ */
+const FILE_DASH = 'src/pages/DashboardPage.jsx'
+if (ada(FILE_DASH)) {
+  let d = baca(FILE_DASH)
+  let berubah = false
+
+  // 5a. Hapus branch drive lama di submitLogbook yang mengubah mediaSource
+  const branchDriveLog = "} else if (it.mode === 'video' && it.driveLink && !it.file && !it.ytLink) {\n           const driveId = parseDriveId(it.driveLink)\n           if (!driveId) { toast.gagal('Link Google Drive tidak valid pada kegiatan ' + (i + 1) + '.'); setBusy(false); return }\n           mediaSource = 'drive'\n           youtubeId = null\n           mediaPath = driveId\n           mediaThumb = driveThumbUrl(driveId)\n           mediaType = 'video'\n         } else if (it.mode === 'video' && it.file) {"
+  if (d.indexOf(branchDriveLog) !== -1) {
+    d = d.replace(branchDriveLog, "} else if (it.mode === 'video' && it.file) {")
+    berubah = true
+    console.log('[BERHASIL] Branch drive lama di submitLogbook dihapus')
+  } else {
+    console.log('[INFO] Branch drive lama submitLogbook tidak ditemukan atau sudah dihapus')
+  }
+
+  // 5b. Hapus branch drive lama di submitGaleri
+  const branchDriveGal = "} else if (galMode === 'video' && galDriveLink && !galForm.file && !galYtLink) {\n         const driveId = parseDriveId(galDriveLink)\n         if (!driveId) { toast.gagal('Link Google Drive tidak valid.'); setBusy(false); return }\n         mediaSource = 'drive'\n         youtubeId = null\n         mediaPath = driveId\n         mediaThumb = driveThumbUrl(driveId)\n         mediaType = 'video'\n       } else if (galMode === 'video' && galForm.file) {"
+  if (d.indexOf(branchDriveGal) !== -1) {
+    d = d.replace(branchDriveGal, "} else if (galMode === 'video' && galForm.file) {")
+    berubah = true
+    console.log('[BERHASIL] Branch drive lama di submitGaleri dihapus')
+  } else {
+    console.log('[INFO] Branch drive lama submitGaleri tidak ditemukan atau sudah dihapus')
+  }
+
+  // 5c. Tambahkan logika drive_id di submitLogbook (sebelum clean.push)
+  const anchorPushLog = "clean.push({ judul: it.judul.trim(), deskripsi: it.deskripsi.trim(), hasil: it.hasil.trim(), media_path: mediaPath, media_type: mediaType, media_thumb: mediaThumb, media_source: mediaSource, youtube_id: youtubeId, show_in_gallery: it.show && !!mediaPath })"
+  if (d.indexOf(anchorPushLog) !== -1 && d.indexOf('drive_id: driveIdLog') === -1) {
+    const baruPushLog = "let driveIdLog = null\n         if (it.mode === 'video' && it.driveLink) {\n           driveIdLog = parseDriveId(it.driveLink)\n           if (!driveIdLog) { toast.gagal('Link Google Drive tidak valid pada kegiatan ' + (i + 1) + '.'); setBusy(false); return }\n         }\n         clean.push({ judul: it.judul.trim(), deskripsi: it.deskripsi.trim(), hasil: it.hasil.trim(), media_path: mediaPath, media_type: mediaType, media_thumb: mediaThumb, media_source: mediaSource, youtube_id: youtubeId, drive_id: driveIdLog, show_in_gallery: it.show && !!mediaPath })"
+    d = d.replace(anchorPushLog, baruPushLog)
+    berubah = true
+    console.log('[BERHASIL] submitLogbook menyimpan drive_id')
+  } else {
+    console.log('[INFO] clean.push submitLogbook sudah ada atau tidak ditemukan')
+  }
+
+  // 5d. Tambahkan drive_id di rows insert logbook_items
+  const anchorRowsLog = "return { logbook_id: logId, urutan: idx + 1, judul: c.judul, deskripsi: c.deskripsi, hasil: c.hasil, media_path: c.media_path, media_type: c.media_type, media_thumb: c.media_thumb, media_source: c.media_source, youtube_id: c.youtube_id, show_in_gallery: c.show_in_gallery }"
+  if (d.indexOf(anchorRowsLog) !== -1 && d.indexOf('drive_id: c.drive_id') === -1) {
+    d = d.replace(anchorRowsLog, "return { logbook_id: logId, urutan: idx + 1, judul: c.judul, deskripsi: c.deskripsi, hasil: c.hasil, media_path: c.media_path, media_type: c.media_type, media_thumb: c.media_thumb, media_source: c.media_source, youtube_id: c.youtube_id, drive_id: c.drive_id, show_in_gallery: c.show_in_gallery }")
+    berubah = true
+    console.log('[BERHASIL] Insert logbook_items menyertakan drive_id')
+  }
+
+  // 5e. Tambahkan logika drive_id di submitGaleri (sebelum payload)
+  const anchorPayloadGal = "const payload = {\n         mahasiswa_id: mahasiswa.id,"
+  if (d.indexOf(anchorPayloadGal) !== -1 && d.indexOf('drive_id: driveIdGal') === -1) {
+    const baruPayloadGal = "let driveIdGal = null\n       if (galMode === 'video' && galDriveLink) {\n         driveIdGal = parseDriveId(galDriveLink)\n         if (!driveIdGal) { toast.gagal('Link Google Drive tidak valid.'); setBusy(false); return }\n       }\n       const payload = {\n         mahasiswa_id: mahasiswa.id,"
+    d = d.replace(anchorPayloadGal, baruPayloadGal)
+    berubah = true
+    console.log('[BERHASIL] submitGaleri memproses drive_id')
+  }
+
+  // 5f. Tambahkan drive_id di payload galeri
+  const anchorPayloadField = "media_source: mediaSource,\n         youtube_id: youtubeId\n       }"
+  if (d.indexOf(anchorPayloadField) !== -1 && d.indexOf('drive_id: driveIdGal') === -1) {
+    d = d.replace(anchorPayloadField, "media_source: mediaSource,\n         youtube_id: youtubeId,\n         drive_id: driveIdGal\n       }")
+    berubah = true
+    console.log('[BERHASIL] Payload galeri menyertakan drive_id')
+  }
+
+  // 5g. Update startEditLog agar memuat driveLink dari drive_id
+  const anchorEditLogDrive = "driveLink: it.media_source === 'drive' ? driveViewUrl(it.media_path) : ''"
+  if (d.indexOf(anchorEditLogDrive) !== -1) {
+    d = d.replace(anchorEditLogDrive, "driveLink: it.drive_id ? driveViewUrl(it.drive_id) : ''")
+    berubah = true
+    console.log('[BERHASIL] startEditLog memuat driveLink dari drive_id')
+  } else {
+    console.log('[INFO] Pola driveLink startEditLog tidak ditemukan atau sudah diubah')
+  }
+
+  // 5h. Update startEditGal agar memuat driveLink dari drive_id
+  const anchorEditGalDrive = "setGalDriveLink(g.media_source === 'drive' ? driveViewUrl(g.media_path) : '')"
+  if (d.indexOf(anchorEditGalDrive) !== -1) {
+    d = d.replace(anchorEditGalDrive, "setGalDriveLink(g.drive_id ? driveViewUrl(g.drive_id) : '')")
+    berubah = true
+    console.log('[BERHASIL] startEditGal memuat driveLink dari drive_id')
+  } else {
+    console.log('[INFO] Pola driveLink startEditGal tidak ditemukan atau sudah diubah')
+  }
+
+  if (berubah) simpan(FILE_DASH, d)
+} else {
+  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
+}
+
+/* ============================================================
+   6. Verifikasi
+   ============================================================ */
+console.log('')
+console.log('Verifikasi:')
+const vCards = ada(FILE_CARDS) ? baca(FILE_CARDS) : ''
+const vUi = ada(FILE_UI) ? baca(FILE_UI) : ''
+const vDash = ada(FILE_DASH) ? baca(FILE_DASH) : ''
+console.log((vCards.indexOf('drive: i.drive_id || null') !== -1 ? '[OK] ' : '[BELUM] ') + 'slidesFromItems meneruskan drive_id')
+console.log((vUi.indexOf('props.driveId') !== -1 && vUi.indexOf('driveDownloadUrl(props.driveId)') !== -1 ? '[OK] ' : '[BELUM] ') + 'Lightbox memakai driveId untuk download')
+console.log((vDash.indexOf('drive_id: driveIdLog') !== -1 ? '[OK] ' : '[BELUM] ') + 'submitLogbook menyimpan drive_id')
+console.log((vDash.indexOf('drive_id: driveIdGal') !== -1 ? '[OK] ' : '[BELUM] ') + 'submitGaleri menyimpan drive_id')
+console.log((vDash.indexOf('it.drive_id ? driveViewUrl(it.drive_id)') !== -1 ? '[OK] ' : '[BELUM] ') + 'startEditLog memuat dari drive_id')
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Cara kerja fitur ini:')
+console.log('1. Tampilan video di web sepenuhnya dari YouTube embed, tidak berubah.')
+console.log('2. Google Drive hanya sebagai sumber tombol download file asli.')
+console.log('3. Di dashboard, pilih mode Video, isi link YouTube untuk tampilan, lalu isi link Google Drive pada field opsional untuk unduhan.')
+console.log('4. Di halaman publik, video diputar lewat YouTube. Saat lightbox dibuka, tombol download muncul jika ada link Drive.')
+console.log('5. Klik tombol download: file diunduh dari Google Drive dengan bypass peringatan virus untuk file di atas 100 MB.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Jalankan SQL migrasi di Supabase SQL Editor untuk menambah kolom drive_id.')
+console.log('2. Buka dashboard, buat kegiatan dengan mode Video, isi link YouTube dan link Google Drive.')
+console.log('3. Simpan, buka halaman publik: video tampil sebagai YouTube player.')
+console.log('4. Klik video hingga masuk lightbox, lalu klik tombol unduh: file asli terunduh dari Google Drive.')
+```
+
+## File: apply-fitur-video-drive.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+function ada(rel) { return fs.existsSync(path.join(root, rel)) }
+
+function ganti(teks, lama, baru) {
+  const i = teks.indexOf(lama)
+  if (i === -1) return null
+  return teks.slice(0, i) + baru + teks.slice(i + lama.length)
+}
+function gantiSemua(teks, lama, baru) {
+  return teks.split(lama).join(baru)
+}
+
+console.log('Mulai memasang fitur video Google Drive (download resolusi asli + bypass peringatan virus)...')
+console.log('')
+
+/* ============================================================
+   1. Buat file baru src/lib/drive.js
+   ============================================================ */
+const FILE_DRIVE = 'src/lib/drive.js'
+const ISI_DRIVE = String.raw`export function parseDriveId(url) {
+  if (!url) return null
+  const s = String(url).trim()
+
+  if (/^[a-zA-Z0-9_-]{20,}$/.test(s) && s.indexOf('/') === -1 && s.indexOf('.') === -1) return s
+
+  try {
+    const u = new URL(s)
+    const host = u.hostname.replace('www.', '')
+
+    if (host === 'drive.google.com' || host === 'drive.usercontent.google.com') {
+      const m = u.pathname.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)
+      if (m) return m[1]
+      const id = u.searchParams.get('id')
+      if (id) return id
+    }
+  } catch (e) {}
+
+  return null
+}
+
+export function drivePreviewUrl(id) {
+  return 'https://drive.google.com/file/d/' + id + '/preview'
+}
+
+export function driveThumbUrl(id) {
+  return 'https://drive.google.com/thumbnail?id=' + id + '&sz=w1280'
+}
+
+export function driveDownloadUrl(id) {
+  return 'https://drive.usercontent.google.com/download?id=' + id + '&export=download&confirm=t'
+}
+
+export function driveViewUrl(id) {
+  return 'https://drive.google.com/file/d/' + id + '/view'
+}
+`
+simpan(FILE_DRIVE, ISI_DRIVE)
+console.log('[BERHASIL] src/lib/drive.js dibuat (parseDriveId, preview, thumbnail, download bypass, view)')
+
+/* ============================================================
+   2. src/components/ui.jsx  (import + MediaDrive + Lightbox)
+   ============================================================ */
+const FILE_UI = 'src/components/ui.jsx'
+if (!ada(FILE_UI)) {
+  console.log('[GAGAL] ui.jsx tidak ditemukan')
+} else {
+  let u = baca(FILE_UI)
+  let berubahUi = false
+
+  if (u.indexOf("from '../lib/drive.js'") === -1) {
+    const anchor = "import PemutarVideo from './PemutarVideo.jsx'"
+    const hasil = ganti(u, anchor, anchor + "\nimport { drivePreviewUrl, driveDownloadUrl, driveThumbUrl } from '../lib/drive.js'")
+    if (hasil) { u = hasil; berubahUi = true; console.log('[BERHASIL] Import helper Drive ditambahkan di ui.jsx') }
+    else console.log('[TIDAK KETEMU] Anchor import PemutarVideo di ui.jsx')
+  } else {
+    console.log('[SUDAH ADA] Import helper Drive di ui.jsx')
+  }
+
+  if (u.indexOf('export function MediaDrive') === -1) {
+    const mulaiLightbox = u.indexOf('export function Lightbox(props) {')
+    const mulaiZoom = u.indexOf('export function ZoomableMedia(props) {')
+    if (mulaiLightbox !== -1 && mulaiZoom !== -1 && mulaiZoom > mulaiLightbox) {
+      const BLOK = String.raw`export function MediaDrive(props) {
+  const [gagal, setGagal] = useState(false)
+  useEffect(function () {
+    setGagal(false)
+  }, [props.driveId])
+  if (gagal) {
+    return (
+      <div className={'grid place-items-center bg-gradient-to-br from-slate-800 to-slate-900 ' + (props.className || 'absolute inset-0 h-full w-full')}>
+        <div className="flex flex-col items-center gap-2 text-slate-300">
+          <span className="grid h-12 w-12 place-items-center rounded-full bg-white/10">
+            <SizedIcon name="image" size={22} />
+          </span>
+          <p className="px-2 text-center text-[11px] font-semibold">Video Google Drive</p>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <img
+      src={driveThumbUrl(props.driveId)}
+      alt={props.alt || 'Video Google Drive'}
+      onClick={props.onClick || undefined}
+      onError={function () { setGagal(true) }}
+      className={(props.className || 'absolute inset-0 h-full w-full object-cover') + (props.onClick ? ' cursor-zoom-in' : '')}
+    />
+  )
+}
+export function Lightbox(props) {
+  useBodyScrollLock(true)
+  const [busyUnduh, setBusyUnduh] = useState(false)
+  useEffect(function () {
+    function onKey(e) {
+      if (e.key === 'Escape') props.onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    return function () { document.removeEventListener('keydown', onKey) }
+  }, [])
+  async function unduh() {
+    if (busyUnduh) return
+    setBusyUnduh(true)
+    if (props.driveId) {
+      try {
+        const nama = (props.title ? props.title.replace(/[\/\\:*?"<>|]/g, '').replace(/\s+/g, '-').substring(0, 60) : 'video-' + props.driveId) + '.mp4'
+        const a = document.createElement('a')
+        a.href = driveDownloadUrl(props.driveId)
+        a.download = nama
+        a.target = '_blank'
+        a.rel = 'noopener noreferrer'
+        a.style.display = 'none'
+        document.body.appendChild(a)
+        a.click()
+        setTimeout(function () { a.remove() }, 1000)
+      } catch (err) {
+        window.open(driveDownloadUrl(props.driveId), '_blank')
+      }
+      setBusyUnduh(false)
+      return
+    }
+    let nama = 'media'
+    try {
+      const urlAsli = new URL(props.src)
+      const ekstensi = urlAsli.pathname.split('.').pop().split('?')[0] || 'jpg'
+      if (props.title && props.title.trim()) {
+        const judulAman = props.title.trim().replace(/[\/\\:*?"<>|]/g, '').replace(/\s+/g, '-').substring(0, 60)
+        nama = judulAman + '.' + ekstensi
+      } else {
+        nama = urlAsli.pathname.split('/').pop() || ('media.' + ekstensi)
+      }
+    } catch (e) {
+      nama = (props.title || 'media') + '.jpg'
+    }
+    try {
+      const urlUnduh = props.src + (props.src.includes('?') ? '&' : '?') + 'unduh=1'
+      const res = await fetch(urlUnduh, { cache: 'no-store' })
+      if (!res.ok) throw new Error('status ' + res.status)
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = nama
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(function () { URL.revokeObjectURL(url) }, 2000)
+    } catch (err) {
+      window.open(props.src, '_blank')
+    }
+    setBusyUnduh(false)
+  }
+  return createPortal(
+    <div className="anim-overlay fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/95 p-4" onClick={props.onClose}>
+      <div className="relative w-full max-w-5xl" onClick={function (e) { e.stopPropagation() }}>
+        {props.driveId ? (
+          <iframe
+            key={props.driveId}
+            src={drivePreviewUrl(props.driveId)}
+            title={props.title || 'Video Google Drive'}
+            allow="autoplay; encrypted-media; fullscreen"
+            allowFullScreen
+            className="mx-auto aspect-video w-full rounded-2xl border-0 bg-black"
+          />
+        ) : props.youtubeId ? (
+          <PemutarVideo key={props.youtubeId} youtubeId={props.youtubeId} title={props.title || 'Video'} className="mx-auto aspect-video w-full rounded-2xl" />
+        ) : props.type === 'video' ? (
+          <video src={props.src} controls autoPlay className="mx-auto max-h-[85vh] w-full rounded-2xl bg-slate-900 object-contain" />
+        ) : (
+          <img
+            src={props.src}
+            alt={props.title || 'Media'}
+            onClick={props.onClose}
+            className="mx-auto max-h-[85vh] w-auto max-w-full cursor-zoom-out rounded-2xl object-contain"
+          />
+        )}
+        {props.title ? <p className="mt-3 truncate text-center text-sm text-slate-300">{props.title}</p> : null}
+      </div>
+      <div className="absolute right-4 top-4 flex gap-2">
+        <button
+          type="button"
+          title={busyUnduh ? 'Menyiapkan unduhan...' : (props.driveId ? 'Unduh video resolusi asli dari Google Drive' : 'Unduh media')}
+          onClick={unduh}
+          disabled={busyUnduh}
+          style={props.youtubeId ? { display: 'none' } : undefined}
+          className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20 disabled:opacity-50"
+        >
+          <SizedIcon name="download" size={18} />
+        </button>
+        <button
+          type="button"
+          title="Tutup (Esc)"
+          onClick={props.onClose}
+          className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
+        >
+          <SizedIcon name="close" size={18} />
+        </button>
+      </div>
+      <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-slate-400">
+        {props.driveId ? 'Klik tombol unduh untuk menyimpan video resolusi asli dari Google Drive' : 'Klik media atau tekan Esc untuk menutup'}
+      </p>
+    </div>
+  , document.body)
+}
+`
+      u = u.slice(0, mulaiLightbox) + BLOK + u.slice(mulaiZoom)
+      berubahUi = true
+      console.log('[BERHASIL] Komponen MediaDrive dan Lightbox versi Drive dipasang di ui.jsx')
+    } else {
+      console.log('[TIDAK KETEMU] Blok Lightbox atau ZoomableMedia di ui.jsx')
+    }
+  } else {
+    console.log('[SUDAH ADA] MediaDrive di ui.jsx')
+  }
+
+  if (berubahUi) simpan(FILE_UI, u)
+}
+
+/* ============================================================
+   3. src/components/cards.jsx
+   ============================================================ */
+const FILE_CARDS = 'src/components/cards.jsx'
+if (!ada(FILE_CARDS)) {
+  console.log('[GAGAL] cards.jsx tidak ditemukan')
+} else {
+  let c = baca(FILE_CARDS)
+  let berubahCards = false
+
+  if (c.indexOf('MediaDrive') === -1) {
+    let h = ganti(c, 'SmartFit , MediaYouTube } from \'./ui.jsx\'', 'SmartFit , MediaYouTube, MediaDrive } from \'./ui.jsx\'')
+    if (h) { c = h; berubahCards = true }
+    else console.log('[TIDAK KETEMU] Import ui.jsx di cards.jsx')
+  }
+  if (c.indexOf('drivePreviewUrl') === -1) {
+    const anchor = "from '../lib/format.js'"
+    const h = ganti(c, anchor, anchor + "\nimport { drivePreviewUrl, driveThumbUrl } from '../lib/drive.js'")
+    if (h) { c = h; berubahCards = true }
+    else console.log('[TIDAK KETEMU] Import format.js di cards.jsx')
+  } else {
+    console.log('[SUDAH ADA] Import helper Drive di cards.jsx')
+  }
+
+  const SLIDES_LAMA = "export function slidesFromItems(items) {\n  return (items || []).filter(function (i) { return i.media_path }).map(function (i) {\n    return { src: i.media_thumb || i.media_path, full: i.media_path, type: i.media_source === 'youtube' ? 'foto' : i.media_type, title: i.judul, yt: i.youtube_id || null }\n  })\n}"
+  const SLIDES_BARU = "export function slidesFromItems(items) {\n  return (items || []).filter(function (i) { return i.media_path }).map(function (i) {\n    const drive = i.media_source === 'drive' ? i.media_path : null\n    return { src: drive ? driveThumbUrl(i.media_path) : (i.media_thumb || i.media_path), full: i.media_path, type: (i.media_source === 'youtube' || i.media_source === 'drive') ? 'foto' : i.media_type, title: i.judul, yt: i.youtube_id || null, drive: drive }\n  })\n}"
+  if (c.indexOf('driveThumbUrl(i.media_path)') === -1) {
+    const h = ganti(c, SLIDES_LAMA, SLIDES_BARU)
+    if (h) { c = h; berubahCards = true; console.log('[BERHASIL] slidesFromItems mendukung media Drive') }
+    else console.log('[TIDAK KETEMU] Pola slidesFromItems di cards.jsx')
+  } else {
+    console.log('[SUDAH ADA] slidesFromItems mendukung Drive')
+  }
+
+  const GC_LAMA = "{item.media_source === 'youtube' ? (\n        <MediaYouTube src={item.media_path} alt={item.judul} />\n      ) : (\n        <SmartFit src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} alt={item.judul} />\n      )}"
+  const GC_BARU = "{item.media_source === 'youtube' ? (\n        <MediaYouTube src={item.media_path} alt={item.judul} />\n      ) : item.media_source === 'drive' ? (\n        <MediaDrive driveId={item.media_path} alt={item.judul} />\n      ) : (\n        <SmartFit src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} alt={item.judul} />\n      )}"
+  if (c.indexOf('<MediaDrive driveId={item.media_path}') === -1) {
+    const h = ganti(c, GC_LAMA, GC_BARU)
+    if (h) { c = h; berubahCards = true; console.log('[BERHASIL] GalleryCard mendukung thumbnail Drive') }
+    else console.log('[TIDAK KETEMU] Pola media GalleryCard di cards.jsx')
+  } else {
+    console.log('[SUDAH ADA] GalleryCard mendukung Drive')
+  }
+
+  const GD_LAMA = "{item.media_source === 'youtube' ? (\n        <PemutarVideo key={item.youtube_id} youtubeId={item.youtube_id} title={item.judul} className=\"aspect-video w-full rounded-2xl\" />\n      ) : (\n        <ZoomableMedia src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} title={item.judul} className=\"rounded-2xl overflow-hidden aspect-video bg-slate-900\" />\n      )}"
+  const GD_BARU = "{item.media_source === 'youtube' ? (\n        <PemutarVideo key={item.youtube_id} youtubeId={item.youtube_id} title={item.judul} className=\"aspect-video w-full rounded-2xl\" />\n      ) : item.media_source === 'drive' ? (\n        <iframe src={drivePreviewUrl(item.media_path)} title={item.judul} allow=\"autoplay; encrypted-media; fullscreen\" allowFullScreen className=\"aspect-video w-full rounded-2xl border-0 bg-black\" />\n      ) : (\n        <ZoomableMedia src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} title={item.judul} className=\"rounded-2xl overflow-hidden aspect-video bg-slate-900\" />\n      )}"
+  if (c.indexOf('drivePreviewUrl(item.media_path)') === -1) {
+    const h = ganti(c, GD_LAMA, GD_BARU)
+    if (h) { c = h; berubahCards = true; console.log('[BERHASIL] GalleryDetail mendukung pemutar Drive') }
+    else console.log('[TIDAK KETEMU] Pola media GalleryDetail di cards.jsx')
+  } else {
+    console.log('[SUDAH ADA] GalleryDetail mendukung Drive')
+  }
+
+  const LD_LAMA = "{it.media_path ? (\n                      it.media_source === 'youtube' ? (\n                        <PemutarVideo key={it.youtube_id} youtubeId={it.youtube_id} title={it.judul} className=\"aspect-video w-full rounded-2xl mb-3\" />\n                      ) : (\n                        <ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className=\"rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3\" />\n                      )\n                    ) : null}"
+  const LD_BARU = "{it.media_path ? (\n                      it.media_source === 'youtube' ? (\n                        <PemutarVideo key={it.youtube_id} youtubeId={it.youtube_id} title={it.judul} className=\"aspect-video w-full rounded-2xl mb-3\" />\n                      ) : it.media_source === 'drive' ? (\n                        <iframe key={it.media_path} src={drivePreviewUrl(it.media_path)} title={it.judul} allow=\"autoplay; encrypted-media; fullscreen\" allowFullScreen className=\"aspect-video w-full rounded-2xl border-0 bg-black mb-3\" />\n                      ) : (\n                        <ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className=\"rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3\" />\n                      )\n                    ) : null}"
+  if (c.indexOf('drivePreviewUrl(it.media_path)') === -1) {
+    const h = ganti(c, LD_LAMA, LD_BARU)
+    if (h) { c = h; berubahCards = true; console.log('[BERHASIL] LogbookDetail mendukung pemutar Drive') }
+    else console.log('[TIDAK KETEMU] Pola media LogbookDetail di cards.jsx')
+  } else {
+    console.log('[SUDAH ADA] LogbookDetail mendukung Drive')
+  }
+
+  if (berubahCards) simpan(FILE_CARDS, c)
+}
+
+/* ============================================================
+   4. src/components/Carousel.jsx
+   ============================================================ */
+const FILE_CAROUSEL = 'src/components/Carousel.jsx'
+if (!ada(FILE_CAROUSEL)) {
+  console.log('[GAGAL] Carousel.jsx tidak ditemukan')
+} else {
+  let r = baca(FILE_CAROUSEL)
+  let berubahCar = false
+
+  if (r.indexOf('MediaDrive') === -1) {
+    const h = ganti(r, "import { Lightbox, SmartFit } from './ui.jsx'", "import { Lightbox, SmartFit, MediaDrive } from './ui.jsx'")
+    if (h) { r = h; berubahCar = true; console.log('[BERHASIL] Import MediaDrive di Carousel.jsx') }
+    else console.log('[TIDAK KETEMU] Import ui.jsx di Carousel.jsx')
+  } else {
+    console.log('[SUDAH ADA] Import MediaDrive di Carousel.jsx')
+  }
+
+  if (r.indexOf('s.drive') === -1) {
+    const SINGLE_LAMA = "<SmartFit src={s.src} full={s.full} type={s.type} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} />"
+    const SINGLE_BARU = "{s.drive ? (\n            <MediaDrive driveId={s.drive} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} className=\"absolute inset-0 h-full w-full object-cover cursor-zoom-in\" />\n          ) : (\n            <SmartFit src={s.src} full={s.full} type={s.type} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} />\n          )}"
+    const h1 = ganti(r, SINGLE_LAMA, SINGLE_BARU)
+    if (h1) { r = h1; berubahCar = true; console.log('[BERHASIL] Carousel single slide mendukung Drive') }
+    else console.log('[TIDAK KETEMU] Pola single slide di Carousel.jsx')
+
+    const MULTI_LAMA = "<SmartFit\n                  src={s.src}\n                  full={s.full}\n                   type={s.type}\n                  alt={s.title || 'Media'}\n                  onClick={function () {\n                    if (moved.current) { moved.current = false; return }\n                    setZoom(s)\n                  }}\n                />"
+    const MULTI_BARU = "{s.drive ? (\n                  <MediaDrive driveId={s.drive} alt={s.title || 'Media'} onClick={function () { if (moved.current) { moved.current = false; return } setZoom(s) }} className=\"absolute inset-0 h-full w-full object-cover cursor-zoom-in\" />\n                ) : (\n                <SmartFit\n                  src={s.src}\n                  full={s.full}\n                   type={s.type}\n                  alt={s.title || 'Media'}\n                  onClick={function () {\n                    if (moved.current) { moved.current = false; return }\n                    setZoom(s)\n                  }}\n                />\n                )}"
+    const h2 = ganti(r, MULTI_LAMA, MULTI_BARU)
+    if (h2) { r = h2; berubahCar = true; console.log('[BERHASIL] Carousel multi slide mendukung Drive') }
+    else console.log('[TIDAK KETEMU] Pola multi slide di Carousel.jsx')
+  } else {
+    console.log('[SUDAH ADA] Carousel mendukung Drive')
+  }
+
+  if (r.indexOf('driveId={zoom.drive || null}') === -1) {
+    r = gantiSemua(r,
+      "<Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} onClose={function () { setZoom(null) }} />",
+      "<Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} driveId={zoom.drive || null} onClose={function () { setZoom(null) }} />")
+    berubahCar = true
+    console.log('[BERHASIL] Lightbox di Carousel menerima prop driveId')
+  } else {
+    console.log('[SUDAH ADA] Lightbox Carousel menerima driveId')
+  }
+
+  if (berubahCar) simpan(FILE_CAROUSEL, r)
+}
+
+/* ============================================================
+   5. src/pages/DashboardPage.jsx
+   ============================================================ */
+const FILE_DASH = 'src/pages/DashboardPage.jsx'
+if (!ada(FILE_DASH)) {
+  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
+} else {
+  let d = baca(FILE_DASH)
+  let berubahDash = false
+  function pasang(lama, baru, label) {
+    if (d.indexOf(baru) !== -1) { console.log('[SUDAH ADA] ' + label); return }
+    const h = ganti(d, lama, baru)
+    if (h) { d = h; berubahDash = true; console.log('[BERHASIL] ' + label) }
+    else console.log('[TIDAK KETEMU] ' + label)
+  }
+
+  pasang(
+    "import { parseYouTubeId, ytThumb, fetchYouTubeQuota, unggahVideoYouTube } from '../lib/youtube.js'",
+    "import { parseYouTubeId, ytThumb, fetchYouTubeQuota, unggahVideoYouTube } from '../lib/youtube.js'\nimport { parseDriveId, driveThumbUrl, driveViewUrl } from '../lib/drive.js'",
+    'Import helper Drive di DashboardPage'
+  )
+
+  pasang(
+    "ytLink: '', oldYtId: null, oldSource: 'r2' }",
+    "ytLink: '', oldYtId: null, oldSource: 'r2', driveLink: '' }",
+    'Field driveLink pada newItem'
+  )
+
+  pasang(
+    "const [galYtLink, setGalYtLink] = useState('')",
+    "const [galYtLink, setGalYtLink] = useState('')\n   const [galDriveLink, setGalDriveLink] = useState('')",
+    'State galDriveLink'
+  )
+
+  pasang(
+    '<input className={inputCls} value={it.ytLink} onChange={function (e) { patchItem(i, { ytLink: e.target.value }) }} placeholder="Atau tempel link video eksternal" />',
+    '<input className={inputCls} value={it.ytLink} onChange={function (e) { patchItem(i, { ytLink: e.target.value }) }} placeholder="Atau tempel link video eksternal" />\n                          <input className={inputCls} value={it.driveLink} onChange={function (e) { patchItem(i, { driveLink: e.target.value }) }} placeholder="Atau tempel link Google Drive (opsional)" />',
+    'Input Google Drive pada form kegiatan logbook'
+  )
+
+  pasang(
+    '<input className={inputCls} value={galYtLink} onChange={function (e) { setGalYtLink(e.target.value) }} placeholder="Atau tempel link video eksternal" />',
+    '<input className={inputCls} value={galYtLink} onChange={function (e) { setGalYtLink(e.target.value) }} placeholder="Atau tempel link video eksternal" />\n                       <input className={inputCls} value={galDriveLink} onChange={function (e) { setGalDriveLink(e.target.value) }} placeholder="Atau tempel link Google Drive (opsional)" />',
+    'Input Google Drive pada form galeri'
+  )
+
+  pasang(
+    "} else if (it.mode === 'video' && it.file) {",
+    "} else if (it.mode === 'video' && it.driveLink && !it.file && !it.ytLink) {\n           const driveId = parseDriveId(it.driveLink)\n           if (!driveId) { toast.gagal('Link Google Drive tidak valid pada kegiatan ' + (i + 1) + '.'); setBusy(false); return }\n           mediaSource = 'drive'\n           youtubeId = null\n           mediaPath = driveId\n           mediaThumb = driveThumbUrl(driveId)\n           mediaType = 'video'\n         } else if (it.mode === 'video' && it.file) {",
+    'Branch Drive pada submitLogbook'
+  )
+
+  pasang(
+    "} else if (galMode === 'video' && galForm.file) {",
+    "} else if (galMode === 'video' && galDriveLink && !galForm.file && !galYtLink) {\n         const driveId = parseDriveId(galDriveLink)\n         if (!driveId) { toast.gagal('Link Google Drive tidak valid.'); setBusy(false); return }\n         mediaSource = 'drive'\n         youtubeId = null\n         mediaPath = driveId\n         mediaThumb = driveThumbUrl(driveId)\n         mediaType = 'video'\n       } else if (galMode === 'video' && galForm.file) {",
+    'Branch Drive pada submitGaleri'
+  )
+
+  pasang(
+    "preview: it.media_path || '', oldPath: it.media_source === 'youtube' ? '' : (it.media_path || ''), oldThumb: it.media_source === 'youtube' ? '' : (it.media_thumb || ''), previewLoading: false, show: it.show_in_gallery, mode: it.media_source === 'youtube' ? 'video' : (it.media_type === 'video' ? 'video' : 'foto'), ytLink: it.media_source === 'youtube' && it.youtube_id ? 'https://youtu.be/' + it.youtube_id : '', oldYtId: it.youtube_id || null, oldSource: it.media_source || 'r2' }",
+    "preview: it.media_source === 'drive' ? driveThumbUrl(it.media_path) : (it.media_path || ''), oldPath: (it.media_source === 'youtube' || it.media_source === 'drive') ? '' : (it.media_path || ''), oldThumb: (it.media_source === 'youtube' || it.media_source === 'drive') ? '' : (it.media_thumb || ''), previewLoading: false, show: it.show_in_gallery, mode: (it.media_source === 'youtube' || it.media_source === 'drive') ? 'video' : (it.media_type === 'video' ? 'video' : 'foto'), ytLink: it.media_source === 'youtube' && it.youtube_id ? 'https://youtu.be/' + it.youtube_id : '', driveLink: it.media_source === 'drive' ? driveViewUrl(it.media_path) : '', oldYtId: it.youtube_id || null, oldSource: it.media_source || 'r2' }",
+    'startEditLog memuat kembali link Drive'
+  )
+
+  pasang(
+    "setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_path || '', oldPath: g.media_source === 'youtube' ? '' : (g.media_path || ''), oldThumb: g.media_source === 'youtube' ? '' : (g.media_thumb || ''), previewLoading: false })",
+    "setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_source === 'drive' ? driveThumbUrl(g.media_path) : (g.media_path || ''), oldPath: (g.media_source === 'youtube' || g.media_source === 'drive') ? '' : (g.media_path || ''), oldThumb: (g.media_source === 'youtube' || g.media_source === 'drive') ? '' : (g.media_thumb || ''), previewLoading: false })",
+    'startEditGal memuat thumbnail Drive'
+  )
+
+  pasang(
+    "setGalMode(g.media_source === 'youtube' ? 'video' : (g.media_type === 'video' ? 'video' : 'foto'))",
+    "setGalMode((g.media_source === 'youtube' || g.media_source === 'drive') ? 'video' : (g.media_type === 'video' ? 'video' : 'foto'))",
+    'startEditGal mengatur mode video untuk Drive'
+  )
+
+  pasang(
+    "setGalYtLink(g.media_source === 'youtube' && g.youtube_id ? 'https://youtu.be/' + g.youtube_id : '')",
+    "setGalYtLink(g.media_source === 'youtube' && g.youtube_id ? 'https://youtu.be/' + g.youtube_id : '')\n     setGalDriveLink(g.media_source === 'drive' ? driveViewUrl(g.media_path) : '')",
+    'startEditGal memuat kembali link Drive'
+  )
+
+  if (d.indexOf("setGalDriveLink('')") === -1) {
+    d = gantiSemua(d,
+      "setGalYtLink('')\n      setGalOldYt(null)",
+      "setGalYtLink('')\n      setGalDriveLink('')\n      setGalOldYt(null)")
+    berubahDash = true
+    console.log('[BERHASIL] Reset galDriveLink pada submitGaleri dan cancelEditGal')
+  } else {
+    console.log('[SUDAH ADA] Reset galDriveLink')
+  }
+
+  pasang(
+    "if (String(url || '').indexOf('i.ytimg.com') !== -1 || String(url || '').indexOf('youtube') !== -1) return",
+    "if (String(url || '').indexOf('i.ytimg.com') !== -1 || String(url || '').indexOf('youtube') !== -1) return\n     if (String(url || '').indexOf('drive.google.com') !== -1 || String(url || '').indexOf('drive.usercontent.google.com') !== -1) return\n     if (!/^https?:\\/\\//.test(String(url || ''))) return",
+    'Penjaga hapusMediaR2 agar media Drive tidak ikut terhapus dari R2'
+  )
+
+  if (berubahDash) simpan(FILE_DASH, d)
+}
+
+/* ============================================================
+   6. Verifikasi
+   ============================================================ */
+console.log('')
+console.log('Verifikasi:')
+const vDrive = ada(FILE_DRIVE) ? baca(FILE_DRIVE) : ''
+const vUi = ada(FILE_UI) ? baca(FILE_UI) : ''
+const vCards = ada(FILE_CARDS) ? baca(FILE_CARDS) : ''
+const vCar = ada(FILE_CAROUSEL) ? baca(FILE_CAROUSEL) : ''
+const vDash = ada(FILE_DASH) ? baca(FILE_DASH) : ''
+
+console.log((vDrive.indexOf('driveDownloadUrl') !== -1 ? '[OK] ' : '[BELUM] ') + 'src/lib/drive.js tersedia dengan endpoint bypass')
+console.log((vUi.indexOf('export function MediaDrive') !== -1 ? '[OK] ' : '[BELUM] ') + 'Komponen MediaDrive di ui.jsx')
+console.log((vUi.indexOf('props.driveId') !== -1 ? '[OK] ' : '[BELUM] ') + 'Lightbox mendukung video Drive dan tombol unduh')
+console.log((vCards.indexOf('drivePreviewUrl') !== -1 ? '[OK] ' : '[BELUM] ') + 'cards.jsx menampilkan media Drive')
+console.log((vCar.indexOf('driveId={zoom.drive || null}') !== -1 ? '[OK] ' : '[BELUM] ') + 'Carousel meneruskan driveId ke Lightbox')
+console.log((vDash.indexOf('parseDriveId') !== -1 ? '[OK] ' : '[BELUM] ') + 'DashboardPage memproses link Google Drive')
+console.log((vDash.indexOf('Atau tempel link Google Drive (opsional)') !== -1 ? '[OK] ' : '[BELUM] ') + 'Form opsional paste link Google Drive tersedia')
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Yang dipasang oleh script ini:')
+console.log('1. File baru src/lib/drive.js berisi parseDriveId, drivePreviewUrl, driveThumbUrl, driveDownloadUrl, dan driveViewUrl.')
+console.log('2. Lightbox kini mengenali prop driveId, menampilkan iframe preview Google Drive, dan tombol unduh langsung memakai endpoint drive.usercontent.google.com dengan parameter confirm=t sehingga file di atas 100 MB terunduh tanpa peringatan virus.')
+console.log('3. Komponen MediaDrive menampilkan thumbnail Drive dengan fallback rapi bila thumbnail gagal dimuat.')
+console.log('4. Kartu galeri, detail galeri, dan detail logbook mendukung media bersumber Drive.')
+console.log('5. Carousel meneruskan driveId ke Lightbox sehingga zoom media Drive bekerja.')
+console.log('6. Dashboard mendapat input opsional untuk menempel link Google Drive pada form kegiatan logbook dan form galeri, lengkap dengan logika simpan, edit, dan reset.')
+console.log('7. Media Drive disimpan dengan media_source = drive dan media_path berisi File ID, tanpa perlu migrasi database.')
+console.log('8. Fungsi hapusMediaR2 diberi penjaga agar File ID Drive tidak dianggap key R2 dan tidak ikut terhapus.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka dashboard, pilih mode Video pada kegiatan logbook atau galeri, lalu tempel link Google Drive pada field opsional.')
+console.log('2. Simpan, lalu buka halaman publik: thumbnail Drive tampil di kartu dan iframe preview tampil di detail.')
+console.log('3. Klik media hingga masuk lightbox, lalu klik tombol unduh: video Drive langsung terunduh dalam resolusi asli tanpa halaman peringatan virus.')
+console.log('4. Pastikan file di Google Drive sudah dibagikan dengan akses Anyone with the link agar preview dan unduhan berfungsi.')
+```
+
+## File: apply-fix-galeri-drive.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+const FILE = 'src/pages/DashboardPage.jsx'
+
+console.log('Memperbaiki submitGaleri agar menyimpan drive_id...')
+console.log('')
+
+let d = fs.readFileSync(path.join(root, FILE), 'utf8').replace(/\r\n/g, '\n')
+let berubah = false
+
+// 1. Sisipkan parsing driveIdGal tepat sebelum const payload = {
+const pola1 = /if \(!mediaPath\) \{ toast\.gagal\('Galeri wajib memiliki media[^}]+\}\n(\s*)const payload = \{/
+if (pola1.test(d) && d.indexOf('let driveIdGal = null') === -1) {
+  d = d.replace(pola1, function(match, spasi) {
+    return `if (!mediaPath) { toast.gagal('Galeri wajib memiliki media. Pilih file foto atau video terlebih dahulu.'); setBusy(false); return }\n${spasi}let driveIdGal = null\n${spasi}if (galMode === 'video' && galDriveLink) {\n${spasi}  driveIdGal = parseDriveId(galDriveLink)\n${spasi}  if (!driveIdGal) { toast.gagal('Link Google Drive tidak valid.'); setBusy(false); return }\n${spasi}}\n${spasi}const payload = {`
+  })
+  berubah = true
+  console.log('[BERHASIL] Parsing driveIdGal ditambahkan sebelum payload galeri')
+} else if (d.indexOf('let driveIdGal = null') !== -1) {
+  console.log('[SUDAH ADA] Parsing driveIdGal')
+} else {
+  console.log('[TIDAK KETEMU] Anchor sebelum payload galeri')
+}
+
+// 2. Sisipkan drive_id ke dalam objek payload galeri
+const pola2 = /media_source: mediaSource,\n(\s*)youtube_id: youtubeId\n(\s*)\}/
+if (pola2.test(d) && d.indexOf('drive_id: driveIdGal') === -1) {
+  d = d.replace(pola2, function(match, spasi1, spasi2) {
+    return `media_source: mediaSource,\n${spasi1}youtube_id: youtubeId,\n${spasi1}drive_id: driveIdGal\n${spasi2}}`
+  })
+  berubah = true
+  console.log('[BERHASIL] drive_id ditambahkan ke dalam objek payload galeri')
+} else if (d.indexOf('drive_id: driveIdGal') !== -1) {
+  console.log('[SUDAH ADA] drive_id di payload galeri')
+} else {
+  console.log('[TIDAK KETEMU] Anchor objek payload galeri')
+}
+
+if (berubah) {
+  fs.writeFileSync(path.join(root, FILE), d, 'utf8')
+  console.log('')
+  console.log('File DashboardPage.jsx berhasil diperbarui.')
+}
+
+console.log('')
+console.log('Verifikasi akhir:')
+const v = fs.readFileSync(path.join(root, FILE), 'utf8')
+console.log((v.indexOf('let driveIdGal = null') !== -1 ? '[OK] ' : '[BELUM] ') + 'Variabel driveIdGal dideklarasikan')
+console.log((v.indexOf('drive_id: driveIdGal') !== -1 ? '[OK] ' : '[BELUM] ') + 'submitGaleri sekarang menyimpan drive_id ke database')
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+```
+
+## File: apply-fix-logbookdetail-drive.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Memperbaiki LogbookDetail untuk mendukung video Google Drive...')
+console.log('')
+
+const FILE_CARDS = 'src/components/cards.jsx'
+let c = baca(FILE_CARDS)
+let berubah = false
+
+// Pastikan import drivePreviewUrl ada
+if (c.indexOf('drivePreviewUrl') === -1) {
+  const anchor = "from '../lib/format.js'"
+  const hasil = c.replace(anchor, anchor + "\nimport { drivePreviewUrl } from '../lib/drive.js'")
+  if (hasil !== c) {
+    c = hasil
+    berubah = true
+    console.log('[BERHASIL] Import drivePreviewUrl ditambahkan')
+  } else {
+    console.log('[TIDAK KETEMU] Anchor import format.js')
+  }
+} else {
+  console.log('[SUDAH ADA] Import drivePreviewUrl')
+}
+
+// Cari dan ganti pola LogbookDetail dengan pendekatan yang lebih fleksibel
+// Kita cari blok yang menangani media di LogbookDetail
+const polaLama1 = "{it.media_path ? (\n                      it.media_source === 'youtube' ? (\n                        <PemutarVideo key={it.youtube_id} youtubeId={it.youtube_id} title={it.judul} className=\"aspect-video w-full rounded-2xl mb-3\" />\n                      ) : (\n                        <ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className=\"rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3\" />\n                      )\n                    ) : null}"
+
+const polaLama2 = "{it.media_path ? (\n                  it.media_source === 'youtube' ? (\n                    <PemutarVideo key={it.youtube_id} youtubeId={it.youtube_id} title={it.judul} className=\"aspect-video w-full rounded-2xl mb-3\" />\n                  ) : (\n                    <ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className=\"rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3\" />\n                  )\n                ) : null}"
+
+const polaLama3 = "{it.media_path ? (\n                      it.media_source === 'youtube' ? (\n                        <PemutarVideo key={it.youtube_id} youtubeId={it.youtube_id} title={it.judul} className=\"aspect-video w-full rounded-2xl mb-3\" />\n                      ) : (\n                        <ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className=\"rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3\" />\n                      )\n                    ) : null}"
+
+const polaBaru = "{it.media_path ? (\n                      it.media_source === 'youtube' ? (\n                        <PemutarVideo key={it.youtube_id} youtubeId={it.youtube_id} title={it.judul} className=\"aspect-video w-full rounded-2xl mb-3\" />\n                      ) : it.media_source === 'drive' ? (\n                        <iframe key={it.media_path} src={drivePreviewUrl(it.media_path)} title={it.judul} allow=\"autoplay; encrypted-media; fullscreen\" allowFullScreen className=\"aspect-video w-full rounded-2xl border-0 bg-black mb-3\" />\n                      ) : (\n                        <ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className=\"rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3\" />\n                      )\n                    ) : null}"
+
+if (c.indexOf('drivePreviewUrl(it.media_path)') !== -1) {
+  console.log('[SUDAH ADA] LogbookDetail sudah mendukung Drive')
+} else if (c.includes(polaLama1)) {
+  c = c.replace(polaLama1, polaBaru)
+  berubah = true
+  console.log('[BERHASIL] LogbookDetail diperbarui (pola 1)')
+} else if (c.includes(polaLama2)) {
+  c = c.replace(polaLama2, polaBaru)
+  berubah = true
+  console.log('[BERHASIL] LogbookDetail diperbarui (pola 2)')
+} else if (c.includes(polaLama3)) {
+  c = c.replace(polaLama3, polaBaru)
+  berubah = true
+  console.log('[BERHASIL] LogbookDetail diperbarui (pola 3)')
+} else {
+  // Pendekatan lebih agresif: cari berdasarkan pattern yang lebih longgar
+  const idxStart = c.indexOf('export function LogbookDetail(props) {')
+  if (idxStart !== -1) {
+    const idxEnd = c.indexOf('export function GalleryCard(props) {', idxStart)
+    if (idxEnd !== -1) {
+      const blokLogbookDetail = c.slice(idxStart, idxEnd)
+      
+      // Cari pola media_path dengan youtube
+      const reMedia = /\{it\.media_path\s*\?\s*\(\s*it\.media_source\s*===\s*'youtube'\s*\?\s*\(\s*<PemutarVideo[^>]*\/>\s*\)\s*:\s*\(\s*<ZoomableMedia[^>]*\/>\s*\)\s*\)\s*:\s*null\}/s
+      
+      if (reMedia.test(blokLogbookDetail)) {
+        const blokBaru = blokLogbookDetail.replace(reMedia, polaBaru)
+        c = c.slice(0, idxStart) + blokBaru + c.slice(idxEnd)
+        berubah = true
+        console.log('[BERHASIL] LogbookDetail diperbarui (regex fleksibel)')
+      } else {
+        console.log('[TIDAK KETEMU] Pola media di LogbookDetail dengan regex')
+        console.log('[INFO] Mencoba pendekatan manual...')
+        
+        // Cari dan ganti manual
+        const cariYoutube = "it.media_source === 'youtube' ? ("
+        const cariZoom = "<ZoomableMedia src={it.media_thumb || it.media_path}"
+        
+        const idxYT = blokLogbookDetail.indexOf(cariYoutube)
+        const idxZoom = blokLogbookDetail.indexOf(cariZoom, idxYT)
+        
+        if (idxYT !== -1 && idxZoom !== -1) {
+          // Sisipkan branch drive sebelum ZoomableMedia
+          const beforeZoom = blokLogbookDetail.slice(0, idxZoom)
+          const afterZoom = blokLogbookDetail.slice(idxZoom)
+          
+          const sisipan = "it.media_source === 'drive' ? (\n                        <iframe key={it.media_path} src={drivePreviewUrl(it.media_path)} title={it.judul} allow=\"autoplay; encrypted-media; fullscreen\" allowFullScreen className=\"aspect-video w-full rounded-2xl border-0 bg-black mb-3\" />\n                      ) : (\n                        "
+          
+          const blokBaru = beforeZoom + sisipan + afterZoom
+          c = c.slice(0, idxStart) + blokBaru + c.slice(idxEnd)
+          berubah = true
+          console.log('[BERHASIL] LogbookDetail diperbarui (manual insert)')
+        } else {
+          console.log('[GAGAL] Tidak dapat menemukan pola media di LogbookDetail')
+        }
+      }
+    } else {
+      console.log('[TIDAK KETEMU] Batas akhir LogbookDetail')
+    }
+  } else {
+    console.log('[TIDAK KETEMU] Fungsi LogbookDetail')
+  }
+}
+
+if (berubah) {
+  simpan(FILE_CARDS, c)
+  console.log('')
+  console.log('Verifikasi:')
+  const v = baca(FILE_CARDS)
+  console.log((v.indexOf('drivePreviewUrl(it.media_path)') !== -1 ? '[OK] ' : '[BELUM] ') + 'LogbookDetail mendukung iframe Drive')
+  console.log((v.indexOf("from '../lib/drive.js'") !== -1 ? '[OK] ' : '[BELUM] ') + 'Import drive.js tersedia')
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Yang diperbaiki:')
+console.log('1. LogbookDetail kini menampilkan iframe preview Google Drive untuk video bersumber drive.')
+console.log('2. Import drivePreviewUrl ditambahkan ke cards.jsx.')
+console.log('3. Fallback tetap ke ZoomableMedia untuk media R2 biasa.')
+```
+
+## File: apply-fix-toggle-dark.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai memperbaiki warna tombol Foto dan Video pada mode gelap...')
+console.log('')
+
+const FILE_D = 'src/pages/DashboardPage.jsx'
+if (!fs.existsSync(path.join(root, FILE_D))) {
+  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
+  process.exit(1)
+}
+
+let d = baca(FILE_D)
+const LAMA = 'bg-slate-200 text-slate-600'
+const BARU = 'bg-slate-200 text-slate-600 dark:bg-slate-700'
+
+const sudah = d.split(BARU).length - 1
+if (sudah >= 4) {
+  console.log('[SUDAH ADA] Kelas dark:bg-slate-700 sudah terpasang di ' + sudah + ' tombol')
+} else {
+  const jumlah = d.split(LAMA).length - 1
+  if (jumlah > 0) {
+    d = d.split(LAMA).join(BARU)
+    simpan(FILE_D, d)
+    console.log('[BERHASIL] ' + jumlah + ' tombol Foto dan Video diberi kelas dark:bg-slate-700')
+  } else {
+    console.log('[TIDAK KETEMU] Pola kelas bg-slate-200 text-slate-600 di DashboardPage.jsx')
+  }
+}
+
+const v = baca(FILE_D)
+const total = v.split(BARU).length - 1
+console.log('')
+console.log('Verifikasi:')
+console.log((total >= 4 ? '[OK] ' : '[BELUM] ') + 'Empat tombol mode memakai latar gelap (' + total + ' tombol terpasang)')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Penjelasan perbaikan:')
+console.log('1. Masalah: tombol tidak aktif memakai kelas bg-slate-200 yang tidak punya aturan pengganti di index.css, sehingga pada mode gelap pill tetap abu terang hampir putih dan menonjol sendiri.')
+console.log('2. Perbaikan: menambahkan varian dark:bg-slate-700 langsung pada kelas tombol, jadi pada mode gelap pill menjadi abu gelap yang menyatu dengan kartu, sementara mode terang tetap seperti semula.')
+console.log('3. Varian dark dipilih bukan aturan CSS global .dark .bg-slate-200 supaya garis timeline di cards.jsx yang sengaja memadukan bg-slate-200 dengan dark:bg-slate-700 tidak ikut tertimpa.')
+console.log('4. Teks tombol tidak perlu diubah karena index.css sudah mengganti text-slate-600 menjadi abu terang pada mode gelap, sehingga kontrasnya tetap terbaca di atas pill gelap.')
+console.log('5. Tombol aktif tidak disentuh karena kombinasi bg-bsi-800 sudah otomatis menjadi hijau tua pada mode gelap dan terlihat benar.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka dashboard pada mode gelap lalu lihat tombol Foto dan Video di form logbook maupun form galeri.')
+console.log('2. Tombol tidak aktif kini berwarna abu gelap, bukan putih terang, dan teksnya tetap terbaca.')
+console.log('3. Klik bergantian Foto dan Video: tombol aktif tetap hijau di kedua mode.')
+console.log('4. Kembali ke mode terang: tampilan tombol tidak berubah seperti sebelumnya.')
+```
+
+## File: apply-menu-mobile-halus-v2.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+function ada(rel) { return fs.existsSync(path.join(root, rel)) }
+
+console.log('Mulai mengganti animasi menu mobile menjadi versi halus v2...')
+console.log('')
+
+/* ===== 1. index.css: buang blok menu-mobile-v1, pasang menu-mobile-v2 ===== */
+const FILE_CSS = 'src/index.css'
+if (!ada(FILE_CSS)) {
+  console.log('[GAGAL] index.css tidak ditemukan')
+  process.exit(1)
+}
+let css = baca(FILE_CSS)
+
+const CSS_V2 = `/* menu-mobile-v2: tinggi menu diinterpolasi persis lewat grid rows, transisi bisa dipotong di tengah jadi terasa halus seperti aplikasi native */
+.menu-mobile-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.36s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.menu-mobile-wrap.menu-mobile-buka { grid-template-rows: 1fr; }
+.menu-mobile-dalam {
+  overflow: hidden;
+  min-height: 0;
+  visibility: hidden;
+  transition: visibility 0.36s;
+}
+.menu-mobile-buka .menu-mobile-dalam { visibility: visible; }
+.menu-mobile-isi {
+  opacity: 0;
+  transform: translateY(-8px);
+  transition: opacity 0.2s ease, transform 0.24s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.menu-mobile-buka .menu-mobile-isi {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.34s ease 0.08s, transform 0.4s cubic-bezier(0.32, 0.72, 0, 1) 0.05s;
+}
+`
+
+if (css.includes('menu-mobile-v2')) {
+  console.log('[SUDAH ADA] CSS menu-mobile-v2 di index.css')
+} else {
+  const mulai = css.indexOf('/* menu-mobile-v1')
+  if (mulai !== -1) {
+    let akhir = css.indexOf('\n/*', mulai + 10)
+    if (akhir === -1) akhir = css.length
+    css = css.slice(0, mulai) + CSS_V2 + css.slice(akhir)
+    simpan(FILE_CSS, css)
+    console.log('[BERHASIL] Blok menu-mobile-v1 diganti menjadi menu-mobile-v2')
+  } else {
+    simpan(FILE_CSS, css.trimEnd() + '\n\n' + CSS_V2)
+    console.log('[BERHASIL] CSS menu-mobile-v2 ditambahkan (blok v1 tidak ditemukan)')
+  }
+}
+
+/* ===== 2. Layout.jsx: MenuMobile selalu terpasang, tanpa timer, tanpa unmount ===== */
+const FILE_L = 'src/components/Layout.jsx'
+if (!ada(FILE_L)) {
+  console.log('[GAGAL] Layout.jsx tidak ditemukan')
+  process.exit(1)
+}
+let l = baca(FILE_L)
+
+const KOMPONEN_V2 = `function MenuMobile(props) {
+  return (
+    <div className={'menu-mobile-wrap xl:hidden' + (props.open ? ' menu-mobile-buka' : '')}>
+      <div className="menu-mobile-dalam">
+        <div className="menu-mobile-isi border-t border-slate-200 bg-white px-4 py-4 space-y-2">
+          {props.children}
+        </div>
+      </div>
+    </div>
+  )
+}
+`
+
+if (l.includes('menu-mobile-wrap')) {
+  console.log('[SUDAH ADA] MenuMobile versi v2 di Layout.jsx')
+} else {
+  const mulaiFn = l.indexOf('function MenuMobile(props) {')
+  const mulaiExport = l.indexOf('export default function Layout')
+  if (mulaiFn !== -1 && mulaiExport !== -1 && mulaiExport > mulaiFn) {
+    l = l.slice(0, mulaiFn) + KOMPONEN_V2 + l.slice(mulaiExport)
+    simpan(FILE_L, l)
+    console.log('[BERHASIL] Komponen MenuMobile diganti menjadi versi selalu terpasang')
+  } else {
+    console.log('[TIDAK KETEMU] Blok komponen MenuMobile di Layout.jsx')
+  }
+}
+
+/* ===== 3. Verifikasi ===== */
+console.log('')
+console.log('Verifikasi:')
+const c2 = baca(FILE_CSS)
+const l2 = baca(FILE_L)
+console.log((c2.includes('menu-mobile-v2') ? '[OK] ' : '[BELUM] ') + 'CSS menu-mobile-v2 terpasang')
+console.log((!c2.includes('menuMobileIn') && !c2.includes('menuMobileOut') ? '[OK] ' : '[BELUM] ') + 'Keyframes max-height lama sudah dibuang')
+console.log((c2.includes('grid-template-rows 0fr') || c2.includes('grid-template-rows: 0fr') ? '[OK] ' : '[BELUM] ') + 'Interpolasi tinggi lewat grid rows tersedia')
+console.log((l2.includes('menu-mobile-wrap') ? '[OK] ' : '[BELUM] ') + 'Struktur wrapper menu v2 terpasang')
+console.log((!l2.includes('menu-mobile-tutup') ? '[OK] ' : '[BELUM] ') + 'Logika timer dan kelas tutup lama sudah hilang')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Kenapa versi v2 terasa jauh lebih halus:')
+console.log('1. Tinggi menu diinterpolasi persis dari nol sampai tinggi aslinya lewat trik grid rows 0fr ke 1fr, jadi kurva easing terasa proporsional sepanjang gerakan, tidak seperti max-height 480px yang membuat gerakan selesai lebih awal lalu terasa mengambang.')
+console.log('2. Animasi memakai transition, bukan keyframes, sehingga kalau tombol Menu diketuk lagi di tengah animasi, gerakan berbalik mulus dari posisi terakhir tanpa melompat atau mengulang dari awal.')
+console.log('3. Tidak ada lagi efek berurutan per tautan yang membuat panel terasa tersendat, seluruh isi memudar dan bergeser sebagai satu kesatuan dengan penundaan kecil yang lembut.')
+console.log('4. Easing cubic-bezier(0.32, 0.72, 0, 1) meniru kurva perlambatan menu iOS, gerakan cepat di awal lalu meluncur pelan saat berhenti.')
+console.log('5. Elemen menu kini selalu terpasang di DOM dengan visibility hidden saat tertutup, jadi tidak ada lagi lompatan layout saat elemen dilepas, dan tautan tetap tidak bisa difokuskan saat menu tertutup.')
+console.log('6. Perubahan tinggi terkurung di wrapper grid, sementara isi hanya memakai opacity dan transform yang ringan bagi kompositor.')
+console.log('7. Pengguna reduce motion tetap mendapat perilaku instan karena aturan global proyek memotong durasi transisi.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Persempit jendela di bawah 1280 piksel lalu ketuk tombol Menu: panel meluncur terbuka dengan perlambatan alami di ujung gerakan.')
+console.log('2. Ketuk Menu lagi saat panel masih terbuka setengah: panel berbalik menutup mulus dari posisi tersebut, bukan melompat.')
+console.log('3. Buka tutup berulang dengan cepat beberapa kali: gerakan selalu kontinu tanpa patahan maupun kedip.')
+console.log('4. Gulir halaman saat menu terbuka lalu tutup: konten di bawah header tidak melompat karena tinggi merapat dengan mulus.')
+console.log('5. Aktifkan mode gelap: warna panel menyesuaikan dan kehalusan animasi tetap sama.')
+```
+
+## File: apply-placeholder-drive.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+function ada(rel) { return fs.existsSync(path.join(root, rel)) }
+
+console.log('Mulai menyesuaikan placeholder Google Drive dan YouTube agar lebih jelas...')
+console.log('')
+
+const FILE_DASH = 'src/pages/DashboardPage.jsx'
+if (!ada(FILE_DASH)) {
+  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
+  process.exit(1)
+}
+
+let d = baca(FILE_DASH)
+let berubah = false
+let totalPerubahan = 0
+
+/* ===== 1. Placeholder YouTube di form logbook items ===== */
+const ytLogLama = 'value={it.ytLink} onChange={function (e) { patchItem(i, { ytLink: e.target.value }) }} placeholder="Atau tempel link video eksternal"'
+const ytLogBaru = 'value={it.ytLink} onChange={function (e) { patchItem(i, { ytLink: e.target.value }) }} placeholder="Link video YouTube untuk tampilan (opsional)"'
+if (d.indexOf(ytLogLama) !== -1) {
+  d = d.replace(ytLogLama, ytLogBaru)
+  berubah = true
+  totalPerubahan++
+  console.log('[BERHASIL] Placeholder YouTube di form kegiatan logbook diperjelas')
+} else if (d.indexOf(ytLogBaru) !== -1) {
+  console.log('[SUDAH ADA] Placeholder YouTube logbook sudah diperjelas')
+} else {
+  console.log('[TIDAK KETEMU] Placeholder YouTube di form kegiatan logbook')
+}
+
+/* ===== 2. Placeholder Drive di form logbook items ===== */
+const driveLogLama = 'value={it.driveLink} onChange={function (e) { patchItem(i, { driveLink: e.target.value }) }} placeholder="Atau tempel link Google Drive (opsional)"'
+const driveLogBaru = 'value={it.driveLink} onChange={function (e) { patchItem(i, { driveLink: e.target.value }) }} placeholder="Link Google Drive untuk unduhan (opsional)"'
+if (d.indexOf(driveLogLama) !== -1) {
+  d = d.replace(driveLogLama, driveLogBaru)
+  berubah = true
+  totalPerubahan++
+  console.log('[BERHASIL] Placeholder Drive di form kegiatan logbook disesuaikan dengan fitur unduhan')
+} else if (d.indexOf(driveLogBaru) !== -1) {
+  console.log('[SUDAH ADA] Placeholder Drive logbook sudah disesuaikan')
+} else {
+  console.log('[TIDAK KETEMU] Placeholder Drive di form kegiatan logbook')
+}
+
+/* ===== 3. Placeholder YouTube di form galeri ===== */
+const ytGalLama = 'value={galYtLink} onChange={function (e) { setGalYtLink(e.target.value) }} placeholder="Atau tempel link video eksternal"'
+const ytGalBaru = 'value={galYtLink} onChange={function (e) { setGalYtLink(e.target.value) }} placeholder="Link video YouTube untuk tampilan (opsional)"'
+if (d.indexOf(ytGalLama) !== -1) {
+  d = d.replace(ytGalLama, ytGalBaru)
+  berubah = true
+  totalPerubahan++
+  console.log('[BERHASIL] Placeholder YouTube di form galeri diperjelas')
+} else if (d.indexOf(ytGalBaru) !== -1) {
+  console.log('[SUDAH ADA] Placeholder YouTube galeri sudah diperjelas')
+} else {
+  console.log('[TIDAK KETEMU] Placeholder YouTube di form galeri')
+}
+
+/* ===== 4. Placeholder Drive di form galeri ===== */
+const driveGalLama = 'value={galDriveLink} onChange={function (e) { setGalDriveLink(e.target.value) }} placeholder="Atau tempel link Google Drive (opsional)"'
+const driveGalBaru = 'value={galDriveLink} onChange={function (e) { setGalDriveLink(e.target.value) }} placeholder="Link Google Drive untuk unduhan (opsional)"'
+if (d.indexOf(driveGalLama) !== -1) {
+  d = d.replace(driveGalLama, driveGalBaru)
+  berubah = true
+  totalPerubahan++
+  console.log('[BERHASIL] Placeholder Drive di form galeri disesuaikan dengan fitur unduhan')
+} else if (d.indexOf(driveGalBaru) !== -1) {
+  console.log('[SUDAH ADA] Placeholder Drive galeri sudah disesuaikan')
+} else {
+  console.log('[TIDAK KETEMU] Placeholder Drive di form galeri')
+}
+
+/* ===== 5. Simpan jika ada perubahan ===== */
+if (berubah) {
+  simpan(FILE_DASH, d)
+}
+
+/* ===== 6. Verifikasi ===== */
+console.log('')
+console.log('Verifikasi:')
+const v = baca(FILE_DASH)
+console.log((v.indexOf('Link video YouTube untuk tampilan (opsional)') !== -1 ? '[OK] ' : '[BELUM] ') + 'Placeholder YouTube diperjelas untuk tampilan')
+console.log((v.indexOf('Link Google Drive untuk unduhan (opsional)') !== -1 ? '[OK] ' : '[BELUM] ') + 'Placeholder Drive diperjelas untuk unduhan')
+console.log('')
+console.log('Total perubahan: ' + totalPerubahan + ' lokasi')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Hasil akhir:')
+console.log('1. Field YouTube kini berbunyi "Link video YouTube untuk tampilan (opsional)" sehingga user paham ini untuk menampilkan video di web.')
+console.log('2. Field Google Drive kini berbunyi "Link Google Drive untuk unduhan (opsional)" sehingga user paham ini hanya untuk tombol download, bukan untuk tampilan.')
+console.log('3. Kedua field tetap opsional dan bisa diisi salah satu atau keduanya sekaligus.')
+console.log('4. Bahasa placeholder menggunakan istilah sederhana yang langsung dipahami tanpa perlu penjelasan tambahan.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka dashboard, pilih mode Video pada kegiatan logbook atau galeri.')
+console.log('2. Perhatikan placeholder kedua field: YouTube untuk tampilan, Drive untuk unduhan.')
+console.log('3. Isi link YouTube saja: video tampil di web tanpa tombol download Drive.')
+console.log('4. Isi link YouTube dan Drive: video tampil dari YouTube dan tombol download mengambil file dari Drive.')
+console.log('5. Isi link Drive saja tanpa YouTube: video tidak tampil karena tampilan tetap butuh YouTube, tapi ini bisa diatasi dengan tetap mengisi YouTube.')
+```
+
+## File: apply-scrollbar-tipis.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+function ada(rel) { return fs.existsSync(path.join(root, rel)) }
+
+console.log('Mulai mengecilkan dan menipiskan scrollbar overlay...')
+console.log('')
+
+/* ===== 1. index.css: track 8px jadi 4px, thumb 6px jadi 3px, tepi lebih rapat ===== */
+const FILE_CSS = 'src/index.css'
+if (!ada(FILE_CSS)) {
+  console.log('[GAGAL] index.css tidak ditemukan')
+  process.exit(1)
+}
+let css = baca(FILE_CSS)
+let berubahCss = false
+
+const TRACK_LAMA = '#scroll-indicator {\n  position: fixed;\n  right: 3px;\n  top: 0;\n  width: 8px;'
+const TRACK_BARU = '#scroll-indicator {\n  position: fixed;\n  right: 2px;\n  top: 0;\n  width: 4px;'
+if (css.indexOf(TRACK_BARU) !== -1) {
+  console.log('[SUDAH ADA] Track scrollbar overlay sudah 4px')
+} else if (css.indexOf(TRACK_LAMA) !== -1) {
+  css = css.replace(TRACK_LAMA, TRACK_BARU)
+  berubahCss = true
+  console.log('[BERHASIL] Track scrollbar overlay diperkecil dari 8px menjadi 4px')
+} else {
+  console.log('[TIDAK KETEMU] Pola blok #scroll-indicator di index.css')
+}
+
+const THUMB_LAMA = '#scroll-thumb {\n  width: 6px;\n  margin-left: 1px;'
+const THUMB_BARU = '#scroll-thumb {\n  width: 3px;\n  margin-left: 0.5px;'
+if (css.indexOf(THUMB_BARU) !== -1) {
+  console.log('[SUDAH ADA] Thumb scrollbar overlay sudah 3px')
+} else if (css.indexOf(THUMB_LAMA) !== -1) {
+  css = css.replace(THUMB_LAMA, THUMB_BARU)
+  berubahCss = true
+  console.log('[BERHASIL] Thumb scrollbar overlay ditipiskan dari 6px menjadi 3px')
+} else {
+  console.log('[TIDAK KETEMU] Pola blok #scroll-thumb di index.css')
+}
+
+if (berubahCss) simpan(FILE_CSS, css)
+
+/* ===== 2. main.jsx: thumb minimum lebih pendek dan inset track disesuaikan ===== */
+const FILE_M = 'src/main.jsx'
+if (!ada(FILE_M)) {
+  console.log('[LEWATI] main.jsx tidak ditemukan')
+} else {
+  let m = baca(FILE_M)
+  let berubahM = false
+
+  const MIN_LAMA = 'const thumbTinggi = Math.max(36, trackTinggi * ratio)'
+  const MIN_BARU = 'const thumbTinggi = Math.max(24, trackTinggi * ratio)'
+  if (m.indexOf(MIN_BARU) !== -1) {
+    console.log('[SUDAH ADA] Tinggi minimum thumb sudah 24px')
+  } else if (m.indexOf(MIN_LAMA) !== -1) {
+    m = m.replace(MIN_LAMA, MIN_BARU)
+    berubahM = true
+    console.log('[BERHASIL] Tinggi minimum thumb dipendekkan dari 36px menjadi 24px')
+  } else {
+    console.log('[TIDAK KETEMU] Pola tinggi minimum thumb di main.jsx')
+  }
+
+  const INSET_LAMA = 'const trackTinggi = rect.height - 8'
+  const INSET_BARU = 'const trackTinggi = rect.height - 6'
+  if (m.indexOf(INSET_BARU) !== -1) {
+    console.log('[SUDAH ADA] Inset track sudah 6px')
+  } else if (m.indexOf(INSET_LAMA) !== -1) {
+    m = m.replace(INSET_LAMA, INSET_BARU)
+    berubahM = true
+    console.log('[BERHASIL] Inset atas bawah track dirapatkan dari 8px menjadi 6px')
+  } else {
+    console.log('[TIDAK KETEMU] Pola inset track di main.jsx')
+  }
+
+  const GESER_LAMA = '(4 + gerak * maxTop)'
+  const GESER_BARU = '(3 + gerak * maxTop)'
+  if (m.indexOf(GESER_BARU) !== -1) {
+    console.log('[SUDAH ADA] Offset awal thumb sudah 3px')
+  } else if (m.indexOf(GESER_LAMA) !== -1) {
+    m = m.replace(GESER_LAMA, GESER_BARU)
+    berubahM = true
+    console.log('[BERHASIL] Offset awal thumb disesuaikan dari 4px menjadi 3px')
+  } else {
+    console.log('[TIDAK KETEMU] Pola offset awal thumb di main.jsx')
+  }
+
+  const RIGHT_LAMA = "track.style.right = (window.innerWidth - rect.right + 3) + 'px'"
+  const RIGHT_BARU = "track.style.right = (window.innerWidth - rect.right + 2) + 'px'"
+  if (m.indexOf(RIGHT_BARU) !== -1) {
+    console.log('[SUDAH ADA] Posisi kanan track sudah 2px')
+  } else if (m.indexOf(RIGHT_LAMA) !== -1) {
+    m = m.replace(RIGHT_LAMA, RIGHT_BARU)
+    berubahM = true
+    console.log('[BERHASIL] Posisi kanan track dirapatkan dari 3px menjadi 2px')
+  } else {
+    console.log('[TIDAK KETEMU] Pola posisi kanan track di main.jsx')
+  }
+
+  if (berubahM) simpan(FILE_M, m)
+}
+
+/* ===== 3. Verifikasi ===== */
+console.log('')
+console.log('Verifikasi:')
+const vCss = baca(FILE_CSS)
+const vM = ada(FILE_M) ? baca(FILE_M) : ''
+console.log((vCss.indexOf('width: 4px;') !== -1 ? '[OK] ' : '[BELUM] ') + 'Track scrollbar overlay 4px')
+console.log((vCss.indexOf('width: 3px;') !== -1 ? '[OK] ' : '[BELUM] ') + 'Thumb scrollbar overlay 3px')
+console.log((vM.indexOf('Math.max(24, trackTinggi * ratio)') !== -1 ? '[OK] ' : '[BELUM] ') + 'Tinggi minimum thumb 24px')
+console.log((vM.indexOf('rect.height - 6') !== -1 ? '[OK] ' : '[BELUM] ') + 'Inset track 6px')
+console.log((vM.indexOf('rect.right + 2)') !== -1 ? '[OK] ' : '[BELUM] ') + 'Posisi kanan track 2px')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Perubahan yang diterapkan:')
+console.log('1. Lebar track indikator turun dari 8px menjadi 4px, sehingga garis jalur scrollbar tidak lagi terasa tebal di tepi layar.')
+console.log('2. Lebar thumb turun dari 6px menjadi 3px dan diposisikan tepat di tengah track, menghasilkan garis tipis yang elegan.')
+console.log('3. Tinggi minimum thumb turun dari 36px menjadi 24px, sehingga pada halaman sangat panjang thumb tidak terlihat seperti balok besar.')
+console.log('4. Inset atas bawah track dan offset awal thumb dirapatkan supaya thumb tidak menggantung terlalu jauh dari ujung layar.')
+console.log('5. Jarak track dari tepi kanan layar dirapatkan dari 3px menjadi 2px agar scrollbar tipis terasa menempel rapi di sisi jendela.')
+console.log('6. Perilaku auto hide tidak diubah: indikator tetap muncul hanya saat menggulir lalu memudar sendiri, jadi layar tetap bersih.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Gulir halaman panjang seperti Logbook publik atau Dashboard: garis scrollbar kini berupa strip tipis 3px di tepi kanan.')
+console.log('2. Gulir cepat sampai mentok: thumb terpendek kini sekitar 24px, tidak sepanjang sebelumnya.')
+console.log('3. Buka modal detail berisi banyak konten lalu gulir di dalamnya: indikator tipis muncul mengikuti tepi panel modal.')
+console.log('4. Aktifkan mode gelap: warna thumb tetap abu terang lembut dengan bentuk tipis yang sama.')
+console.log('5. Diamkan sebentar setelah menggulir: scrollbar memudar hilang seperti biasanya.')
+```
+
+## File: apply-status-published.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+function ada(rel) { return fs.existsSync(path.join(root, rel)) }
+
+console.log('Mulai mengubah teks status "Siap dilihat" menjadi "Published"...')
+console.log('')
+
+let totalPerubahan = 0
+
+/* 1. ui.jsx: StatusBadge di kartu logbook */
+const FILE_UI = 'src/components/ui.jsx'
+if (ada(FILE_UI)) {
+  let u = baca(FILE_UI)
+  const anchor = "{publik ? 'Siap dilihat' : 'Draft'}"
+  if (u.indexOf(anchor) !== -1) {
+    u = u.replace(anchor, "{publik ? 'Published' : 'Draft'}")
+    simpan(FILE_UI, u)
+    totalPerubahan++
+    console.log('[BERHASIL] StatusBadge di ui.jsx kini menampilkan Published')
+  } else if (u.indexOf("{publik ? 'Published' : 'Draft'}") !== -1) {
+    console.log('[SUDAH ADA] StatusBadge sudah Published')
+  } else {
+    console.log('[TIDAK KETEMU] Pola StatusBadge di ui.jsx')
+  }
+} else {
+  console.log('[GAGAL] ui.jsx tidak ditemukan')
+}
+
+/* 2. DashboardPage.jsx: select status tampil + filter status logbook */
+const FILE_DASH = 'src/pages/DashboardPage.jsx'
+if (ada(FILE_DASH)) {
+  let d = baca(FILE_DASH)
+  const anchor = "{ value: 'publik', label: 'Siap dilihat' }"
+  const jumlah = d.split(anchor).length - 1
+  if (jumlah > 0) {
+    d = d.split(anchor).join("{ value: 'publik', label: 'Published' }")
+    simpan(FILE_DASH, d)
+    totalPerubahan += jumlah
+    console.log('[BERHASIL] ' + jumlah + ' lokasi label status di DashboardPage diubah menjadi Published')
+  } else if (d.indexOf("{ value: 'publik', label: 'Published' }") !== -1) {
+    console.log('[SUDAH ADA] Label status DashboardPage sudah Published')
+  } else {
+    console.log('[TIDAK KETEMU] Pola label status di DashboardPage')
+  }
+} else {
+  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
+}
+
+/* 3. HomePage.jsx: teks EmptyState */
+const FILE_HOME = 'src/pages/HomePage.jsx'
+if (ada(FILE_HOME)) {
+  let h = baca(FILE_HOME)
+  const anchor = 'desc="Logbook yang sudah diatur sebagai siap dilihat akan tampil di sini."'
+  if (h.indexOf(anchor) !== -1) {
+    h = h.replace(anchor, 'desc="Logbook yang sudah berstatus Published akan tampil di sini."')
+    simpan(FILE_HOME, h)
+    totalPerubahan++
+    console.log('[BERHASIL] Teks EmptyState di HomePage diperbarui')
+  } else if (h.indexOf('berstatus Published') !== -1) {
+    console.log('[SUDAH ADA] Teks EmptyState HomePage sudah diperbarui')
+  } else {
+    console.log('[TIDAK KETEMU] Pola EmptyState di HomePage')
+  }
+} else {
+  console.log('[GAGAL] HomePage.jsx tidak ditemukan')
+}
+
+/* 4. Verifikasi */
+console.log('')
+console.log('Verifikasi:')
+const vUi = ada(FILE_UI) ? baca(FILE_UI) : ''
+const vDash = ada(FILE_DASH) ? baca(FILE_DASH) : ''
+const vHome = ada(FILE_HOME) ? baca(FILE_HOME) : ''
+
+console.log((vUi.indexOf("'Published'") !== -1 ? '[OK] ' : '[BELUM] ') + 'StatusBadge menampilkan Published')
+console.log((vDash.indexOf("label: 'Published'") !== -1 ? '[OK] ' : '[BELUM] ') + 'Select dan filter status di Dashboard memakai Published')
+console.log((vHome.indexOf('berstatus Published') !== -1 ? '[OK] ' : '[BELUM] ') + 'EmptyState HomePage menyebut Published')
+console.log('')
+console.log('Total perubahan: ' + totalPerubahan + ' lokasi')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Penjelasan:')
+console.log('1. Istilah Published dipakai karena standar industri untuk pasangan Draft dan Published, digunakan WordPress, Medium, dan Shopify.')
+console.log('2. Nilai yang disimpan ke database tetap draft dan publik, jadi tidak perlu migrasi database sama sekali. Yang berubah hanya teks tampilannya.')
+console.log('3. Badge di kartu logbook kini menampilkan Draft atau Published.')
+console.log('4. Dropdown status tampil dan filter status di dashboard kini memakai label Draft dan Published.')
+console.log('5. Jika nanti ingin pakai istilah lain seperti Public atau Live, cukup ganti kata Published di script ini lalu jalankan ulang.')
+```
 
 ## File: api/r2/delete.js
 ```javascript
@@ -681,6 +2628,80 @@ R2_ACCESS_KEY_ID=
 R2_SECRET_ACCESS_KEY=
 R2_BUCKET_NAME=mbsi-media
 R2_PUBLIC_BASE_URL=
+```
+
+## File: apply-batal-edit-pindah-tab.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+const FILE_D = 'src/pages/DashboardPage.jsx'
+
+if (!fs.existsSync(path.join(root, FILE_D))) {
+  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
+  process.exit(1)
+}
+
+let d = fs.readFileSync(path.join(root, FILE_D), 'utf8').replace(/\r\n/g, '\n')
+
+console.log('Mulai menerapkan pembatalan otomatis mode edit saat pindah tab...')
+console.log('')
+
+/* ===== 1. Sisipkan Fungsi gantiTab ===== */
+const GANTI_TAB_CODE = `  function gantiTab(tabBaru) {
+    if (tabBaru !== tab) {
+      cancelEditLog()
+      cancelEditGal()
+      cancelEditHadir()
+      setTab(tabBaru)
+    }
+  }
+
+`
+if (d.includes('function gantiTab(tabBaru)')) {
+  console.log('[SUDAH ADA] Fungsi gantiTab di DashboardPage.jsx')
+} else {
+  const anchor = 'const tabCls = function (t) {'
+  if (d.includes(anchor)) {
+    d = d.replace(anchor, GANTI_TAB_CODE + '  ' + anchor)
+    console.log('[BERHASIL] Fungsi gantiTab berhasil disisipkan')
+  } else {
+    console.log('[TIDAK KETEMU] Anchor untuk menyisipkan fungsi gantiTab')
+  }
+}
+
+/* ===== 2. Ubah Navigasi ke gantiTab ===== */
+const targets = [
+  { old: "onClick={function () { setTab('profil') }} title=\"Kelola foto profil\"", new: "onClick={function () { gantiTab('profil') }} title=\"Kelola foto profil\"" },
+  { old: "onClick={function () { setTab('logbook') }} className={tabCls('logbook')}", new: "onClick={function () { gantiTab('logbook') }} className={tabCls('logbook')}" },
+  { old: "onClick={function () { setTab('galeri') }} className={tabCls('galeri')}", new: "onClick={function () { gantiTab('galeri') }} className={tabCls('galeri')}" },
+  { old: "onClick={function () { setTab('absen') }} className={tabCls('absen')}", new: "onClick={function () { gantiTab('absen') }} className={tabCls('absen')}" },
+  { old: "onClick={function () { setTab('profil') }} className={tabCls('profil')}", new: "onClick={function () { gantiTab('profil') }} className={tabCls('profil')}" }
+]
+
+let replacements = 0
+targets.forEach(t => {
+  if (d.includes(t.old)) {
+    d = d.replace(t.old, t.new)
+    replacements++
+  }
+})
+
+if (replacements > 0) {
+  console.log('[BERHASIL] ' + replacements + ' lokasi navigasi diubah untuk menggunakan gantiTab')
+} else {
+  console.log('[INFO] Tombol navigasi sudah menggunakan gantiTab atau tidak ditemukan')
+}
+
+fs.writeFileSync(path.join(root, FILE_D), d, 'utf8')
+
+console.log('')
+console.log('Selesai. Silakan muat ulang browser (Ctrl + Shift + R).')
+console.log('')
+console.log('Perilaku baru:')
+console.log('1. Berpindah tab lewat tombol navigasi kini akan selalu melewati gantiTab().')
+console.log('2. Semua Mode Edit (Logbook, Galeri, atau Daftar Hadir) akan otomatis dibatalkan jika kamu pindah ke tab lain.')
+console.log('3. Form akan tersetting ulang dengan aman agar tidak ada data sisa yang tertinggal.')
 ```
 
 ## File: apply-fix-skeleton-ekspor.cjs
@@ -3837,7 +5858,7 @@ export default defineConfig(function ({ mode }) {
 ```javascript
 import { useEffect, useRef, useState } from 'react'
 import { SizedIcon } from './icons.jsx'
-import { Lightbox, SmartFit } from './ui.jsx'
+import { Lightbox, SmartFit, MediaDrive } from './ui.jsx'
 
 export default function Carousel(props) {
   const slides = props.slides || []
@@ -3868,13 +5889,17 @@ export default function Carousel(props) {
     return (
       <>
         <div className="relative group rounded-2xl overflow-hidden aspect-video bg-slate-900">
-          <SmartFit src={s.src} full={s.full} type={s.type} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} />
+          {s.drive ? (
+            <MediaDrive driveId={s.drive} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} className="absolute inset-0 h-full w-full object-cover cursor-zoom-in" />
+          ) : (
+            <SmartFit src={s.src} full={s.full} type={s.type} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} />
+          )}
           <button type="button" title="Perbesar media" onClick={function () { setZoom(s) }}
             className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
             <SizedIcon name="expand" size={15} />
           </button>
         </div>
-        {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} onClose={function () { setZoom(null) }} /> : null}
+        {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} driveId={zoom.drive || null} onClose={function () { setZoom(null) }} /> : null}
       </>
     )
   }
@@ -3898,6 +5923,9 @@ export default function Carousel(props) {
           {slides.map(function (s, i) {
             return (
               <div key={i} className="carousel-slide">
+                {s.drive ? (
+                  <MediaDrive driveId={s.drive} alt={s.title || 'Media'} onClick={function () { if (moved.current) { moved.current = false; return } setZoom(s) }} className="absolute inset-0 h-full w-full object-cover cursor-zoom-in" />
+                ) : (
                 <SmartFit
                   src={s.src}
                   full={s.full}
@@ -3908,6 +5936,7 @@ export default function Carousel(props) {
                     setZoom(s)
                   }}
                 />
+                )}
                 <button type="button" title="Perbesar media" onClick={function (e) { e.stopPropagation(); setZoom(s) }}
                   className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
                   <SizedIcon name="expand" size={15} />
@@ -3945,7 +5974,7 @@ export default function Carousel(props) {
           })}
         </div>
       </div>
-      {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} onClose={function () { setZoom(null) }} /> : null}
+      {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} driveId={zoom.drive || null} onClose={function () { setZoom(null) }} /> : null}
     </>
   )
 }
@@ -4024,15 +6053,17 @@ export function FilterBar(props) {
             : <span className="inline-flex items-center gap-2"><span className="text-slate-400">{ICONS.funnel}</span><span>Belum ada filter aktif</span></span>}
         </div>
       </div>
-      <div className={props.open ? 'anim-page mt-4' : 'hidden xl:block xl:mt-4'}>
-        <div className="flex flex-wrap items-center gap-3">
-          {props.children}
-          {props.activeCount > 0 ? (
-            <button onClick={props.onReset}
-              className="inline-flex items-center gap-2 rounded-2xl bg-red-50 border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100">
-              {ICONS.close}<span>Reset</span>
-            </button>
-          ) : null}
+            <div className={'filter-wrap' + (props.open ? ' filter-wrap-buka' : '')}>
+        <div className="filter-dalam">
+          <div className="filter-isi flex flex-wrap items-center gap-3">
+            {props.children}
+            {props.activeCount > 0 ? (
+              <button onClick={props.onReset}
+                className="inline-flex items-center gap-2 rounded-2xl bg-red-50 border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100">
+                {ICONS.close}<span>Reset</span>
+              </button>
+            ) : null}
+          </div>
         </div>
       </div>
     </div>
@@ -4322,17 +6353,17 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       const selisih = scrollHeight - clientHeight
       if (selisih <= 4) { sembunyikan(); return }
       const ratio = clientHeight / scrollHeight
-      const trackTinggi = rect.height - 8
-      const thumbTinggi = Math.max(36, trackTinggi * ratio)
+      const trackTinggi = rect.height - 6
+      const thumbTinggi = Math.max(24, trackTinggi * ratio)
       const maxTop = trackTinggi - thumbTinggi
       let gerak = scrollTop / selisih
       if (gerak < 0) gerak = 0
       if (gerak > 1) gerak = 1
       thumb.style.height = thumbTinggi + 'px'
-      thumb.style.transform = 'translateY(' + (4 + gerak * maxTop) + 'px)'
+      thumb.style.transform = 'translateY(' + (3 + gerak * maxTop) + 'px)'
       track.style.top = rect.top + 'px'
       track.style.height = rect.height + 'px'
-      track.style.right = (window.innerWidth - rect.right + 3) + 'px'
+      track.style.right = (window.innerWidth - rect.right + 2) + 'px'
     }
     function onScroll(e) {
       const t = e.target
@@ -4487,7 +6518,7 @@ import { Outlet, Link, NavLink } from 'react-router-dom'
 import { useTheme } from '../lib/theme.jsx'
 import { useAuth, logoutMahasiswa } from '../lib/auth.js'
 import { SizedIcon } from './icons.jsx'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 const LINKS = [
   { to: '/', label: 'Beranda' },
@@ -4497,6 +6528,17 @@ const LINKS = [
   { to: '/dospem', label: 'Tim & Dospem' }
 ]
 
+function MenuMobile(props) {
+  return (
+    <div className={'menu-mobile-wrap xl:hidden' + (props.open ? ' menu-mobile-buka' : '')}>
+      <div className="menu-mobile-dalam">
+        <div className="menu-mobile-isi border-t border-slate-200 bg-white px-4 py-4 space-y-2">
+          {props.children}
+        </div>
+      </div>
+    </div>
+  )
+}
 export default function Layout() {
   const theme = useTheme()
   const { mahasiswa } = useAuth()
@@ -4548,8 +6590,7 @@ export default function Layout() {
             </div>
           </div>
         </div>
-        {open ? (
-          <div className="xl:hidden border-t border-slate-200 bg-white px-4 py-4 space-y-2">
+        <MenuMobile open={open}>
             {LINKS.map(function (l) {
               return <Link key={l.to} to={l.to} onClick={function () { setOpen(false) }} className="block px-4 py-3 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100">{l.label}</Link>
             })}
@@ -4561,8 +6602,7 @@ export default function Layout() {
             ) : (
               <Link to="/login" onClick={function () { setOpen(false) }} className="block px-4 py-3 rounded-xl bg-slate-900 text-white text-sm font-semibold">Masuk Intern</Link>
             )}
-          </div>
-        ) : null}
+        </MenuMobile>
       </header>
 
       <main className="anim-page max-w-7xl mx-auto px-4 py-8 lg:py-10 flex-1 w-full">
@@ -4878,7 +6918,7 @@ export default function HomePage() {
                   </div>
                 )
               })}
-          {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum ada logbook publik" desc="Logbook yang sudah diatur sebagai siap dilihat akan tampil di sini." /></div> : null}
+          {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum ada logbook publik" desc="Logbook yang sudah berstatus Published akan tampil di sini." /></div> : null}
         </div>
         <div className="mt-8 flex justify-center">
           <Link to="/logbook" className="rounded-2xl bg-bsi-800 px-6 py-3 text-sm font-bold text-white hover:bg-bsi-900">Lihat semua logbook</Link>
@@ -5547,8 +7587,9 @@ export default function GalleryPage() {
 import { Avatar } from './ui.jsx'
 import PemutarVideo from './PemutarVideo.jsx'
 import Carousel from './Carousel.jsx'
-import { StatusBadge, CategoryBadge, AttendanceBadge, btnSmall, ZoomableMedia, SmartFit , MediaYouTube } from './ui.jsx'
+import { StatusBadge, CategoryBadge, AttendanceBadge, btnSmall, ZoomableMedia, SmartFit , MediaYouTube, MediaDrive } from './ui.jsx'
 import { formatTanggal, formatTanggalShort } from '../lib/format.js'
+import { drivePreviewUrl, driveThumbUrl } from '../lib/drive.js'
 
 function PersonChip(props) {
   const p = props.mahasiswa
@@ -5584,7 +7625,7 @@ function ActionButtons(props) {
 
 export function slidesFromItems(items) {
   return (items || []).filter(function (i) { return i.media_path }).map(function (i) {
-    return { src: i.media_thumb || i.media_path, full: i.media_path, type: i.media_source === 'youtube' ? 'foto' : i.media_type, title: i.judul, yt: i.youtube_id || null }
+    return { src: i.media_thumb || i.media_path, full: i.media_path, type: i.media_source === 'youtube' ? 'foto' : i.media_type, title: i.judul, yt: i.youtube_id || null, drive: i.drive_id || null }
   })
 }
 
@@ -5646,12 +7687,14 @@ export function LogbookDetail(props) {
                 {i < items.length - 1 ? <span className="absolute left-4 top-9 bottom-0 w-px bg-slate-200 dark:bg-slate-700" /> : null}
                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                    {it.media_path ? (
-                     it.media_source === 'youtube' ? (
-                       <PemutarVideo key={it.youtube_id} youtubeId={it.youtube_id} title={it.judul} className="aspect-video w-full rounded-2xl mb-3" />
-                     ) : (
-                       <ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3" />
-                     )
-                   ) : null}
+                      it.media_source === 'youtube' ? (
+                        <PemutarVideo key={it.youtube_id} youtubeId={it.youtube_id} title={it.judul} className="aspect-video w-full rounded-2xl mb-3" />
+                      ) : it.media_source === 'drive' ? (
+                        <iframe key={it.media_path} src={drivePreviewUrl(it.media_path)} title={it.judul} allow="autoplay; encrypted-media; fullscreen" allowFullScreen className="aspect-video w-full rounded-2xl border-0 bg-black mb-3" />
+                      ) : (
+                        <ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3" />
+                      )
+                    ) : null}
                   <p className="font-bold text-slate-900">
                     {it.judul}
                     {it.show_in_gallery && it.media_path ? <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gold-500/15 text-gold-600">Di galeri</span> : null}
@@ -5687,6 +7730,8 @@ export function GalleryCard(props) {
       <div className="relative aspect-video w-full overflow-hidden bg-slate-900">
         {item.media_source === 'youtube' ? (
         <MediaYouTube src={item.media_path} alt={item.judul} />
+      ) : item.media_source === 'drive' ? (
+        <MediaDrive driveId={item.media_path} alt={item.judul} />
       ) : (
         <SmartFit src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} alt={item.judul} />
       )}
@@ -5723,6 +7768,8 @@ export function GalleryDetail(props) {
     <div className="space-y-4">
       {item.media_source === 'youtube' ? (
         <PemutarVideo key={item.youtube_id} youtubeId={item.youtube_id} title={item.judul} className="aspect-video w-full rounded-2xl" />
+      ) : item.media_source === 'drive' ? (
+        <iframe src={drivePreviewUrl(item.media_path)} title={item.judul} allow="autoplay; encrypted-media; fullscreen" allowFullScreen className="aspect-video w-full rounded-2xl border-0 bg-black" />
       ) : (
         <ZoomableMedia src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} title={item.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900" />
       )}
@@ -6202,9 +8249,9 @@ html { scroll-behavior: smooth; }
 }
 #scroll-indicator {
   position: fixed;
-  right: 3px;
+  right: 2px;
   top: 0;
-  width: 8px;
+  width: 4px;
   z-index: 95;
   border-radius: 9999px;
   opacity: 0;
@@ -6213,8 +8260,8 @@ html { scroll-behavior: smooth; }
 }
 #scroll-indicator.aktif { opacity: 1; }
 #scroll-thumb {
-  width: 6px;
-  margin-left: 1px;
+  width: 3px;
+  margin-left: 0.5px;
   border-radius: 9999px;
   background: rgba(100, 116, 139, 0.55);
 }
@@ -6298,12 +8345,85 @@ to { opacity: 1; transform: translateX(0) scale(1); }
 
 /* footer-ramping: ruang bawah halaman dirapatkan supaya footer slim terasa pas */
 main { padding-bottom: 2.5rem !important; }
+
+/* menu-mobile-v2: tinggi menu diinterpolasi persis lewat grid rows, transisi bisa dipotong di tengah jadi terasa halus seperti aplikasi native */
+.menu-mobile-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.36s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.menu-mobile-wrap.menu-mobile-buka { grid-template-rows: 1fr; }
+.menu-mobile-dalam {
+  overflow: hidden;
+  min-height: 0;
+  visibility: hidden;
+  transition: visibility 0.36s;
+}
+.menu-mobile-buka .menu-mobile-dalam { visibility: visible; }
+.menu-mobile-isi {
+  opacity: 0;
+  transform: translateY(-8px);
+  transition: opacity 0.2s ease, transform 0.24s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.menu-mobile-buka .menu-mobile-isi {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.34s ease 0.08s, transform 0.4s cubic-bezier(0.32, 0.72, 0, 1) 0.05s;
+}
+
+/* filter-mobile-v1: panel filter mengembang dan merapat mulus di mobile dan tablet, tiap kontrol muncul berurutan */
+.filter-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.36s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.filter-wrap-buka { grid-template-rows: 1fr; }
+.filter-dalam {
+  overflow: hidden;
+  min-height: 0;
+  visibility: hidden;
+  transition: visibility 0.36s;
+}
+.filter-wrap-buka .filter-dalam { visibility: visible; }
+.filter-isi {
+  margin-top: 1rem;
+  opacity: 0;
+  transform: translateY(-8px);
+  transition: opacity 0.2s ease, transform 0.24s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.filter-wrap-buka .filter-isi {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.34s ease 0.06s, transform 0.4s cubic-bezier(0.32, 0.72, 0, 1) 0.04s;
+}
+.filter-isi > * {
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity 0.16s ease, transform 0.2s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.filter-wrap-buka .filter-isi > * {
+  opacity: 1;
+  transform: translateY(0);
+}
+.filter-wrap-buka .filter-isi > *:nth-child(1) { transition-delay: 0.08s; }
+.filter-wrap-buka .filter-isi > *:nth-child(2) { transition-delay: 0.14s; }
+.filter-wrap-buka .filter-isi > *:nth-child(3) { transition-delay: 0.2s; }
+.filter-wrap-buka .filter-isi > *:nth-child(4) { transition-delay: 0.26s; }
+.filter-wrap-buka .filter-isi > *:nth-child(5) { transition-delay: 0.32s; }
+.filter-wrap-buka .filter-isi > *:nth-child(6) { transition-delay: 0.38s; }
+@media (min-width: 1280px) {
+  .filter-wrap { grid-template-rows: 1fr; }
+  .filter-dalam { visibility: visible; }
+  .filter-isi { opacity: 1; transform: none; }
+  .filter-isi > * { opacity: 1; transform: none; transition: none; }
+}
 ```
 
 ## File: src/components/ui.jsx
 ```javascript
 import { createPortal } from 'react-dom'
 import PemutarVideo from './PemutarVideo.jsx'
+import { drivePreviewUrl, driveDownloadUrl, driveThumbUrl } from '../lib/drive.js'
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { SizedIcon } from './icons.jsx'
 function useBodyScrollLock(active) {
@@ -6350,7 +8470,7 @@ export function StatusBadge(props) {
   const publik = props.status === 'publik'
   return (
     <span className={'px-3 py-1 rounded-full text-xs font-semibold ' + (publik ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800')}>
-      {publik ? 'Siap dilihat' : 'Draft'}
+      {publik ? 'Published' : 'Draft'}
     </span>
   )
 }
@@ -6471,6 +8591,33 @@ Batal
 }
 
 
+export function MediaDrive(props) {
+  const [gagal, setGagal] = useState(false)
+  useEffect(function () {
+    setGagal(false)
+  }, [props.driveId])
+  if (gagal) {
+    return (
+      <div className={'grid place-items-center bg-gradient-to-br from-slate-800 to-slate-900 ' + (props.className || 'absolute inset-0 h-full w-full')}>
+        <div className="flex flex-col items-center gap-2 text-slate-300">
+          <span className="grid h-12 w-12 place-items-center rounded-full bg-white/10">
+            <SizedIcon name="image" size={22} />
+          </span>
+          <p className="px-2 text-center text-[11px] font-semibold">Video Google Drive</p>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <img
+      src={driveThumbUrl(props.driveId)}
+      alt={props.alt || 'Video Google Drive'}
+      onClick={props.onClick || undefined}
+      onError={function () { setGagal(true) }}
+      className={(props.className || 'absolute inset-0 h-full w-full object-cover') + (props.onClick ? ' cursor-zoom-in' : '')}
+    />
+  )
+}
 export function Lightbox(props) {
   useBodyScrollLock(true)
   const [busyUnduh, setBusyUnduh] = useState(false)
@@ -6484,19 +8631,37 @@ export function Lightbox(props) {
   async function unduh() {
     if (busyUnduh) return
     setBusyUnduh(true)
-    let nama = 'media'
+    if (props.driveId) {
       try {
-        const urlAsli = new URL(props.src)
-        const ekstensi = urlAsli.pathname.split('.').pop().split('?')[0] || 'jpg'
-        if (props.title && props.title.trim()) {
-          const judulAman = props.title.trim().replace(/[\/\\:*?"<>|]/g, '').replace(/\s+/g, '-').substring(0, 60)
-          nama = judulAman + '.' + ekstensi
-        } else {
-          nama = urlAsli.pathname.split('/').pop() || ('media.' + ekstensi)
-        }
-      } catch (e) {
-        nama = (props.title || 'media') + '.jpg'
+        const nama = (props.title ? props.title.replace(/[\/\\:*?"<>|]/g, '').replace(/\s+/g, '-').substring(0, 60) : 'video-' + props.driveId) + '.mp4'
+        const a = document.createElement('a')
+        a.href = driveDownloadUrl(props.driveId)
+        a.download = nama
+        a.target = '_blank'
+        a.rel = 'noopener noreferrer'
+        a.style.display = 'none'
+        document.body.appendChild(a)
+        a.click()
+        setTimeout(function () { a.remove() }, 1000)
+      } catch (err) {
+        window.open(driveDownloadUrl(props.driveId), '_blank')
       }
+      setBusyUnduh(false)
+      return
+    }
+    let nama = 'media'
+    try {
+      const urlAsli = new URL(props.src)
+      const ekstensi = urlAsli.pathname.split('.').pop().split('?')[0] || 'jpg'
+      if (props.title && props.title.trim()) {
+        const judulAman = props.title.trim().replace(/[\/\\:*?"<>|]/g, '').replace(/\s+/g, '-').substring(0, 60)
+        nama = judulAman + '.' + ekstensi
+      } else {
+        nama = urlAsli.pathname.split('/').pop() || ('media.' + ekstensi)
+      }
+    } catch (e) {
+      nama = (props.title || 'media') + '.jpg'
+    }
     try {
       const urlUnduh = props.src + (props.src.includes('?') ? '&' : '?') + 'unduh=1'
       const res = await fetch(urlUnduh, { cache: 'no-store' })
@@ -6515,6 +8680,7 @@ export function Lightbox(props) {
     }
     setBusyUnduh(false)
   }
+  const tombolUnduhTerlihat = !!props.driveId || !props.youtubeId
   return createPortal(
     <div className="anim-overlay fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/95 p-4" onClick={props.onClose}>
       <div className="relative w-full max-w-5xl" onClick={function (e) { e.stopPropagation() }}>
@@ -6535,10 +8701,10 @@ export function Lightbox(props) {
       <div className="absolute right-4 top-4 flex gap-2">
         <button
           type="button"
-          title={busyUnduh ? 'Menyiapkan unduhan...' : 'Unduh media'}
+          title={busyUnduh ? 'Menyiapkan unduhan...' : (props.driveId ? 'Unduh video dari Google Drive' : 'Unduh media')}
           onClick={unduh}
           disabled={busyUnduh}
-          style={props.youtubeId ? { display: 'none' } : undefined}
+          style={tombolUnduhTerlihat ? undefined : { display: 'none' }}
           className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20 disabled:opacity-50"
         >
           <SizedIcon name="download" size={18} />
@@ -6552,11 +8718,12 @@ export function Lightbox(props) {
           <SizedIcon name="close" size={18} />
         </button>
       </div>
-      <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-slate-400">Klik media atau tekan Esc untuk menutup</p>
+      <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-slate-400">
+        {props.driveId ? 'Video diputar dari YouTube, unduhan diambil dari Google Drive' : 'Klik media atau tekan Esc untuk menutup'}
+      </p>
     </div>
   , document.body)
 }
-
 export function ZoomableMedia(props) {
   const [open, setOpen] = useState(false)
   const isVideo = props.type === 'video'
@@ -6907,6 +9074,7 @@ import { useAuth } from '../lib/auth.js'
 import { uploadMedia, deleteMedia } from '../lib/upload.js'
 import { syncGaleriFromLogbook } from '../lib/logbook.js'
 import { parseYouTubeId, ytThumb, fetchYouTubeQuota, unggahVideoYouTube } from '../lib/youtube.js'
+import { parseDriveId, driveThumbUrl, driveViewUrl } from '../lib/drive.js'
 import { uploadFotoProfil, updateFotoProfilMahasiswa, hapusFotoProfil } from '../lib/profil.js'
 import { Avatar } from '../components/ui.jsx'
 import { supabase as sbClient } from '../lib/supabase.js'
@@ -6921,7 +9089,7 @@ import { SizedIcon, ICONS } from '../components/icons.jsx'
 import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
 
 function newItem() {
-  return { key: Math.random().toString(36).slice(2), judul: '', deskripsi: '', hasil: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false, show: false, mode: 'foto', ytLink: '', oldYtId: null, oldSource: 'r2' }
+  return { key: Math.random().toString(36).slice(2), judul: '', deskripsi: '', hasil: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false, show: false, mode: 'foto', ytLink: '', oldYtId: null, oldSource: 'r2', driveLink: '' }
 }
 
 const LOG_INITIAL = { kategori: '', status: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
@@ -6977,6 +9145,7 @@ export default function DashboardPage() {
   const [, setVersiFoto] = useState(0)
   const [galMode, setGalMode] = useState('foto')
   const [galYtLink, setGalYtLink] = useState('')
+   const [galDriveLink, setGalDriveLink] = useState('')
   const [galOldYt, setGalOldYt] = useState(null)
   const [itemMode, setItemMode] = useState({})
   const [galYtTitle, setGalYtTitle] = useState('')
@@ -7092,6 +9261,8 @@ const refFormHadir = useRef(null)
 
   async function hapusMediaR2(url) {
     if (String(url || '').indexOf('i.ytimg.com') !== -1 || String(url || '').indexOf('youtube') !== -1) return
+     if (String(url || '').indexOf('drive.google.com') !== -1 || String(url || '').indexOf('drive.usercontent.google.com') !== -1) return
+     if (!/^https?:\/\//.test(String(url || ''))) return
     const key = keyDariUrl(url)
     if (!key) {
       console.warn('URL media tidak valid, dilewati:', url)
@@ -7157,7 +9328,12 @@ const refFormHadir = useRef(null)
           mediaSource = 'r2'
           youtubeId = null
         }
-        clean.push({ judul: it.judul.trim(), deskripsi: it.deskripsi.trim(), hasil: it.hasil.trim(), media_path: mediaPath, media_type: mediaType, media_thumb: mediaThumb, media_source: mediaSource, youtube_id: youtubeId, show_in_gallery: it.show && !!mediaPath })
+        let driveIdLog = null
+         if (it.mode === 'video' && it.driveLink) {
+           driveIdLog = parseDriveId(it.driveLink)
+           if (!driveIdLog) { toast.gagal('Link Google Drive tidak valid pada kegiatan ' + (i + 1) + '.'); setBusy(false); return }
+         }
+         clean.push({ judul: it.judul.trim(), deskripsi: it.deskripsi.trim(), hasil: it.hasil.trim(), media_path: mediaPath, media_type: mediaType, media_thumb: mediaThumb, media_source: mediaSource, youtube_id: youtubeId, drive_id: driveIdLog, show_in_gallery: it.show && !!mediaPath })
       }
       if (!clean.length) { toast.gagal('Tambahkan minimal satu kegiatan dengan judul.'); setBusy(false); return }
 
@@ -7185,7 +9361,7 @@ const refFormHadir = useRef(null)
       }
 
       const rows = clean.map(function (c, idx) {
-        return { logbook_id: logId, urutan: idx + 1, judul: c.judul, deskripsi: c.deskripsi, hasil: c.hasil, media_path: c.media_path, media_type: c.media_type, media_thumb: c.media_thumb, media_source: c.media_source, youtube_id: c.youtube_id, show_in_gallery: c.show_in_gallery }
+        return { logbook_id: logId, urutan: idx + 1, judul: c.judul, deskripsi: c.deskripsi, hasil: c.hasil, media_path: c.media_path, media_type: c.media_type, media_thumb: c.media_thumb, media_source: c.media_source, youtube_id: c.youtube_id, drive_id: c.drive_id, show_in_gallery: c.show_in_gallery }
       })
       const insItems = await supabase.from('logbook_items').insert(rows).select()
       await syncGaleriFromLogbook(mahasiswa.id, insItems.data || [], { tanggal: form.tanggal, kategori: form.kategori })
@@ -7225,7 +9401,7 @@ function startEditLog(log) {
       kendala: log.kendala || '', solusi: log.solusi || '', pembelajaran: log.pembelajaran || '', status: log.status
     })
     const mapped = (log.logbook_items || []).map(function (it) {
-      return { key: it.id, judul: it.judul, deskripsi: it.deskripsi || '', hasil: it.hasil || '', file: null, preview: it.media_path || '', oldPath: it.media_source === 'youtube' ? '' : (it.media_path || ''), oldThumb: it.media_source === 'youtube' ? '' : (it.media_thumb || ''), previewLoading: false, show: it.show_in_gallery, mode: it.media_source === 'youtube' ? 'video' : (it.media_type === 'video' ? 'video' : 'foto'), ytLink: it.media_source === 'youtube' && it.youtube_id ? 'https://youtu.be/' + it.youtube_id : '', oldYtId: it.youtube_id || null, oldSource: it.media_source || 'r2' }
+      return { key: it.id, judul: it.judul, deskripsi: it.deskripsi || '', hasil: it.hasil || '', file: null, preview: it.media_source === 'drive' ? driveThumbUrl(it.media_path) : (it.media_path || ''), oldPath: (it.media_source === 'youtube' || it.media_source === 'drive') ? '' : (it.media_path || ''), oldThumb: (it.media_source === 'youtube' || it.media_source === 'drive') ? '' : (it.media_thumb || ''), previewLoading: false, show: it.show_in_gallery, mode: (it.media_source === 'youtube' || it.media_source === 'drive') ? 'video' : (it.media_type === 'video' ? 'video' : 'foto'), ytLink: it.media_source === 'youtube' && it.youtube_id ? 'https://youtu.be/' + it.youtube_id : '', driveLink: it.drive_id ? driveViewUrl(it.drive_id) : '', oldYtId: it.youtube_id || null, oldSource: it.media_source || 'r2' }
     })
     setItems(mapped.length ? mapped : [newItem()])
     setTab('logbook')
@@ -7240,9 +9416,10 @@ function startEditLog(log) {
 
   function startEditGal(g) {
     setEditGalId(g.id)
-    setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_path || '', oldPath: g.media_source === 'youtube' ? '' : (g.media_path || ''), oldThumb: g.media_source === 'youtube' ? '' : (g.media_thumb || ''), previewLoading: false })
-    setGalMode(g.media_source === 'youtube' ? 'video' : (g.media_type === 'video' ? 'video' : 'foto'))
+    setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_source === 'drive' ? driveThumbUrl(g.media_path) : (g.media_path || ''), oldPath: (g.media_source === 'youtube' || g.media_source === 'drive') ? '' : (g.media_path || ''), oldThumb: (g.media_source === 'youtube' || g.media_source === 'drive') ? '' : (g.media_thumb || ''), previewLoading: false })
+    setGalMode((g.media_source === 'youtube' || g.media_source === 'drive') ? 'video' : (g.media_type === 'video' ? 'video' : 'foto'))
     setGalYtLink(g.media_source === 'youtube' && g.youtube_id ? 'https://youtu.be/' + g.youtube_id : '')
+     setGalDriveLink(g.drive_id ? driveViewUrl(g.drive_id) : '')
     setGalOldYt(g.youtube_id || null)
     gulirKeForm(refFormGal)
   }
@@ -7319,6 +9496,11 @@ function startEditLog(log) {
         youtubeId = null
       }
       if (!mediaPath) { toast.gagal('Galeri wajib memiliki media. Pilih file foto atau video terlebih dahulu.'); setBusy(false); return }
+      let driveIdGal = null
+      if (galMode === 'video' && galDriveLink) {
+        driveIdGal = parseDriveId(galDriveLink)
+        if (!driveIdGal) { toast.gagal('Link Google Drive tidak valid.'); setBusy(false); return }
+      }
       const payload = {
         mahasiswa_id: mahasiswa.id,
         judul: galForm.judul || ('Dokumentasi ' + galForm.tanggal),
@@ -7329,7 +9511,8 @@ function startEditLog(log) {
         media_type: mediaType,
         media_thumb: mediaThumb,
         media_source: mediaSource,
-        youtube_id: youtubeId
+        youtube_id: youtubeId,
+        drive_id: driveIdGal
       }
       let oldGalUrls = []
       if (editGalId) {
@@ -7543,6 +9726,15 @@ async function submitHadir(e) {
 
   const editGalDerived = editGalId ? ((galeri.find(function (g) { return g.id === editGalId }) || {}).logbook_item_id || null) : null
 
+    function gantiTab(tabBaru) {
+    if (tabBaru !== tab) {
+      cancelEditLog()
+      cancelEditGal()
+      cancelEditHadir()
+      setTab(tabBaru)
+    }
+  }
+
   const tabCls = function (t) {
     return 'px-5 py-3 rounded-2xl text-sm font-bold ' + (tab === t ? 'bg-bsi-800 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200')
   }
@@ -7553,7 +9745,7 @@ async function submitHadir(e) {
         <div className="flex flex-wrap items-center justify-between gap-6">
           <div>
             <div className="flex flex-wrap items-center gap-6">
-<Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl"  onClick={function () { setTab('profil') }} title="Kelola foto profil" />
+<Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl"  onClick={function () { gantiTab('profil') }} title="Kelola foto profil" />
 <div className="min-w-0 flex-1">
             <h1 className="text-2xl lg:text-3xl font-black text-slate-900">{mahasiswa.nama}</h1>
             <p className="text-sm text-slate-500">NIM {mahasiswa.nim}</p>
@@ -7562,10 +9754,10 @@ async function submitHadir(e) {
         </div>
         </div>
 <div className="mt-8 flex flex-wrap gap-2">
-          <button onClick={function () { setTab('logbook') }} className={tabCls('logbook')}>Logbook</button>
-          <button onClick={function () { setTab('galeri') }} className={tabCls('galeri')}>Galeri</button>
-          <button onClick={function () { setTab('absen') }} className={tabCls('absen')}>Daftar Hadir</button>
-<button onClick={function () { setTab('profil') }} className={tabCls('profil')}>Profil</button>
+          <button onClick={function () { gantiTab('logbook') }} className={tabCls('logbook')}>Logbook</button>
+          <button onClick={function () { gantiTab('galeri') }} className={tabCls('galeri')}>Galeri</button>
+          <button onClick={function () { gantiTab('absen') }} className={tabCls('absen')}>Daftar Hadir</button>
+<button onClick={function () { gantiTab('profil') }} className={tabCls('profil')}>Profil</button>
         </div>
       
 </div></section>
@@ -7648,7 +9840,7 @@ async function submitHadir(e) {
                   <div className="mt-1.5">
                     <CustomSelect value={form.status}
                       onChange={function (v) { setForm(Object.assign({}, form, { status: v })) }}
-                      options={[{ value: 'draft', label: 'Draft' }, { value: 'publik', label: 'Siap dilihat' }]} />
+                      options={[{ value: 'draft', label: 'Draft' }, { value: 'publik', label: 'Published' }]} />
                   </div>
                 </div>
               </div>
@@ -7692,8 +9884,8 @@ async function submitHadir(e) {
                         </div>
                       ) : null}
                       <div className="flex gap-2">
-                        <button type="button" onClick={function () { patchItem(i, { mode: 'foto' }) }} className={'px-3 py-1.5 rounded-xl text-xs font-bold ' + (it.mode !== 'video' ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600')}>Foto</button>
-                        <button type="button" onClick={function () { patchItem(i, { mode: 'video' }) }} className={'px-3 py-1.5 rounded-xl text-xs font-bold ' + (it.mode === 'video' ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600')}>Video</button>
+                        <button type="button" onClick={function () { patchItem(i, { mode: 'foto' }) }} className={'px-3 py-1.5 rounded-xl text-xs font-bold ' + (it.mode !== 'video' ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700')}>Foto</button>
+                        <button type="button" onClick={function () { patchItem(i, { mode: 'video' }) }} className={'px-3 py-1.5 rounded-xl text-xs font-bold ' + (it.mode === 'video' ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700')}>Video</button>
                       </div>
                       {it.mode === 'video' ? (
                         <div className="space-y-2">
@@ -7703,7 +9895,8 @@ async function submitHadir(e) {
                               onChange={function (e) { onItemFile(i, e.target.files[0]) }} />
                           </div>
                           {ytQuota.remaining <= 0 ? <p className="text-xs text-red-600">Kuota habis. Gunakan link video di bawah.</p> : null}
-                          <input className={inputCls} value={it.ytLink} onChange={function (e) { patchItem(i, { ytLink: e.target.value }) }} placeholder="Atau tempel link video eksternal" />
+                          <input className={inputCls} value={it.ytLink} onChange={function (e) { patchItem(i, { ytLink: e.target.value }) }} placeholder="Link video YouTube untuk tampilan (opsional)" />
+                          <input className={inputCls} value={it.driveLink} onChange={function (e) { patchItem(i, { driveLink: e.target.value }) }} placeholder="Link Google Drive untuk unduhan (opsional)" />
                         </div>
                       ) : (
                         <FileInput accept="image/*" fileName={it.file ? it.file.name : ''}
@@ -7735,7 +9928,7 @@ async function submitHadir(e) {
               <FilterSelect icon={ICONS.tag} value={logFilter.kategori} onChange={function (v) { setLogFilter(Object.assign({}, logFilter, { kategori: v })) }}
                 options={[{ value: '', label: 'Semua kategori' }].concat(KATEGORI.map(function (k) { return { value: k, label: k } }))} />
               <FilterSelect icon={ICONS.check} value={logFilter.status} onChange={function (v) { setLogFilter(Object.assign({}, logFilter, { status: v })) }}
-                options={[{ value: '', label: 'Semua status' }, { value: 'draft', label: 'Draft' }, { value: 'publik', label: 'Siap dilihat' }]} />
+                options={[{ value: '', label: 'Semua status' }, { value: 'draft', label: 'Draft' }, { value: 'publik', label: 'Published' }]} />
               <TimeFilter filter={logFilter} set={setLogFilter} />
               <SortSelect value={sort} onChange={setSort} />
             </FilterBar>
@@ -7763,8 +9956,8 @@ async function submitHadir(e) {
               <div>
                 <label className={labelCls}>Jenis media {editGalId ? null : <span className="text-red-500">*</span>}</label>
                 <div className="mt-1.5 flex gap-2">
-                  <button type="button" onClick={function () { setGalMode('foto') }} className={'px-3 py-1.5 rounded-xl text-xs font-bold ' + (galMode !== 'video' ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600')}>Foto</button>
-                  <button type="button" onClick={function () { setGalMode('video') }} className={'px-3 py-1.5 rounded-xl text-xs font-bold ' + (galMode === 'video' ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600')}>Video</button>
+                  <button type="button" onClick={function () { setGalMode('foto') }} className={'px-3 py-1.5 rounded-xl text-xs font-bold ' + (galMode !== 'video' ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700')}>Foto</button>
+                  <button type="button" onClick={function () { setGalMode('video') }} className={'px-3 py-1.5 rounded-xl text-xs font-bold ' + (galMode === 'video' ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700')}>Video</button>
                 </div>
                 <div className="mt-1.5">
                   {galMode === 'video' ? (
@@ -7779,7 +9972,8 @@ async function submitHadir(e) {
                           }} />
                       </div>
                       {ytQuota.remaining <= 0 ? <p className="text-xs text-red-600">Kuota habis. Gunakan link video di bawah.</p> : null}
-                      <input className={inputCls} value={galYtLink} onChange={function (e) { setGalYtLink(e.target.value) }} placeholder="Atau tempel link video eksternal" />
+                      <input className={inputCls} value={galYtLink} onChange={function (e) { setGalYtLink(e.target.value) }} placeholder="Link video YouTube untuk tampilan (opsional)" />
+                       <input className={inputCls} value={galDriveLink} onChange={function (e) { setGalDriveLink(e.target.value) }} placeholder="Link Google Drive untuk unduhan (opsional)" />
                     </div>
                   ) : (
                     <FileInput accept="image/*" fileName={galForm.file ? galForm.file.name : ''}

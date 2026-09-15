@@ -1,5 +1,6 @@
 import { createPortal } from 'react-dom'
 import PemutarVideo from './PemutarVideo.jsx'
+import { drivePreviewUrl, driveDownloadUrl, driveThumbUrl } from '../lib/drive.js'
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { SizedIcon } from './icons.jsx'
 function useBodyScrollLock(active) {
@@ -46,7 +47,7 @@ export function StatusBadge(props) {
   const publik = props.status === 'publik'
   return (
     <span className={'px-3 py-1 rounded-full text-xs font-semibold ' + (publik ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800')}>
-      {publik ? 'Siap dilihat' : 'Draft'}
+      {publik ? 'Published' : 'Draft'}
     </span>
   )
 }
@@ -167,12 +168,47 @@ Batal
 }
 
 
+export function MediaDrive(props) {
+  const [gagal, setGagal] = useState(false)
+  useEffect(function () {
+    setGagal(false)
+  }, [props.driveId])
+  if (gagal) {
+    return (
+      <div className={'grid place-items-center bg-gradient-to-br from-slate-800 to-slate-900 ' + (props.className || 'absolute inset-0 h-full w-full')}>
+        <div className="flex flex-col items-center gap-2 text-slate-300">
+          <span className="grid h-12 w-12 place-items-center rounded-full bg-white/10">
+            <SizedIcon name="image" size={22} />
+          </span>
+          <p className="px-2 text-center text-[11px] font-semibold">Video Google Drive</p>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <img
+      src={driveThumbUrl(props.driveId)}
+      alt={props.alt || 'Video Google Drive'}
+      onClick={props.onClick || undefined}
+      onError={function () { setGagal(true) }}
+      className={(props.className || 'absolute inset-0 h-full w-full object-cover') + (props.onClick ? ' cursor-zoom-in' : '')}
+    />
+  )
+}
 export function Lightbox(props) {
   useBodyScrollLock(true)
   const [busyUnduh, setBusyUnduh] = useState(false)
+  const [tutup, setTutup] = useState(false)
+  const sedangTutup = useRef(false)
+  function mintaTutup() {
+    if (sedangTutup.current) return
+    sedangTutup.current = true
+    setTutup(true)
+    setTimeout(function () { props.onClose() }, 200)
+  }
   useEffect(function () {
     function onKey(e) {
-      if (e.key === 'Escape') props.onClose()
+      if (e.key === 'Escape') mintaTutup()
     }
     document.addEventListener('keydown', onKey)
     return function () { document.removeEventListener('keydown', onKey) }
@@ -180,19 +216,37 @@ export function Lightbox(props) {
   async function unduh() {
     if (busyUnduh) return
     setBusyUnduh(true)
-    let nama = 'media'
+    if (props.driveId) {
       try {
-        const urlAsli = new URL(props.src)
-        const ekstensi = urlAsli.pathname.split('.').pop().split('?')[0] || 'jpg'
-        if (props.title && props.title.trim()) {
-          const judulAman = props.title.trim().replace(/[\/\\:*?"<>|]/g, '').replace(/\s+/g, '-').substring(0, 60)
-          nama = judulAman + '.' + ekstensi
-        } else {
-          nama = urlAsli.pathname.split('/').pop() || ('media.' + ekstensi)
-        }
-      } catch (e) {
-        nama = (props.title || 'media') + '.jpg'
+        const nama = (props.title ? props.title.replace(/[\/\\:*?"<>|]/g, '').replace(/\s+/g, '-').substring(0, 60) : 'video-' + props.driveId) + '.mp4'
+        const a = document.createElement('a')
+        a.href = driveDownloadUrl(props.driveId)
+        a.download = nama
+        a.target = '_blank'
+        a.rel = 'noopener noreferrer'
+        a.style.display = 'none'
+        document.body.appendChild(a)
+        a.click()
+        setTimeout(function () { a.remove() }, 1000)
+      } catch (err) {
+        window.open(driveDownloadUrl(props.driveId), '_blank')
       }
+      setBusyUnduh(false)
+      return
+    }
+    let nama = 'media'
+    try {
+      const urlAsli = new URL(props.src)
+      const ekstensi = urlAsli.pathname.split('.').pop().split('?')[0] || 'jpg'
+      if (props.title && props.title.trim()) {
+        const judulAman = props.title.trim().replace(/[\/\\:*?"<>|]/g, '').replace(/\s+/g, '-').substring(0, 60)
+        nama = judulAman + '.' + ekstensi
+      } else {
+        nama = urlAsli.pathname.split('/').pop() || ('media.' + ekstensi)
+      }
+    } catch (e) {
+      nama = (props.title || 'media') + '.jpg'
+    }
     try {
       const urlUnduh = props.src + (props.src.includes('?') ? '&' : '?') + 'unduh=1'
       const res = await fetch(urlUnduh, { cache: 'no-store' })
@@ -211,9 +265,10 @@ export function Lightbox(props) {
     }
     setBusyUnduh(false)
   }
+  const tombolUnduhTerlihat = !!props.driveId || !props.youtubeId
   return createPortal(
-    <div className="anim-overlay fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/95 p-4" onClick={props.onClose}>
-      <div className="relative w-full max-w-5xl" onClick={function (e) { e.stopPropagation() }}>
+    <div className={'anim-overlay fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/95 p-4' + (tutup ? ' lightbox-tutup' : '')} onClick={mintaTutup}>
+      <div className="lightbox-isi relative w-full max-w-5xl" onClick={function (e) { e.stopPropagation() }}>
         {props.youtubeId ? (
           <PemutarVideo key={props.youtubeId} youtubeId={props.youtubeId} title={props.title || 'Video'} className="mx-auto aspect-video w-full rounded-2xl" />
         ) : props.type === 'video' ? (
@@ -222,7 +277,7 @@ export function Lightbox(props) {
           <img
             src={props.src}
             alt={props.title || 'Media'}
-            onClick={props.onClose}
+            onClick={mintaTutup}
             className="mx-auto max-h-[85vh] w-auto max-w-full cursor-zoom-out rounded-2xl object-contain"
           />
         )}
@@ -231,10 +286,10 @@ export function Lightbox(props) {
       <div className="absolute right-4 top-4 flex gap-2">
         <button
           type="button"
-          title={busyUnduh ? 'Menyiapkan unduhan...' : 'Unduh media'}
+          title={busyUnduh ? 'Menyiapkan unduhan...' : (props.driveId ? 'Unduh video dari Google Drive' : 'Unduh media')}
           onClick={unduh}
           disabled={busyUnduh}
-          style={props.youtubeId ? { display: 'none' } : undefined}
+          style={tombolUnduhTerlihat ? undefined : { display: 'none' }}
           className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20 disabled:opacity-50"
         >
           <SizedIcon name="download" size={18} />
@@ -242,17 +297,18 @@ export function Lightbox(props) {
         <button
           type="button"
           title="Tutup (Esc)"
-          onClick={props.onClose}
+          onClick={mintaTutup}
           className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
         >
           <SizedIcon name="close" size={18} />
         </button>
       </div>
-      <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-slate-400">Klik media atau tekan Esc untuk menutup</p>
+      <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-slate-400">
+        {props.driveId ? 'Video diputar dari YouTube, unduhan diambil dari Google Drive' : 'Klik media atau tekan Esc untuk menutup'}
+      </p>
     </div>
   , document.body)
 }
-
 export function ZoomableMedia(props) {
   const [open, setOpen] = useState(false)
   const isVideo = props.type === 'video'

@@ -17,8 +17,16 @@ export function ThemeProvider(props) {
   return (
     <ThemeContext.Provider value={{ dark: dark, toggle: function () {
 const ganti = function () { setDark(function (d) { return !d }) }
-if (document.startViewTransition && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) document.startViewTransition(ganti)
-else ganti()
+if (document.startViewTransition && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  const akar = document.documentElement
+  const vt = document.startViewTransition(function () {
+    akar.classList.add('vt-tema')
+    ganti()
+  })
+  const lepas = function () { akar.classList.remove('vt-tema') }
+  vt.finished.then(lepas, lepas)
+  setTimeout(lepas, 600)
+} else ganti()
 } }}>
       {props.children}
     </ThemeContext.Provider>

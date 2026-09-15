@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { ICONS } from './icons.jsx'
 import { CustomSelect, CustomDateInput } from './controls.jsx'
 
@@ -51,6 +52,15 @@ export function TimeFilter(props) {
 }
 
 export function FilterBar(props) {
+  const [settled, setSettled] = useState(false)
+  useEffect(function () {
+    if (props.open) {
+      const t = setTimeout(function () { setSettled(true) }, 400)
+      return function () { clearTimeout(t) }
+    }
+    setSettled(false)
+    return undefined
+  }, [props.open])
   return (
     <div className="rounded-3xl border border-slate-200 bg-white p-4 lg:p-5 shadow-sm">
       <div className="flex items-center justify-between gap-3">
@@ -69,15 +79,17 @@ export function FilterBar(props) {
             : <span className="inline-flex items-center gap-2"><span className="text-slate-400">{ICONS.funnel}</span><span>Belum ada filter aktif</span></span>}
         </div>
       </div>
-      <div className={props.open ? 'anim-page mt-4' : 'hidden xl:block xl:mt-4'}>
-        <div className="flex flex-wrap items-center gap-3">
-          {props.children}
-          {props.activeCount > 0 ? (
-            <button onClick={props.onReset}
-              className="inline-flex items-center gap-2 rounded-2xl bg-red-50 border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100">
-              {ICONS.close}<span>Reset</span>
-            </button>
-          ) : null}
+            <div className={'filter-wrap' + (props.open ? ' filter-wrap-buka' : '')}>
+        <div className={'filter-dalam' + (props.open && settled ? ' filter-dalam-santai' : '')}>
+          <div className="filter-isi flex flex-wrap items-center gap-3">
+            {props.children}
+            {props.activeCount > 0 ? (
+              <button onClick={props.onReset}
+                className="inline-flex items-center gap-2 rounded-2xl bg-red-50 border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100">
+                {ICONS.close}<span>Reset</span>
+              </button>
+            ) : null}
+          </div>
         </div>
       </div>
     </div>

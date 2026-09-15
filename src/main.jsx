@@ -21,11 +21,33 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     track.appendChild(thumb)
     document.body.appendChild(track)
     let timer = null
-    function sembunyikan() { track.classList.remove('aktif') }
+    let sumber = null
+    let watchdog = null
+    function stopWatchdog() {
+      if (watchdog) { clearInterval(watchdog); watchdog = null }
+    }
+    function mulaiWatchdog() {
+      if (watchdog) return
+      watchdog = setInterval(function () {
+        if (!track.classList.contains('aktif')) { stopWatchdog(); return }
+        if (sumber) {
+          if (!sumber.isConnected || sumber.scrollHeight - sumber.clientHeight <= 4) {
+            sembunyikan()
+            sumber = null
+            stopWatchdog()
+          }
+        } else if (document.documentElement.scrollHeight - window.innerHeight <= 4) {
+          sembunyikan()
+          stopWatchdog()
+        }
+      }, 90)
+    }
+    function sembunyikan() { track.classList.remove('aktif'); stopWatchdog() }
     function tampilkan() {
       track.classList.add('aktif')
       if (timer) clearTimeout(timer)
-      timer = setTimeout(sembunyikan, 900)
+      timer = setTimeout(sembunyikan, 400)
+      mulaiWatchdog()
     }
     function ukur(el, adalahWindow, rect) {
       const scrollTop = adalahWindow ? (window.scrollY || document.documentElement.scrollTop) : el.scrollTop
@@ -34,23 +56,25 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       const selisih = scrollHeight - clientHeight
       if (selisih <= 4) { sembunyikan(); return }
       const ratio = clientHeight / scrollHeight
-      const trackTinggi = rect.height - 8
-      const thumbTinggi = Math.max(36, trackTinggi * ratio)
+      const trackTinggi = rect.height - 6
+      const thumbTinggi = Math.max(24, trackTinggi * ratio)
       const maxTop = trackTinggi - thumbTinggi
       let gerak = scrollTop / selisih
       if (gerak < 0) gerak = 0
       if (gerak > 1) gerak = 1
       thumb.style.height = thumbTinggi + 'px'
-      thumb.style.transform = 'translateY(' + (4 + gerak * maxTop) + 'px)'
+      thumb.style.transform = 'translateY(' + (3 + gerak * maxTop) + 'px)'
       track.style.top = rect.top + 'px'
       track.style.height = rect.height + 'px'
-      track.style.right = (window.innerWidth - rect.right + 3) + 'px'
+      track.style.right = (window.innerWidth - rect.right + 2) + 'px'
     }
     function onScroll(e) {
       const t = e.target
       if (t === document || t === document.documentElement || t === window || !t || t.nodeType !== 1) {
+        sumber = null
         ukur(null, true, { top: 0, height: window.innerHeight, right: window.innerWidth })
       } else {
+        sumber = t
         const r = t.getBoundingClientRect()
         ukur(t, false, { top: r.top, height: r.height, right: r.right })
       }

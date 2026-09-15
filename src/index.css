@@ -26,7 +26,7 @@ button:active, a:active, .clickable:active { transform: scale(.97); }
 .carousel-track { display: flex; height: 100%; transition: transform .5s ease; }
 .carousel-slide { position: relative; flex: 0 0 100%; height: 100%; }
 .carousel-slide img, .carousel-slide video { position: absolute; inset: 0; width: 100%; height: 100%; background: #020617; }
-.media-carousel button:active { transform: translateY(-50%) scale(.97); }
+.media-carousel button:active { transform: scale(.97); }
 
 /* ===== Filter ===== */
 .filter-input-wrap { position: relative; display: inline-flex; align-items: center; }
@@ -412,19 +412,19 @@ html { scroll-behavior: smooth; }
 }
 #scroll-indicator {
   position: fixed;
-  right: 3px;
+  right: 2px;
   top: 0;
-  width: 8px;
+  width: 4px;
   z-index: 95;
   border-radius: 9999px;
   opacity: 0;
-  transition: opacity 0.25s ease;
+  transition: opacity 0.18s ease;
   pointer-events: none;
 }
 #scroll-indicator.aktif { opacity: 1; }
 #scroll-thumb {
-  width: 6px;
-  margin-left: 1px;
+  width: 3px;
+  margin-left: 0.5px;
   border-radius: 9999px;
   background: rgba(100, 116, 139, 0.55);
 }
@@ -508,3 +508,100 @@ to { opacity: 1; transform: translateX(0) scale(1); }
 
 /* footer-ramping: ruang bawah halaman dirapatkan supaya footer slim terasa pas */
 main { padding-bottom: 2.5rem !important; }
+
+/* menu-mobile-v2: tinggi menu diinterpolasi persis lewat grid rows, transisi bisa dipotong di tengah jadi terasa halus seperti aplikasi native */
+.menu-mobile-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.36s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.menu-mobile-wrap.menu-mobile-buka { grid-template-rows: 1fr; }
+.menu-mobile-dalam {
+  overflow: hidden;
+  min-height: 0;
+  visibility: hidden;
+  transition: visibility 0.36s;
+}
+.menu-mobile-buka .menu-mobile-dalam { visibility: visible; }
+.menu-mobile-isi {
+  opacity: 0;
+  transform: translateY(-8px);
+  transition: opacity 0.2s ease, transform 0.24s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.menu-mobile-buka .menu-mobile-isi {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.34s ease 0.08s, transform 0.4s cubic-bezier(0.32, 0.72, 0, 1) 0.05s;
+}
+
+/* filter-mobile-v1: panel filter mengembang dan merapat mulus di mobile dan tablet, tiap kontrol muncul berurutan */
+.filter-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.36s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.filter-wrap-buka { grid-template-rows: 1fr; }
+.filter-dalam {
+  overflow: hidden;
+  min-height: 0;
+  visibility: hidden;
+  transition: visibility 0.36s;
+}
+.filter-wrap-buka .filter-dalam { visibility: visible; }
+/* fix-filter-dropdown: clip dilepas setelah panel selesai mengembang supaya dropdown dan date picker bebas keluar panel seperti semula */
+.filter-dalam-santai { overflow: visible; }
+.filter-isi {
+  margin-top: 1rem;
+  opacity: 0;
+  transform: translateY(-8px);
+  transition: opacity 0.2s ease, transform 0.24s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.filter-wrap-buka .filter-isi {
+  opacity: 1;
+  transform: none;
+  transition: opacity 0.34s ease 0.06s, transform 0.4s cubic-bezier(0.32, 0.72, 0, 1) 0.04s;
+}
+.filter-isi > * {
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity 0.16s ease, transform 0.2s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.filter-wrap-buka .filter-isi > * {
+  opacity: 1;
+  transform: none;
+}
+.filter-wrap-buka .filter-isi > *:nth-child(1) { transition-delay: 0.08s; }
+.filter-wrap-buka .filter-isi > *:nth-child(2) { transition-delay: 0.14s; }
+.filter-wrap-buka .filter-isi > *:nth-child(3) { transition-delay: 0.2s; }
+.filter-wrap-buka .filter-isi > *:nth-child(4) { transition-delay: 0.26s; }
+.filter-wrap-buka .filter-isi > *:nth-child(5) { transition-delay: 0.32s; }
+.filter-wrap-buka .filter-isi > *:nth-child(6) { transition-delay: 0.38s; }
+@media (min-width: 1280px) {
+  .filter-wrap { grid-template-rows: 1fr; }
+  .filter-dalam { visibility: visible; overflow: visible; }
+  .filter-isi { opacity: 1; transform: none; }
+  .filter-isi > * { opacity: 1; transform: none; transition: none; }
+}
+
+/* transisi-tema-v4: capture snapshot bersih, navbar tidak berkedip dan tepi layar tidak menyala putih saat crossfade */
+.vt-tema, .vt-tema *, .vt-tema *::before, .vt-tema *::after {
+  transition: none !important;
+}
+.vt-tema [class*="backdrop-blur"] {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* lightbox-anim-v1: masuk keluar lightbox mulus, keluar memakai animasi mundur sebelum dilepas */
+@keyframes lightboxIn {
+  from { opacity: 0; transform: scale(0.96) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes lightboxOut {
+  from { opacity: 1; transform: scale(1) translateY(0); }
+  to { opacity: 0; transform: scale(0.96) translateY(8px); }
+}
+.lightbox-isi { animation: lightboxIn 0.28s cubic-bezier(0.16, 1, 0.3, 1); }
+.lightbox-tutup { pointer-events: none; }
+.lightbox-tutup.anim-overlay { animation: overlayFadeOut 0.2s ease-in forwards; }
+.lightbox-tutup .lightbox-isi { animation: lightboxOut 0.2s ease-in forwards; }
