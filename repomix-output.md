@@ -83,24 +83,6 @@ supabase/
   schema.sql
 .env.example
 .gitignore
-apply-animasi-filter-mobile.cjs
-apply-animasi-menu-mobile.cjs
-apply-batal-edit-pindah-tab.cjs
-apply-fitur-drive-download.cjs
-apply-fitur-video-drive.cjs
-apply-fix-galeri-drive.cjs
-apply-fix-logbookdetail-drive.cjs
-apply-fix-skeleton-ekspor.cjs
-apply-fix-tahun-footer.cjs
-apply-fix-toggle-dark.cjs
-apply-footer-ramping.cjs
-apply-menu-mobile-halus-v2.cjs
-apply-placeholder-drive.cjs
-apply-scroll-ke-form.cjs
-apply-scrollbar-tipis.cjs
-apply-skeleton-ui-baru.cjs
-apply-status-published.cjs
-apply-transisi-tema-v3.cjs
 index.html
 package.json
 postcss.config.js
@@ -113,1939 +95,6 @@ vite.config.js
 ```
 
 # Files
-
-## File: src/lib/drive.js
-```javascript
-export function parseDriveId(url) {
-  if (!url) return null
-  const s = String(url).trim()
-
-  if (/^[a-zA-Z0-9_-]{20,}$/.test(s) && s.indexOf('/') === -1 && s.indexOf('.') === -1) return s
-
-  try {
-    const u = new URL(s)
-    const host = u.hostname.replace('www.', '')
-
-    if (host === 'drive.google.com' || host === 'drive.usercontent.google.com') {
-      const m = u.pathname.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)
-      if (m) return m[1]
-      const id = u.searchParams.get('id')
-      if (id) return id
-    }
-  } catch (e) {}
-
-  return null
-}
-
-export function drivePreviewUrl(id) {
-  return 'https://drive.google.com/file/d/' + id + '/preview'
-}
-
-export function driveThumbUrl(id) {
-  return 'https://drive.google.com/thumbnail?id=' + id + '&sz=w1280'
-}
-
-export function driveDownloadUrl(id) {
-  return 'https://drive.usercontent.google.com/download?id=' + id + '&export=download&confirm=t'
-}
-
-export function driveViewUrl(id) {
-  return 'https://drive.google.com/file/d/' + id + '/view'
-}
-```
-
-## File: supabase/migrasi-drive-download.sql
-```sql
--- Migrasi fitur download Google Drive
--- Jalankan SQL ini di Supabase Dashboard > SQL Editor
--- jika kolom drive_id belum ada.
-
-alter table public.logbook_items add column if not exists drive_id text;
-alter table public.galeri add column if not exists drive_id text;
-```
-
-## File: apply-animasi-filter-mobile.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-function ada(rel) { return fs.existsSync(path.join(root, rel)) }
-
-console.log('Mulai memasang animasi panel filter mobile dan tablet...')
-console.log('')
-
-/* ===== 1. FilterBar.jsx: bungkus panel dengan struktur filter-wrap, filter-dalam, filter-isi ===== */
-const FILE_F = 'src/components/FilterBar.jsx'
-if (!ada(FILE_F)) {
-  console.log('[GAGAL] FilterBar.jsx tidak ditemukan')
-  process.exit(1)
-}
-let f = baca(FILE_F)
-
-const BLOK_BARU = `      <div className={'filter-wrap' + (props.open ? ' filter-wrap-buka' : '')}>
-        <div className="filter-dalam">
-          <div className="filter-isi flex flex-wrap items-center gap-3">
-            {props.children}
-            {props.activeCount > 0 ? (
-              <button onClick={props.onReset}
-                className="inline-flex items-center gap-2 rounded-2xl bg-red-50 border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100">
-                {ICONS.close}<span>Reset</span>
-              </button>
-            ) : null}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-`
-
-if (f.includes('filter-wrap')) {
-  console.log('[SUDAH ADA] Struktur filter-wrap di FilterBar.jsx')
-} else {
-  const mulai = f.indexOf("<div className={props.open ? 'anim-page mt-4' : 'hidden xl:block xl:mt-4'}>")
-  const akhir = f.indexOf('export function SortSelect', mulai)
-  if (mulai !== -1 && akhir !== -1) {
-    f = f.slice(0, mulai) + BLOK_BARU + f.slice(akhir)
-    simpan(FILE_F, f)
-    console.log('[BERHASIL] Panel filter dibungkus struktur animasi filter-wrap')
-  } else {
-    console.log('[TIDAK KETEMU] Blok panel filter di FilterBar.jsx')
-  }
-}
-
-/* ===== 2. index.css: aturan expand collapse plus kemunculan berurutan tiap kontrol ===== */
-const FILE_CSS = 'src/index.css'
-const CSS_BLOK = `/* filter-mobile-v1: panel filter mengembang dan merapat mulus di mobile dan tablet, tiap kontrol muncul berurutan */
-.filter-wrap {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows 0.36s cubic-bezier(0.32, 0.72, 0, 1);
-}
-.filter-wrap-buka { grid-template-rows: 1fr; }
-.filter-dalam {
-  overflow: hidden;
-  min-height: 0;
-  visibility: hidden;
-  transition: visibility 0.36s;
-}
-.filter-wrap-buka .filter-dalam { visibility: visible; }
-.filter-isi {
-  margin-top: 1rem;
-  opacity: 0;
-  transform: translateY(-8px);
-  transition: opacity 0.2s ease, transform 0.24s cubic-bezier(0.32, 0.72, 0, 1);
-}
-.filter-wrap-buka .filter-isi {
-  opacity: 1;
-  transform: translateY(0);
-  transition: opacity 0.34s ease 0.06s, transform 0.4s cubic-bezier(0.32, 0.72, 0, 1) 0.04s;
-}
-.filter-isi > * {
-  opacity: 0;
-  transform: translateY(-6px);
-  transition: opacity 0.16s ease, transform 0.2s cubic-bezier(0.32, 0.72, 0, 1);
-}
-.filter-wrap-buka .filter-isi > * {
-  opacity: 1;
-  transform: translateY(0);
-}
-.filter-wrap-buka .filter-isi > *:nth-child(1) { transition-delay: 0.08s; }
-.filter-wrap-buka .filter-isi > *:nth-child(2) { transition-delay: 0.14s; }
-.filter-wrap-buka .filter-isi > *:nth-child(3) { transition-delay: 0.2s; }
-.filter-wrap-buka .filter-isi > *:nth-child(4) { transition-delay: 0.26s; }
-.filter-wrap-buka .filter-isi > *:nth-child(5) { transition-delay: 0.32s; }
-.filter-wrap-buka .filter-isi > *:nth-child(6) { transition-delay: 0.38s; }
-@media (min-width: 1280px) {
-  .filter-wrap { grid-template-rows: 1fr; }
-  .filter-dalam { visibility: visible; }
-  .filter-isi { opacity: 1; transform: none; }
-  .filter-isi > * { opacity: 1; transform: none; transition: none; }
-}
-`
-if (!ada(FILE_CSS)) {
-  console.log('[LEWATI] index.css tidak ditemukan')
-} else {
-  let css = baca(FILE_CSS)
-  if (css.includes('filter-mobile-v1')) {
-    console.log('[SUDAH ADA] CSS filter-mobile-v1 di index.css')
-  } else {
-    simpan(FILE_CSS, css.trimEnd() + '\n\n' + CSS_BLOK)
-    console.log('[BERHASIL] CSS animasi panel filter ditambahkan di index.css')
-  }
-}
-
-/* ===== 3. Verifikasi ===== */
-console.log('')
-console.log('Verifikasi:')
-const f2 = baca(FILE_F)
-const c2 = ada(FILE_CSS) ? baca(FILE_CSS) : ''
-console.log((f2.includes('filter-wrap') ? '[OK] ' : '[BELUM] ') + 'Struktur filter-wrap terpasang di FilterBar.jsx')
-console.log((f2.includes('filter-dalam') && f2.includes('filter-isi') ? '[OK] ' : '[BELUM] ') + 'Lapisan dalam dan isi panel tersedia')
-console.log((!f2.includes("anim-page mt-4") ? '[OK] ' : '[BELUM] ') + 'Kelas lama anim-page dan hidden xl:block sudah diganti')
-console.log((c2.includes('filter-mobile-v1') ? '[OK] ' : '[BELUM] ') + 'CSS filter-mobile-v1 tersedia')
-console.log((c2.includes('.filter-wrap-buka .filter-isi > *:nth-child(1)') ? '[OK] ' : '[BELUM] ') + 'Kemunculan berurutan tiap kontrol tersedia')
-console.log((c2.includes('@media (min-width: 1280px)') ? '[OK] ' : '[BELUM] ') + 'Desktop tetap terbuka penuh tanpa animasi')
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Cara kerja animasi baru:')
-console.log('1. Div pembungkus panel kini memakai grid rows 0fr ke 1fr, jadi saat tombol Filter diketuk panel mengembang dari tinggi nol sampai tinggi aslinya dengan perlambatan alami, bukan muncul sekonyongkonyong.')
-console.log('2. Saat ditutup, tinggi panel merapat kembali ke nol sambil isi memudar, sehingga tidak ada lompatan layout pada kartu di bawahnya.')
-console.log('3. Seluruh isi panel memudar dan bergeser turun lembut sebagai satu kesatuan dengan kurva yang sama seperti menu mobile yang kamu suka.')
-console.log('4. Setiap kontrol di dalamnya, yaitu filter mahasiswa atau kegiatan, filter kategori, pilihan bulan atau rentang waktu, sortir, sampai tombol Reset, muncul berurutan dengan jeda 60 milidetik sehingga terasa mengalir dari kiri ke kanan.')
-console.log('5. Saat panel menutup, semua kontrol memudar cepat dalam 160 milidetik tanpa jeda, jadi gerakan keluar terasa tegas dan tidak bertele tele.')
-console.log('6. Transisi bisa dipotong di tengah: mengetuk tombol Filter saat panel masih setengah terbuka akan membalikkan gerakan dari posisi terakhir, persis seperti menu mobile v2.')
-console.log('7. Di layar lebar 1280 piksel ke atas, panel tetap selalu terbuka dan seluruh animasi dimatikan lewat media query, jadi tampilan desktop tidak berubah sama sekali.')
-console.log('8. Pengguna dengan preferensi reduce motion tetap mendapat perilaku instan karena aturan global proyek memotong durasi transisi.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Persempit jendela di bawah 1280 piksel lalu buka halaman Logbook, Galeri, Daftar Hadir, atau dashboard.')
-console.log('2. Ketuk tombol Filter: panel mengembang mulus dan kontrol filter serta sortir muncul berurutan dari kiri ke kanan.')
-console.log('3. Ketuk tombol Filter lagi saat panel masih bergerak: gerakan berbalik mulus dari posisi terakhir tanpa lompatan.')
-console.log('4. Tutup panel sepenuhnya: tinggi merapat ke nol dan kontrol memudar cepat, kartu di bawahnya tidak melompat.')
-console.log('5. Ganti mode waktu antara Bulan dan Rentang Waktu saat panel terbuka: animasi FLIP yang sudah ada tetap bekerja normal di dalam panel.')
-console.log('6. Lebarkan jendela ke ukuran desktop: panel langsung terbuka penuh tanpa animasi dan tanpa jarak yang berubah.')
-```
-
-## File: apply-animasi-menu-mobile.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-function ada(rel) { return fs.existsSync(path.join(root, rel)) }
-
-console.log('Mulai memasang animasi smooth untuk menu navigasi mobile dan tablet...')
-console.log('')
-
-/* ===== 1. Layout.jsx: komponen MenuMobile dengan mount bertahan saat animasi keluar ===== */
-const FILE_L = 'src/components/Layout.jsx'
-if (!ada(FILE_L)) {
-  console.log('[GAGAL] Layout.jsx tidak ditemukan')
-  process.exit(1)
-}
-let l = baca(FILE_L)
-let berubahL = false
-
-if (l.includes("import { useEffect, useState } from 'react'")) {
-  console.log('[SUDAH ADA] Impor useEffect di Layout.jsx')
-} else if (l.includes("import { useState } from 'react'")) {
-  l = l.replace("import { useState } from 'react'", "import { useEffect, useState } from 'react'")
-  berubahL = true
-  console.log('[BERHASIL] Impor useEffect ditambahkan di Layout.jsx')
-} else {
-  console.log('[TIDAK KETEMU] Impor useState di Layout.jsx')
-}
-
-const KOMPONEN = `function MenuMobile(props) {
-  const [tampil, setTampil] = useState(props.open)
-  const tutup = tampil && !props.open
-  useEffect(function () {
-    if (props.open) { setTampil(true); return undefined }
-    if (!tampil) return undefined
-    const t = setTimeout(function () { setTampil(false) }, 240)
-    return function () { clearTimeout(t) }
-  }, [props.open, tampil])
-  if (!tampil) return null
-  return (
-    <div className={'menu-mobile xl:hidden border-t border-slate-200 bg-white px-4 py-4 space-y-2' + (tutup ? ' menu-mobile-tutup' : '')}>
-      {props.children}
-    </div>
-  )
-}
-`
-
-if (l.includes('function MenuMobile(')) {
-  console.log('[SUDAH ADA] Komponen MenuMobile di Layout.jsx')
-} else if (l.includes('export default function Layout() {')) {
-  l = l.replace('export default function Layout() {', KOMPONEN + 'export default function Layout() {')
-  berubahL = true
-  console.log('[BERHASIL] Komponen MenuMobile ditambahkan di Layout.jsx')
-} else {
-  console.log('[TIDAK KETEMU] Anchor export default function Layout')
-}
-
-const BUKA_LAMA = "        {open ? (\n          <div className=\"xl:hidden border-t border-slate-200 bg-white px-4 py-4 space-y-2\">"
-const BUKA_BARU = "        <MenuMobile open={open}>"
-if (l.includes('<MenuMobile open={open}>')) {
-  console.log('[SUDAH ADA] Pembuka menu memakai MenuMobile')
-} else if (l.includes(BUKA_LAMA)) {
-  l = l.replace(BUKA_LAMA, BUKA_BARU)
-  berubahL = true
-  console.log('[BERHASIL] Pembuka menu mobile diganti menjadi MenuMobile')
-} else {
-  console.log('[TIDAK KETEMU] Pola pembuka menu mobile di Layout.jsx')
-}
-
-const TUTUP_LAMA = "          </div>\n        ) : null}\n      </header>"
-const TUTUP_BARU = "        </MenuMobile>\n      </header>"
-if (l.includes('</MenuMobile>')) {
-  console.log('[SUDAH ADA] Penutup menu memakai MenuMobile')
-} else if (l.includes(TUTUP_LAMA)) {
-  l = l.replace(TUTUP_LAMA, TUTUP_BARU)
-  berubahL = true
-  console.log('[BERHASIL] Penutup menu mobile diganti menjadi MenuMobile')
-} else {
-  console.log('[TIDAK KETEMU] Pola penutup menu mobile di Layout.jsx')
-}
-
-if (berubahL) simpan(FILE_L, l)
-
-/* ===== 2. index.css: keyframes animasi masuk dan keluar menu ===== */
-const FILE_CSS = 'src/index.css'
-const CSS_BLOK = `/* menu-mobile-v1: animasi buka tutup menu navigasi mobile dan tablet, tinggi ikut mengembang dan merapat */
-@keyframes menuMobileIn {
-  from { opacity: 0; transform: translateY(-12px); max-height: 0; }
-  to { opacity: 1; transform: translateY(0); max-height: 30rem; }
-}
-@keyframes menuMobileOut {
-  from { opacity: 1; transform: translateY(0); max-height: 30rem; }
-  to { opacity: 0; transform: translateY(-12px); max-height: 0; }
-}
-.menu-mobile {
-  overflow: hidden;
-  animation: menuMobileIn 0.28s cubic-bezier(0.22, 1, 0.36, 1);
-}
-.menu-mobile-tutup {
-  pointer-events: none;
-  animation: menuMobileOut 0.24s ease-in forwards;
-}
-@keyframes menuMobileItem {
-  from { opacity: 0; transform: translateY(-6px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-.menu-mobile > * { animation: menuMobileItem 0.3s cubic-bezier(0.22, 1, 0.36, 1) backwards; }
-.menu-mobile > *:nth-child(1) { animation-delay: 0.04s; }
-.menu-mobile > *:nth-child(2) { animation-delay: 0.08s; }
-.menu-mobile > *:nth-child(3) { animation-delay: 0.12s; }
-.menu-mobile > *:nth-child(4) { animation-delay: 0.16s; }
-.menu-mobile > *:nth-child(5) { animation-delay: 0.2s; }
-.menu-mobile > *:nth-child(6) { animation-delay: 0.24s; }
-.menu-mobile > *:nth-child(7) { animation-delay: 0.28s; }
-.menu-mobile-tutup > * { animation: none; }
-`
-if (!ada(FILE_CSS)) {
-  console.log('[LEWATI] index.css tidak ditemukan')
-} else {
-  let css = baca(FILE_CSS)
-  if (css.includes('menu-mobile-v1')) {
-    console.log('[SUDAH ADA] CSS animasi menu mobile di index.css')
-  } else {
-    simpan(FILE_CSS, css.trimEnd() + '\n\n' + CSS_BLOK)
-    console.log('[BERHASIL] CSS animasi menu mobile ditambahkan di index.css')
-  }
-}
-
-/* ===== 3. Verifikasi ===== */
-console.log('')
-console.log('Verifikasi:')
-const l2 = baca(FILE_L)
-const css2 = ada(FILE_CSS) ? baca(FILE_CSS) : ''
-console.log((l2.includes("import { useEffect, useState } from 'react'") ? '[OK] ' : '[BELUM] ') + 'Impor useEffect tersedia di Layout.jsx')
-console.log((l2.includes('function MenuMobile(') ? '[OK] ' : '[BELUM] ') + 'Komponen MenuMobile tersedia')
-console.log((l2.includes('<MenuMobile open={open}>') ? '[OK] ' : '[BELUM] ') + 'Menu mobile dibungkus MenuMobile')
-console.log((l2.includes('</MenuMobile>') ? '[OK] ' : '[BELUM] ') + 'Penutup MenuMobile terpasang')
-console.log((css2.includes('menu-mobile-v1') ? '[OK] ' : '[BELUM] ') + 'Keyframes animasi menu tersedia di index.css')
-console.log((css2.includes('.menu-mobile-tutup') ? '[OK] ' : '[BELUM] ') + 'Kelas animasi keluar tersedia')
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Cara kerja animasi baru:')
-console.log('1. Saat tombol Menu diketuk, wadah menu mengembang dari tinggi nol sambil memudar masuk dan bergeser turun lembut, sehingga tidak lagi muncul sekonyongkonyong.')
-console.log('2. Tiap tautan di dalamnya muncul berurutan dengan jeda 40 milidetik, memberi efek mengalir dari atas ke bawah seperti menu aplikasi modern.')
-console.log('3. Saat menu ditutup, tinggi wadah merapat kembali ke nol sambil memudar keluar, jadi konten halaman di bawah header tidak melompat tiba tiba.')
-console.log('4. Elemen menu sengaja dibiarkan terpasang 240 milidetik selama animasi keluar lewat komponen MenuMobile, pola yang sama dengan Modal dan panel dropdown yang sudah ada.')
-console.log('5. Selama animasi keluar, pointer events dimatikan supaya tautan tidak sengaja terklik saat menu sedang menghilang.')
-console.log('6. Pengguna dengan preferensi reduce motion tetap mendapat perilaku instan karena aturan global proyek sudah memotong durasi semua animasi.')
-console.log('7. Mode gelap tidak terpengaruh karena warna latar dan garis pemisah menu tetap memakai kelas bawaan yang sudah punya pengganti gelap.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Persempit jendela browser di bawah 1280 piksel atau buka di ponsel sehingga tombol Menu terlihat.')
-console.log('2. Ketuk tombol Menu: panel navigasi mengembang mulus dengan tautan muncul berurutan.')
-console.log('3. Ketuk tombol Menu lagi: panel merapat ke atas sambil memudar, lalu hilang tanpa membuat halaman melompat.')
-console.log('4. Buka tutup berulang dengan cepat: animasi tidak menumpuk karena state tampil dikendalikan satu timer.')
-console.log('5. Uji dalam mode gelap: warna menu menyesuaikan dan animasinya tetap sama halusnya.')
-```
-
-## File: apply-fitur-drive-download.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-function ada(rel) { return fs.existsSync(path.join(root, rel)) }
-
-console.log('Mulai memasang fitur: YouTube untuk tampilan, Google Drive untuk download...')
-console.log('')
-
-/* ============================================================
-   1. Buat file SQL migrasi sebagai pengingat
-   ============================================================ */
-const SQL_MIGRASI = `-- Migrasi fitur download Google Drive
--- Jalankan SQL ini di Supabase Dashboard > SQL Editor
--- jika kolom drive_id belum ada.
-
-alter table public.logbook_items add column if not exists drive_id text;
-alter table public.galeri add column if not exists drive_id text;
-`
-simpan('supabase/migrasi-drive-download.sql', SQL_MIGRASI)
-console.log('[BERHASIL] File supabase/migrasi-drive-download.sql dibuat')
-console.log('[PENTING] Jalankan SQL tersebut di Supabase SQL Editor untuk menambah kolom drive_id')
-console.log('')
-
-/* ============================================================
-   2. Pastikan src/lib/drive.js tersedia
-   ============================================================ */
-const FILE_DRIVE = 'src/lib/drive.js'
-if (!ada(FILE_DRIVE)) {
-  const ISI_DRIVE = String.raw`export function parseDriveId(url) {
-  if (!url) return null
-  const s = String(url).trim()
-  if (/^[a-zA-Z0-9_-]{20,}$/.test(s) && s.indexOf('/') === -1 && s.indexOf('.') === -1) return s
-  try {
-    const u = new URL(s)
-    const host = u.hostname.replace('www.', '')
-    if (host === 'drive.google.com' || host === 'drive.usercontent.google.com') {
-      const m = u.pathname.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)
-      if (m) return m[1]
-      const id = u.searchParams.get('id')
-      if (id) return id
-    }
-  } catch (e) {}
-  return null
-}
-
-export function driveDownloadUrl(id) {
-  return 'https://drive.usercontent.google.com/download?id=' + id + '&export=download&confirm=t'
-}
-
-export function driveViewUrl(id) {
-  return 'https://drive.google.com/file/d/' + id + '/view'
-}
-`
-  simpan(FILE_DRIVE, ISI_DRIVE)
-  console.log('[BERHASIL] src/lib/drive.js dibuat')
-} else {
-  console.log('[SUDAH ADA] src/lib/drive.js')
-}
-
-/* ============================================================
-   3. cards.jsx: slidesFromItems meneruskan drive_id
-   ============================================================ */
-const FILE_CARDS = 'src/components/cards.jsx'
-if (ada(FILE_CARDS)) {
-  let c = baca(FILE_CARDS)
-  let berubah = false
-
-  // Cari fungsi slidesFromItems dan ganti seluruhnya
-  const mulaiFn = c.indexOf('export function slidesFromItems(items) {')
-  if (mulaiFn !== -1) {
-    // Cari akhir fungsi (tanda } yang menutup fungsi)
-    let brace = 0
-    let akhir = -1
-    let mulaiBrace = false
-    for (let i = mulaiFn; i < c.length; i++) {
-      if (c[i] === '{') { brace++; mulaiBrace = true }
-      if (c[i] === '}') { brace--; if (mulaiBrace && brace === 0) { akhir = i + 1; break } }
-    }
-    if (akhir !== -1) {
-      const baru = `export function slidesFromItems(items) {
-  return (items || []).filter(function (i) { return i.media_path }).map(function (i) {
-    return { src: i.media_thumb || i.media_path, full: i.media_path, type: i.media_source === 'youtube' ? 'foto' : i.media_type, title: i.judul, yt: i.youtube_id || null, drive: i.drive_id || null }
-  })
-}`
-      c = c.slice(0, mulaiFn) + baru + c.slice(akhir)
-      berubah = true
-      console.log('[BERHASIL] slidesFromItems meneruskan drive_id dari database')
-    } else {
-      console.log('[TIDAK KETEMU] Akhir fungsi slidesFromItems')
-    }
-  } else {
-    console.log('[TIDAK KETEMU] Fungsi slidesFromItems')
-  }
-
-  if (berubah) simpan(FILE_CARDS, c)
-} else {
-  console.log('[GAGAL] cards.jsx tidak ditemukan')
-}
-
-/* ============================================================
-   4. ui.jsx: Lightbox memakai driveId untuk download
-   ============================================================ */
-const FILE_UI = 'src/components/ui.jsx'
-if (ada(FILE_UI)) {
-  let u = baca(FILE_UI)
-  let berubah = false
-
-  // Pastikan import drive ada
-  if (u.indexOf("from '../lib/drive.js'") === -1) {
-    const anchor = "import PemutarVideo from './PemutarVideo.jsx'"
-    const idx = u.indexOf(anchor)
-    if (idx !== -1) {
-      u = u.slice(0, idx) + anchor + "\nimport { driveDownloadUrl } from '../lib/drive.js'" + u.slice(idx + anchor.length)
-      berubah = true
-      console.log('[BERHASIL] Import driveDownloadUrl ditambahkan di ui.jsx')
-    }
-  } else {
-    console.log('[SUDAH ADA] Import helper Drive di ui.jsx')
-  }
-
-  // Ganti Lightbox agar driveId dipakai untuk download, bukan preview
-  const mulaiLightbox = u.indexOf('export function Lightbox(props) {')
-  const mulaiZoom = u.indexOf('export function ZoomableMedia(props) {')
-  if (mulaiLightbox !== -1 && mulaiZoom !== -1 && mulaiZoom > mulaiLightbox) {
-    const LIGHTBOX_BARU = String.raw`export function Lightbox(props) {
-  useBodyScrollLock(true)
-  const [busyUnduh, setBusyUnduh] = useState(false)
-  useEffect(function () {
-    function onKey(e) {
-      if (e.key === 'Escape') props.onClose()
-    }
-    document.addEventListener('keydown', onKey)
-    return function () { document.removeEventListener('keydown', onKey) }
-  }, [])
-  async function unduh() {
-    if (busyUnduh) return
-    setBusyUnduh(true)
-    if (props.driveId) {
-      try {
-        const nama = (props.title ? props.title.replace(/[\/\\:*?"<>|]/g, '').replace(/\s+/g, '-').substring(0, 60) : 'video-' + props.driveId) + '.mp4'
-        const a = document.createElement('a')
-        a.href = driveDownloadUrl(props.driveId)
-        a.download = nama
-        a.target = '_blank'
-        a.rel = 'noopener noreferrer'
-        a.style.display = 'none'
-        document.body.appendChild(a)
-        a.click()
-        setTimeout(function () { a.remove() }, 1000)
-      } catch (err) {
-        window.open(driveDownloadUrl(props.driveId), '_blank')
-      }
-      setBusyUnduh(false)
-      return
-    }
-    let nama = 'media'
-    try {
-      const urlAsli = new URL(props.src)
-      const ekstensi = urlAsli.pathname.split('.').pop().split('?')[0] || 'jpg'
-      if (props.title && props.title.trim()) {
-        const judulAman = props.title.trim().replace(/[\/\\:*?"<>|]/g, '').replace(/\s+/g, '-').substring(0, 60)
-        nama = judulAman + '.' + ekstensi
-      } else {
-        nama = urlAsli.pathname.split('/').pop() || ('media.' + ekstensi)
-      }
-    } catch (e) {
-      nama = (props.title || 'media') + '.jpg'
-    }
-    try {
-      const urlUnduh = props.src + (props.src.includes('?') ? '&' : '?') + 'unduh=1'
-      const res = await fetch(urlUnduh, { cache: 'no-store' })
-      if (!res.ok) throw new Error('status ' + res.status)
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = nama
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      setTimeout(function () { URL.revokeObjectURL(url) }, 2000)
-    } catch (err) {
-      window.open(props.src, '_blank')
-    }
-    setBusyUnduh(false)
-  }
-  const tombolUnduhTerlihat = !!props.driveId || !props.youtubeId
-  return createPortal(
-    <div className="anim-overlay fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/95 p-4" onClick={props.onClose}>
-      <div className="relative w-full max-w-5xl" onClick={function (e) { e.stopPropagation() }}>
-        {props.youtubeId ? (
-          <PemutarVideo key={props.youtubeId} youtubeId={props.youtubeId} title={props.title || 'Video'} className="mx-auto aspect-video w-full rounded-2xl" />
-        ) : props.type === 'video' ? (
-          <video src={props.src} controls autoPlay className="mx-auto max-h-[85vh] w-full rounded-2xl bg-slate-900 object-contain" />
-        ) : (
-          <img
-            src={props.src}
-            alt={props.title || 'Media'}
-            onClick={props.onClose}
-            className="mx-auto max-h-[85vh] w-auto max-w-full cursor-zoom-out rounded-2xl object-contain"
-          />
-        )}
-        {props.title ? <p className="mt-3 truncate text-center text-sm text-slate-300">{props.title}</p> : null}
-      </div>
-      <div className="absolute right-4 top-4 flex gap-2">
-        <button
-          type="button"
-          title={busyUnduh ? 'Menyiapkan unduhan...' : (props.driveId ? 'Unduh video dari Google Drive' : 'Unduh media')}
-          onClick={unduh}
-          disabled={busyUnduh}
-          style={tombolUnduhTerlihat ? undefined : { display: 'none' }}
-          className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20 disabled:opacity-50"
-        >
-          <SizedIcon name="download" size={18} />
-        </button>
-        <button
-          type="button"
-          title="Tutup (Esc)"
-          onClick={props.onClose}
-          className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
-        >
-          <SizedIcon name="close" size={18} />
-        </button>
-      </div>
-      <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-slate-400">
-        {props.driveId ? 'Video diputar dari YouTube, unduhan diambil dari Google Drive' : 'Klik media atau tekan Esc untuk menutup'}
-      </p>
-    </div>
-  , document.body)
-}
-`
-    u = u.slice(0, mulaiLightbox) + LIGHTBOX_BARU + u.slice(mulaiZoom)
-    berubah = true
-    console.log('[BERHASIL] Lightbox memakai driveId untuk download, preview tetap YouTube')
-  } else {
-    console.log('[TIDAK KETEMU] Blok Lightbox di ui.jsx')
-  }
-
-  if (berubah) simpan(FILE_UI, u)
-} else {
-  console.log('[GAGAL] ui.jsx tidak ditemukan')
-}
-
-/* ============================================================
-   5. DashboardPage.jsx: simpan dan muat drive_id
-   ============================================================ */
-const FILE_DASH = 'src/pages/DashboardPage.jsx'
-if (ada(FILE_DASH)) {
-  let d = baca(FILE_DASH)
-  let berubah = false
-
-  // 5a. Hapus branch drive lama di submitLogbook yang mengubah mediaSource
-  const branchDriveLog = "} else if (it.mode === 'video' && it.driveLink && !it.file && !it.ytLink) {\n           const driveId = parseDriveId(it.driveLink)\n           if (!driveId) { toast.gagal('Link Google Drive tidak valid pada kegiatan ' + (i + 1) + '.'); setBusy(false); return }\n           mediaSource = 'drive'\n           youtubeId = null\n           mediaPath = driveId\n           mediaThumb = driveThumbUrl(driveId)\n           mediaType = 'video'\n         } else if (it.mode === 'video' && it.file) {"
-  if (d.indexOf(branchDriveLog) !== -1) {
-    d = d.replace(branchDriveLog, "} else if (it.mode === 'video' && it.file) {")
-    berubah = true
-    console.log('[BERHASIL] Branch drive lama di submitLogbook dihapus')
-  } else {
-    console.log('[INFO] Branch drive lama submitLogbook tidak ditemukan atau sudah dihapus')
-  }
-
-  // 5b. Hapus branch drive lama di submitGaleri
-  const branchDriveGal = "} else if (galMode === 'video' && galDriveLink && !galForm.file && !galYtLink) {\n         const driveId = parseDriveId(galDriveLink)\n         if (!driveId) { toast.gagal('Link Google Drive tidak valid.'); setBusy(false); return }\n         mediaSource = 'drive'\n         youtubeId = null\n         mediaPath = driveId\n         mediaThumb = driveThumbUrl(driveId)\n         mediaType = 'video'\n       } else if (galMode === 'video' && galForm.file) {"
-  if (d.indexOf(branchDriveGal) !== -1) {
-    d = d.replace(branchDriveGal, "} else if (galMode === 'video' && galForm.file) {")
-    berubah = true
-    console.log('[BERHASIL] Branch drive lama di submitGaleri dihapus')
-  } else {
-    console.log('[INFO] Branch drive lama submitGaleri tidak ditemukan atau sudah dihapus')
-  }
-
-  // 5c. Tambahkan logika drive_id di submitLogbook (sebelum clean.push)
-  const anchorPushLog = "clean.push({ judul: it.judul.trim(), deskripsi: it.deskripsi.trim(), hasil: it.hasil.trim(), media_path: mediaPath, media_type: mediaType, media_thumb: mediaThumb, media_source: mediaSource, youtube_id: youtubeId, show_in_gallery: it.show && !!mediaPath })"
-  if (d.indexOf(anchorPushLog) !== -1 && d.indexOf('drive_id: driveIdLog') === -1) {
-    const baruPushLog = "let driveIdLog = null\n         if (it.mode === 'video' && it.driveLink) {\n           driveIdLog = parseDriveId(it.driveLink)\n           if (!driveIdLog) { toast.gagal('Link Google Drive tidak valid pada kegiatan ' + (i + 1) + '.'); setBusy(false); return }\n         }\n         clean.push({ judul: it.judul.trim(), deskripsi: it.deskripsi.trim(), hasil: it.hasil.trim(), media_path: mediaPath, media_type: mediaType, media_thumb: mediaThumb, media_source: mediaSource, youtube_id: youtubeId, drive_id: driveIdLog, show_in_gallery: it.show && !!mediaPath })"
-    d = d.replace(anchorPushLog, baruPushLog)
-    berubah = true
-    console.log('[BERHASIL] submitLogbook menyimpan drive_id')
-  } else {
-    console.log('[INFO] clean.push submitLogbook sudah ada atau tidak ditemukan')
-  }
-
-  // 5d. Tambahkan drive_id di rows insert logbook_items
-  const anchorRowsLog = "return { logbook_id: logId, urutan: idx + 1, judul: c.judul, deskripsi: c.deskripsi, hasil: c.hasil, media_path: c.media_path, media_type: c.media_type, media_thumb: c.media_thumb, media_source: c.media_source, youtube_id: c.youtube_id, show_in_gallery: c.show_in_gallery }"
-  if (d.indexOf(anchorRowsLog) !== -1 && d.indexOf('drive_id: c.drive_id') === -1) {
-    d = d.replace(anchorRowsLog, "return { logbook_id: logId, urutan: idx + 1, judul: c.judul, deskripsi: c.deskripsi, hasil: c.hasil, media_path: c.media_path, media_type: c.media_type, media_thumb: c.media_thumb, media_source: c.media_source, youtube_id: c.youtube_id, drive_id: c.drive_id, show_in_gallery: c.show_in_gallery }")
-    berubah = true
-    console.log('[BERHASIL] Insert logbook_items menyertakan drive_id')
-  }
-
-  // 5e. Tambahkan logika drive_id di submitGaleri (sebelum payload)
-  const anchorPayloadGal = "const payload = {\n         mahasiswa_id: mahasiswa.id,"
-  if (d.indexOf(anchorPayloadGal) !== -1 && d.indexOf('drive_id: driveIdGal') === -1) {
-    const baruPayloadGal = "let driveIdGal = null\n       if (galMode === 'video' && galDriveLink) {\n         driveIdGal = parseDriveId(galDriveLink)\n         if (!driveIdGal) { toast.gagal('Link Google Drive tidak valid.'); setBusy(false); return }\n       }\n       const payload = {\n         mahasiswa_id: mahasiswa.id,"
-    d = d.replace(anchorPayloadGal, baruPayloadGal)
-    berubah = true
-    console.log('[BERHASIL] submitGaleri memproses drive_id')
-  }
-
-  // 5f. Tambahkan drive_id di payload galeri
-  const anchorPayloadField = "media_source: mediaSource,\n         youtube_id: youtubeId\n       }"
-  if (d.indexOf(anchorPayloadField) !== -1 && d.indexOf('drive_id: driveIdGal') === -1) {
-    d = d.replace(anchorPayloadField, "media_source: mediaSource,\n         youtube_id: youtubeId,\n         drive_id: driveIdGal\n       }")
-    berubah = true
-    console.log('[BERHASIL] Payload galeri menyertakan drive_id')
-  }
-
-  // 5g. Update startEditLog agar memuat driveLink dari drive_id
-  const anchorEditLogDrive = "driveLink: it.media_source === 'drive' ? driveViewUrl(it.media_path) : ''"
-  if (d.indexOf(anchorEditLogDrive) !== -1) {
-    d = d.replace(anchorEditLogDrive, "driveLink: it.drive_id ? driveViewUrl(it.drive_id) : ''")
-    berubah = true
-    console.log('[BERHASIL] startEditLog memuat driveLink dari drive_id')
-  } else {
-    console.log('[INFO] Pola driveLink startEditLog tidak ditemukan atau sudah diubah')
-  }
-
-  // 5h. Update startEditGal agar memuat driveLink dari drive_id
-  const anchorEditGalDrive = "setGalDriveLink(g.media_source === 'drive' ? driveViewUrl(g.media_path) : '')"
-  if (d.indexOf(anchorEditGalDrive) !== -1) {
-    d = d.replace(anchorEditGalDrive, "setGalDriveLink(g.drive_id ? driveViewUrl(g.drive_id) : '')")
-    berubah = true
-    console.log('[BERHASIL] startEditGal memuat driveLink dari drive_id')
-  } else {
-    console.log('[INFO] Pola driveLink startEditGal tidak ditemukan atau sudah diubah')
-  }
-
-  if (berubah) simpan(FILE_DASH, d)
-} else {
-  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
-}
-
-/* ============================================================
-   6. Verifikasi
-   ============================================================ */
-console.log('')
-console.log('Verifikasi:')
-const vCards = ada(FILE_CARDS) ? baca(FILE_CARDS) : ''
-const vUi = ada(FILE_UI) ? baca(FILE_UI) : ''
-const vDash = ada(FILE_DASH) ? baca(FILE_DASH) : ''
-console.log((vCards.indexOf('drive: i.drive_id || null') !== -1 ? '[OK] ' : '[BELUM] ') + 'slidesFromItems meneruskan drive_id')
-console.log((vUi.indexOf('props.driveId') !== -1 && vUi.indexOf('driveDownloadUrl(props.driveId)') !== -1 ? '[OK] ' : '[BELUM] ') + 'Lightbox memakai driveId untuk download')
-console.log((vDash.indexOf('drive_id: driveIdLog') !== -1 ? '[OK] ' : '[BELUM] ') + 'submitLogbook menyimpan drive_id')
-console.log((vDash.indexOf('drive_id: driveIdGal') !== -1 ? '[OK] ' : '[BELUM] ') + 'submitGaleri menyimpan drive_id')
-console.log((vDash.indexOf('it.drive_id ? driveViewUrl(it.drive_id)') !== -1 ? '[OK] ' : '[BELUM] ') + 'startEditLog memuat dari drive_id')
-
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Cara kerja fitur ini:')
-console.log('1. Tampilan video di web sepenuhnya dari YouTube embed, tidak berubah.')
-console.log('2. Google Drive hanya sebagai sumber tombol download file asli.')
-console.log('3. Di dashboard, pilih mode Video, isi link YouTube untuk tampilan, lalu isi link Google Drive pada field opsional untuk unduhan.')
-console.log('4. Di halaman publik, video diputar lewat YouTube. Saat lightbox dibuka, tombol download muncul jika ada link Drive.')
-console.log('5. Klik tombol download: file diunduh dari Google Drive dengan bypass peringatan virus untuk file di atas 100 MB.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Jalankan SQL migrasi di Supabase SQL Editor untuk menambah kolom drive_id.')
-console.log('2. Buka dashboard, buat kegiatan dengan mode Video, isi link YouTube dan link Google Drive.')
-console.log('3. Simpan, buka halaman publik: video tampil sebagai YouTube player.')
-console.log('4. Klik video hingga masuk lightbox, lalu klik tombol unduh: file asli terunduh dari Google Drive.')
-```
-
-## File: apply-fitur-video-drive.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-function ada(rel) { return fs.existsSync(path.join(root, rel)) }
-
-function ganti(teks, lama, baru) {
-  const i = teks.indexOf(lama)
-  if (i === -1) return null
-  return teks.slice(0, i) + baru + teks.slice(i + lama.length)
-}
-function gantiSemua(teks, lama, baru) {
-  return teks.split(lama).join(baru)
-}
-
-console.log('Mulai memasang fitur video Google Drive (download resolusi asli + bypass peringatan virus)...')
-console.log('')
-
-/* ============================================================
-   1. Buat file baru src/lib/drive.js
-   ============================================================ */
-const FILE_DRIVE = 'src/lib/drive.js'
-const ISI_DRIVE = String.raw`export function parseDriveId(url) {
-  if (!url) return null
-  const s = String(url).trim()
-
-  if (/^[a-zA-Z0-9_-]{20,}$/.test(s) && s.indexOf('/') === -1 && s.indexOf('.') === -1) return s
-
-  try {
-    const u = new URL(s)
-    const host = u.hostname.replace('www.', '')
-
-    if (host === 'drive.google.com' || host === 'drive.usercontent.google.com') {
-      const m = u.pathname.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)
-      if (m) return m[1]
-      const id = u.searchParams.get('id')
-      if (id) return id
-    }
-  } catch (e) {}
-
-  return null
-}
-
-export function drivePreviewUrl(id) {
-  return 'https://drive.google.com/file/d/' + id + '/preview'
-}
-
-export function driveThumbUrl(id) {
-  return 'https://drive.google.com/thumbnail?id=' + id + '&sz=w1280'
-}
-
-export function driveDownloadUrl(id) {
-  return 'https://drive.usercontent.google.com/download?id=' + id + '&export=download&confirm=t'
-}
-
-export function driveViewUrl(id) {
-  return 'https://drive.google.com/file/d/' + id + '/view'
-}
-`
-simpan(FILE_DRIVE, ISI_DRIVE)
-console.log('[BERHASIL] src/lib/drive.js dibuat (parseDriveId, preview, thumbnail, download bypass, view)')
-
-/* ============================================================
-   2. src/components/ui.jsx  (import + MediaDrive + Lightbox)
-   ============================================================ */
-const FILE_UI = 'src/components/ui.jsx'
-if (!ada(FILE_UI)) {
-  console.log('[GAGAL] ui.jsx tidak ditemukan')
-} else {
-  let u = baca(FILE_UI)
-  let berubahUi = false
-
-  if (u.indexOf("from '../lib/drive.js'") === -1) {
-    const anchor = "import PemutarVideo from './PemutarVideo.jsx'"
-    const hasil = ganti(u, anchor, anchor + "\nimport { drivePreviewUrl, driveDownloadUrl, driveThumbUrl } from '../lib/drive.js'")
-    if (hasil) { u = hasil; berubahUi = true; console.log('[BERHASIL] Import helper Drive ditambahkan di ui.jsx') }
-    else console.log('[TIDAK KETEMU] Anchor import PemutarVideo di ui.jsx')
-  } else {
-    console.log('[SUDAH ADA] Import helper Drive di ui.jsx')
-  }
-
-  if (u.indexOf('export function MediaDrive') === -1) {
-    const mulaiLightbox = u.indexOf('export function Lightbox(props) {')
-    const mulaiZoom = u.indexOf('export function ZoomableMedia(props) {')
-    if (mulaiLightbox !== -1 && mulaiZoom !== -1 && mulaiZoom > mulaiLightbox) {
-      const BLOK = String.raw`export function MediaDrive(props) {
-  const [gagal, setGagal] = useState(false)
-  useEffect(function () {
-    setGagal(false)
-  }, [props.driveId])
-  if (gagal) {
-    return (
-      <div className={'grid place-items-center bg-gradient-to-br from-slate-800 to-slate-900 ' + (props.className || 'absolute inset-0 h-full w-full')}>
-        <div className="flex flex-col items-center gap-2 text-slate-300">
-          <span className="grid h-12 w-12 place-items-center rounded-full bg-white/10">
-            <SizedIcon name="image" size={22} />
-          </span>
-          <p className="px-2 text-center text-[11px] font-semibold">Video Google Drive</p>
-        </div>
-      </div>
-    )
-  }
-  return (
-    <img
-      src={driveThumbUrl(props.driveId)}
-      alt={props.alt || 'Video Google Drive'}
-      onClick={props.onClick || undefined}
-      onError={function () { setGagal(true) }}
-      className={(props.className || 'absolute inset-0 h-full w-full object-cover') + (props.onClick ? ' cursor-zoom-in' : '')}
-    />
-  )
-}
-export function Lightbox(props) {
-  useBodyScrollLock(true)
-  const [busyUnduh, setBusyUnduh] = useState(false)
-  useEffect(function () {
-    function onKey(e) {
-      if (e.key === 'Escape') props.onClose()
-    }
-    document.addEventListener('keydown', onKey)
-    return function () { document.removeEventListener('keydown', onKey) }
-  }, [])
-  async function unduh() {
-    if (busyUnduh) return
-    setBusyUnduh(true)
-    if (props.driveId) {
-      try {
-        const nama = (props.title ? props.title.replace(/[\/\\:*?"<>|]/g, '').replace(/\s+/g, '-').substring(0, 60) : 'video-' + props.driveId) + '.mp4'
-        const a = document.createElement('a')
-        a.href = driveDownloadUrl(props.driveId)
-        a.download = nama
-        a.target = '_blank'
-        a.rel = 'noopener noreferrer'
-        a.style.display = 'none'
-        document.body.appendChild(a)
-        a.click()
-        setTimeout(function () { a.remove() }, 1000)
-      } catch (err) {
-        window.open(driveDownloadUrl(props.driveId), '_blank')
-      }
-      setBusyUnduh(false)
-      return
-    }
-    let nama = 'media'
-    try {
-      const urlAsli = new URL(props.src)
-      const ekstensi = urlAsli.pathname.split('.').pop().split('?')[0] || 'jpg'
-      if (props.title && props.title.trim()) {
-        const judulAman = props.title.trim().replace(/[\/\\:*?"<>|]/g, '').replace(/\s+/g, '-').substring(0, 60)
-        nama = judulAman + '.' + ekstensi
-      } else {
-        nama = urlAsli.pathname.split('/').pop() || ('media.' + ekstensi)
-      }
-    } catch (e) {
-      nama = (props.title || 'media') + '.jpg'
-    }
-    try {
-      const urlUnduh = props.src + (props.src.includes('?') ? '&' : '?') + 'unduh=1'
-      const res = await fetch(urlUnduh, { cache: 'no-store' })
-      if (!res.ok) throw new Error('status ' + res.status)
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = nama
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      setTimeout(function () { URL.revokeObjectURL(url) }, 2000)
-    } catch (err) {
-      window.open(props.src, '_blank')
-    }
-    setBusyUnduh(false)
-  }
-  return createPortal(
-    <div className="anim-overlay fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/95 p-4" onClick={props.onClose}>
-      <div className="relative w-full max-w-5xl" onClick={function (e) { e.stopPropagation() }}>
-        {props.driveId ? (
-          <iframe
-            key={props.driveId}
-            src={drivePreviewUrl(props.driveId)}
-            title={props.title || 'Video Google Drive'}
-            allow="autoplay; encrypted-media; fullscreen"
-            allowFullScreen
-            className="mx-auto aspect-video w-full rounded-2xl border-0 bg-black"
-          />
-        ) : props.youtubeId ? (
-          <PemutarVideo key={props.youtubeId} youtubeId={props.youtubeId} title={props.title || 'Video'} className="mx-auto aspect-video w-full rounded-2xl" />
-        ) : props.type === 'video' ? (
-          <video src={props.src} controls autoPlay className="mx-auto max-h-[85vh] w-full rounded-2xl bg-slate-900 object-contain" />
-        ) : (
-          <img
-            src={props.src}
-            alt={props.title || 'Media'}
-            onClick={props.onClose}
-            className="mx-auto max-h-[85vh] w-auto max-w-full cursor-zoom-out rounded-2xl object-contain"
-          />
-        )}
-        {props.title ? <p className="mt-3 truncate text-center text-sm text-slate-300">{props.title}</p> : null}
-      </div>
-      <div className="absolute right-4 top-4 flex gap-2">
-        <button
-          type="button"
-          title={busyUnduh ? 'Menyiapkan unduhan...' : (props.driveId ? 'Unduh video resolusi asli dari Google Drive' : 'Unduh media')}
-          onClick={unduh}
-          disabled={busyUnduh}
-          style={props.youtubeId ? { display: 'none' } : undefined}
-          className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20 disabled:opacity-50"
-        >
-          <SizedIcon name="download" size={18} />
-        </button>
-        <button
-          type="button"
-          title="Tutup (Esc)"
-          onClick={props.onClose}
-          className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
-        >
-          <SizedIcon name="close" size={18} />
-        </button>
-      </div>
-      <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-slate-400">
-        {props.driveId ? 'Klik tombol unduh untuk menyimpan video resolusi asli dari Google Drive' : 'Klik media atau tekan Esc untuk menutup'}
-      </p>
-    </div>
-  , document.body)
-}
-`
-      u = u.slice(0, mulaiLightbox) + BLOK + u.slice(mulaiZoom)
-      berubahUi = true
-      console.log('[BERHASIL] Komponen MediaDrive dan Lightbox versi Drive dipasang di ui.jsx')
-    } else {
-      console.log('[TIDAK KETEMU] Blok Lightbox atau ZoomableMedia di ui.jsx')
-    }
-  } else {
-    console.log('[SUDAH ADA] MediaDrive di ui.jsx')
-  }
-
-  if (berubahUi) simpan(FILE_UI, u)
-}
-
-/* ============================================================
-   3. src/components/cards.jsx
-   ============================================================ */
-const FILE_CARDS = 'src/components/cards.jsx'
-if (!ada(FILE_CARDS)) {
-  console.log('[GAGAL] cards.jsx tidak ditemukan')
-} else {
-  let c = baca(FILE_CARDS)
-  let berubahCards = false
-
-  if (c.indexOf('MediaDrive') === -1) {
-    let h = ganti(c, 'SmartFit , MediaYouTube } from \'./ui.jsx\'', 'SmartFit , MediaYouTube, MediaDrive } from \'./ui.jsx\'')
-    if (h) { c = h; berubahCards = true }
-    else console.log('[TIDAK KETEMU] Import ui.jsx di cards.jsx')
-  }
-  if (c.indexOf('drivePreviewUrl') === -1) {
-    const anchor = "from '../lib/format.js'"
-    const h = ganti(c, anchor, anchor + "\nimport { drivePreviewUrl, driveThumbUrl } from '../lib/drive.js'")
-    if (h) { c = h; berubahCards = true }
-    else console.log('[TIDAK KETEMU] Import format.js di cards.jsx')
-  } else {
-    console.log('[SUDAH ADA] Import helper Drive di cards.jsx')
-  }
-
-  const SLIDES_LAMA = "export function slidesFromItems(items) {\n  return (items || []).filter(function (i) { return i.media_path }).map(function (i) {\n    return { src: i.media_thumb || i.media_path, full: i.media_path, type: i.media_source === 'youtube' ? 'foto' : i.media_type, title: i.judul, yt: i.youtube_id || null }\n  })\n}"
-  const SLIDES_BARU = "export function slidesFromItems(items) {\n  return (items || []).filter(function (i) { return i.media_path }).map(function (i) {\n    const drive = i.media_source === 'drive' ? i.media_path : null\n    return { src: drive ? driveThumbUrl(i.media_path) : (i.media_thumb || i.media_path), full: i.media_path, type: (i.media_source === 'youtube' || i.media_source === 'drive') ? 'foto' : i.media_type, title: i.judul, yt: i.youtube_id || null, drive: drive }\n  })\n}"
-  if (c.indexOf('driveThumbUrl(i.media_path)') === -1) {
-    const h = ganti(c, SLIDES_LAMA, SLIDES_BARU)
-    if (h) { c = h; berubahCards = true; console.log('[BERHASIL] slidesFromItems mendukung media Drive') }
-    else console.log('[TIDAK KETEMU] Pola slidesFromItems di cards.jsx')
-  } else {
-    console.log('[SUDAH ADA] slidesFromItems mendukung Drive')
-  }
-
-  const GC_LAMA = "{item.media_source === 'youtube' ? (\n        <MediaYouTube src={item.media_path} alt={item.judul} />\n      ) : (\n        <SmartFit src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} alt={item.judul} />\n      )}"
-  const GC_BARU = "{item.media_source === 'youtube' ? (\n        <MediaYouTube src={item.media_path} alt={item.judul} />\n      ) : item.media_source === 'drive' ? (\n        <MediaDrive driveId={item.media_path} alt={item.judul} />\n      ) : (\n        <SmartFit src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} alt={item.judul} />\n      )}"
-  if (c.indexOf('<MediaDrive driveId={item.media_path}') === -1) {
-    const h = ganti(c, GC_LAMA, GC_BARU)
-    if (h) { c = h; berubahCards = true; console.log('[BERHASIL] GalleryCard mendukung thumbnail Drive') }
-    else console.log('[TIDAK KETEMU] Pola media GalleryCard di cards.jsx')
-  } else {
-    console.log('[SUDAH ADA] GalleryCard mendukung Drive')
-  }
-
-  const GD_LAMA = "{item.media_source === 'youtube' ? (\n        <PemutarVideo key={item.youtube_id} youtubeId={item.youtube_id} title={item.judul} className=\"aspect-video w-full rounded-2xl\" />\n      ) : (\n        <ZoomableMedia src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} title={item.judul} className=\"rounded-2xl overflow-hidden aspect-video bg-slate-900\" />\n      )}"
-  const GD_BARU = "{item.media_source === 'youtube' ? (\n        <PemutarVideo key={item.youtube_id} youtubeId={item.youtube_id} title={item.judul} className=\"aspect-video w-full rounded-2xl\" />\n      ) : item.media_source === 'drive' ? (\n        <iframe src={drivePreviewUrl(item.media_path)} title={item.judul} allow=\"autoplay; encrypted-media; fullscreen\" allowFullScreen className=\"aspect-video w-full rounded-2xl border-0 bg-black\" />\n      ) : (\n        <ZoomableMedia src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} title={item.judul} className=\"rounded-2xl overflow-hidden aspect-video bg-slate-900\" />\n      )}"
-  if (c.indexOf('drivePreviewUrl(item.media_path)') === -1) {
-    const h = ganti(c, GD_LAMA, GD_BARU)
-    if (h) { c = h; berubahCards = true; console.log('[BERHASIL] GalleryDetail mendukung pemutar Drive') }
-    else console.log('[TIDAK KETEMU] Pola media GalleryDetail di cards.jsx')
-  } else {
-    console.log('[SUDAH ADA] GalleryDetail mendukung Drive')
-  }
-
-  const LD_LAMA = "{it.media_path ? (\n                      it.media_source === 'youtube' ? (\n                        <PemutarVideo key={it.youtube_id} youtubeId={it.youtube_id} title={it.judul} className=\"aspect-video w-full rounded-2xl mb-3\" />\n                      ) : (\n                        <ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className=\"rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3\" />\n                      )\n                    ) : null}"
-  const LD_BARU = "{it.media_path ? (\n                      it.media_source === 'youtube' ? (\n                        <PemutarVideo key={it.youtube_id} youtubeId={it.youtube_id} title={it.judul} className=\"aspect-video w-full rounded-2xl mb-3\" />\n                      ) : it.media_source === 'drive' ? (\n                        <iframe key={it.media_path} src={drivePreviewUrl(it.media_path)} title={it.judul} allow=\"autoplay; encrypted-media; fullscreen\" allowFullScreen className=\"aspect-video w-full rounded-2xl border-0 bg-black mb-3\" />\n                      ) : (\n                        <ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className=\"rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3\" />\n                      )\n                    ) : null}"
-  if (c.indexOf('drivePreviewUrl(it.media_path)') === -1) {
-    const h = ganti(c, LD_LAMA, LD_BARU)
-    if (h) { c = h; berubahCards = true; console.log('[BERHASIL] LogbookDetail mendukung pemutar Drive') }
-    else console.log('[TIDAK KETEMU] Pola media LogbookDetail di cards.jsx')
-  } else {
-    console.log('[SUDAH ADA] LogbookDetail mendukung Drive')
-  }
-
-  if (berubahCards) simpan(FILE_CARDS, c)
-}
-
-/* ============================================================
-   4. src/components/Carousel.jsx
-   ============================================================ */
-const FILE_CAROUSEL = 'src/components/Carousel.jsx'
-if (!ada(FILE_CAROUSEL)) {
-  console.log('[GAGAL] Carousel.jsx tidak ditemukan')
-} else {
-  let r = baca(FILE_CAROUSEL)
-  let berubahCar = false
-
-  if (r.indexOf('MediaDrive') === -1) {
-    const h = ganti(r, "import { Lightbox, SmartFit } from './ui.jsx'", "import { Lightbox, SmartFit, MediaDrive } from './ui.jsx'")
-    if (h) { r = h; berubahCar = true; console.log('[BERHASIL] Import MediaDrive di Carousel.jsx') }
-    else console.log('[TIDAK KETEMU] Import ui.jsx di Carousel.jsx')
-  } else {
-    console.log('[SUDAH ADA] Import MediaDrive di Carousel.jsx')
-  }
-
-  if (r.indexOf('s.drive') === -1) {
-    const SINGLE_LAMA = "<SmartFit src={s.src} full={s.full} type={s.type} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} />"
-    const SINGLE_BARU = "{s.drive ? (\n            <MediaDrive driveId={s.drive} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} className=\"absolute inset-0 h-full w-full object-cover cursor-zoom-in\" />\n          ) : (\n            <SmartFit src={s.src} full={s.full} type={s.type} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} />\n          )}"
-    const h1 = ganti(r, SINGLE_LAMA, SINGLE_BARU)
-    if (h1) { r = h1; berubahCar = true; console.log('[BERHASIL] Carousel single slide mendukung Drive') }
-    else console.log('[TIDAK KETEMU] Pola single slide di Carousel.jsx')
-
-    const MULTI_LAMA = "<SmartFit\n                  src={s.src}\n                  full={s.full}\n                   type={s.type}\n                  alt={s.title || 'Media'}\n                  onClick={function () {\n                    if (moved.current) { moved.current = false; return }\n                    setZoom(s)\n                  }}\n                />"
-    const MULTI_BARU = "{s.drive ? (\n                  <MediaDrive driveId={s.drive} alt={s.title || 'Media'} onClick={function () { if (moved.current) { moved.current = false; return } setZoom(s) }} className=\"absolute inset-0 h-full w-full object-cover cursor-zoom-in\" />\n                ) : (\n                <SmartFit\n                  src={s.src}\n                  full={s.full}\n                   type={s.type}\n                  alt={s.title || 'Media'}\n                  onClick={function () {\n                    if (moved.current) { moved.current = false; return }\n                    setZoom(s)\n                  }}\n                />\n                )}"
-    const h2 = ganti(r, MULTI_LAMA, MULTI_BARU)
-    if (h2) { r = h2; berubahCar = true; console.log('[BERHASIL] Carousel multi slide mendukung Drive') }
-    else console.log('[TIDAK KETEMU] Pola multi slide di Carousel.jsx')
-  } else {
-    console.log('[SUDAH ADA] Carousel mendukung Drive')
-  }
-
-  if (r.indexOf('driveId={zoom.drive || null}') === -1) {
-    r = gantiSemua(r,
-      "<Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} onClose={function () { setZoom(null) }} />",
-      "<Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} driveId={zoom.drive || null} onClose={function () { setZoom(null) }} />")
-    berubahCar = true
-    console.log('[BERHASIL] Lightbox di Carousel menerima prop driveId')
-  } else {
-    console.log('[SUDAH ADA] Lightbox Carousel menerima driveId')
-  }
-
-  if (berubahCar) simpan(FILE_CAROUSEL, r)
-}
-
-/* ============================================================
-   5. src/pages/DashboardPage.jsx
-   ============================================================ */
-const FILE_DASH = 'src/pages/DashboardPage.jsx'
-if (!ada(FILE_DASH)) {
-  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
-} else {
-  let d = baca(FILE_DASH)
-  let berubahDash = false
-  function pasang(lama, baru, label) {
-    if (d.indexOf(baru) !== -1) { console.log('[SUDAH ADA] ' + label); return }
-    const h = ganti(d, lama, baru)
-    if (h) { d = h; berubahDash = true; console.log('[BERHASIL] ' + label) }
-    else console.log('[TIDAK KETEMU] ' + label)
-  }
-
-  pasang(
-    "import { parseYouTubeId, ytThumb, fetchYouTubeQuota, unggahVideoYouTube } from '../lib/youtube.js'",
-    "import { parseYouTubeId, ytThumb, fetchYouTubeQuota, unggahVideoYouTube } from '../lib/youtube.js'\nimport { parseDriveId, driveThumbUrl, driveViewUrl } from '../lib/drive.js'",
-    'Import helper Drive di DashboardPage'
-  )
-
-  pasang(
-    "ytLink: '', oldYtId: null, oldSource: 'r2' }",
-    "ytLink: '', oldYtId: null, oldSource: 'r2', driveLink: '' }",
-    'Field driveLink pada newItem'
-  )
-
-  pasang(
-    "const [galYtLink, setGalYtLink] = useState('')",
-    "const [galYtLink, setGalYtLink] = useState('')\n   const [galDriveLink, setGalDriveLink] = useState('')",
-    'State galDriveLink'
-  )
-
-  pasang(
-    '<input className={inputCls} value={it.ytLink} onChange={function (e) { patchItem(i, { ytLink: e.target.value }) }} placeholder="Atau tempel link video eksternal" />',
-    '<input className={inputCls} value={it.ytLink} onChange={function (e) { patchItem(i, { ytLink: e.target.value }) }} placeholder="Atau tempel link video eksternal" />\n                          <input className={inputCls} value={it.driveLink} onChange={function (e) { patchItem(i, { driveLink: e.target.value }) }} placeholder="Atau tempel link Google Drive (opsional)" />',
-    'Input Google Drive pada form kegiatan logbook'
-  )
-
-  pasang(
-    '<input className={inputCls} value={galYtLink} onChange={function (e) { setGalYtLink(e.target.value) }} placeholder="Atau tempel link video eksternal" />',
-    '<input className={inputCls} value={galYtLink} onChange={function (e) { setGalYtLink(e.target.value) }} placeholder="Atau tempel link video eksternal" />\n                       <input className={inputCls} value={galDriveLink} onChange={function (e) { setGalDriveLink(e.target.value) }} placeholder="Atau tempel link Google Drive (opsional)" />',
-    'Input Google Drive pada form galeri'
-  )
-
-  pasang(
-    "} else if (it.mode === 'video' && it.file) {",
-    "} else if (it.mode === 'video' && it.driveLink && !it.file && !it.ytLink) {\n           const driveId = parseDriveId(it.driveLink)\n           if (!driveId) { toast.gagal('Link Google Drive tidak valid pada kegiatan ' + (i + 1) + '.'); setBusy(false); return }\n           mediaSource = 'drive'\n           youtubeId = null\n           mediaPath = driveId\n           mediaThumb = driveThumbUrl(driveId)\n           mediaType = 'video'\n         } else if (it.mode === 'video' && it.file) {",
-    'Branch Drive pada submitLogbook'
-  )
-
-  pasang(
-    "} else if (galMode === 'video' && galForm.file) {",
-    "} else if (galMode === 'video' && galDriveLink && !galForm.file && !galYtLink) {\n         const driveId = parseDriveId(galDriveLink)\n         if (!driveId) { toast.gagal('Link Google Drive tidak valid.'); setBusy(false); return }\n         mediaSource = 'drive'\n         youtubeId = null\n         mediaPath = driveId\n         mediaThumb = driveThumbUrl(driveId)\n         mediaType = 'video'\n       } else if (galMode === 'video' && galForm.file) {",
-    'Branch Drive pada submitGaleri'
-  )
-
-  pasang(
-    "preview: it.media_path || '', oldPath: it.media_source === 'youtube' ? '' : (it.media_path || ''), oldThumb: it.media_source === 'youtube' ? '' : (it.media_thumb || ''), previewLoading: false, show: it.show_in_gallery, mode: it.media_source === 'youtube' ? 'video' : (it.media_type === 'video' ? 'video' : 'foto'), ytLink: it.media_source === 'youtube' && it.youtube_id ? 'https://youtu.be/' + it.youtube_id : '', oldYtId: it.youtube_id || null, oldSource: it.media_source || 'r2' }",
-    "preview: it.media_source === 'drive' ? driveThumbUrl(it.media_path) : (it.media_path || ''), oldPath: (it.media_source === 'youtube' || it.media_source === 'drive') ? '' : (it.media_path || ''), oldThumb: (it.media_source === 'youtube' || it.media_source === 'drive') ? '' : (it.media_thumb || ''), previewLoading: false, show: it.show_in_gallery, mode: (it.media_source === 'youtube' || it.media_source === 'drive') ? 'video' : (it.media_type === 'video' ? 'video' : 'foto'), ytLink: it.media_source === 'youtube' && it.youtube_id ? 'https://youtu.be/' + it.youtube_id : '', driveLink: it.media_source === 'drive' ? driveViewUrl(it.media_path) : '', oldYtId: it.youtube_id || null, oldSource: it.media_source || 'r2' }",
-    'startEditLog memuat kembali link Drive'
-  )
-
-  pasang(
-    "setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_path || '', oldPath: g.media_source === 'youtube' ? '' : (g.media_path || ''), oldThumb: g.media_source === 'youtube' ? '' : (g.media_thumb || ''), previewLoading: false })",
-    "setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_source === 'drive' ? driveThumbUrl(g.media_path) : (g.media_path || ''), oldPath: (g.media_source === 'youtube' || g.media_source === 'drive') ? '' : (g.media_path || ''), oldThumb: (g.media_source === 'youtube' || g.media_source === 'drive') ? '' : (g.media_thumb || ''), previewLoading: false })",
-    'startEditGal memuat thumbnail Drive'
-  )
-
-  pasang(
-    "setGalMode(g.media_source === 'youtube' ? 'video' : (g.media_type === 'video' ? 'video' : 'foto'))",
-    "setGalMode((g.media_source === 'youtube' || g.media_source === 'drive') ? 'video' : (g.media_type === 'video' ? 'video' : 'foto'))",
-    'startEditGal mengatur mode video untuk Drive'
-  )
-
-  pasang(
-    "setGalYtLink(g.media_source === 'youtube' && g.youtube_id ? 'https://youtu.be/' + g.youtube_id : '')",
-    "setGalYtLink(g.media_source === 'youtube' && g.youtube_id ? 'https://youtu.be/' + g.youtube_id : '')\n     setGalDriveLink(g.media_source === 'drive' ? driveViewUrl(g.media_path) : '')",
-    'startEditGal memuat kembali link Drive'
-  )
-
-  if (d.indexOf("setGalDriveLink('')") === -1) {
-    d = gantiSemua(d,
-      "setGalYtLink('')\n      setGalOldYt(null)",
-      "setGalYtLink('')\n      setGalDriveLink('')\n      setGalOldYt(null)")
-    berubahDash = true
-    console.log('[BERHASIL] Reset galDriveLink pada submitGaleri dan cancelEditGal')
-  } else {
-    console.log('[SUDAH ADA] Reset galDriveLink')
-  }
-
-  pasang(
-    "if (String(url || '').indexOf('i.ytimg.com') !== -1 || String(url || '').indexOf('youtube') !== -1) return",
-    "if (String(url || '').indexOf('i.ytimg.com') !== -1 || String(url || '').indexOf('youtube') !== -1) return\n     if (String(url || '').indexOf('drive.google.com') !== -1 || String(url || '').indexOf('drive.usercontent.google.com') !== -1) return\n     if (!/^https?:\\/\\//.test(String(url || ''))) return",
-    'Penjaga hapusMediaR2 agar media Drive tidak ikut terhapus dari R2'
-  )
-
-  if (berubahDash) simpan(FILE_DASH, d)
-}
-
-/* ============================================================
-   6. Verifikasi
-   ============================================================ */
-console.log('')
-console.log('Verifikasi:')
-const vDrive = ada(FILE_DRIVE) ? baca(FILE_DRIVE) : ''
-const vUi = ada(FILE_UI) ? baca(FILE_UI) : ''
-const vCards = ada(FILE_CARDS) ? baca(FILE_CARDS) : ''
-const vCar = ada(FILE_CAROUSEL) ? baca(FILE_CAROUSEL) : ''
-const vDash = ada(FILE_DASH) ? baca(FILE_DASH) : ''
-
-console.log((vDrive.indexOf('driveDownloadUrl') !== -1 ? '[OK] ' : '[BELUM] ') + 'src/lib/drive.js tersedia dengan endpoint bypass')
-console.log((vUi.indexOf('export function MediaDrive') !== -1 ? '[OK] ' : '[BELUM] ') + 'Komponen MediaDrive di ui.jsx')
-console.log((vUi.indexOf('props.driveId') !== -1 ? '[OK] ' : '[BELUM] ') + 'Lightbox mendukung video Drive dan tombol unduh')
-console.log((vCards.indexOf('drivePreviewUrl') !== -1 ? '[OK] ' : '[BELUM] ') + 'cards.jsx menampilkan media Drive')
-console.log((vCar.indexOf('driveId={zoom.drive || null}') !== -1 ? '[OK] ' : '[BELUM] ') + 'Carousel meneruskan driveId ke Lightbox')
-console.log((vDash.indexOf('parseDriveId') !== -1 ? '[OK] ' : '[BELUM] ') + 'DashboardPage memproses link Google Drive')
-console.log((vDash.indexOf('Atau tempel link Google Drive (opsional)') !== -1 ? '[OK] ' : '[BELUM] ') + 'Form opsional paste link Google Drive tersedia')
-
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Yang dipasang oleh script ini:')
-console.log('1. File baru src/lib/drive.js berisi parseDriveId, drivePreviewUrl, driveThumbUrl, driveDownloadUrl, dan driveViewUrl.')
-console.log('2. Lightbox kini mengenali prop driveId, menampilkan iframe preview Google Drive, dan tombol unduh langsung memakai endpoint drive.usercontent.google.com dengan parameter confirm=t sehingga file di atas 100 MB terunduh tanpa peringatan virus.')
-console.log('3. Komponen MediaDrive menampilkan thumbnail Drive dengan fallback rapi bila thumbnail gagal dimuat.')
-console.log('4. Kartu galeri, detail galeri, dan detail logbook mendukung media bersumber Drive.')
-console.log('5. Carousel meneruskan driveId ke Lightbox sehingga zoom media Drive bekerja.')
-console.log('6. Dashboard mendapat input opsional untuk menempel link Google Drive pada form kegiatan logbook dan form galeri, lengkap dengan logika simpan, edit, dan reset.')
-console.log('7. Media Drive disimpan dengan media_source = drive dan media_path berisi File ID, tanpa perlu migrasi database.')
-console.log('8. Fungsi hapusMediaR2 diberi penjaga agar File ID Drive tidak dianggap key R2 dan tidak ikut terhapus.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Buka dashboard, pilih mode Video pada kegiatan logbook atau galeri, lalu tempel link Google Drive pada field opsional.')
-console.log('2. Simpan, lalu buka halaman publik: thumbnail Drive tampil di kartu dan iframe preview tampil di detail.')
-console.log('3. Klik media hingga masuk lightbox, lalu klik tombol unduh: video Drive langsung terunduh dalam resolusi asli tanpa halaman peringatan virus.')
-console.log('4. Pastikan file di Google Drive sudah dibagikan dengan akses Anyone with the link agar preview dan unduhan berfungsi.')
-```
-
-## File: apply-fix-galeri-drive.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-const FILE = 'src/pages/DashboardPage.jsx'
-
-console.log('Memperbaiki submitGaleri agar menyimpan drive_id...')
-console.log('')
-
-let d = fs.readFileSync(path.join(root, FILE), 'utf8').replace(/\r\n/g, '\n')
-let berubah = false
-
-// 1. Sisipkan parsing driveIdGal tepat sebelum const payload = {
-const pola1 = /if \(!mediaPath\) \{ toast\.gagal\('Galeri wajib memiliki media[^}]+\}\n(\s*)const payload = \{/
-if (pola1.test(d) && d.indexOf('let driveIdGal = null') === -1) {
-  d = d.replace(pola1, function(match, spasi) {
-    return `if (!mediaPath) { toast.gagal('Galeri wajib memiliki media. Pilih file foto atau video terlebih dahulu.'); setBusy(false); return }\n${spasi}let driveIdGal = null\n${spasi}if (galMode === 'video' && galDriveLink) {\n${spasi}  driveIdGal = parseDriveId(galDriveLink)\n${spasi}  if (!driveIdGal) { toast.gagal('Link Google Drive tidak valid.'); setBusy(false); return }\n${spasi}}\n${spasi}const payload = {`
-  })
-  berubah = true
-  console.log('[BERHASIL] Parsing driveIdGal ditambahkan sebelum payload galeri')
-} else if (d.indexOf('let driveIdGal = null') !== -1) {
-  console.log('[SUDAH ADA] Parsing driveIdGal')
-} else {
-  console.log('[TIDAK KETEMU] Anchor sebelum payload galeri')
-}
-
-// 2. Sisipkan drive_id ke dalam objek payload galeri
-const pola2 = /media_source: mediaSource,\n(\s*)youtube_id: youtubeId\n(\s*)\}/
-if (pola2.test(d) && d.indexOf('drive_id: driveIdGal') === -1) {
-  d = d.replace(pola2, function(match, spasi1, spasi2) {
-    return `media_source: mediaSource,\n${spasi1}youtube_id: youtubeId,\n${spasi1}drive_id: driveIdGal\n${spasi2}}`
-  })
-  berubah = true
-  console.log('[BERHASIL] drive_id ditambahkan ke dalam objek payload galeri')
-} else if (d.indexOf('drive_id: driveIdGal') !== -1) {
-  console.log('[SUDAH ADA] drive_id di payload galeri')
-} else {
-  console.log('[TIDAK KETEMU] Anchor objek payload galeri')
-}
-
-if (berubah) {
-  fs.writeFileSync(path.join(root, FILE), d, 'utf8')
-  console.log('')
-  console.log('File DashboardPage.jsx berhasil diperbarui.')
-}
-
-console.log('')
-console.log('Verifikasi akhir:')
-const v = fs.readFileSync(path.join(root, FILE), 'utf8')
-console.log((v.indexOf('let driveIdGal = null') !== -1 ? '[OK] ' : '[BELUM] ') + 'Variabel driveIdGal dideklarasikan')
-console.log((v.indexOf('drive_id: driveIdGal') !== -1 ? '[OK] ' : '[BELUM] ') + 'submitGaleri sekarang menyimpan drive_id ke database')
-
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-```
-
-## File: apply-fix-logbookdetail-drive.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-
-console.log('Memperbaiki LogbookDetail untuk mendukung video Google Drive...')
-console.log('')
-
-const FILE_CARDS = 'src/components/cards.jsx'
-let c = baca(FILE_CARDS)
-let berubah = false
-
-// Pastikan import drivePreviewUrl ada
-if (c.indexOf('drivePreviewUrl') === -1) {
-  const anchor = "from '../lib/format.js'"
-  const hasil = c.replace(anchor, anchor + "\nimport { drivePreviewUrl } from '../lib/drive.js'")
-  if (hasil !== c) {
-    c = hasil
-    berubah = true
-    console.log('[BERHASIL] Import drivePreviewUrl ditambahkan')
-  } else {
-    console.log('[TIDAK KETEMU] Anchor import format.js')
-  }
-} else {
-  console.log('[SUDAH ADA] Import drivePreviewUrl')
-}
-
-// Cari dan ganti pola LogbookDetail dengan pendekatan yang lebih fleksibel
-// Kita cari blok yang menangani media di LogbookDetail
-const polaLama1 = "{it.media_path ? (\n                      it.media_source === 'youtube' ? (\n                        <PemutarVideo key={it.youtube_id} youtubeId={it.youtube_id} title={it.judul} className=\"aspect-video w-full rounded-2xl mb-3\" />\n                      ) : (\n                        <ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className=\"rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3\" />\n                      )\n                    ) : null}"
-
-const polaLama2 = "{it.media_path ? (\n                  it.media_source === 'youtube' ? (\n                    <PemutarVideo key={it.youtube_id} youtubeId={it.youtube_id} title={it.judul} className=\"aspect-video w-full rounded-2xl mb-3\" />\n                  ) : (\n                    <ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className=\"rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3\" />\n                  )\n                ) : null}"
-
-const polaLama3 = "{it.media_path ? (\n                      it.media_source === 'youtube' ? (\n                        <PemutarVideo key={it.youtube_id} youtubeId={it.youtube_id} title={it.judul} className=\"aspect-video w-full rounded-2xl mb-3\" />\n                      ) : (\n                        <ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className=\"rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3\" />\n                      )\n                    ) : null}"
-
-const polaBaru = "{it.media_path ? (\n                      it.media_source === 'youtube' ? (\n                        <PemutarVideo key={it.youtube_id} youtubeId={it.youtube_id} title={it.judul} className=\"aspect-video w-full rounded-2xl mb-3\" />\n                      ) : it.media_source === 'drive' ? (\n                        <iframe key={it.media_path} src={drivePreviewUrl(it.media_path)} title={it.judul} allow=\"autoplay; encrypted-media; fullscreen\" allowFullScreen className=\"aspect-video w-full rounded-2xl border-0 bg-black mb-3\" />\n                      ) : (\n                        <ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className=\"rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3\" />\n                      )\n                    ) : null}"
-
-if (c.indexOf('drivePreviewUrl(it.media_path)') !== -1) {
-  console.log('[SUDAH ADA] LogbookDetail sudah mendukung Drive')
-} else if (c.includes(polaLama1)) {
-  c = c.replace(polaLama1, polaBaru)
-  berubah = true
-  console.log('[BERHASIL] LogbookDetail diperbarui (pola 1)')
-} else if (c.includes(polaLama2)) {
-  c = c.replace(polaLama2, polaBaru)
-  berubah = true
-  console.log('[BERHASIL] LogbookDetail diperbarui (pola 2)')
-} else if (c.includes(polaLama3)) {
-  c = c.replace(polaLama3, polaBaru)
-  berubah = true
-  console.log('[BERHASIL] LogbookDetail diperbarui (pola 3)')
-} else {
-  // Pendekatan lebih agresif: cari berdasarkan pattern yang lebih longgar
-  const idxStart = c.indexOf('export function LogbookDetail(props) {')
-  if (idxStart !== -1) {
-    const idxEnd = c.indexOf('export function GalleryCard(props) {', idxStart)
-    if (idxEnd !== -1) {
-      const blokLogbookDetail = c.slice(idxStart, idxEnd)
-      
-      // Cari pola media_path dengan youtube
-      const reMedia = /\{it\.media_path\s*\?\s*\(\s*it\.media_source\s*===\s*'youtube'\s*\?\s*\(\s*<PemutarVideo[^>]*\/>\s*\)\s*:\s*\(\s*<ZoomableMedia[^>]*\/>\s*\)\s*\)\s*:\s*null\}/s
-      
-      if (reMedia.test(blokLogbookDetail)) {
-        const blokBaru = blokLogbookDetail.replace(reMedia, polaBaru)
-        c = c.slice(0, idxStart) + blokBaru + c.slice(idxEnd)
-        berubah = true
-        console.log('[BERHASIL] LogbookDetail diperbarui (regex fleksibel)')
-      } else {
-        console.log('[TIDAK KETEMU] Pola media di LogbookDetail dengan regex')
-        console.log('[INFO] Mencoba pendekatan manual...')
-        
-        // Cari dan ganti manual
-        const cariYoutube = "it.media_source === 'youtube' ? ("
-        const cariZoom = "<ZoomableMedia src={it.media_thumb || it.media_path}"
-        
-        const idxYT = blokLogbookDetail.indexOf(cariYoutube)
-        const idxZoom = blokLogbookDetail.indexOf(cariZoom, idxYT)
-        
-        if (idxYT !== -1 && idxZoom !== -1) {
-          // Sisipkan branch drive sebelum ZoomableMedia
-          const beforeZoom = blokLogbookDetail.slice(0, idxZoom)
-          const afterZoom = blokLogbookDetail.slice(idxZoom)
-          
-          const sisipan = "it.media_source === 'drive' ? (\n                        <iframe key={it.media_path} src={drivePreviewUrl(it.media_path)} title={it.judul} allow=\"autoplay; encrypted-media; fullscreen\" allowFullScreen className=\"aspect-video w-full rounded-2xl border-0 bg-black mb-3\" />\n                      ) : (\n                        "
-          
-          const blokBaru = beforeZoom + sisipan + afterZoom
-          c = c.slice(0, idxStart) + blokBaru + c.slice(idxEnd)
-          berubah = true
-          console.log('[BERHASIL] LogbookDetail diperbarui (manual insert)')
-        } else {
-          console.log('[GAGAL] Tidak dapat menemukan pola media di LogbookDetail')
-        }
-      }
-    } else {
-      console.log('[TIDAK KETEMU] Batas akhir LogbookDetail')
-    }
-  } else {
-    console.log('[TIDAK KETEMU] Fungsi LogbookDetail')
-  }
-}
-
-if (berubah) {
-  simpan(FILE_CARDS, c)
-  console.log('')
-  console.log('Verifikasi:')
-  const v = baca(FILE_CARDS)
-  console.log((v.indexOf('drivePreviewUrl(it.media_path)') !== -1 ? '[OK] ' : '[BELUM] ') + 'LogbookDetail mendukung iframe Drive')
-  console.log((v.indexOf("from '../lib/drive.js'") !== -1 ? '[OK] ' : '[BELUM] ') + 'Import drive.js tersedia')
-}
-
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Yang diperbaiki:')
-console.log('1. LogbookDetail kini menampilkan iframe preview Google Drive untuk video bersumber drive.')
-console.log('2. Import drivePreviewUrl ditambahkan ke cards.jsx.')
-console.log('3. Fallback tetap ke ZoomableMedia untuk media R2 biasa.')
-```
-
-## File: apply-fix-toggle-dark.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-
-console.log('Mulai memperbaiki warna tombol Foto dan Video pada mode gelap...')
-console.log('')
-
-const FILE_D = 'src/pages/DashboardPage.jsx'
-if (!fs.existsSync(path.join(root, FILE_D))) {
-  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
-  process.exit(1)
-}
-
-let d = baca(FILE_D)
-const LAMA = 'bg-slate-200 text-slate-600'
-const BARU = 'bg-slate-200 text-slate-600 dark:bg-slate-700'
-
-const sudah = d.split(BARU).length - 1
-if (sudah >= 4) {
-  console.log('[SUDAH ADA] Kelas dark:bg-slate-700 sudah terpasang di ' + sudah + ' tombol')
-} else {
-  const jumlah = d.split(LAMA).length - 1
-  if (jumlah > 0) {
-    d = d.split(LAMA).join(BARU)
-    simpan(FILE_D, d)
-    console.log('[BERHASIL] ' + jumlah + ' tombol Foto dan Video diberi kelas dark:bg-slate-700')
-  } else {
-    console.log('[TIDAK KETEMU] Pola kelas bg-slate-200 text-slate-600 di DashboardPage.jsx')
-  }
-}
-
-const v = baca(FILE_D)
-const total = v.split(BARU).length - 1
-console.log('')
-console.log('Verifikasi:')
-console.log((total >= 4 ? '[OK] ' : '[BELUM] ') + 'Empat tombol mode memakai latar gelap (' + total + ' tombol terpasang)')
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Penjelasan perbaikan:')
-console.log('1. Masalah: tombol tidak aktif memakai kelas bg-slate-200 yang tidak punya aturan pengganti di index.css, sehingga pada mode gelap pill tetap abu terang hampir putih dan menonjol sendiri.')
-console.log('2. Perbaikan: menambahkan varian dark:bg-slate-700 langsung pada kelas tombol, jadi pada mode gelap pill menjadi abu gelap yang menyatu dengan kartu, sementara mode terang tetap seperti semula.')
-console.log('3. Varian dark dipilih bukan aturan CSS global .dark .bg-slate-200 supaya garis timeline di cards.jsx yang sengaja memadukan bg-slate-200 dengan dark:bg-slate-700 tidak ikut tertimpa.')
-console.log('4. Teks tombol tidak perlu diubah karena index.css sudah mengganti text-slate-600 menjadi abu terang pada mode gelap, sehingga kontrasnya tetap terbaca di atas pill gelap.')
-console.log('5. Tombol aktif tidak disentuh karena kombinasi bg-bsi-800 sudah otomatis menjadi hijau tua pada mode gelap dan terlihat benar.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Buka dashboard pada mode gelap lalu lihat tombol Foto dan Video di form logbook maupun form galeri.')
-console.log('2. Tombol tidak aktif kini berwarna abu gelap, bukan putih terang, dan teksnya tetap terbaca.')
-console.log('3. Klik bergantian Foto dan Video: tombol aktif tetap hijau di kedua mode.')
-console.log('4. Kembali ke mode terang: tampilan tombol tidak berubah seperti sebelumnya.')
-```
-
-## File: apply-menu-mobile-halus-v2.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-function ada(rel) { return fs.existsSync(path.join(root, rel)) }
-
-console.log('Mulai mengganti animasi menu mobile menjadi versi halus v2...')
-console.log('')
-
-/* ===== 1. index.css: buang blok menu-mobile-v1, pasang menu-mobile-v2 ===== */
-const FILE_CSS = 'src/index.css'
-if (!ada(FILE_CSS)) {
-  console.log('[GAGAL] index.css tidak ditemukan')
-  process.exit(1)
-}
-let css = baca(FILE_CSS)
-
-const CSS_V2 = `/* menu-mobile-v2: tinggi menu diinterpolasi persis lewat grid rows, transisi bisa dipotong di tengah jadi terasa halus seperti aplikasi native */
-.menu-mobile-wrap {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows 0.36s cubic-bezier(0.32, 0.72, 0, 1);
-}
-.menu-mobile-wrap.menu-mobile-buka { grid-template-rows: 1fr; }
-.menu-mobile-dalam {
-  overflow: hidden;
-  min-height: 0;
-  visibility: hidden;
-  transition: visibility 0.36s;
-}
-.menu-mobile-buka .menu-mobile-dalam { visibility: visible; }
-.menu-mobile-isi {
-  opacity: 0;
-  transform: translateY(-8px);
-  transition: opacity 0.2s ease, transform 0.24s cubic-bezier(0.32, 0.72, 0, 1);
-}
-.menu-mobile-buka .menu-mobile-isi {
-  opacity: 1;
-  transform: translateY(0);
-  transition: opacity 0.34s ease 0.08s, transform 0.4s cubic-bezier(0.32, 0.72, 0, 1) 0.05s;
-}
-`
-
-if (css.includes('menu-mobile-v2')) {
-  console.log('[SUDAH ADA] CSS menu-mobile-v2 di index.css')
-} else {
-  const mulai = css.indexOf('/* menu-mobile-v1')
-  if (mulai !== -1) {
-    let akhir = css.indexOf('\n/*', mulai + 10)
-    if (akhir === -1) akhir = css.length
-    css = css.slice(0, mulai) + CSS_V2 + css.slice(akhir)
-    simpan(FILE_CSS, css)
-    console.log('[BERHASIL] Blok menu-mobile-v1 diganti menjadi menu-mobile-v2')
-  } else {
-    simpan(FILE_CSS, css.trimEnd() + '\n\n' + CSS_V2)
-    console.log('[BERHASIL] CSS menu-mobile-v2 ditambahkan (blok v1 tidak ditemukan)')
-  }
-}
-
-/* ===== 2. Layout.jsx: MenuMobile selalu terpasang, tanpa timer, tanpa unmount ===== */
-const FILE_L = 'src/components/Layout.jsx'
-if (!ada(FILE_L)) {
-  console.log('[GAGAL] Layout.jsx tidak ditemukan')
-  process.exit(1)
-}
-let l = baca(FILE_L)
-
-const KOMPONEN_V2 = `function MenuMobile(props) {
-  return (
-    <div className={'menu-mobile-wrap xl:hidden' + (props.open ? ' menu-mobile-buka' : '')}>
-      <div className="menu-mobile-dalam">
-        <div className="menu-mobile-isi border-t border-slate-200 bg-white px-4 py-4 space-y-2">
-          {props.children}
-        </div>
-      </div>
-    </div>
-  )
-}
-`
-
-if (l.includes('menu-mobile-wrap')) {
-  console.log('[SUDAH ADA] MenuMobile versi v2 di Layout.jsx')
-} else {
-  const mulaiFn = l.indexOf('function MenuMobile(props) {')
-  const mulaiExport = l.indexOf('export default function Layout')
-  if (mulaiFn !== -1 && mulaiExport !== -1 && mulaiExport > mulaiFn) {
-    l = l.slice(0, mulaiFn) + KOMPONEN_V2 + l.slice(mulaiExport)
-    simpan(FILE_L, l)
-    console.log('[BERHASIL] Komponen MenuMobile diganti menjadi versi selalu terpasang')
-  } else {
-    console.log('[TIDAK KETEMU] Blok komponen MenuMobile di Layout.jsx')
-  }
-}
-
-/* ===== 3. Verifikasi ===== */
-console.log('')
-console.log('Verifikasi:')
-const c2 = baca(FILE_CSS)
-const l2 = baca(FILE_L)
-console.log((c2.includes('menu-mobile-v2') ? '[OK] ' : '[BELUM] ') + 'CSS menu-mobile-v2 terpasang')
-console.log((!c2.includes('menuMobileIn') && !c2.includes('menuMobileOut') ? '[OK] ' : '[BELUM] ') + 'Keyframes max-height lama sudah dibuang')
-console.log((c2.includes('grid-template-rows 0fr') || c2.includes('grid-template-rows: 0fr') ? '[OK] ' : '[BELUM] ') + 'Interpolasi tinggi lewat grid rows tersedia')
-console.log((l2.includes('menu-mobile-wrap') ? '[OK] ' : '[BELUM] ') + 'Struktur wrapper menu v2 terpasang')
-console.log((!l2.includes('menu-mobile-tutup') ? '[OK] ' : '[BELUM] ') + 'Logika timer dan kelas tutup lama sudah hilang')
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Kenapa versi v2 terasa jauh lebih halus:')
-console.log('1. Tinggi menu diinterpolasi persis dari nol sampai tinggi aslinya lewat trik grid rows 0fr ke 1fr, jadi kurva easing terasa proporsional sepanjang gerakan, tidak seperti max-height 480px yang membuat gerakan selesai lebih awal lalu terasa mengambang.')
-console.log('2. Animasi memakai transition, bukan keyframes, sehingga kalau tombol Menu diketuk lagi di tengah animasi, gerakan berbalik mulus dari posisi terakhir tanpa melompat atau mengulang dari awal.')
-console.log('3. Tidak ada lagi efek berurutan per tautan yang membuat panel terasa tersendat, seluruh isi memudar dan bergeser sebagai satu kesatuan dengan penundaan kecil yang lembut.')
-console.log('4. Easing cubic-bezier(0.32, 0.72, 0, 1) meniru kurva perlambatan menu iOS, gerakan cepat di awal lalu meluncur pelan saat berhenti.')
-console.log('5. Elemen menu kini selalu terpasang di DOM dengan visibility hidden saat tertutup, jadi tidak ada lagi lompatan layout saat elemen dilepas, dan tautan tetap tidak bisa difokuskan saat menu tertutup.')
-console.log('6. Perubahan tinggi terkurung di wrapper grid, sementara isi hanya memakai opacity dan transform yang ringan bagi kompositor.')
-console.log('7. Pengguna reduce motion tetap mendapat perilaku instan karena aturan global proyek memotong durasi transisi.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Persempit jendela di bawah 1280 piksel lalu ketuk tombol Menu: panel meluncur terbuka dengan perlambatan alami di ujung gerakan.')
-console.log('2. Ketuk Menu lagi saat panel masih terbuka setengah: panel berbalik menutup mulus dari posisi tersebut, bukan melompat.')
-console.log('3. Buka tutup berulang dengan cepat beberapa kali: gerakan selalu kontinu tanpa patahan maupun kedip.')
-console.log('4. Gulir halaman saat menu terbuka lalu tutup: konten di bawah header tidak melompat karena tinggi merapat dengan mulus.')
-console.log('5. Aktifkan mode gelap: warna panel menyesuaikan dan kehalusan animasi tetap sama.')
-```
-
-## File: apply-placeholder-drive.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-function ada(rel) { return fs.existsSync(path.join(root, rel)) }
-
-console.log('Mulai menyesuaikan placeholder Google Drive dan YouTube agar lebih jelas...')
-console.log('')
-
-const FILE_DASH = 'src/pages/DashboardPage.jsx'
-if (!ada(FILE_DASH)) {
-  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
-  process.exit(1)
-}
-
-let d = baca(FILE_DASH)
-let berubah = false
-let totalPerubahan = 0
-
-/* ===== 1. Placeholder YouTube di form logbook items ===== */
-const ytLogLama = 'value={it.ytLink} onChange={function (e) { patchItem(i, { ytLink: e.target.value }) }} placeholder="Atau tempel link video eksternal"'
-const ytLogBaru = 'value={it.ytLink} onChange={function (e) { patchItem(i, { ytLink: e.target.value }) }} placeholder="Link video YouTube untuk tampilan (opsional)"'
-if (d.indexOf(ytLogLama) !== -1) {
-  d = d.replace(ytLogLama, ytLogBaru)
-  berubah = true
-  totalPerubahan++
-  console.log('[BERHASIL] Placeholder YouTube di form kegiatan logbook diperjelas')
-} else if (d.indexOf(ytLogBaru) !== -1) {
-  console.log('[SUDAH ADA] Placeholder YouTube logbook sudah diperjelas')
-} else {
-  console.log('[TIDAK KETEMU] Placeholder YouTube di form kegiatan logbook')
-}
-
-/* ===== 2. Placeholder Drive di form logbook items ===== */
-const driveLogLama = 'value={it.driveLink} onChange={function (e) { patchItem(i, { driveLink: e.target.value }) }} placeholder="Atau tempel link Google Drive (opsional)"'
-const driveLogBaru = 'value={it.driveLink} onChange={function (e) { patchItem(i, { driveLink: e.target.value }) }} placeholder="Link Google Drive untuk unduhan (opsional)"'
-if (d.indexOf(driveLogLama) !== -1) {
-  d = d.replace(driveLogLama, driveLogBaru)
-  berubah = true
-  totalPerubahan++
-  console.log('[BERHASIL] Placeholder Drive di form kegiatan logbook disesuaikan dengan fitur unduhan')
-} else if (d.indexOf(driveLogBaru) !== -1) {
-  console.log('[SUDAH ADA] Placeholder Drive logbook sudah disesuaikan')
-} else {
-  console.log('[TIDAK KETEMU] Placeholder Drive di form kegiatan logbook')
-}
-
-/* ===== 3. Placeholder YouTube di form galeri ===== */
-const ytGalLama = 'value={galYtLink} onChange={function (e) { setGalYtLink(e.target.value) }} placeholder="Atau tempel link video eksternal"'
-const ytGalBaru = 'value={galYtLink} onChange={function (e) { setGalYtLink(e.target.value) }} placeholder="Link video YouTube untuk tampilan (opsional)"'
-if (d.indexOf(ytGalLama) !== -1) {
-  d = d.replace(ytGalLama, ytGalBaru)
-  berubah = true
-  totalPerubahan++
-  console.log('[BERHASIL] Placeholder YouTube di form galeri diperjelas')
-} else if (d.indexOf(ytGalBaru) !== -1) {
-  console.log('[SUDAH ADA] Placeholder YouTube galeri sudah diperjelas')
-} else {
-  console.log('[TIDAK KETEMU] Placeholder YouTube di form galeri')
-}
-
-/* ===== 4. Placeholder Drive di form galeri ===== */
-const driveGalLama = 'value={galDriveLink} onChange={function (e) { setGalDriveLink(e.target.value) }} placeholder="Atau tempel link Google Drive (opsional)"'
-const driveGalBaru = 'value={galDriveLink} onChange={function (e) { setGalDriveLink(e.target.value) }} placeholder="Link Google Drive untuk unduhan (opsional)"'
-if (d.indexOf(driveGalLama) !== -1) {
-  d = d.replace(driveGalLama, driveGalBaru)
-  berubah = true
-  totalPerubahan++
-  console.log('[BERHASIL] Placeholder Drive di form galeri disesuaikan dengan fitur unduhan')
-} else if (d.indexOf(driveGalBaru) !== -1) {
-  console.log('[SUDAH ADA] Placeholder Drive galeri sudah disesuaikan')
-} else {
-  console.log('[TIDAK KETEMU] Placeholder Drive di form galeri')
-}
-
-/* ===== 5. Simpan jika ada perubahan ===== */
-if (berubah) {
-  simpan(FILE_DASH, d)
-}
-
-/* ===== 6. Verifikasi ===== */
-console.log('')
-console.log('Verifikasi:')
-const v = baca(FILE_DASH)
-console.log((v.indexOf('Link video YouTube untuk tampilan (opsional)') !== -1 ? '[OK] ' : '[BELUM] ') + 'Placeholder YouTube diperjelas untuk tampilan')
-console.log((v.indexOf('Link Google Drive untuk unduhan (opsional)') !== -1 ? '[OK] ' : '[BELUM] ') + 'Placeholder Drive diperjelas untuk unduhan')
-console.log('')
-console.log('Total perubahan: ' + totalPerubahan + ' lokasi')
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Hasil akhir:')
-console.log('1. Field YouTube kini berbunyi "Link video YouTube untuk tampilan (opsional)" sehingga user paham ini untuk menampilkan video di web.')
-console.log('2. Field Google Drive kini berbunyi "Link Google Drive untuk unduhan (opsional)" sehingga user paham ini hanya untuk tombol download, bukan untuk tampilan.')
-console.log('3. Kedua field tetap opsional dan bisa diisi salah satu atau keduanya sekaligus.')
-console.log('4. Bahasa placeholder menggunakan istilah sederhana yang langsung dipahami tanpa perlu penjelasan tambahan.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Buka dashboard, pilih mode Video pada kegiatan logbook atau galeri.')
-console.log('2. Perhatikan placeholder kedua field: YouTube untuk tampilan, Drive untuk unduhan.')
-console.log('3. Isi link YouTube saja: video tampil di web tanpa tombol download Drive.')
-console.log('4. Isi link YouTube dan Drive: video tampil dari YouTube dan tombol download mengambil file dari Drive.')
-console.log('5. Isi link Drive saja tanpa YouTube: video tidak tampil karena tampilan tetap butuh YouTube, tapi ini bisa diatasi dengan tetap mengisi YouTube.')
-```
-
-## File: apply-scrollbar-tipis.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-function ada(rel) { return fs.existsSync(path.join(root, rel)) }
-
-console.log('Mulai mengecilkan dan menipiskan scrollbar overlay...')
-console.log('')
-
-/* ===== 1. index.css: track 8px jadi 4px, thumb 6px jadi 3px, tepi lebih rapat ===== */
-const FILE_CSS = 'src/index.css'
-if (!ada(FILE_CSS)) {
-  console.log('[GAGAL] index.css tidak ditemukan')
-  process.exit(1)
-}
-let css = baca(FILE_CSS)
-let berubahCss = false
-
-const TRACK_LAMA = '#scroll-indicator {\n  position: fixed;\n  right: 3px;\n  top: 0;\n  width: 8px;'
-const TRACK_BARU = '#scroll-indicator {\n  position: fixed;\n  right: 2px;\n  top: 0;\n  width: 4px;'
-if (css.indexOf(TRACK_BARU) !== -1) {
-  console.log('[SUDAH ADA] Track scrollbar overlay sudah 4px')
-} else if (css.indexOf(TRACK_LAMA) !== -1) {
-  css = css.replace(TRACK_LAMA, TRACK_BARU)
-  berubahCss = true
-  console.log('[BERHASIL] Track scrollbar overlay diperkecil dari 8px menjadi 4px')
-} else {
-  console.log('[TIDAK KETEMU] Pola blok #scroll-indicator di index.css')
-}
-
-const THUMB_LAMA = '#scroll-thumb {\n  width: 6px;\n  margin-left: 1px;'
-const THUMB_BARU = '#scroll-thumb {\n  width: 3px;\n  margin-left: 0.5px;'
-if (css.indexOf(THUMB_BARU) !== -1) {
-  console.log('[SUDAH ADA] Thumb scrollbar overlay sudah 3px')
-} else if (css.indexOf(THUMB_LAMA) !== -1) {
-  css = css.replace(THUMB_LAMA, THUMB_BARU)
-  berubahCss = true
-  console.log('[BERHASIL] Thumb scrollbar overlay ditipiskan dari 6px menjadi 3px')
-} else {
-  console.log('[TIDAK KETEMU] Pola blok #scroll-thumb di index.css')
-}
-
-if (berubahCss) simpan(FILE_CSS, css)
-
-/* ===== 2. main.jsx: thumb minimum lebih pendek dan inset track disesuaikan ===== */
-const FILE_M = 'src/main.jsx'
-if (!ada(FILE_M)) {
-  console.log('[LEWATI] main.jsx tidak ditemukan')
-} else {
-  let m = baca(FILE_M)
-  let berubahM = false
-
-  const MIN_LAMA = 'const thumbTinggi = Math.max(36, trackTinggi * ratio)'
-  const MIN_BARU = 'const thumbTinggi = Math.max(24, trackTinggi * ratio)'
-  if (m.indexOf(MIN_BARU) !== -1) {
-    console.log('[SUDAH ADA] Tinggi minimum thumb sudah 24px')
-  } else if (m.indexOf(MIN_LAMA) !== -1) {
-    m = m.replace(MIN_LAMA, MIN_BARU)
-    berubahM = true
-    console.log('[BERHASIL] Tinggi minimum thumb dipendekkan dari 36px menjadi 24px')
-  } else {
-    console.log('[TIDAK KETEMU] Pola tinggi minimum thumb di main.jsx')
-  }
-
-  const INSET_LAMA = 'const trackTinggi = rect.height - 8'
-  const INSET_BARU = 'const trackTinggi = rect.height - 6'
-  if (m.indexOf(INSET_BARU) !== -1) {
-    console.log('[SUDAH ADA] Inset track sudah 6px')
-  } else if (m.indexOf(INSET_LAMA) !== -1) {
-    m = m.replace(INSET_LAMA, INSET_BARU)
-    berubahM = true
-    console.log('[BERHASIL] Inset atas bawah track dirapatkan dari 8px menjadi 6px')
-  } else {
-    console.log('[TIDAK KETEMU] Pola inset track di main.jsx')
-  }
-
-  const GESER_LAMA = '(4 + gerak * maxTop)'
-  const GESER_BARU = '(3 + gerak * maxTop)'
-  if (m.indexOf(GESER_BARU) !== -1) {
-    console.log('[SUDAH ADA] Offset awal thumb sudah 3px')
-  } else if (m.indexOf(GESER_LAMA) !== -1) {
-    m = m.replace(GESER_LAMA, GESER_BARU)
-    berubahM = true
-    console.log('[BERHASIL] Offset awal thumb disesuaikan dari 4px menjadi 3px')
-  } else {
-    console.log('[TIDAK KETEMU] Pola offset awal thumb di main.jsx')
-  }
-
-  const RIGHT_LAMA = "track.style.right = (window.innerWidth - rect.right + 3) + 'px'"
-  const RIGHT_BARU = "track.style.right = (window.innerWidth - rect.right + 2) + 'px'"
-  if (m.indexOf(RIGHT_BARU) !== -1) {
-    console.log('[SUDAH ADA] Posisi kanan track sudah 2px')
-  } else if (m.indexOf(RIGHT_LAMA) !== -1) {
-    m = m.replace(RIGHT_LAMA, RIGHT_BARU)
-    berubahM = true
-    console.log('[BERHASIL] Posisi kanan track dirapatkan dari 3px menjadi 2px')
-  } else {
-    console.log('[TIDAK KETEMU] Pola posisi kanan track di main.jsx')
-  }
-
-  if (berubahM) simpan(FILE_M, m)
-}
-
-/* ===== 3. Verifikasi ===== */
-console.log('')
-console.log('Verifikasi:')
-const vCss = baca(FILE_CSS)
-const vM = ada(FILE_M) ? baca(FILE_M) : ''
-console.log((vCss.indexOf('width: 4px;') !== -1 ? '[OK] ' : '[BELUM] ') + 'Track scrollbar overlay 4px')
-console.log((vCss.indexOf('width: 3px;') !== -1 ? '[OK] ' : '[BELUM] ') + 'Thumb scrollbar overlay 3px')
-console.log((vM.indexOf('Math.max(24, trackTinggi * ratio)') !== -1 ? '[OK] ' : '[BELUM] ') + 'Tinggi minimum thumb 24px')
-console.log((vM.indexOf('rect.height - 6') !== -1 ? '[OK] ' : '[BELUM] ') + 'Inset track 6px')
-console.log((vM.indexOf('rect.right + 2)') !== -1 ? '[OK] ' : '[BELUM] ') + 'Posisi kanan track 2px')
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Perubahan yang diterapkan:')
-console.log('1. Lebar track indikator turun dari 8px menjadi 4px, sehingga garis jalur scrollbar tidak lagi terasa tebal di tepi layar.')
-console.log('2. Lebar thumb turun dari 6px menjadi 3px dan diposisikan tepat di tengah track, menghasilkan garis tipis yang elegan.')
-console.log('3. Tinggi minimum thumb turun dari 36px menjadi 24px, sehingga pada halaman sangat panjang thumb tidak terlihat seperti balok besar.')
-console.log('4. Inset atas bawah track dan offset awal thumb dirapatkan supaya thumb tidak menggantung terlalu jauh dari ujung layar.')
-console.log('5. Jarak track dari tepi kanan layar dirapatkan dari 3px menjadi 2px agar scrollbar tipis terasa menempel rapi di sisi jendela.')
-console.log('6. Perilaku auto hide tidak diubah: indikator tetap muncul hanya saat menggulir lalu memudar sendiri, jadi layar tetap bersih.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Gulir halaman panjang seperti Logbook publik atau Dashboard: garis scrollbar kini berupa strip tipis 3px di tepi kanan.')
-console.log('2. Gulir cepat sampai mentok: thumb terpendek kini sekitar 24px, tidak sepanjang sebelumnya.')
-console.log('3. Buka modal detail berisi banyak konten lalu gulir di dalamnya: indikator tipis muncul mengikuti tepi panel modal.')
-console.log('4. Aktifkan mode gelap: warna thumb tetap abu terang lembut dengan bentuk tipis yang sama.')
-console.log('5. Diamkan sebentar setelah menggulir: scrollbar memudar hilang seperti biasanya.')
-```
-
-## File: apply-status-published.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-function ada(rel) { return fs.existsSync(path.join(root, rel)) }
-
-console.log('Mulai mengubah teks status "Siap dilihat" menjadi "Published"...')
-console.log('')
-
-let totalPerubahan = 0
-
-/* 1. ui.jsx: StatusBadge di kartu logbook */
-const FILE_UI = 'src/components/ui.jsx'
-if (ada(FILE_UI)) {
-  let u = baca(FILE_UI)
-  const anchor = "{publik ? 'Siap dilihat' : 'Draft'}"
-  if (u.indexOf(anchor) !== -1) {
-    u = u.replace(anchor, "{publik ? 'Published' : 'Draft'}")
-    simpan(FILE_UI, u)
-    totalPerubahan++
-    console.log('[BERHASIL] StatusBadge di ui.jsx kini menampilkan Published')
-  } else if (u.indexOf("{publik ? 'Published' : 'Draft'}") !== -1) {
-    console.log('[SUDAH ADA] StatusBadge sudah Published')
-  } else {
-    console.log('[TIDAK KETEMU] Pola StatusBadge di ui.jsx')
-  }
-} else {
-  console.log('[GAGAL] ui.jsx tidak ditemukan')
-}
-
-/* 2. DashboardPage.jsx: select status tampil + filter status logbook */
-const FILE_DASH = 'src/pages/DashboardPage.jsx'
-if (ada(FILE_DASH)) {
-  let d = baca(FILE_DASH)
-  const anchor = "{ value: 'publik', label: 'Siap dilihat' }"
-  const jumlah = d.split(anchor).length - 1
-  if (jumlah > 0) {
-    d = d.split(anchor).join("{ value: 'publik', label: 'Published' }")
-    simpan(FILE_DASH, d)
-    totalPerubahan += jumlah
-    console.log('[BERHASIL] ' + jumlah + ' lokasi label status di DashboardPage diubah menjadi Published')
-  } else if (d.indexOf("{ value: 'publik', label: 'Published' }") !== -1) {
-    console.log('[SUDAH ADA] Label status DashboardPage sudah Published')
-  } else {
-    console.log('[TIDAK KETEMU] Pola label status di DashboardPage')
-  }
-} else {
-  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
-}
-
-/* 3. HomePage.jsx: teks EmptyState */
-const FILE_HOME = 'src/pages/HomePage.jsx'
-if (ada(FILE_HOME)) {
-  let h = baca(FILE_HOME)
-  const anchor = 'desc="Logbook yang sudah diatur sebagai siap dilihat akan tampil di sini."'
-  if (h.indexOf(anchor) !== -1) {
-    h = h.replace(anchor, 'desc="Logbook yang sudah berstatus Published akan tampil di sini."')
-    simpan(FILE_HOME, h)
-    totalPerubahan++
-    console.log('[BERHASIL] Teks EmptyState di HomePage diperbarui')
-  } else if (h.indexOf('berstatus Published') !== -1) {
-    console.log('[SUDAH ADA] Teks EmptyState HomePage sudah diperbarui')
-  } else {
-    console.log('[TIDAK KETEMU] Pola EmptyState di HomePage')
-  }
-} else {
-  console.log('[GAGAL] HomePage.jsx tidak ditemukan')
-}
-
-/* 4. Verifikasi */
-console.log('')
-console.log('Verifikasi:')
-const vUi = ada(FILE_UI) ? baca(FILE_UI) : ''
-const vDash = ada(FILE_DASH) ? baca(FILE_DASH) : ''
-const vHome = ada(FILE_HOME) ? baca(FILE_HOME) : ''
-
-console.log((vUi.indexOf("'Published'") !== -1 ? '[OK] ' : '[BELUM] ') + 'StatusBadge menampilkan Published')
-console.log((vDash.indexOf("label: 'Published'") !== -1 ? '[OK] ' : '[BELUM] ') + 'Select dan filter status di Dashboard memakai Published')
-console.log((vHome.indexOf('berstatus Published') !== -1 ? '[OK] ' : '[BELUM] ') + 'EmptyState HomePage menyebut Published')
-console.log('')
-console.log('Total perubahan: ' + totalPerubahan + ' lokasi')
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Penjelasan:')
-console.log('1. Istilah Published dipakai karena standar industri untuk pasangan Draft dan Published, digunakan WordPress, Medium, dan Shopify.')
-console.log('2. Nilai yang disimpan ke database tetap draft dan publik, jadi tidak perlu migrasi database sama sekali. Yang berubah hanya teks tampilannya.')
-console.log('3. Badge di kartu logbook kini menampilkan Draft atau Published.')
-console.log('4. Dropdown status tampil dan filter status di dashboard kini memakai label Draft dan Published.')
-console.log('5. Jika nanti ingin pakai istilah lain seperti Public atau Live, cukup ganti kata Published di script ini lalu jalankan ulang.')
-```
 
 ## File: api/r2/delete.js
 ```javascript
@@ -2457,6 +506,46 @@ export default function PemutarVideo(props) {
 }
 ```
 
+## File: src/lib/drive.js
+```javascript
+export function parseDriveId(url) {
+  if (!url) return null
+  const s = String(url).trim()
+
+  if (/^[a-zA-Z0-9_-]{20,}$/.test(s) && s.indexOf('/') === -1 && s.indexOf('.') === -1) return s
+
+  try {
+    const u = new URL(s)
+    const host = u.hostname.replace('www.', '')
+
+    if (host === 'drive.google.com' || host === 'drive.usercontent.google.com') {
+      const m = u.pathname.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)
+      if (m) return m[1]
+      const id = u.searchParams.get('id')
+      if (id) return id
+    }
+  } catch (e) {}
+
+  return null
+}
+
+export function drivePreviewUrl(id) {
+  return 'https://drive.google.com/file/d/' + id + '/preview'
+}
+
+export function driveThumbUrl(id) {
+  return 'https://drive.google.com/thumbnail?id=' + id + '&sz=w1280'
+}
+
+export function driveDownloadUrl(id) {
+  return 'https://drive.usercontent.google.com/download?id=' + id + '&export=download&confirm=t'
+}
+
+export function driveViewUrl(id) {
+  return 'https://drive.google.com/file/d/' + id + '/view'
+}
+```
+
 ## File: src/lib/profil.js
 ```javascript
 import { supabase } from './supabase.js'
@@ -2619,6 +708,16 @@ export async function ambilTokenSesi() {
 }
 ```
 
+## File: supabase/migrasi-drive-download.sql
+```sql
+-- Migrasi fitur download Google Drive
+-- Jalankan SQL ini di Supabase Dashboard > SQL Editor
+-- jika kolom drive_id belum ada.
+
+alter table public.logbook_items add column if not exists drive_id text;
+alter table public.galeri add column if not exists drive_id text;
+```
+
 ## File: .env.example
 ```
 VITE_SUPABASE_URL=
@@ -2628,734 +727,6 @@ R2_ACCESS_KEY_ID=
 R2_SECRET_ACCESS_KEY=
 R2_BUCKET_NAME=mbsi-media
 R2_PUBLIC_BASE_URL=
-```
-
-## File: apply-batal-edit-pindah-tab.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-const FILE_D = 'src/pages/DashboardPage.jsx'
-
-if (!fs.existsSync(path.join(root, FILE_D))) {
-  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
-  process.exit(1)
-}
-
-let d = fs.readFileSync(path.join(root, FILE_D), 'utf8').replace(/\r\n/g, '\n')
-
-console.log('Mulai menerapkan pembatalan otomatis mode edit saat pindah tab...')
-console.log('')
-
-/* ===== 1. Sisipkan Fungsi gantiTab ===== */
-const GANTI_TAB_CODE = `  function gantiTab(tabBaru) {
-    if (tabBaru !== tab) {
-      cancelEditLog()
-      cancelEditGal()
-      cancelEditHadir()
-      setTab(tabBaru)
-    }
-  }
-
-`
-if (d.includes('function gantiTab(tabBaru)')) {
-  console.log('[SUDAH ADA] Fungsi gantiTab di DashboardPage.jsx')
-} else {
-  const anchor = 'const tabCls = function (t) {'
-  if (d.includes(anchor)) {
-    d = d.replace(anchor, GANTI_TAB_CODE + '  ' + anchor)
-    console.log('[BERHASIL] Fungsi gantiTab berhasil disisipkan')
-  } else {
-    console.log('[TIDAK KETEMU] Anchor untuk menyisipkan fungsi gantiTab')
-  }
-}
-
-/* ===== 2. Ubah Navigasi ke gantiTab ===== */
-const targets = [
-  { old: "onClick={function () { setTab('profil') }} title=\"Kelola foto profil\"", new: "onClick={function () { gantiTab('profil') }} title=\"Kelola foto profil\"" },
-  { old: "onClick={function () { setTab('logbook') }} className={tabCls('logbook')}", new: "onClick={function () { gantiTab('logbook') }} className={tabCls('logbook')}" },
-  { old: "onClick={function () { setTab('galeri') }} className={tabCls('galeri')}", new: "onClick={function () { gantiTab('galeri') }} className={tabCls('galeri')}" },
-  { old: "onClick={function () { setTab('absen') }} className={tabCls('absen')}", new: "onClick={function () { gantiTab('absen') }} className={tabCls('absen')}" },
-  { old: "onClick={function () { setTab('profil') }} className={tabCls('profil')}", new: "onClick={function () { gantiTab('profil') }} className={tabCls('profil')}" }
-]
-
-let replacements = 0
-targets.forEach(t => {
-  if (d.includes(t.old)) {
-    d = d.replace(t.old, t.new)
-    replacements++
-  }
-})
-
-if (replacements > 0) {
-  console.log('[BERHASIL] ' + replacements + ' lokasi navigasi diubah untuk menggunakan gantiTab')
-} else {
-  console.log('[INFO] Tombol navigasi sudah menggunakan gantiTab atau tidak ditemukan')
-}
-
-fs.writeFileSync(path.join(root, FILE_D), d, 'utf8')
-
-console.log('')
-console.log('Selesai. Silakan muat ulang browser (Ctrl + Shift + R).')
-console.log('')
-console.log('Perilaku baru:')
-console.log('1. Berpindah tab lewat tombol navigasi kini akan selalu melewati gantiTab().')
-console.log('2. Semua Mode Edit (Logbook, Galeri, atau Daftar Hadir) akan otomatis dibatalkan jika kamu pindah ke tab lain.')
-console.log('3. Form akan tersetting ulang dengan aman agar tidak ada data sisa yang tertinggal.')
-```
-
-## File: apply-fix-skeleton-ekspor.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-const FILE_S = 'src/components/Skeleton.jsx'
-if (!fs.existsSync(path.join(root, FILE_S))) {
-  console.log('[GAGAL] Skeleton.jsx tidak ditemukan')
-  process.exit(1)
-}
-let s = fs.readFileSync(path.join(root, FILE_S), 'utf8').replace(/\r\n/g, '\n')
-let berubah = false
-
-console.log('Mulai mengembalikan ekspor skeleton yang hilang...')
-console.log('')
-
-const STAT = `
-export function SkeletonStatCard() {
-  return (
-    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
-      <div className="skeleton h-4 w-28"></div>
-      <div className="skeleton h-9 w-16 mt-3"></div>
-      <div className="skeleton h-3 w-36 mt-2"></div>
-    </div>
-  )
-}
-`
-const CHART = `
-export function SkeletonChartRow() {
-  return (
-    <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5">
-      <div className="flex items-center justify-between">
-        <div className="space-y-2">
-          <div className="skeleton h-4 w-32"></div>
-          <div className="skeleton h-3 w-24"></div>
-        </div>
-        <div className="skeleton h-4 w-40"></div>
-      </div>
-      <div className="skeleton h-4 w-full rounded-full mt-4"></div>
-    </div>
-  )
-}
-`
-
-if (s.includes('export function SkeletonStatCard')) {
-  console.log('[SUDAH ADA] SkeletonStatCard di Skeleton.jsx')
-} else {
-  s = s.trimEnd() + '\n' + STAT
-  berubah = true
-  console.log('[BERHASIL] SkeletonStatCard dikembalikan ke Skeleton.jsx')
-}
-if (s.includes('export function SkeletonChartRow')) {
-  console.log('[SUDAH ADA] SkeletonChartRow di Skeleton.jsx')
-} else {
-  s = s.trimEnd() + '\n' + CHART
-  berubah = true
-  console.log('[BERHASIL] SkeletonChartRow dikembalikan ke Skeleton.jsx')
-}
-if (berubah) fs.writeFileSync(path.join(root, FILE_S), s, 'utf8')
-
-/* ===== Verifikasi menyeluruh: semua impor skeleton di proyek harus punya ekspor ===== */
-function daftarFile(dir) {
-  let out = []
-  const nama = fs.readdirSync(dir)
-  for (let i = 0; i < nama.length; i++) {
-    const p = path.join(dir, nama[i])
-    const st = fs.statSync(p)
-    if (st.isDirectory()) out = out.concat(daftarFile(p))
-    else if (p.endsWith('.jsx') || p.endsWith('.js')) out.push(p)
-  }
-  return out
-}
-s = fs.readFileSync(path.join(root, FILE_S), 'utf8')
-const file = daftarFile(path.join(root, 'src'))
-let masalah = 0
-for (let i = 0; i < file.length; i++) {
-  const isi = fs.readFileSync(file[i], 'utf8')
-  const re = /import\s*\{([^}]*)\}\s*from\s*['"][^'"]*Skeleton\.jsx['"]/g
-  let m
-  while ((m = re.exec(isi)) !== null) {
-    const nama = m[1].split(',').map(function (x) { return x.trim() }).filter(Boolean)
-    for (let j = 0; j < nama.length; j++) {
-      if (!s.includes('export function ' + nama[j])) {
-        masalah++
-        console.log('[KURANG] Ekspor ' + nama[j] + ' belum ada (dipakai di ' + path.relative(root, file[i]) + ')')
-      }
-    }
-  }
-}
-console.log('')
-console.log('Verifikasi:')
-console.log((s.includes('export function SkeletonStatCard') ? '[OK] ' : '[BELUM] ') + 'SkeletonStatCard')
-console.log((s.includes('export function SkeletonChartRow') ? '[OK] ' : '[BELUM] ') + 'SkeletonChartRow')
-console.log((s.includes('export function SkeletonLogbookCard') ? '[OK] ' : '[BELUM] ') + 'SkeletonLogbookCard')
-console.log((s.includes('export function SkeletonGalleryCard') ? '[OK] ' : '[BELUM] ') + 'SkeletonGalleryCard')
-console.log((s.includes('export function SkeletonAttendanceCard') ? '[OK] ' : '[BELUM] ') + 'SkeletonAttendanceCard')
-console.log((s.includes('export function SkeletonPersonCard') ? '[OK] ' : '[BELUM] ') + 'SkeletonPersonCard')
-console.log((s.includes('export function SkeletonDashboard') ? '[OK] ' : '[BELUM] ') + 'SkeletonDashboard')
-console.log((masalah === 0 ? '[OK] ' : '[BELUM] ') + 'Seluruh impor skeleton di proyek terpenuhi (' + masalah + ' kekurangan)')
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Penjelasan perbaikan:')
-console.log('1. Layar blank terjadi karena HomePage dan AttendancePage masih mengimpor SkeletonStatCard dan SkeletonChartRow yang sempat hilang dari Skeleton.jsx.')
-console.log('2. Kedua komponen itu kini dikembalikan dengan bentuk yang sama seperti sebelumnya, jadi statistik dan baris grafik kehadiran kembali punya skeleton.')
-console.log('3. Script sekaligus menyisir semua file di src dan mencocokkan setiap impor dari Skeleton.jsx dengan ekspor yang ada, sehingga bila masih ada yang kurang akan langsung terlihat di daftar KURANG.')
-console.log('4. Tidak ada komponen skeleton lain yang diubah, jadi tampilan skeleton versi UI baru tetap utuh.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Muat ulang browser: aplikasi tidak lagi blank dan halaman Beranda tampil normal.')
-console.log('2. Buka halaman Daftar Hadir saat memuat: kartu statistik dan baris grafik per orang tampil sebagai skeleton.')
-console.log('3. Buka dashboard dan halaman publik lain: semua skeleton muncul sesuai bentuk kartu terkini.')
-console.log('4. Bila konsol bersih dari error modul, berarti seluruh impor dan ekspor skeleton sudah sinkron.')
-```
-
-## File: apply-fix-tahun-footer.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-const FILE_L = 'src/components/Layout.jsx'
-
-console.log('Mulai mengubah tahun footer menjadi statis 2026...')
-console.log('')
-
-if (!fs.existsSync(path.join(root, FILE_L))) {
-  console.log('[GAGAL] Layout.jsx tidak ditemukan')
-  process.exit(1)
-}
-
-let l = fs.readFileSync(path.join(root, FILE_L), 'utf8').replace(/\r\n/g, '\n')
-
-if (l.includes('2026 Tim Magang BSI') && !l.includes('new Date().getFullYear()')) {
-  console.log('[SUDAH ADA] Tahun footer sudah statis 2026')
-} else if (l.includes('{new Date().getFullYear()}')) {
-  l = l.replace('{new Date().getFullYear()}', '2026')
-  fs.writeFileSync(path.join(root, FILE_L), l, 'utf8')
-  console.log('[BERHASIL] Tahun footer diubah menjadi statis 2026')
-} else {
-  console.log('[TIDAK KETEMU] Pola tahun dinamis di Layout.jsx')
-}
-
-l = fs.readFileSync(path.join(root, FILE_L), 'utf8')
-console.log('')
-console.log('Verifikasi:')
-console.log((l.includes('2026 Tim Magang BSI') ? '[OK] ' : '[BELUM] ') + 'Teks footer memuat angka 2026 secara statis')
-console.log((!l.includes('new Date().getFullYear()') ? '[OK] ' : '[BELUM] ') + 'Fungsi new Date() sudah tidak dipakai di footer')
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Perubahan:')
-console.log('1. Teks footer kini tertulis paten: © 2026 Tim Magang BSI.')
-console.log('2. Tidak ada lagi pemanggilan fungsi waktu sistem, sehingga footer tidak akan pernah berubah meski dibuka pada tahun 2027 atau seterusnya.')
-console.log('3. Ukuran file sedikit lebih ringan karena tidak perlu mengevaluasi ekspresi JavaScript saat merender footer.')
-```
-
-## File: apply-footer-ramping.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-
-console.log('Mulai merampingkan footer sesuai Opsi A...')
-console.log('')
-
-/* ===== 1. Layout.jsx: footer satu baris ramping dengan tahun otomatis ===== */
-const FILE_L = 'src/components/Layout.jsx'
-const FOOTER_BARU = `<footer className="footer-ramping border-t border-slate-200 bg-white">
-<div className="mx-auto max-w-7xl px-4 py-4 text-center">
-<p className="text-xs text-slate-500">© {new Date().getFullYear()} Tim Magang BSI</p>
-</div>
-</footer>`
-if (!fs.existsSync(path.join(root, FILE_L))) {
-  console.log('[GAGAL] Layout.jsx tidak ditemukan')
-  process.exit(1)
-}
-let l = baca(FILE_L)
-if (l.includes('footer-ramping')) {
-  console.log('[SUDAH ADA] Footer ramping di Layout.jsx')
-} else {
-  const iF = l.indexOf('<footer')
-  const iE = l.indexOf('</footer>', iF)
-  if (iF === -1 || iE === -1) {
-    console.log('[TIDAK KETEMU] Blok footer di Layout.jsx')
-  } else {
-    l = l.slice(0, iF) + FOOTER_BARU + l.slice(iE + '</footer>'.length)
-    simpan(FILE_L, l)
-    console.log('[BERHASIL] Footer diganti menjadi satu baris ramping dengan tahun otomatis')
-  }
-}
-
-/* ===== 2. index.css: rapatkan ruang mati di atas footer ===== */
-const FILE_CSS = 'src/index.css'
-const CSS_BLOK = `/* footer-ramping: ruang bawah halaman dirapatkan supaya footer slim terasa pas */
-main { padding-bottom: 2.5rem !important; }
-`
-if (!fs.existsSync(path.join(root, FILE_CSS))) {
-  console.log('[LEWATI] index.css tidak ditemukan')
-} else {
-  let css = baca(FILE_CSS)
-  if (css.includes('footer-ramping:')) {
-    console.log('[SUDAH ADA] CSS perapat ruang bawah di index.css')
-  } else {
-    simpan(FILE_CSS, css.trimEnd() + '\n\n' + CSS_BLOK)
-    console.log('[BERHASIL] Ruang bawah halaman dirapatkan lewat index.css')
-  }
-}
-
-/* ===== 3. Verifikasi ===== */
-l = baca(FILE_L)
-const css2 = baca(FILE_CSS)
-console.log('')
-console.log('Verifikasi:')
-console.log((l.includes('footer-ramping') ? '[OK] ' : '[BELUM] ') + 'Footer ramping terpasang di Layout.jsx')
-console.log((l.includes('new Date().getFullYear()') ? '[OK] ' : '[BELUM] ') + 'Tahun footer otomatis mengikuti tanggal sistem')
-console.log((css2.includes('main { padding-bottom: 2.5rem') ? '[OK] ' : '[BELUM] ') + 'Ruang mati di atas footer dirapatkan')
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Hasil akhir Opsi A:')
-console.log('1. Footer kini hanya satu baris teks kecil di tengah dengan padding vertikal 16 piksel, total tinggi sekitar 48 piksel termasuk garis pemisah.')
-console.log('2. Tahun tidak lagi ditulis manual melainkan diambil dari tanggal sistem, jadi tidak perlu diedit tiap pergantian tahun.')
-console.log('3. Ruang kosong antara konten terakhir atau pagination dengan footer dipangkas menjadi 40 piksel, sehingga ujung halaman terasa rapat dan tidak mengambang.')
-console.log('4. Garis pemisah atas dan pembeda warna tipis dipertahankan, jadi halaman tetap terasa berhenti dengan rapi di kedua mode.')
-console.log('5. Pada halaman berisi sedikit konten, footer tetap menempel di bawah layar karena struktur flex layout tidak diubah.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Buka halaman Daftar Hadir atau halaman berisi sedikit data: footer terlihat sebagai bar tipis yang rapi, bukan kotak tinggi.')
-console.log('2. Gulir ke ujung halaman: jarak antara pagination dan footer kini pendek dan proporsional.')
-console.log('3. Aktifkan mode gelap: warna footer menyesuaikan latar gelap dengan garis pemisah lembut seperti sebelumnya.')
-console.log('4. Periksa teks footer: tahun tampil sesuai tahun berjalan tanpa perlu diubah manual.')
-console.log('5. Buka halaman panjang seperti Logbook publik: footer tetap berada di ujung dokumen tanpa memakan ruang berlebihan.')
-```
-
-## File: apply-scroll-ke-form.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-const FILE_D = 'src/pages/DashboardPage.jsx'
-if (!fs.existsSync(path.join(root, FILE_D))) {
-  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
-  process.exit(1)
-}
-let d = fs.readFileSync(path.join(root, FILE_D), 'utf8').replace(/\r\n/g, '\n')
-
-console.log('Mulai mengarahkan scroll tombol Edit ke kartu form, bukan ke puncak halaman...')
-console.log('')
-
-/* ===== 1. Tambahkan tiga ref untuk kartu form ===== */
-if (d.includes('const refFormLog = useRef(null)')) {
-  console.log('[SUDAH ADA] Ref kartu form di DashboardPage')
-} else if (d.includes('const refListLog = useRef(null)')) {
-  d = d.replace('const refListLog = useRef(null)',
-    'const refListLog = useRef(null)\nconst refFormLog = useRef(null)\nconst refFormGal = useRef(null)\nconst refFormHadir = useRef(null)')
-  console.log('[BERHASIL] Ref kartu form ditambahkan')
-} else if (d.includes('const toast = useToast()')) {
-  d = d.replace('const toast = useToast()',
-    'const toast = useToast()\nconst refFormLog = useRef(null)\nconst refFormGal = useRef(null)\nconst refFormHadir = useRef(null)')
-  console.log('[BERHASIL] Ref kartu form ditambahkan lewat anchor toast')
-} else {
-  console.log('[TIDAK KETEMU] Anchor untuk menyisipkan ref kartu form')
-}
-
-/* ===== 2. Tambahkan fungsi bantu gulirKeForm ===== */
-const HELPER = `function gulirKeForm(ref) {
-requestAnimationFrame(function () {
-if (ref && ref.current) ref.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
-})
-}
-`
-if (d.includes('function gulirKeForm(')) {
-  console.log('[SUDAH ADA] Fungsi bantu gulirKeForm')
-} else if (d.includes('function startEditLog(')) {
-  d = d.replace('function startEditLog(', HELPER + 'function startEditLog(')
-  console.log('[BERHASIL] Fungsi bantu gulirKeForm ditambahkan')
-} else {
-  console.log('[TIDAK KETEMU] Anchor fungsi startEditLog')
-}
-
-/* ===== 3. Ganti window.scrollTo di dalam tiap startEdit ===== */
-const TARGET = "window.scrollTo({ top: 0, behavior: 'smooth' })"
-function gantiScrollDalam(namaFn, pengganti) {
-  const idx = d.indexOf('function ' + namaFn + '(')
-  if (idx === -1) { console.log('[TIDAK KETEMU] Fungsi ' + namaFn); return }
-  const nextFn = d.indexOf('\nfunction ', idx + 5)
-  const batas = nextFn === -1 ? d.length : nextFn
-  const seg = d.slice(idx, batas)
-  if (seg.includes(pengganti)) { console.log('[SUDAH ADA] Scroll ke form di ' + namaFn); return }
-  if (!seg.includes(TARGET)) { console.log('[TIDAK KETEMU] window.scrollTo di ' + namaFn); return }
-  d = d.slice(0, idx) + seg.replace(TARGET, pengganti) + d.slice(batas)
-  console.log('[BERHASIL] Scroll ' + namaFn + ' diarahkan ke kartu form')
-}
-gantiScrollDalam('startEditLog', 'gulirKeForm(refFormLog)')
-gantiScrollDalam('startEditGal', 'gulirKeForm(refFormGal)')
-gantiScrollDalam('startEditHadir', 'gulirKeForm(refFormHadir)')
-
-/* ===== 4. Pasang ref dan scroll margin pada ketiga kartu form ===== */
-const pasangan = [
-  ['editLogId', 'refFormLog'],
-  ['editGalId', 'refFormGal'],
-  ['editHadirId', 'refFormHadir']
-]
-pasangan.forEach(function (p) {
-  const re = new RegExp("<div className=\\{'card-hover bg-white rounded-\\[2rem\\] border shadow-sm p-8 min-w-0 ' \\+ \\(" + p[0])
-  if (d.includes('ref={' + p[1] + '}')) {
-    console.log('[SUDAH ADA] Ref terpasang di kartu form ' + p[0])
-  } else if (re.test(d)) {
-    d = d.replace(re, "<div ref={" + p[1] + "} className={'card-hover scroll-mt-24 bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (" + p[0])
-    console.log('[BERHASIL] Ref dan scroll margin terpasang di kartu form ' + p[0])
-  } else {
-    console.log('[TIDAK KETEMU] Pola kartu form ' + p[0])
-  }
-})
-
-fs.writeFileSync(path.join(root, FILE_D), d, 'utf8')
-
-/* ===== 5. Verifikasi ===== */
-d = fs.readFileSync(path.join(root, FILE_D), 'utf8')
-console.log('')
-console.log('Verifikasi:')
-console.log((d.includes('const refFormLog = useRef(null)') ? '[OK] ' : '[BELUM] ') + 'Ref kartu form tersedia')
-console.log((d.includes('function gulirKeForm(') ? '[OK] ' : '[BELUM] ') + 'Fungsi bantu gulirKeForm tersedia')
-console.log((d.includes('gulirKeForm(refFormLog)') ? '[OK] ' : '[BELUM] ') + 'Edit logbook menggulir ke form')
-console.log((d.includes('gulirKeForm(refFormGal)') ? '[OK] ' : '[BELUM] ') + 'Edit galeri menggulir ke form')
-console.log((d.includes('gulirKeForm(refFormHadir)') ? '[OK] ' : '[BELUM] ') + 'Edit daftar hadir menggulir ke form')
-console.log((d.includes('scroll-mt-24 bg-white rounded-[2rem]') ? '[OK] ' : '[BELUM] ') + 'Scroll margin agar form berhenti di bawah header')
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Perilaku baru:')
-console.log('1. Klik Edit pada kartu logbook, galeri, atau daftar hadir: layar menggulir mulus hanya sampai kartu form edit, bukan ke puncak halaman.')
-console.log('2. Kartu form berhenti tepat di bawah header sticky berkat scroll margin 96 piksel, jadi judul form dan badge Mode Edit langsung terlihat seperti lampiranmu.')
-console.log('3. Pengguliran dijalankan satu frame setelah state edit aktif, sehingga posisi form sudah final sebelum scroll dimulai dan tidak meleset.')
-console.log('4. Tombol Batal Edit dan alur simpan tidak disentuh sama sekali, jadi perilaku lainnya tetap identik.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Buka dashboard, gulir daftar logbook sampai bawah, lalu klik Edit pada kartu mana pun.')
-console.log('2. Perhatikan layar berhenti dengan kartu form Ubah logbook harian terlihat penuh di area pandang, bukan layar paling atas.')
-console.log('3. Ulangi pada tab Galeri dan Daftar Hadir: perilaku sama pada form masing masing.')
-console.log('4. Klik Batal Edit lalu Edit lagi: scroll tetap konsisten berhenti di posisi form.')
-```
-
-## File: apply-skeleton-ui-baru.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-
-console.log('Mulai menulis ulang skeleton agar identik dengan UI kartu saat ini...')
-console.log('')
-
-/* ===== 1. Baca bentuk borderRadius yang dipakai komponen Avatar saat ini ===== */
-const FILE_U = 'src/components/ui.jsx'
-let RAD = '9999px'
-if (fs.existsSync(path.join(root, FILE_U))) {
-  const u = baca(FILE_U)
-  const idx = u.indexOf('function Avatar(')
-  if (idx !== -1) {
-    const idxOpen = u.indexOf('{', idx)
-    let brace = 0, akhir = -1, inStr = false, strCh = ''
-    for (let i = idxOpen; i < u.length; i++) {
-      const ch = u[i]
-      const prev = i > 0 ? u[i - 1] : ''
-      if (inStr) { if (ch === strCh && prev !== '\\') inStr = false; continue }
-      if (ch === '"' || ch === "'" || ch === '`') { inStr = true; strCh = ch; continue }
-      if (ch === '{') brace++
-      if (ch === '}') { brace--; if (brace === 0) { akhir = i + 1; break } }
-    }
-    if (akhir !== -1) {
-      const span = u.slice(idx, akhir)
-      const m = span.match(/borderRadius:\s*['"]([^'"]+)['"]/) || span.match(/borderRadius:\s*([^,'}\s]+)/)
-      if (m) RAD = m[1]
-    }
-  }
-  console.log('[INFO] Bentuk avatar saat ini memakai borderRadius: ' + RAD)
-} else {
-  console.log('[LEWATI] ui.jsx tidak ditemukan, memakai borderRadius bawaan')
-}
-
-/* ===== 2. Tulis ulang Skeleton.jsx sesuai UI kartu terkini ===== */
-const FILE_S = 'src/components/Skeleton.jsx'
-const ISI = `export function SkeletonLogbookCard() {
-  return (
-    <div className="card-hover flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="skeleton aspect-video w-full rounded-2xl"></div>
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="skeleton h-6 w-24 rounded-full"></div>
-        <div className="skeleton h-6 w-20 rounded-full"></div>
-        <div className="skeleton ml-auto h-6 w-20 rounded-full"></div>
-      </div>
-      <div className="skeleton h-4 w-36 rounded-full"></div>
-      <div className="skeleton h-6 w-40 rounded-full"></div>
-      <div className="skeleton h-4 w-32 rounded-full"></div>
-      <div className="skeleton h-3 w-24 rounded-full"></div>
-      <div className="mt-auto flex items-center gap-3 border-t border-slate-100 pt-4">
-        <div className="skeleton h-10 w-10" style={{ borderRadius: '${RAD}' }}></div>
-        <div className="flex-1 space-y-2">
-          <div className="skeleton h-4 w-36 rounded-full"></div>
-          <div className="skeleton h-3 w-24 rounded-full"></div>
-        </div>
-        <div className="skeleton h-9 w-20 rounded-2xl"></div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonGalleryCard() {
-  return (
-    <div className="card-hover flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="skeleton aspect-video w-full rounded-2xl"></div>
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="skeleton h-6 w-24 rounded-full"></div>
-        <div className="skeleton ml-auto h-6 w-20 rounded-full"></div>
-      </div>
-      <div className="skeleton h-4 w-36 rounded-full"></div>
-      <div className="skeleton h-6 w-44 rounded-full"></div>
-      <div className="mt-auto flex items-center gap-3 border-t border-slate-100 pt-4">
-        <div className="skeleton h-10 w-10" style={{ borderRadius: '${RAD}' }}></div>
-        <div className="flex-1 space-y-2">
-          <div className="skeleton h-4 w-36 rounded-full"></div>
-          <div className="skeleton h-3 w-24 rounded-full"></div>
-        </div>
-        <div className="skeleton h-9 w-20 rounded-2xl"></div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonAttendanceCard() {
-  return (
-    <div className="card-hover flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="flex items-center justify-between">
-        <div className="skeleton h-6 w-20 rounded-full"></div>
-        <div className="skeleton h-4 w-32 rounded-full"></div>
-      </div>
-      <div className="skeleton h-5 w-28 rounded-full"></div>
-      <div className="skeleton h-4 w-full rounded-full"></div>
-      <div className="mt-auto flex items-center gap-3 border-t border-slate-100 pt-4">
-        <div className="skeleton h-10 w-10" style={{ borderRadius: '${RAD}' }}></div>
-        <div className="flex-1 space-y-2">
-          <div className="skeleton h-4 w-36 rounded-full"></div>
-          <div className="skeleton h-3 w-24 rounded-full"></div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonPersonCard() {
-  return (
-    <div className="card-hover flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex items-center gap-4">
-        <div className="skeleton h-14 w-14" style={{ borderRadius: '${RAD}' }}></div>
-        <div className="flex-1 space-y-2">
-          <div className="skeleton h-5 w-40 rounded-full"></div>
-          <div className="skeleton h-3 w-24 rounded-full"></div>
-          <div className="skeleton h-5 w-28 rounded-full"></div>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="skeleton h-16 rounded-2xl"></div>
-        <div className="skeleton h-16 rounded-2xl"></div>
-      </div>
-      <div className="grid grid-cols-3 gap-2">
-        <div className="skeleton h-12 rounded-xl"></div>
-        <div className="skeleton h-12 rounded-xl"></div>
-        <div className="skeleton h-12 rounded-xl"></div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonDashboard() {
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="skeleton h-14 w-14" style={{ borderRadius: '${RAD}' }}></div>
-        <div className="flex-1 space-y-2">
-          <div className="skeleton h-4 w-44 rounded-full"></div>
-          <div className="skeleton h-3 w-28 rounded-full"></div>
-        </div>
-        <div className="skeleton h-10 w-28 rounded-2xl"></div>
-      </div>
-      <div className="grid items-start gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-        <div className="space-y-4 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="skeleton h-5 w-36 rounded-full"></div>
-          <div className="skeleton h-10 w-full rounded-2xl"></div>
-          <div className="skeleton h-10 w-full rounded-2xl"></div>
-          <div className="skeleton h-20 w-full rounded-2xl"></div>
-          <div className="skeleton h-11 w-44 rounded-2xl"></div>
-        </div>
-        <div className="space-y-5">
-          <div className="skeleton h-6 w-32 rounded-full"></div>
-          <div className="grid gap-5 md:grid-cols-2">
-            <SkeletonLogbookCard />
-            <SkeletonLogbookCard />
-            <SkeletonLogbookCard />
-            <SkeletonLogbookCard />
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-`
-simpan(FILE_S, ISI)
-console.log('[BERHASIL] Skeleton.jsx ditulis ulang dengan lima komponen sesuai UI terkini')
-
-/* ===== 3. Verifikasi ===== */
-const s2 = baca(FILE_S)
-console.log('')
-console.log('Verifikasi:')
-console.log((s2.includes('export function SkeletonLogbookCard') ? '[OK] ' : '[BELUM] ') + 'SkeletonLogbookCard')
-console.log((s2.includes('export function SkeletonGalleryCard') ? '[OK] ' : '[BELUM] ') + 'SkeletonGalleryCard')
-console.log((s2.includes('export function SkeletonAttendanceCard') ? '[OK] ' : '[BELUM] ') + 'SkeletonAttendanceCard')
-console.log((s2.includes('export function SkeletonPersonCard') ? '[OK] ' : '[BELUM] ') + 'SkeletonPersonCard')
-console.log((s2.includes('export function SkeletonDashboard') ? '[OK] ' : '[BELUM] ') + 'SkeletonDashboard')
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Penyesuaian skeleton terhadap UI saat ini:')
-console.log('1. Skeleton logbook dan galeri kini punya blok media aspect-video di bagian atas, meniru kartu yang menampilkan foto atau video.')
-console.log('2. Baris chip dibuat tiga bagian dengan chip status terdorong ke kanan, sama seperti chip kategori, unit, dan Siap dilihat pada kartu asli.')
-console.log('3. Ditambahkan baris pendek peniru daftar kegiatan dan tanggal, sehingga tinggi skeleton mendekati kartu berisi.')
-console.log('4. Bentuk blok avatar dibaca langsung dari komponen Avatar di ui.jsx, jadi skeleton selalu mengikuti bentuk avatar yang berlaku tanpa perlu ditebak.')
-console.log('5. Skeleton kartu profil meniru kotak statistik Logbook dan Media serta tiga kotak rekap kehadiran, sesuai kartu di halaman Tim & Dospem.')
-console.log('6. Skeleton dashboard meniru kartu kepala profil, panel form kiri, dan grid daftar kanan, sehingga layar memuat sesi terlihat seperti dashboard sungguhan.')
-console.log('7. Semua blok memakai kelas skeleton bawaan yang sudah punya efek shimmer dan varian mode gelap, jadi tidak ada CSS baru yang perlu dipelihara.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Muat halaman Logbook publik dalam kondisi jaringan lambat atau saat data belum siap: skeleton kartu kini berbentuk sama dengan kartu asli termasuk blok media.')
-console.log('2. Buka dashboard saat sesi masih dimuat: kerangka dua kolom muncul dan begitu data siap pergantiannya mulus tanpa lompatan bentuk.')
-console.log('3. Buka halaman Tim & Dospem saat memuat: skeleton profil menampilkan kotak statistik dan rekap kehadiran tiruan.')
-console.log('4. Aktifkan mode gelap: seluruh skeleton menyesuaikan warna gelap dengan kilau lembut yang sama.')
-console.log('5. Ganti halaman pagination dengan cepat: skeleton tidak lagi muncul karena data sudah termuat, tetapi saat muat ulang penuh bentuknya konsisten.')
-```
-
-## File: apply-transisi-tema-v3.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-
-console.log('Mulai memasang crossfade kompositor untuk pergantian tema...')
-console.log('')
-
-/* ===== 1. theme.jsx: bungkus pergantian tema dengan startViewTransition ===== */
-const FILE_T = 'src/lib/theme.jsx'
-if (!fs.existsSync(path.join(root, FILE_T))) {
-  console.log('[GAGAL] theme.jsx tidak ditemukan')
-  process.exit(1)
-}
-let t = baca(FILE_T)
-if (t.includes('startViewTransition')) {
-  console.log('[SUDAH ADA] Toggle tema memakai startViewTransition')
-} else {
-  const RE_INLINE = /toggle: function \(\) \{ setDark\(function \(d\) \{ return !d \}\) \}/
-  const RE_STANDALONE = /function toggle\(\) \{\s*setDark\(function \(d\) \{ return !d \}\)\s*\}/
-  const BADAN = "const ganti = function () { setDark(function (d) { return !d }) }\nif (document.startViewTransition && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) document.startViewTransition(ganti)\nelse ganti()"
-  if (RE_INLINE.test(t)) {
-    t = t.replace(RE_INLINE, 'toggle: function () {\n' + BADAN + '\n}')
-    simpan(FILE_T, t)
-    console.log('[BERHASIL] Toggle tema dibungkus startViewTransition')
-  } else if (RE_STANDALONE.test(t)) {
-    t = t.replace(RE_STANDALONE, 'function toggle() {\n' + BADAN + '\n}')
-    simpan(FILE_T, t)
-    console.log('[BERHASIL] Fungsi toggle tema dibungkus startViewTransition')
-  } else {
-    console.log('[TIDAK KETEMU] Pola fungsi toggle di theme.jsx')
-  }
-}
-
-/* ===== 2. main.jsx: lewati transisi fallback bila View Transitions tersedia ===== */
-const FILE_M = 'src/main.jsx'
-if (fs.existsSync(path.join(root, FILE_M))) {
-  let m = baca(FILE_M)
-  const RE_OBS = /gelap = sekarang(\s*)akar\.classList\.add\('theme-transition'\)/
-  if (m.includes("if (document.startViewTransition) return")) {
-    console.log('[SUDAH ADA] Penjaga View Transitions di pengamat main.jsx')
-  } else if (RE_OBS.test(m)) {
-    m = m.replace(RE_OBS, "gelap = sekarang$1if (document.startViewTransition) return$1akar.classList.add('theme-transition')")
-    simpan(FILE_M, m)
-    console.log('[BERHASIL] Pengamat tema melewati fallback bila View Transitions tersedia')
-  } else {
-    console.log('[TIDAK KETEMU] Pola pengamat tema di main.jsx')
-  }
-} else {
-  console.log('[LEWATI] main.jsx tidak ditemukan')
-}
-
-/* ===== 3. index.css: aturan crossfade snapshot dan pemutus blur saat fallback ===== */
-const FILE_CSS = 'src/index.css'
-const CSS_BLOK = `/* transisi-tema-v3: crossfade snapshot di kompositor, bebas lukis ulang elemen */
-::view-transition-old(root), ::view-transition-new(root) {
-  animation: none;
-  mix-blend-mode: normal;
-}
-::view-transition-old(root) { z-index: 1; }
-::view-transition-new(root) { z-index: 2; }
-@keyframes vtTema {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-::view-transition-new(root) { animation: vtTema 0.4s ease; }
-/* selama fallback transisi warna berjalan, matikan blur mahal supaya tidak patah */
-.theme-transition [class*="backdrop-blur"] { backdrop-filter: none !important; }
-`
-if (!fs.existsSync(path.join(root, FILE_CSS))) {
-  console.log('[LEWATI] index.css tidak ditemukan')
-} else {
-  let css = baca(FILE_CSS)
-  if (css.includes('transisi-tema-v3')) {
-    console.log('[SUDAH ADA] CSS transisi-tema-v3 di index.css')
-  } else {
-    simpan(FILE_CSS, css.trimEnd() + '\n\n' + CSS_BLOK)
-    console.log('[BERHASIL] CSS crossfade snapshot ditambahkan di index.css')
-  }
-}
-
-/* ===== 4. Verifikasi ===== */
-t = baca(FILE_T)
-const m2 = fs.existsSync(path.join(root, FILE_M)) ? baca(FILE_M) : ''
-const css2 = baca(FILE_CSS)
-console.log('')
-console.log('Verifikasi:')
-console.log((t.includes('startViewTransition') ? '[OK] ' : '[BELUM] ') + 'Toggle tema memakai View Transitions')
-console.log((m2.includes('if (document.startViewTransition) return') ? '[OK] ' : '[BELUM] ') + 'Fallback dilewati bila View Transitions ada')
-console.log((css2.includes('::view-transition-new(root)') ? '[OK] ' : '[BELUM] ') + 'Aturan crossfade snapshot tersedia')
-console.log((css2.includes('.theme-transition [class*="backdrop-blur"]') ? '[OK] ' : '[BELUM] ') + 'Blur mahal dimatikan selama fallback')
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Kenapa versi ini akhirnya mulus:')
-console.log('1. Pergantian tema tidak lagi mentransisikan warna ratusan elemen satu per satu yang memaksa lukis ulang tiap frame.')
-console.log('2. Browser mengambil snapshot layar lama dan baru sebagai tekstur, lalu crossfade 0.4 detik dikerjakan kompositor GPU, jadi terasa seperti video lembut.')
-console.log('3. Elemen ber-backdrop-blur tidak lagi menghitung ulang blur tiap frame karena tidak ada warna yang beranimasi di bawahnya pada jalur View Transitions.')
-console.log('4. Bila browser belum mendukung View Transitions, fallback transisi warna tetap jalan tetapi blur header dimatikan sementara selama jendela transisi, sumber patah utama ikut hilang.')
-console.log('5. Pengguna dengan reduce motion langsung mendapat pergantian instan tanpa animasi, sesuai standar aksesibilitas.')
-console.log('6. Klik beruntun tetap aman karena transisi yang sedang berjalan otomatis dibatalkan oleh transisi baru.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Klik tombol bulan atau matahari: seluruh layar luluh berganti mode dalam satu gerakan crossfade lembut tanpa sendatan.')
-console.log('2. Perhatikan header berblur: tidak ada lagi getar atau patah saat warna berganti.')
-console.log('3. Klik bolak balik dengan cepat: setiap pergantian tetap halus dan tidak menumpuk.')
-console.log('4. Uji di browser lama bila ada: pergantian tetap beranimasi lewat fallback tanpa blur yang memberatkan.')
 ```
 
 ## File: postcss.config.js
@@ -4777,40 +2148,6 @@ export const GALERI_KEGIATAN = [
 ]
 ```
 
-## File: src/lib/theme.jsx
-```javascript
-import { createContext, useContext, useEffect, useState } from 'react'
-
-const ThemeContext = createContext(null)
-
-export function ThemeProvider(props) {
-  const [dark, setDark] = useState(function () {
-    const saved = localStorage.getItem('mbsi-theme')
-    if (saved) return saved === 'dark'
-    return window.matchMedia('(prefers-color-scheme: dark)').matches
-  })
-
-  useEffect(function () {
-    document.documentElement.classList.toggle('dark', dark)
-    localStorage.setItem('mbsi-theme', dark ? 'dark' : 'light')
-  }, [dark])
-
-  return (
-    <ThemeContext.Provider value={{ dark: dark, toggle: function () {
-const ganti = function () { setDark(function (d) { return !d }) }
-if (document.startViewTransition && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) document.startViewTransition(ganti)
-else ganti()
-} }}>
-      {props.children}
-    </ThemeContext.Provider>
-  )
-}
-
-export function useTheme() {
-  return useContext(ThemeContext)
-}
-```
-
 ## File: supabase/schema.sql
 ```sql
 create extension if not exists "pgcrypto";
@@ -5504,6 +2841,48 @@ export async function siapkanFotoProfil(file, maksSisi, kualitas) {
 }
 ```
 
+## File: src/lib/theme.jsx
+```javascript
+import { createContext, useContext, useEffect, useState } from 'react'
+
+const ThemeContext = createContext(null)
+
+export function ThemeProvider(props) {
+  const [dark, setDark] = useState(function () {
+    const saved = localStorage.getItem('mbsi-theme')
+    if (saved) return saved === 'dark'
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  })
+
+  useEffect(function () {
+    document.documentElement.classList.toggle('dark', dark)
+    localStorage.setItem('mbsi-theme', dark ? 'dark' : 'light')
+  }, [dark])
+
+  return (
+    <ThemeContext.Provider value={{ dark: dark, toggle: function () {
+const ganti = function () { setDark(function (d) { return !d }) }
+if (document.startViewTransition && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  const akar = document.documentElement
+  const vt = document.startViewTransition(function () {
+    akar.classList.add('vt-tema')
+    ganti()
+  })
+  const lepas = function () { akar.classList.remove('vt-tema') }
+  vt.finished.then(lepas, lepas)
+  setTimeout(lepas, 600)
+} else ganti()
+} }}>
+      {props.children}
+    </ThemeContext.Provider>
+  )
+}
+
+export function useTheme() {
+  return useContext(ThemeContext)
+}
+```
+
 ## File: package.json
 ```json
 {
@@ -5854,244 +3233,6 @@ export default defineConfig(function ({ mode }) {
 })
 ```
 
-## File: src/components/Carousel.jsx
-```javascript
-import { useEffect, useRef, useState } from 'react'
-import { SizedIcon } from './icons.jsx'
-import { Lightbox, SmartFit, MediaDrive } from './ui.jsx'
-
-export default function Carousel(props) {
-  const slides = props.slides || []
-  const autoMs = props.autoMs || 4000
-  const [idx, setIdx] = useState(0)
-  const [paused, setPaused] = useState(false)
-  const [zoom, setZoom] = useState(null)
-  const trackRef = useRef(null)
-  const touchX = useRef(0)
-  const moved = useRef(false)
-
-  useEffect(function () {
-    if (slides.length < 2 || paused) return undefined
-    const t = setInterval(function () {
-      setIdx(function (i) { return (i + 1) % slides.length })
-    }, autoMs)
-    return function () { clearInterval(t) }
-  }, [slides.length, paused, autoMs])
-
-  useEffect(function () {
-    if (trackRef.current) trackRef.current.style.transform = 'translateX(-' + (idx * 100) + '%)'
-  }, [idx])
-
-  if (!slides.length) return null
-
-  if (slides.length === 1) {
-    const s = slides[0]
-    return (
-      <>
-        <div className="relative group rounded-2xl overflow-hidden aspect-video bg-slate-900">
-          {s.drive ? (
-            <MediaDrive driveId={s.drive} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} className="absolute inset-0 h-full w-full object-cover cursor-zoom-in" />
-          ) : (
-            <SmartFit src={s.src} full={s.full} type={s.type} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} />
-          )}
-          <button type="button" title="Perbesar media" onClick={function () { setZoom(s) }}
-            className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
-            <SizedIcon name="expand" size={15} />
-          </button>
-        </div>
-        {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} driveId={zoom.drive || null} onClose={function () { setZoom(null) }} /> : null}
-      </>
-    )
-  }
-
-  return (
-    <>
-      <div
-        className="media-carousel group"
-        onMouseEnter={function () { setPaused(true) }}
-        onMouseLeave={function () { setPaused(false) }}
-        onTouchStart={function (e) { touchX.current = e.touches[0].clientX; moved.current = false }}
-        onTouchEnd={function (e) {
-          const dx = e.changedTouches[0].clientX - touchX.current
-          if (Math.abs(dx) > 40) {
-            moved.current = true
-            setIdx(function (i) { return (i + (dx < 0 ? 1 : -1) + slides.length) % slides.length })
-          }
-        }}
-      >
-        <div ref={trackRef} className="carousel-track">
-          {slides.map(function (s, i) {
-            return (
-              <div key={i} className="carousel-slide">
-                {s.drive ? (
-                  <MediaDrive driveId={s.drive} alt={s.title || 'Media'} onClick={function () { if (moved.current) { moved.current = false; return } setZoom(s) }} className="absolute inset-0 h-full w-full object-cover cursor-zoom-in" />
-                ) : (
-                <SmartFit
-                  src={s.src}
-                  full={s.full}
-                   type={s.type}
-                  alt={s.title || 'Media'}
-                  onClick={function () {
-                    if (moved.current) { moved.current = false; return }
-                    setZoom(s)
-                  }}
-                />
-                )}
-                <button type="button" title="Perbesar media" onClick={function (e) { e.stopPropagation(); setZoom(s) }}
-                  className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
-                  <SizedIcon name="expand" size={15} />
-                </button>
-                {s.title ? (
-                  <span className="absolute bottom-2 left-2 z-10 px-2 py-1 rounded-lg bg-black/60 text-white text-xs max-w-[85%] truncate">
-                    {s.title}
-                  </span>
-                ) : null}
-              </div>
-            )
-          })}
-        </div>
-        <button
-          onClick={function () { setIdx(function (i) { return (i - 1 + slides.length) % slides.length }) }}
-          className="absolute left-2 top-1/2 -translate-y-1/2 z-10 h-8 w-8 rounded-full bg-black/40 text-white grid place-items-center opacity-100 xl:opacity-0 xl:group-hover:opacity-100 hover:bg-black/60"
-        >
-          &#8249;
-        </button>
-        <button
-          onClick={function () { setIdx(function (i) { return (i + 1) % slides.length }) }}
-          className="absolute right-2 top-1/2 -translate-y-1/2 z-10 h-8 w-8 rounded-full bg-black/40 text-white grid place-items-center opacity-100 xl:opacity-0 xl:group-hover:opacity-100 hover:bg-black/60"
-        >
-          &#8250;
-        </button>
-        <div className="absolute bottom-2 right-2 z-10 flex gap-1.5">
-          {slides.map(function (s, i) {
-            return (
-              <button
-                key={i}
-                onClick={function () { setIdx(i) }}
-                className={'carousel-dot h-2 w-2 rounded-full transition-all ' + (i === idx ? 'bg-white' : 'bg-white/40')}
-              />
-            )
-          })}
-        </div>
-      </div>
-      {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} driveId={zoom.drive || null} onClose={function () { setZoom(null) }} /> : null}
-    </>
-  )
-}
-```
-
-## File: src/components/FilterBar.jsx
-```javascript
-import { ICONS } from './icons.jsx'
-import { CustomSelect, CustomDateInput } from './controls.jsx'
-
-export function FilterSelect(props) {
-  return (
-    <CustomSelect
-      icon={props.icon}
-      value={props.value}
-      onChange={props.onChange}
-      options={props.options}
-      className="min-w-[190px]"
-      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
-    />
-  )
-}
-
-export function FilterDate(props) {
-  return (
-    <CustomDateInput
-      mode={props.mode || 'date'}
-      value={props.value}
-      onChange={props.onChange}
-      className="min-w-[170px]"
-      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
-    />
-  )
-}
-
-export function TimeFilter(props) {
-  const f = props.filter
-  const set = props.set
-  return (
-    <div className="flex flex-wrap items-center gap-3">
-      <div className="time-toggle">
-        <button type="button" className={f.timeMode === 'bulan' ? 'active' : ''}
-          onClick={function () { set(Object.assign({}, f, { timeMode: 'bulan', bulan: '', dari: '', sampai: '' })) }}>Bulan</button>
-        <button type="button" className={f.timeMode === 'rentang' ? 'active' : ''}
-          onClick={function () { set(Object.assign({}, f, { timeMode: 'rentang', bulan: '', dari: '', sampai: '' })) }}>Rentang Waktu</button>
-      </div>
-      {f.timeMode === 'bulan'
-        ? <div key="bulan" className="anim-ganti-bulan flex flex-wrap items-center gap-2">
-<FilterDate mode="month" value={f.bulan} onChange={function (v) { set(Object.assign({}, f, { bulan: v })) }} />
-</div>
-        : <div key="rentang" className="anim-ganti-rentang flex flex-wrap items-center gap-2">
-            <FilterDate value={f.dari} onChange={function (v) { set(Object.assign({}, f, { dari: v })) }} />
-            <span className="text-slate-400 text-sm">sampai</span>
-            <FilterDate value={f.sampai} onChange={function (v) { set(Object.assign({}, f, { sampai: v })) }} />
-          </div>}
-    </div>
-  )
-}
-
-export function FilterBar(props) {
-  return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-4 lg:p-5 shadow-sm">
-      <div className="flex items-center justify-between gap-3">
-        <button onClick={props.onToggle}
-          className="xl:hidden flex items-center gap-2 px-4 py-2.5 rounded-2xl border border-slate-200 bg-slate-50 text-sm font-semibold text-slate-700 hover:bg-slate-100">
-          <span className="text-bsi-700">{ICONS.funnel}</span>
-          <span>Filter</span>
-          {props.activeCount > 0 ? (
-            <span className="inline-flex items-center justify-center h-6 min-w-6 px-2 rounded-full bg-bsi-800 text-white text-xs font-bold">{props.activeCount}</span>
-          ) : null}
-          <span className={'transition-transform duration-200 text-slate-400 ' + (props.open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
-        </button>
-        <div className="hidden xl:block text-sm text-slate-500">
-          {props.activeCount > 0
-            ? <span className="inline-flex items-center gap-2"><span className="text-bsi-700">{ICONS.funnel}</span><span><strong className="text-slate-900">{props.activeCount}</strong> filter aktif</span></span>
-            : <span className="inline-flex items-center gap-2"><span className="text-slate-400">{ICONS.funnel}</span><span>Belum ada filter aktif</span></span>}
-        </div>
-      </div>
-            <div className={'filter-wrap' + (props.open ? ' filter-wrap-buka' : '')}>
-        <div className="filter-dalam">
-          <div className="filter-isi flex flex-wrap items-center gap-3">
-            {props.children}
-            {props.activeCount > 0 ? (
-              <button onClick={props.onReset}
-                className="inline-flex items-center gap-2 rounded-2xl bg-red-50 border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100">
-                {ICONS.close}<span>Reset</span>
-              </button>
-            ) : null}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export function SortSelect(props) {
-  return (
-    <CustomSelect
-      icon={ICONS.sort}
-      value={props.value}
-      onChange={props.onChange}
-      options={[{ value: 'terbaru', label: 'Terbaru' }, { value: 'terlama', label: 'Terlama' }]}
-      className="min-w-[150px]"
-      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
-    />
-  )
-}
-export function countActiveFilters(o) {
-  let c = 0
-  for (const k in o) {
-    if (k === 'timeMode') continue
-    if (o[k]) c++
-  }
-  return c
-}
-```
-
 ## File: src/lib/logbook.js
 ```javascript
 import { supabase } from './supabase.js'
@@ -6315,201 +3456,313 @@ export default function LoginPage() {
 }
 ```
 
-## File: src/main.jsx
+## File: src/components/Carousel.jsx
 ```javascript
-import React from 'react'
-import ReactDOM from 'react-dom/client'
-import App from './App.jsx'
-import './index.css'
+import { useEffect, useRef, useState } from 'react'
+import { SizedIcon } from './icons.jsx'
+import { Lightbox, SmartFit, MediaDrive } from './ui.jsx'
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-)
+export default function Carousel(props) {
+  const slides = props.slides || []
+  const autoMs = props.autoMs || 4000
+  const [idx, setIdx] = useState(0)
+  const [paused, setPaused] = useState(false)
+  const [zoom, setZoom] = useState(null)
+  const trackRef = useRef(null)
+  const touchX = useRef(0)
+  const moved = useRef(false)
 
-/* ===== Indikator scrollbar auto hide, overlay tanpa menggeser layout ===== */
-;(function () {
-  if (typeof document === 'undefined') return
-  function pasang() {
-    if (document.getElementById('scroll-indicator')) return
-    const track = document.createElement('div')
-    track.id = 'scroll-indicator'
-    const thumb = document.createElement('div')
-    thumb.id = 'scroll-thumb'
-    track.appendChild(thumb)
-    document.body.appendChild(track)
-    let timer = null
-    function sembunyikan() { track.classList.remove('aktif') }
-    function tampilkan() {
-      track.classList.add('aktif')
-      if (timer) clearTimeout(timer)
-      timer = setTimeout(sembunyikan, 900)
-    }
-    function ukur(el, adalahWindow, rect) {
-      const scrollTop = adalahWindow ? (window.scrollY || document.documentElement.scrollTop) : el.scrollTop
-      const scrollHeight = adalahWindow ? document.documentElement.scrollHeight : el.scrollHeight
-      const clientHeight = adalahWindow ? window.innerHeight : el.clientHeight
-      const selisih = scrollHeight - clientHeight
-      if (selisih <= 4) { sembunyikan(); return }
-      const ratio = clientHeight / scrollHeight
-      const trackTinggi = rect.height - 6
-      const thumbTinggi = Math.max(24, trackTinggi * ratio)
-      const maxTop = trackTinggi - thumbTinggi
-      let gerak = scrollTop / selisih
-      if (gerak < 0) gerak = 0
-      if (gerak > 1) gerak = 1
-      thumb.style.height = thumbTinggi + 'px'
-      thumb.style.transform = 'translateY(' + (3 + gerak * maxTop) + 'px)'
-      track.style.top = rect.top + 'px'
-      track.style.height = rect.height + 'px'
-      track.style.right = (window.innerWidth - rect.right + 2) + 'px'
-    }
-    function onScroll(e) {
-      const t = e.target
-      if (t === document || t === document.documentElement || t === window || !t || t.nodeType !== 1) {
-        ukur(null, true, { top: 0, height: window.innerHeight, right: window.innerWidth })
-      } else {
-        const r = t.getBoundingClientRect()
-        ukur(t, false, { top: r.top, height: r.height, right: r.right })
-      }
-      tampilkan()
-    }
-    window.addEventListener('scroll', onScroll, true)
-    document.addEventListener('scroll', onScroll, true)
-    window.addEventListener('resize', sembunyikan)
+  useEffect(function () {
+    if (slides.length < 2 || paused) return undefined
+    const t = setInterval(function () {
+      setIdx(function (i) { return (i + 1) % slides.length })
+    }, autoMs)
+    return function () { clearInterval(t) }
+  }, [slides.length, paused, autoMs])
+
+  useEffect(function () {
+    if (trackRef.current) trackRef.current.style.transform = 'translateX(-' + (idx * 100) + '%)'
+  }, [idx])
+
+  if (!slides.length) return null
+
+  if (slides.length === 1) {
+    const s = slides[0]
+    return (
+      <>
+        <div className="relative group rounded-2xl overflow-hidden aspect-video bg-slate-900">
+          {s.drive ? (
+            <MediaDrive driveId={s.drive} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} className="absolute inset-0 h-full w-full object-cover cursor-zoom-in" />
+          ) : (
+            <SmartFit src={s.src} full={s.full} type={s.type} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} />
+          )}
+          <button type="button" title="Perbesar media" onClick={function () { setZoom(s) }}
+            className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
+            <SizedIcon name="expand" size={15} />
+          </button>
+        </div>
+        {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} driveId={zoom.drive || null} onClose={function () { setZoom(null) }} /> : null}
+      </>
+    )
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pasang)
-  else pasang()
-})()
 
-/* ===== Pergeseran mulus isi filter saat mode waktu berganti (bayangan keluar plus FLIP) ===== */
-;(function () {
-  if (typeof document === 'undefined') return
-  function pasang() {
-    document.addEventListener('click', function (e) {
-      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-      const tombol = e.target && e.target.closest ? e.target.closest('.time-toggle button') : null
-      if (!tombol) return
-      if ((' ' + tombol.className + ' ').indexOf(' active ') !== -1) return
-      const toggle = tombol.closest('.time-toggle')
-      if (!toggle || !toggle.parentElement) return
-      const wadah = tombol.closest('.rounded-3xl') || toggle.parentElement.parentElement || toggle.parentElement
-      const cabang = toggle.parentElement.querySelector('.anim-ganti-bulan, .anim-ganti-rentang')
-      if (cabang) {
-        const r = cabang.getBoundingClientRect()
-        if (r.width > 0) {
-          const hantu = cabang.cloneNode(true)
-          hantu.style.position = 'fixed'
-          hantu.style.left = r.left + 'px'
-          hantu.style.top = r.top + 'px'
-          hantu.style.width = r.width + 'px'
-          hantu.style.height = r.height + 'px'
-          hantu.style.margin = '0'
-          hantu.style.zIndex = '45'
-          hantu.classList.add('hantu-cabang')
-          document.body.appendChild(hantu)
-          hantu.style.animation = 'none'
-          const turunan = hantu.querySelectorAll('*')
-          for (let i = 0; i < turunan.length; i++) turunan[i].style.animation = 'none'
-          const keBulan = !tombol.previousElementSibling
-          if (hantu.animate) {
-            hantu.animate([
-              { opacity: 1, transform: 'translateX(0)' },
-              { opacity: 0, transform: keBulan ? 'translateX(10px)' : 'translateX(-10px)' }
-            ], { duration: 180, easing: 'ease-in' }).onfinish = function () { if (hantu.parentNode) hantu.parentNode.removeChild(hantu) }
-          } else {
-            setTimeout(function () { if (hantu.parentNode) hantu.parentNode.removeChild(hantu) }, 200)
+  return (
+    <>
+      <div
+        className="media-carousel group"
+        onMouseEnter={function () { setPaused(true) }}
+        onMouseLeave={function () { setPaused(false) }}
+        onTouchStart={function (e) { touchX.current = e.touches[0].clientX; moved.current = false }}
+        onTouchEnd={function (e) {
+          const dx = e.changedTouches[0].clientX - touchX.current
+          if (Math.abs(dx) > 40) {
+            moved.current = true
+            setIdx(function (i) { return (i + (dx < 0 ? 1 : -1) + slides.length) % slides.length })
           }
-        }
-      }
-      const snap = new Map()
-      const els = wadah.querySelectorAll('*')
-      for (let i = 0; i < els.length; i++) snap.set(els[i], els[i].getBoundingClientRect())
-      requestAnimationFrame(function () {
-        requestAnimationFrame(function () {
-          snap.forEach(function (rect, el) {
-            if (!el.isConnected || !el.animate) return
-            const r = el.getBoundingClientRect()
-            const dx = rect.left - r.left
-            const dy = rect.top - r.top
-            if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return
-            el.animate([
-              { transform: 'translate(' + dx + 'px, ' + dy + 'px)' },
-              { transform: 'translate(0, 0)' }
-            ], { duration: 320, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' })
-          })
-        })
-      })
-    }, true)
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pasang)
-  else pasang()
-})()
+        }}
+      >
+        <div ref={trackRef} className="carousel-track">
+          {slides.map(function (s, i) {
+            return (
+              <div key={i} className="carousel-slide">
+                {s.drive ? (
+                  <MediaDrive driveId={s.drive} alt={s.title || 'Media'} onClick={function () { if (moved.current) { moved.current = false; return } setZoom(s) }} className="absolute inset-0 h-full w-full object-cover cursor-zoom-in" />
+                ) : (
+                <SmartFit
+                  src={s.src}
+                  full={s.full}
+                   type={s.type}
+                  alt={s.title || 'Media'}
+                  onClick={function () {
+                    if (moved.current) { moved.current = false; return }
+                    setZoom(s)
+                  }}
+                />
+                )}
+                <button type="button" title="Perbesar media" onClick={function (e) { e.stopPropagation(); setZoom(s) }}
+                  className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
+                  <SizedIcon name="expand" size={15} />
+                </button>
+                {s.title ? (
+                  <span className="absolute bottom-2 left-2 z-10 px-2 py-1 rounded-lg bg-black/60 text-white text-xs max-w-[85%] truncate">
+                    {s.title}
+                  </span>
+                ) : null}
+              </div>
+            )
+          })}
+        </div>
+        <button
+          onClick={function () { setIdx(function (i) { return (i - 1 + slides.length) % slides.length }) }}
+          className="absolute left-2 top-0 bottom-0 my-auto z-10 h-8 w-8 rounded-full bg-black/40 text-white grid place-items-center opacity-100 xl:opacity-0 xl:group-hover:opacity-100 hover:bg-black/60"
+        >
+          &#8249;
+        </button>
+        <button
+          onClick={function () { setIdx(function (i) { return (i + 1) % slides.length }) }}
+          className="absolute right-2 top-0 bottom-0 my-auto z-10 h-8 w-8 rounded-full bg-black/40 text-white grid place-items-center opacity-100 xl:opacity-0 xl:group-hover:opacity-100 hover:bg-black/60"
+        >
+          &#8250;
+        </button>
+        <div className="absolute bottom-2 right-2 z-10 flex gap-1.5">
+          {slides.map(function (s, i) {
+            return (
+              <button
+                key={i}
+                onClick={function () { setIdx(i) }}
+                className={'carousel-dot h-2 w-2 rounded-full transition-all ' + (i === idx ? 'bg-white' : 'bg-white/40')}
+              />
+            )
+          })}
+        </div>
+      </div>
+      {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} driveId={zoom.drive || null} onClose={function () { setZoom(null) }} /> : null}
+    </>
+  )
+}
+```
 
-/* ===== transisi-halaman-v1: picu ulang animasi saat pindah rute dan pindah halaman pagination ===== */
-;(function () {
-  if (typeof document === 'undefined') return
-  function ulangAnimasi(el) {
-    if (!el) return
-    el.style.animation = 'none'
-    void el.offsetWidth
-    el.style.animation = ''
-  }
-  function pasang() {
-    document.addEventListener('click', function (e) {
-      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-      const t = e.target
-      if (!t || !t.closest) return
-      const link = t.closest('a[href]')
-      if (link) {
-        const href = link.getAttribute('href') || ''
-        const eksternal = link.target === '_blank' || href.indexOf('http') === 0 || href.indexOf('#') === 0
-        if (!eksternal) {
-          requestAnimationFrame(function () {
-            requestAnimationFrame(function () {
-              ulangAnimasi(document.querySelector('main.anim-page') || document.querySelector('.anim-page'))
-            })
-          })
-        }
-        return
-      }
-      const pag = t.closest('.mt-8.flex.flex-wrap.items-center.justify-center.gap-2')
-      if (pag && t.closest('button')) {
-        requestAnimationFrame(function () {
-          requestAnimationFrame(function () {
-            const grid = document.querySelectorAll('.grid-pusat, .grid-pusat-rapat, .kartu-grid')
-            for (let i = 0; i < grid.length; i++) {
-              const anak = grid[i].children
-              for (let j = 0; j < anak.length; j++) ulangAnimasi(anak[j])
-            }
-          })
-        })
-      }
-    }, true)
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pasang)
-  else pasang()
-})()
+## File: src/components/FilterBar.jsx
+```javascript
+import { useEffect, useState } from 'react'
+import { ICONS } from './icons.jsx'
+import { CustomSelect, CustomDateInput } from './controls.jsx'
 
-/* ===== transisi-tema: aktifkan transisi pelan hanya pada momen pergantian mode ===== */
-;(function () {
-  if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return
-  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-  const akar = document.documentElement
-  let gelap = akar.classList.contains('dark')
-  let timer = null
-  const obs = new MutationObserver(function () {
-    const sekarang = akar.classList.contains('dark')
-    if (sekarang === gelap) return
-    gelap = sekarang
-    if (document.startViewTransition) return
-    akar.classList.add('theme-transition')
-    if (timer) clearTimeout(timer)
-    timer = setTimeout(function () { akar.classList.remove('theme-transition') }, 400)
-  })
-  obs.observe(akar, { attributes: true, attributeFilter: ['class'] })
-})()
+export function FilterSelect(props) {
+  return (
+    <CustomSelect
+      icon={props.icon}
+      value={props.value}
+      onChange={props.onChange}
+      options={props.options}
+      className="min-w-[190px]"
+      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+    />
+  )
+}
+
+export function FilterDate(props) {
+  return (
+    <CustomDateInput
+      mode={props.mode || 'date'}
+      value={props.value}
+      onChange={props.onChange}
+      className="min-w-[170px]"
+      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+    />
+  )
+}
+
+export function TimeFilter(props) {
+  const f = props.filter
+  const set = props.set
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <div className="time-toggle">
+        <button type="button" className={f.timeMode === 'bulan' ? 'active' : ''}
+          onClick={function () { set(Object.assign({}, f, { timeMode: 'bulan', bulan: '', dari: '', sampai: '' })) }}>Bulan</button>
+        <button type="button" className={f.timeMode === 'rentang' ? 'active' : ''}
+          onClick={function () { set(Object.assign({}, f, { timeMode: 'rentang', bulan: '', dari: '', sampai: '' })) }}>Rentang Waktu</button>
+      </div>
+      {f.timeMode === 'bulan'
+        ? <div key="bulan" className="anim-ganti-bulan flex flex-wrap items-center gap-2">
+<FilterDate mode="month" value={f.bulan} onChange={function (v) { set(Object.assign({}, f, { bulan: v })) }} />
+</div>
+        : <div key="rentang" className="anim-ganti-rentang flex flex-wrap items-center gap-2">
+            <FilterDate value={f.dari} onChange={function (v) { set(Object.assign({}, f, { dari: v })) }} />
+            <span className="text-slate-400 text-sm">sampai</span>
+            <FilterDate value={f.sampai} onChange={function (v) { set(Object.assign({}, f, { sampai: v })) }} />
+          </div>}
+    </div>
+  )
+}
+
+export function FilterBar(props) {
+  const [settled, setSettled] = useState(false)
+  useEffect(function () {
+    if (props.open) {
+      const t = setTimeout(function () { setSettled(true) }, 400)
+      return function () { clearTimeout(t) }
+    }
+    setSettled(false)
+    return undefined
+  }, [props.open])
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-4 lg:p-5 shadow-sm">
+      <div className="flex items-center justify-between gap-3">
+        <button onClick={props.onToggle}
+          className="xl:hidden flex items-center gap-2 px-4 py-2.5 rounded-2xl border border-slate-200 bg-slate-50 text-sm font-semibold text-slate-700 hover:bg-slate-100">
+          <span className="text-bsi-700">{ICONS.funnel}</span>
+          <span>Filter</span>
+          {props.activeCount > 0 ? (
+            <span className="inline-flex items-center justify-center h-6 min-w-6 px-2 rounded-full bg-bsi-800 text-white text-xs font-bold">{props.activeCount}</span>
+          ) : null}
+          <span className={'transition-transform duration-200 text-slate-400 ' + (props.open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
+        </button>
+        <div className="hidden xl:block text-sm text-slate-500">
+          {props.activeCount > 0
+            ? <span className="inline-flex items-center gap-2"><span className="text-bsi-700">{ICONS.funnel}</span><span><strong className="text-slate-900">{props.activeCount}</strong> filter aktif</span></span>
+            : <span className="inline-flex items-center gap-2"><span className="text-slate-400">{ICONS.funnel}</span><span>Belum ada filter aktif</span></span>}
+        </div>
+      </div>
+            <div className={'filter-wrap' + (props.open ? ' filter-wrap-buka' : '')}>
+        <div className={'filter-dalam' + (props.open && settled ? ' filter-dalam-santai' : '')}>
+          <div className="filter-isi flex flex-wrap items-center gap-3">
+            {props.children}
+            {props.activeCount > 0 ? (
+              <button onClick={props.onReset}
+                className="inline-flex items-center gap-2 rounded-2xl bg-red-50 border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100">
+                {ICONS.close}<span>Reset</span>
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function SortSelect(props) {
+  return (
+    <CustomSelect
+      icon={ICONS.sort}
+      value={props.value}
+      onChange={props.onChange}
+      options={[{ value: 'terbaru', label: 'Terbaru' }, { value: 'terlama', label: 'Terlama' }]}
+      className="min-w-[150px]"
+      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+    />
+  )
+}
+export function countActiveFilters(o) {
+  let c = 0
+  for (const k in o) {
+    if (k === 'timeMode') continue
+    if (o[k]) c++
+  }
+  return c
+}
+```
+
+## File: src/pages/TimPage.jsx
+```javascript
+import { useEffect, useState } from 'react'
+import { supabase } from '../lib/supabase.js'
+import { SkeletonPersonCard } from '../components/Skeleton.jsx'
+
+export default function TimPage() {
+  const [people, setPeople] = useState([])
+  const [logs, setLogs] = useState([])
+  const [galeri, setGaleri] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(function () {
+    async function load() {
+      const p = await supabase.from('mahasiswa').select('id, nama, nim, prodi, foto_profil').order('nama')
+      const l = await supabase.from('logbooks').select('id, mahasiswa_id, foto_profil').eq('status', 'publik')
+      const g = await supabase.from('galeri').select('id, mahasiswa_id, foto_profil')
+      setPeople(p.data || [])
+      setLogs(l.data || [])
+      setGaleri(g.data || [])
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  return (
+    <div>
+      <section className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Profil Mahasiswa</p>
+        <h1 className="mt-2 text-3xl lg:text-4xl font-black text-slate-900">Mahasiswa magang Bank BSI</h1>
+      </section>
+      <section className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        {loading
+          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <SkeletonPersonCard key={i} /> })
+          : people.map(function (p) {
+              const totalLog = logs.filter(function (l) { return l.mahasiswa_id === p.id }).length
+              const totalGal = galeri.filter(function (g) { return g.mahasiswa_id === p.id }).length
+              const initials = p.nama.split(' ').slice(0, 2).map(function (w) { return w.charAt(0) || '' }).join('').toUpperCase()
+              return (
+                <div key={p.id} className="card-hover bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
+                  <div className="flex items-center gap-4">
+                    <div className="h-14 w-14 rounded-3xl bg-bsi-800 text-white grid place-items-center text-xl font-black">{typeof p !== 'undefined' && p && p.foto_profil ? <img src={p.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : typeof m !== 'undefined' && m && m.foto_profil ? <img src={m.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : initials}</div>
+                    <div>
+                      <p className="text-lg font-bold text-slate-900">{p.nama}</p>
+                      <p className="text-sm text-slate-500">NIM {p.nim}</p>
+                      {p.prodi ? <span className="mt-1 inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-bsi-100 text-bsi-900">{p.prodi}</span> : null}
+                    </div>
+                  </div>
+                  <div className="mt-5 grid grid-cols-2 gap-3">
+                    <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Logbook publik</p><p className="mt-1 text-2xl font-black text-bsi-900">{totalLog}</p></div>
+                    <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Media galeri</p><p className="mt-1 text-2xl font-black text-bsi-900">{totalGal}</p></div>
+                  </div>
+                </div>
+              )
+            })}
+      </section>
+    </div>
+  )
+}
 ```
 
 ## File: src/components/Layout.jsx
@@ -6614,67 +3867,6 @@ export default function Layout() {
 <p className="text-xs text-slate-500">© 2026 Tim Magang BSI</p>
 </div>
 </footer>
-    </div>
-  )
-}
-```
-
-## File: src/pages/TimPage.jsx
-```javascript
-import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase.js'
-import { SkeletonPersonCard } from '../components/Skeleton.jsx'
-
-export default function TimPage() {
-  const [people, setPeople] = useState([])
-  const [logs, setLogs] = useState([])
-  const [galeri, setGaleri] = useState([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(function () {
-    async function load() {
-      const p = await supabase.from('mahasiswa').select('id, nama, nim, prodi, foto_profil').order('nama')
-      const l = await supabase.from('logbooks').select('id, mahasiswa_id, foto_profil').eq('status', 'publik')
-      const g = await supabase.from('galeri').select('id, mahasiswa_id, foto_profil')
-      setPeople(p.data || [])
-      setLogs(l.data || [])
-      setGaleri(g.data || [])
-      setLoading(false)
-    }
-    load()
-  }, [])
-
-  return (
-    <div>
-      <section className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Profil Mahasiswa</p>
-        <h1 className="mt-2 text-3xl lg:text-4xl font-black text-slate-900">Mahasiswa magang Bank BSI</h1>
-      </section>
-      <section className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-        {loading
-          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <SkeletonPersonCard key={i} /> })
-          : people.map(function (p) {
-              const totalLog = logs.filter(function (l) { return l.mahasiswa_id === p.id }).length
-              const totalGal = galeri.filter(function (g) { return g.mahasiswa_id === p.id }).length
-              const initials = p.nama.split(' ').slice(0, 2).map(function (w) { return w.charAt(0) || '' }).join('').toUpperCase()
-              return (
-                <div key={p.id} className="card-hover bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
-                  <div className="flex items-center gap-4">
-                    <div className="h-14 w-14 rounded-3xl bg-bsi-800 text-white grid place-items-center text-xl font-black">{typeof p !== 'undefined' && p && p.foto_profil ? <img src={p.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : typeof m !== 'undefined' && m && m.foto_profil ? <img src={m.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : initials}</div>
-                    <div>
-                      <p className="text-lg font-bold text-slate-900">{p.nama}</p>
-                      <p className="text-sm text-slate-500">NIM {p.nim}</p>
-                      {p.prodi ? <span className="mt-1 inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-bsi-100 text-bsi-900">{p.prodi}</span> : null}
-                    </div>
-                  </div>
-                  <div className="mt-5 grid grid-cols-2 gap-3">
-                    <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Logbook publik</p><p className="mt-1 text-2xl font-black text-bsi-900">{totalLog}</p></div>
-                    <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Media galeri</p><p className="mt-1 text-2xl font-black text-bsi-900">{totalGal}</p></div>
-                  </div>
-                </div>
-              )
-            })}
-      </section>
     </div>
   )
 }
@@ -6834,105 +4026,6 @@ return (
 }
 ```
 
-## File: src/pages/HomePage.jsx
-```javascript
-import { urutkanTanggal } from '../lib/format.js'
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { supabase } from '../lib/supabase.js'
-import { useAuth } from '../lib/auth.js'
-import { StatCard, EmptyState, Modal } from '../components/ui.jsx'
-import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
-import { SkeletonLogbookCard, SkeletonStatCard } from '../components/Skeleton.jsx'
-
-export default function HomePage() {
-  const { mahasiswa } = useAuth()
-  const [logs, setLogs] = useState([])
-  const [stats, setStats] = useState({ logbook: 0, galeri: 0, mahasiswa: 0 })
-  const [detail, setDetail] = useState(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(function () {
-    async function load() {
-      const l = await supabase
-        .from('logbooks')
-        .select('*, mahasiswa(*), logbook_items(*)')
-        .eq('status', 'publik')
-        .order('tanggal', { ascending: false })
-        .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
-      const g = await supabase.from('galeri').select('id')
-      const p = await supabase.from('mahasiswa').select('id')
-      setLogs(l.data || [])
-      setStats({ logbook: (l.data || []).length, galeri: (g.data || []).length, mahasiswa: (p.data || []).length })
-      setLoading(false)
-    }
-    load()
-  }, [])
-
-  return (
-    <div>
-      <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr] items-stretch">
-        <div className="card-hover relative overflow-hidden rounded-[2rem] bg-bsi-900 text-white p-8 lg:p-12">
-          <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-gold-500/20 blur-2xl" />
-          <div className="absolute -left-10 bottom-0 h-40 w-40 rounded-full bg-emerald-300/10 blur-2xl" />
-          <div className="relative z-10">
-            <span className="inline-flex px-4 py-2 rounded-full bg-white/10 text-xs font-semibold uppercase tracking-wide">Magang Bank BSI</span>
-            <h1 className="mt-6 text-3xl lg:text-5xl font-black leading-tight max-w-2xl">Logbook, Galeri, dan Daftar Hadir Magang dalam Satu Portal</h1>
-            <p className="mt-5 max-w-2xl text-white/80 leading-relaxed">Portal ini mencatat kegiatan harian, dokumentasi media, dan kehadiran tim magang selama membantu operasional Bank BSI.</p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link to="/logbook" className="px-6 py-3 rounded-2xl bg-gold-500 text-slate-900 font-bold hover:bg-gold-400">Lihat Logbook</Link>
-              <Link to="/galeri" className="px-6 py-3 rounded-2xl bg-white/10 text-white font-bold hover:bg-white/20">Lihat Galeri</Link>
-              <Link to="/absen" className="px-6 py-3 rounded-2xl bg-white/10 text-white font-bold hover:bg-white/20">Daftar Hadir</Link>
-              {mahasiswa
-                ? <Link to="/dashboard" className="px-6 py-3 rounded-2xl bg-white text-bsi-900 font-bold hover:bg-slate-100">Buka Dashboard</Link>
-                : <Link to="/login" className="px-6 py-3 rounded-2xl bg-white text-bsi-900 font-bold hover:bg-slate-100">Masuk Intern</Link>}
-            </div>
-          </div>
-        </div>
-        <div className="grid gap-4">
-          {loading
-            ? [0, 1, 2].map(function (i) { return <SkeletonStatCard key={i} /> })
-            : [
-                <StatCard key="mahasiswa" label="Total mahasiswa magang" value={stats.mahasiswa} sub="Mahasiswa terdaftar dalam tim" />,
-                <StatCard key="logbook" label="Total logbook publik" value={stats.logbook} sub="Catatan kegiatan harian" />,
-                <StatCard key="galeri" label="Total media galeri" value={stats.galeri} sub="Foto dan video dokumentasi" />
-              ]}
-        </div>
-      </section>
-
-      <section className="mt-10">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Kegiatan terbaru</p>
-            <h2 className="mt-2 text-2xl lg:text-3xl font-black text-slate-900">Logbook terbaru tim</h2>
-          </div>
-          <Link to="/logbook" className="text-sm font-semibold text-bsi-800 hover:text-bsi-950">Lihat semua logbook</Link>
-        </div>
-        <div className="grid-pusat mt-6">
-          {loading
-            ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
-            : urutkanTanggal(logs, 'terbaru').slice(0, 6).map(function (l) {
-                return (
-                  <div key={l.id} className="kolom-kartu">
-                    <LogbookCard log={l} onDetail={function () { setDetail(l) }} />
-                  </div>
-                )
-              })}
-          {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum ada logbook publik" desc="Logbook yang sudah berstatus Published akan tampil di sini." /></div> : null}
-        </div>
-        <div className="mt-8 flex justify-center">
-          <Link to="/logbook" className="rounded-2xl bg-bsi-800 px-6 py-3 text-sm font-bold text-white hover:bg-bsi-900">Lihat semua logbook</Link>
-        </div>
-      </section>
-
-      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
-        {detail ? <LogbookDetail log={detail} /> : null}
-      </Modal>
-    </div>
-  )
-}
-```
-
 ## File: src/App.jsx
 ```javascript
 import { SkeletonDashboard } from './components/Skeleton.jsx'
@@ -6989,6 +4082,228 @@ export default function App() {
     </ThemeProvider>
   )
 }
+```
+
+## File: src/main.jsx
+```javascript
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import App from './App.jsx'
+import './index.css'
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+)
+
+/* ===== Indikator scrollbar auto hide, overlay tanpa menggeser layout ===== */
+;(function () {
+  if (typeof document === 'undefined') return
+  function pasang() {
+    if (document.getElementById('scroll-indicator')) return
+    const track = document.createElement('div')
+    track.id = 'scroll-indicator'
+    const thumb = document.createElement('div')
+    thumb.id = 'scroll-thumb'
+    track.appendChild(thumb)
+    document.body.appendChild(track)
+    let timer = null
+    let sumber = null
+    let watchdog = null
+    function stopWatchdog() {
+      if (watchdog) { clearInterval(watchdog); watchdog = null }
+    }
+    function mulaiWatchdog() {
+      if (watchdog) return
+      watchdog = setInterval(function () {
+        if (!track.classList.contains('aktif')) { stopWatchdog(); return }
+        if (sumber) {
+          if (!sumber.isConnected || sumber.scrollHeight - sumber.clientHeight <= 4) {
+            sembunyikan()
+            sumber = null
+            stopWatchdog()
+          }
+        } else if (document.documentElement.scrollHeight - window.innerHeight <= 4) {
+          sembunyikan()
+          stopWatchdog()
+        }
+      }, 90)
+    }
+    function sembunyikan() { track.classList.remove('aktif'); stopWatchdog() }
+    function tampilkan() {
+      track.classList.add('aktif')
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(sembunyikan, 400)
+      mulaiWatchdog()
+    }
+    function ukur(el, adalahWindow, rect) {
+      const scrollTop = adalahWindow ? (window.scrollY || document.documentElement.scrollTop) : el.scrollTop
+      const scrollHeight = adalahWindow ? document.documentElement.scrollHeight : el.scrollHeight
+      const clientHeight = adalahWindow ? window.innerHeight : el.clientHeight
+      const selisih = scrollHeight - clientHeight
+      if (selisih <= 4) { sembunyikan(); return }
+      const ratio = clientHeight / scrollHeight
+      const trackTinggi = rect.height - 6
+      const thumbTinggi = Math.max(24, trackTinggi * ratio)
+      const maxTop = trackTinggi - thumbTinggi
+      let gerak = scrollTop / selisih
+      if (gerak < 0) gerak = 0
+      if (gerak > 1) gerak = 1
+      thumb.style.height = thumbTinggi + 'px'
+      thumb.style.transform = 'translateY(' + (3 + gerak * maxTop) + 'px)'
+      track.style.top = rect.top + 'px'
+      track.style.height = rect.height + 'px'
+      track.style.right = (window.innerWidth - rect.right + 2) + 'px'
+    }
+    function onScroll(e) {
+      const t = e.target
+      if (t === document || t === document.documentElement || t === window || !t || t.nodeType !== 1) {
+        sumber = null
+        ukur(null, true, { top: 0, height: window.innerHeight, right: window.innerWidth })
+      } else {
+        sumber = t
+        const r = t.getBoundingClientRect()
+        ukur(t, false, { top: r.top, height: r.height, right: r.right })
+      }
+      tampilkan()
+    }
+    window.addEventListener('scroll', onScroll, true)
+    document.addEventListener('scroll', onScroll, true)
+    window.addEventListener('resize', sembunyikan)
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pasang)
+  else pasang()
+})()
+
+/* ===== Pergeseran mulus isi filter saat mode waktu berganti (bayangan keluar plus FLIP) ===== */
+;(function () {
+  if (typeof document === 'undefined') return
+  function pasang() {
+    document.addEventListener('click', function (e) {
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+      const tombol = e.target && e.target.closest ? e.target.closest('.time-toggle button') : null
+      if (!tombol) return
+      if ((' ' + tombol.className + ' ').indexOf(' active ') !== -1) return
+      const toggle = tombol.closest('.time-toggle')
+      if (!toggle || !toggle.parentElement) return
+      if (window.innerWidth < 1280) return
+       const wadah = tombol.closest('.rounded-3xl') || toggle.parentElement.parentElement || toggle.parentElement
+      const cabang = toggle.parentElement.querySelector('.anim-ganti-bulan, .anim-ganti-rentang')
+      if (cabang) {
+        const r = cabang.getBoundingClientRect()
+        if (r.width > 0) {
+          const hantu = cabang.cloneNode(true)
+          hantu.style.position = 'fixed'
+          hantu.style.left = r.left + 'px'
+          hantu.style.top = r.top + 'px'
+          hantu.style.width = r.width + 'px'
+          hantu.style.height = r.height + 'px'
+          hantu.style.margin = '0'
+          hantu.style.zIndex = '45'
+          hantu.classList.add('hantu-cabang')
+          document.body.appendChild(hantu)
+          hantu.style.animation = 'none'
+          const turunan = hantu.querySelectorAll('*')
+          for (let i = 0; i < turunan.length; i++) turunan[i].style.animation = 'none'
+          const keBulan = !tombol.previousElementSibling
+          if (hantu.animate) {
+            hantu.animate([
+              { opacity: 1, transform: 'translateX(0)' },
+              { opacity: 0, transform: keBulan ? 'translateX(10px)' : 'translateX(-10px)' }
+            ], { duration: 180, easing: 'ease-in' }).onfinish = function () { if (hantu.parentNode) hantu.parentNode.removeChild(hantu) }
+          } else {
+            setTimeout(function () { if (hantu.parentNode) hantu.parentNode.removeChild(hantu) }, 200)
+          }
+        }
+      }
+      const snap = new Map()
+      const els = wadah.querySelectorAll('*')
+      for (let i = 0; i < els.length; i++) snap.set(els[i], els[i].getBoundingClientRect())
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          snap.forEach(function (rect, el) {
+            if (!el.isConnected || !el.animate) return
+            const r = el.getBoundingClientRect()
+            const dx = rect.left - r.left
+            const dy = rect.top - r.top
+            if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return
+            el.animate([
+              { transform: 'translate(' + dx + 'px, ' + dy + 'px)' },
+              { transform: 'translate(0, 0)' }
+            ], { duration: 320, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' })
+          })
+        })
+      })
+    }, true)
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pasang)
+  else pasang()
+})()
+
+/* ===== transisi-halaman-v1: picu ulang animasi saat pindah rute dan pindah halaman pagination ===== */
+;(function () {
+  if (typeof document === 'undefined') return
+  function ulangAnimasi(el) {
+    if (!el) return
+    el.style.animation = 'none'
+    void el.offsetWidth
+    el.style.animation = ''
+  }
+  function pasang() {
+    document.addEventListener('click', function (e) {
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+      const t = e.target
+      if (!t || !t.closest) return
+      const link = t.closest('a[href]')
+      if (link) {
+        const href = link.getAttribute('href') || ''
+        const eksternal = link.target === '_blank' || href.indexOf('http') === 0 || href.indexOf('#') === 0
+        if (!eksternal) {
+          requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+              ulangAnimasi(document.querySelector('main.anim-page') || document.querySelector('.anim-page'))
+            })
+          })
+        }
+        return
+      }
+      const pag = t.closest('.mt-8.flex.flex-wrap.items-center.justify-center.gap-2')
+      if (pag && t.closest('button')) {
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            const grid = document.querySelectorAll('.grid-pusat, .grid-pusat-rapat, .kartu-grid')
+            for (let i = 0; i < grid.length; i++) {
+              const anak = grid[i].children
+              for (let j = 0; j < anak.length; j++) ulangAnimasi(anak[j])
+            }
+          })
+        })
+      }
+    }, true)
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pasang)
+  else pasang()
+})()
+
+/* ===== transisi-tema: aktifkan transisi pelan hanya pada momen pergantian mode ===== */
+;(function () {
+  if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  const akar = document.documentElement
+  let gelap = akar.classList.contains('dark')
+  let timer = null
+  const obs = new MutationObserver(function () {
+    const sekarang = akar.classList.contains('dark')
+    if (sekarang === gelap) return
+    gelap = sekarang
+    if (document.startViewTransition) return
+    akar.classList.add('theme-transition')
+    if (timer) clearTimeout(timer)
+    timer = setTimeout(function () { akar.classList.remove('theme-transition') }, 400)
+  })
+  obs.observe(akar, { attributes: true, attributeFilter: ['class'] })
+})()
 ```
 
 ## File: src/components/icons.jsx
@@ -7199,6 +4514,105 @@ export function EyeToggle(props) {
       <circle cx="12" cy="12" r="3" className="eye-pupil" />
       <line x1="2" y1="2" x2="22" y2="22" className="eye-slash" />
     </svg>
+  )
+}
+```
+
+## File: src/pages/HomePage.jsx
+```javascript
+import { urutkanTanggal } from '../lib/format.js'
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { supabase } from '../lib/supabase.js'
+import { useAuth } from '../lib/auth.js'
+import { StatCard, EmptyState, Modal } from '../components/ui.jsx'
+import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
+import { SkeletonLogbookCard, SkeletonStatCard } from '../components/Skeleton.jsx'
+
+export default function HomePage() {
+  const { mahasiswa } = useAuth()
+  const [logs, setLogs] = useState([])
+  const [stats, setStats] = useState({ logbook: 0, galeri: 0, mahasiswa: 0 })
+  const [detail, setDetail] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(function () {
+    async function load() {
+      const l = await supabase
+        .from('logbooks')
+        .select('*, mahasiswa(*), logbook_items(*)')
+        .eq('status', 'publik')
+        .order('tanggal', { ascending: false })
+        .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
+      const g = await supabase.from('galeri').select('id')
+      const p = await supabase.from('mahasiswa').select('id')
+      setLogs(l.data || [])
+      setStats({ logbook: (l.data || []).length, galeri: (g.data || []).length, mahasiswa: (p.data || []).length })
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  return (
+    <div>
+      <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr] items-stretch">
+        <div className="card-hover relative overflow-hidden rounded-[2rem] bg-bsi-900 text-white p-8 lg:p-12">
+          <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-gold-500/20 blur-2xl" />
+          <div className="absolute -left-10 bottom-0 h-40 w-40 rounded-full bg-emerald-300/10 blur-2xl" />
+          <div className="relative z-10">
+            <span className="inline-flex px-4 py-2 rounded-full bg-white/10 text-xs font-semibold uppercase tracking-wide">Magang Bank BSI</span>
+            <h1 className="mt-6 text-3xl lg:text-5xl font-black leading-tight max-w-2xl">Logbook, Galeri, dan Daftar Hadir Magang dalam Satu Portal</h1>
+            <p className="mt-5 max-w-2xl text-white/80 leading-relaxed">Portal ini mencatat kegiatan harian, dokumentasi media, dan kehadiran tim magang selama membantu operasional Bank BSI.</p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link to="/logbook" className="px-6 py-3 rounded-2xl bg-gold-500 text-slate-900 font-bold hover:bg-gold-400">Lihat Logbook</Link>
+              <Link to="/galeri" className="px-6 py-3 rounded-2xl bg-white/10 text-white font-bold hover:bg-white/20">Lihat Galeri</Link>
+              <Link to="/absen" className="px-6 py-3 rounded-2xl bg-white/10 text-white font-bold hover:bg-white/20">Daftar Hadir</Link>
+              {mahasiswa
+                ? <Link to="/dashboard" className="px-6 py-3 rounded-2xl bg-white text-bsi-900 font-bold hover:bg-slate-100">Buka Dashboard</Link>
+                : <Link to="/login" className="px-6 py-3 rounded-2xl bg-white text-bsi-900 font-bold hover:bg-slate-100">Masuk Intern</Link>}
+            </div>
+          </div>
+        </div>
+        <div className="grid gap-4">
+          {loading
+            ? [0, 1, 2].map(function (i) { return <SkeletonStatCard key={i} /> })
+            : [
+                <StatCard key="mahasiswa" label="Total mahasiswa magang" value={stats.mahasiswa} sub="Mahasiswa terdaftar dalam tim" />,
+                <StatCard key="logbook" label="Total logbook publik" value={stats.logbook} sub="Catatan kegiatan harian" />,
+                <StatCard key="galeri" label="Total media galeri" value={stats.galeri} sub="Foto dan video dokumentasi" />
+              ]}
+        </div>
+      </section>
+
+      <section className="mt-10">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Kegiatan terbaru</p>
+            <h2 className="mt-2 text-2xl lg:text-3xl font-black text-slate-900">Logbook terbaru tim</h2>
+          </div>
+          <Link to="/logbook" className="text-sm font-semibold text-bsi-800 hover:text-bsi-950">Lihat semua logbook</Link>
+        </div>
+        <div className="grid-pusat mt-6">
+          {loading
+            ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
+            : urutkanTanggal(logs, 'terbaru').slice(0, 6).map(function (l) {
+                return (
+                  <div key={l.id} className="kolom-kartu">
+                    <LogbookCard log={l} onDetail={function () { setDetail(l) }} />
+                  </div>
+                )
+              })}
+          {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum ada logbook publik" desc="Logbook yang sudah berstatus Published akan tampil di sini." /></div> : null}
+        </div>
+        <div className="mt-8 flex justify-center">
+          <Link to="/logbook" className="rounded-2xl bg-bsi-800 px-6 py-3 text-sm font-bold text-white hover:bg-bsi-900">Lihat semua logbook</Link>
+        </div>
+      </section>
+
+      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
+        {detail ? <LogbookDetail log={detail} /> : null}
+      </Modal>
+    </div>
   )
 }
 ```
@@ -7833,6 +5247,661 @@ export function AttendanceDetail(props) {
 }
 ```
 
+## File: src/components/ui.jsx
+```javascript
+import { createPortal } from 'react-dom'
+import PemutarVideo from './PemutarVideo.jsx'
+import { drivePreviewUrl, driveDownloadUrl, driveThumbUrl } from '../lib/drive.js'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { SizedIcon } from './icons.jsx'
+function useBodyScrollLock(active) {
+  useEffect(function () {
+    if (!active) return undefined
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return function () {
+      document.body.style.overflow = previous
+    }
+  }, [active])
+}
+
+
+export const inputCls = 'mt-1.5 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-bsi-500'
+export const labelCls = 'text-sm font-semibold text-slate-700'
+export const btnPrimary = 'w-full rounded-2xl bg-bsi-800 px-6 py-4 text-white font-bold hover:bg-bsi-900'
+export const btnSmall = 'px-4 py-2 rounded-xl text-sm font-semibold'
+export const cardCls = 'card-hover bg-white rounded-3xl border border-slate-200 shadow-sm'
+
+export function StatCard(props) {
+  return (
+    <div className={cardCls + ' p-6'}>
+      <p className="text-sm text-slate-500">{props.label}</p>
+      <p className="mt-2 text-3xl font-black text-bsi-900">{props.value}</p>
+      {props.sub ? <p className="mt-1 text-xs text-slate-500">{props.sub}</p> : null}
+    </div>
+  )
+}
+
+export function EmptyState(props) {
+  return (
+    <div className={cardCls + ' border-dashed p-10 text-center'}>
+      <div className="mx-auto h-14 w-14 rounded-2xl bg-slate-100 grid place-items-center text-slate-400">
+        <SizedIcon name={props.icon || 'file'} size={24} />
+      </div>
+      <h3 className="mt-4 text-lg font-bold text-slate-800">{props.title}</h3>
+      <p className="mt-2 text-sm text-slate-500 max-w-md mx-auto">{props.desc}</p>
+    </div>
+  )
+}
+
+export function StatusBadge(props) {
+  const publik = props.status === 'publik'
+  return (
+    <span className={'px-3 py-1 rounded-full text-xs font-semibold ' + (publik ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800')}>
+      {publik ? 'Published' : 'Draft'}
+    </span>
+  )
+}
+
+export function CategoryBadge(props) {
+  return <span className="px-3 py-1 rounded-full text-xs font-semibold bg-bsi-100 text-bsi-900">{props.value || 'Lainnya'}</span>
+}
+
+export function AttendanceBadge(props) {
+  const map = {
+    Masuk: 'bg-emerald-100 text-emerald-800',
+    Izin: 'bg-amber-100 text-amber-800',
+    Bolos: 'bg-red-100 text-red-700'
+  }
+  return <span className={'px-3 py-1 rounded-full text-xs font-semibold ' + (map[props.status] || 'bg-slate-100 text-slate-700')}>{props.status}</span>
+}
+
+export function Modal(props) {
+  const [tampil, setTampil] = useState(props.open)
+  const [tutup, setTutup] = useState(false)
+  const isiSimpan = useRef(null)
+  if (props.open) isiSimpan.current = props.children
+  useBodyScrollLock(!!props.open)
+  useEffect(function () {
+    if (props.open) {
+      setTampil(true)
+      setTutup(false)
+      return undefined
+    }
+    if (!tampil) return undefined
+    setTutup(true)
+    const t = setTimeout(function () {
+      setTampil(false)
+      setTutup(false)
+    }, 200)
+    return function () { clearTimeout(t) }
+  }, [props.open])
+  if (!tampil) return null
+  return (
+    <div className={'anim-overlay fixed inset-0 z-[60] overflow-y-auto overscroll-contain bg-slate-900/60 p-4' + (tutup ? ' modal-tutup' : '')} onClick={props.onClose}>
+      <div className="min-h-full flex items-center justify-center py-8">
+        <div className="anim-modal w-full max-w-3xl rounded-[2rem] bg-white shadow-2xl max-h-[88vh] overflow-y-auto overscroll-contain" onClick={function (e) { e.stopPropagation() }}>
+          <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+            <p className="font-bold text-slate-900">{props.title || 'Detail'}</p>
+            <button onClick={props.onClose} className="h-9 w-9 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 grid place-items-center">
+              <SizedIcon name="close" size={16} />
+            </button>
+          </div>
+          <div className="p-6">{props.open ? props.children : isiSimpan.current}</div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function AutoTextArea(props) {
+  const ref = useRef(null)
+
+  useEffect(function () {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = el.scrollHeight + 'px'
+  }, [props.value])
+
+  return (
+    <textarea
+      ref={ref}
+      className={props.className}
+      rows={props.rows || 2}
+      value={props.value}
+      placeholder={props.placeholder}
+      onChange={props.onChange}
+      disabled={props.disabled || false}
+    />
+  )
+}
+
+export function ConfirmModal(props) {
+const [tampil, setTampil] = useState(props.open)
+const propsSimpan = useRef(null)
+if (props.open) propsSimpan.current = props
+const p = props.open ? props : (propsSimpan.current || props)
+const tutup = tampil && !props.open
+useBodyScrollLock(!!props.open)
+useEffect(function () {
+if (props.open) { setTampil(true); return undefined }
+if (!tampil) return undefined
+const t = setTimeout(function () { setTampil(false) }, 200)
+return function () { clearTimeout(t) }
+}, [props.open, tampil])
+if (!tampil) return null
+return (
+<div className={'anim-overlay fixed inset-0 z-[70] overflow-y-auto overscroll-contain bg-slate-900/60 p-4' + (tutup ? ' modal-tutup' : '')} onClick={p.onCancel}>
+<div className="min-h-full flex items-center justify-center py-8">
+<div className="anim-modal w-full max-w-md rounded-[2rem] bg-white shadow-2xl" onClick={function (e) { e.stopPropagation() }}>
+<div className="p-6 space-y-4">
+<div className="mx-auto h-14 w-14 rounded-2xl bg-red-100 text-red-600 grid place-items-center">
+<SizedIcon name="trash" size={24} />
+</div>
+<div className="text-center">
+<h3 className="text-xl font-black text-slate-900">{p.title || 'Hapus data ini?'}</h3>
+<p className="mt-2 text-sm text-slate-500">{p.message}</p>
+</div>
+<div className="grid grid-cols-2 gap-3">
+<button type="button" onClick={p.onCancel} className="rounded-2xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100">
+Batal
+</button>
+<button type="button" onClick={p.onConfirm} className="rounded-2xl bg-red-500 px-4 py-3 text-sm font-bold text-white hover:bg-red-600">
+{p.confirmLabel || 'Ya, Hapus'}
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+)
+}
+
+
+export function MediaDrive(props) {
+  const [gagal, setGagal] = useState(false)
+  useEffect(function () {
+    setGagal(false)
+  }, [props.driveId])
+  if (gagal) {
+    return (
+      <div className={'grid place-items-center bg-gradient-to-br from-slate-800 to-slate-900 ' + (props.className || 'absolute inset-0 h-full w-full')}>
+        <div className="flex flex-col items-center gap-2 text-slate-300">
+          <span className="grid h-12 w-12 place-items-center rounded-full bg-white/10">
+            <SizedIcon name="image" size={22} />
+          </span>
+          <p className="px-2 text-center text-[11px] font-semibold">Video Google Drive</p>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <img
+      src={driveThumbUrl(props.driveId)}
+      alt={props.alt || 'Video Google Drive'}
+      onClick={props.onClick || undefined}
+      onError={function () { setGagal(true) }}
+      className={(props.className || 'absolute inset-0 h-full w-full object-cover') + (props.onClick ? ' cursor-zoom-in' : '')}
+    />
+  )
+}
+export function Lightbox(props) {
+  useBodyScrollLock(true)
+  const [busyUnduh, setBusyUnduh] = useState(false)
+  const [tutup, setTutup] = useState(false)
+  const sedangTutup = useRef(false)
+  function mintaTutup() {
+    if (sedangTutup.current) return
+    sedangTutup.current = true
+    setTutup(true)
+    setTimeout(function () { props.onClose() }, 200)
+  }
+  useEffect(function () {
+    function onKey(e) {
+      if (e.key === 'Escape') mintaTutup()
+    }
+    document.addEventListener('keydown', onKey)
+    return function () { document.removeEventListener('keydown', onKey) }
+  }, [])
+  async function unduh() {
+    if (busyUnduh) return
+    setBusyUnduh(true)
+    if (props.driveId) {
+      try {
+        const nama = (props.title ? props.title.replace(/[\/\\:*?"<>|]/g, '').replace(/\s+/g, '-').substring(0, 60) : 'video-' + props.driveId) + '.mp4'
+        const a = document.createElement('a')
+        a.href = driveDownloadUrl(props.driveId)
+        a.download = nama
+        a.target = '_blank'
+        a.rel = 'noopener noreferrer'
+        a.style.display = 'none'
+        document.body.appendChild(a)
+        a.click()
+        setTimeout(function () { a.remove() }, 1000)
+      } catch (err) {
+        window.open(driveDownloadUrl(props.driveId), '_blank')
+      }
+      setBusyUnduh(false)
+      return
+    }
+    let nama = 'media'
+    try {
+      const urlAsli = new URL(props.src)
+      const ekstensi = urlAsli.pathname.split('.').pop().split('?')[0] || 'jpg'
+      if (props.title && props.title.trim()) {
+        const judulAman = props.title.trim().replace(/[\/\\:*?"<>|]/g, '').replace(/\s+/g, '-').substring(0, 60)
+        nama = judulAman + '.' + ekstensi
+      } else {
+        nama = urlAsli.pathname.split('/').pop() || ('media.' + ekstensi)
+      }
+    } catch (e) {
+      nama = (props.title || 'media') + '.jpg'
+    }
+    try {
+      const urlUnduh = props.src + (props.src.includes('?') ? '&' : '?') + 'unduh=1'
+      const res = await fetch(urlUnduh, { cache: 'no-store' })
+      if (!res.ok) throw new Error('status ' + res.status)
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = nama
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(function () { URL.revokeObjectURL(url) }, 2000)
+    } catch (err) {
+      window.open(props.src, '_blank')
+    }
+    setBusyUnduh(false)
+  }
+  const tombolUnduhTerlihat = !!props.driveId || !props.youtubeId
+  return createPortal(
+    <div className={'anim-overlay fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/95 p-4' + (tutup ? ' lightbox-tutup' : '')} onClick={mintaTutup}>
+      <div className="lightbox-isi relative w-full max-w-5xl" onClick={function (e) { e.stopPropagation() }}>
+        {props.youtubeId ? (
+          <PemutarVideo key={props.youtubeId} youtubeId={props.youtubeId} title={props.title || 'Video'} className="mx-auto aspect-video w-full rounded-2xl" />
+        ) : props.type === 'video' ? (
+          <video src={props.src} controls autoPlay className="mx-auto max-h-[85vh] w-full rounded-2xl bg-slate-900 object-contain" />
+        ) : (
+          <img
+            src={props.src}
+            alt={props.title || 'Media'}
+            onClick={mintaTutup}
+            className="mx-auto max-h-[85vh] w-auto max-w-full cursor-zoom-out rounded-2xl object-contain"
+          />
+        )}
+        {props.title ? <p className="mt-3 truncate text-center text-sm text-slate-300">{props.title}</p> : null}
+      </div>
+      <div className="absolute right-4 top-4 flex gap-2">
+        <button
+          type="button"
+          title={busyUnduh ? 'Menyiapkan unduhan...' : (props.driveId ? 'Unduh video dari Google Drive' : 'Unduh media')}
+          onClick={unduh}
+          disabled={busyUnduh}
+          style={tombolUnduhTerlihat ? undefined : { display: 'none' }}
+          className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20 disabled:opacity-50"
+        >
+          <SizedIcon name="download" size={18} />
+        </button>
+        <button
+          type="button"
+          title="Tutup (Esc)"
+          onClick={mintaTutup}
+          className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
+        >
+          <SizedIcon name="close" size={18} />
+        </button>
+      </div>
+      <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-slate-400">
+        {props.driveId ? 'Video diputar dari YouTube, unduhan diambil dari Google Drive' : 'Klik media atau tekan Esc untuk menutup'}
+      </p>
+    </div>
+  , document.body)
+}
+export function ZoomableMedia(props) {
+  const [open, setOpen] = useState(false)
+  const isVideo = props.type === 'video'
+  return (
+    <div className={'relative group ' + (props.className || '')}>
+      <SmartFit
+        src={props.src}
+        type={props.type}
+        alt={props.title || 'Media'}
+        full={props.full || props.src}
+         controls={isVideo}
+        onClick={isVideo ? null : function (e) { e.stopPropagation(); setOpen(true) }}
+      />
+      <button
+        type="button"
+        title="Perbesar media"
+        onClick={function (e) { e.stopPropagation(); setOpen(true) }}
+        className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100"
+      >
+        <SizedIcon name="expand" size={15} />
+      </button>
+      {open ? <Lightbox src={props.full || props.src} type={props.type} title={props.title} onClose={function () { setOpen(false) }} /> : null}
+    </div>
+  )
+}
+
+
+export function SmartFit(props) {
+  const [ratio, setRatio] = useState(null)
+  const [near, setNear] = useState(false)
+  const mediaRef = useRef(null)
+  const isVideo = props.type === 'video'
+  if (!isVideo && String(props.src || '').indexOf('i.ytimg.com') !== -1) {
+    return <MediaYouTube src={props.src} alt={props.alt} onClick={props.onClick} className="absolute inset-0 h-full w-full object-cover" />
+  }
+  useEffect(function () {
+    const el = mediaRef.current
+    if (!el) return undefined
+    if (typeof IntersectionObserver === 'undefined') {
+      setNear(true)
+      return undefined
+    }
+    const io = new IntersectionObserver(function (entries) {
+      for (let i = 0; i < entries.length; i++) {
+        if (entries[i].isIntersecting) {
+          setNear(true)
+          io.disconnect()
+          break
+        }
+      }
+    }, { rootMargin: '400px' })
+    io.observe(el)
+    return function () { io.disconnect() }
+  }, [])
+  function bacaUkuran(e) {
+    const el = e.target
+    const w = isVideo ? el.videoWidth : el.naturalWidth
+    const h = isVideo ? el.videoHeight : el.naturalHeight
+    if (w && h) setRatio(w / h)
+  }
+  function cadangkan(e) {
+    const el = e.currentTarget
+    const cad = props.full && props.full !== props.src ? props.full : props.src
+    if (cad && el.src !== cad) el.src = cad
+  }
+  const cover = ratio !== null && ratio > 1
+  const potret = ratio !== null && ratio <= 1
+  return (
+    <>
+      {potret && !isVideo ? (
+        <img src={props.src} alt="" aria-hidden="true" loading="lazy" decoding="async" onError={cadangkan} className="absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-xl" />
+      ) : null}
+      {isVideo ? (
+        <video
+          ref={mediaRef}
+          src={near ? props.src : undefined}
+          muted={props.controls ? false : true}
+          preload="metadata"
+          controls={props.controls || false}
+          onLoadedMetadata={bacaUkuran}
+          className={'absolute inset-0 h-full w-full ' + (cover ? 'object-cover' : 'object-contain')}
+        />
+      ) : (
+        <img
+          ref={mediaRef}
+          src={near ? props.src : undefined}
+          alt={props.alt || 'Media'}
+          loading="lazy"
+          decoding="async"
+          onLoad={bacaUkuran}
+          onError={cadangkan}
+          onClick={props.onClick || undefined}
+          className={'absolute inset-0 h-full w-full ' + (cover ? 'object-cover' : 'object-contain') + (props.onClick ? ' cursor-zoom-in' : '')}
+        />
+      )}
+    </>
+  )
+}
+
+export function MediaYouTube(props) {
+  const [status, setStatus] = useState('muat')
+  const [coba, setCoba] = useState(0)
+  useEffect(function () {
+    if (status !== 'tunggu') return undefined
+    const t = setTimeout(function () {
+      setCoba(function (c) { return c + 1 })
+      setStatus('muat')
+    }, 15000)
+    return function () { clearTimeout(t) }
+  }, [status])
+  if (status === 'tunggu' || status === 'habis') {
+    return (
+      <div className={'grid place-items-center bg-slate-800 ' + (props.className || 'absolute inset-0 h-full w-full')}>
+        <div className="flex flex-col items-center gap-2 text-slate-400">
+          <SizedIcon name="video" size={26} />
+          <p className="px-2 text-center text-[11px] font-semibold">{status === 'habis' ? 'Pratinjau video belum siap' : 'Menyiapkan pratinjau video'}</p>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <img
+      src={props.src + (coba > 0 ? (String(props.src).indexOf('?') === -1 ? '?' : '&') + 'r=' + coba : '')}
+      alt={props.alt || 'Pratinjau video'}
+      onClick={props.onClick || undefined}
+      onError={function () { setStatus(coba >= 3 ? 'habis' : 'tunggu') }}
+      onLoad={function () { setStatus('muat') }}
+      className={props.className || 'absolute inset-0 h-full w-full object-cover'}
+    />
+  )
+}
+
+export function TitikAnim() {
+
+  return (
+    <span className="titik-anim" aria-hidden="true">
+      <i></i>
+      <i></i>
+      <i></i>
+    </span>
+  )
+}
+export function LabelProses(props) {
+  const bersih = String(props.teks || '').replace(/\.{3}/g, '').replace(/\s+/g, ' ').trim()
+  return (
+    <span className="inline-flex items-center justify-center">
+      <span>{bersih}</span>
+      <TitikAnim />
+    </span>
+  )
+}
+
+export function Avatar(props) {
+  const ukuran = { sm: 36, md: 44, lg: 56, xl: 96, '2xl': 160 }
+  const px = ukuran[props.size] || 44
+  const radius = Math.round(px * 0.28) + 'px'
+  const nama = props.nama || ''
+  const kata = nama.trim().split(/\s+/)
+  const inisial = nama ? ((kata[0] ? kata[0].charAt(0) : '') + (kata[1] ? kata[1].charAt(0) : '')).toUpperCase() : '?'
+  const palet = ['#166534', '#15803d', '#a16207', '#ca8a04', '#334155', '#047857']
+  let hash = 0
+  for (let i = 0; i < nama.length; i++) hash = (hash * 31 + nama.charCodeAt(i)) >>> 0
+  const warna = palet[hash % palet.length]
+  const bisaKlik = typeof props.onClick === 'function'
+  const gaya = {
+    boxSizing: 'content-box',
+    display: 'inline-block',
+    width: px + 'px',
+    height: px + 'px',
+    padding: 0,
+    margin: 0,
+    borderRadius: radius,
+    overflow: 'hidden',
+    position: 'relative',
+    verticalAlign: 'middle',
+    flexShrink: 0,
+    background: props.src ? '#ffffff' : warna,
+    boxShadow: '0 1px 2px rgba(15, 23, 42, 0.10), 0 10px 28px rgba(15, 23, 42, 0.22)',
+    cursor: bisaKlik ? 'pointer' : 'default',
+    outline: 'none',
+    lineHeight: 0
+  }
+  const gayaFoto = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+    objectPosition: 'center',
+    display: 'block',
+    borderRadius: radius
+  }
+  const gayaTeks = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#ffffff',
+    fontWeight: 800,
+    fontSize: Math.round(px * 0.36) + 'px'
+  }
+  if (bisaKlik) {
+    return (
+      <button type="button" onClick={props.onClick} title={props.title} style={gaya}>
+        {props.src ? <img src={props.src} alt={nama || 'Foto profil'} style={gayaFoto} /> : <span style={gayaTeks}>{inisial}</span>}
+      </button>
+    )
+  }
+  return (
+    <span style={gaya}>
+      {props.src ? <img src={props.src} alt={nama || 'Foto profil'} style={gayaFoto} /> : <span style={gayaTeks}>{inisial}</span>}
+    </span>
+  )
+}
+
+export function Pagination(props) {
+  /* pagination-v2: tombol nomor halaman sesuai tema BSI */
+  const totalItems = props.totalItems || 0
+  const perPage = props.perPage || 10
+  const page = props.page || 1
+  const onPageChange = props.onPageChange || function () {}
+  const totalPages = Math.ceil(totalItems / perPage)
+  if (!totalItems) return null
+  const halaman = []
+  if (totalPages <= 7) {
+    for (let i = 1; i <= totalPages; i++) halaman.push(i)
+  } else {
+    for (let i = 1; i <= totalPages; i++) {
+      if (i === 1 || i === totalPages || (i >= page - 1 && i <= page + 1)) {
+        halaman.push(i)
+      } else if (halaman[halaman.length - 1] !== '...') {
+        halaman.push('...')
+      }
+    }
+  }
+  const clsAngka = 'grid h-10 min-w-10 place-items-center rounded-xl px-3 text-sm font-bold transition '
+  const clsNav = 'flex h-10 items-center rounded-xl px-4 text-sm font-semibold transition '
+  const clsNetral = 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 hover:text-bsi-800'
+  return (
+    <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
+      {totalPages > 1 ? (
+        <button
+          type="button"
+          disabled={page <= 1}
+          onClick={function () { onPageChange(page - 1) }}
+          className={clsNav + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}
+        >
+          Sebelumnya
+        </button>
+      ) : null}
+      {halaman.map(function (h, idx) {
+        if (h === '...') {
+          return <span key={'lompat' + idx} className="px-1 text-sm font-bold text-slate-400">...</span>
+        }
+        const aktif = h === page
+        return (
+          <button
+            key={'hal' + h}
+            type="button"
+            onClick={function () { onPageChange(h) }}
+            className={clsAngka + (aktif
+              ? 'bg-bsi-800 text-white shadow-lg shadow-bsi-900/25'
+              : clsNetral)}
+          >
+            {h}
+          </button>
+        )
+      })}
+      {totalPages > 1 ? (
+        <button
+          type="button"
+          disabled={page >= totalPages}
+          onClick={function () { onPageChange(page + 1) }}
+          className={clsNav + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}
+        >
+          Berikutnya
+        </button>
+      ) : null}
+    </div>
+  )
+}
+
+const ToastContext = createContext(null)
+ export function ToastProvider(props) {
+   const [toasts, setToasts] = useState([])
+   function tutupToast(id) {
+     setToasts(function (prev) { return prev.filter(function (t) { return t.id !== id }) })
+   }
+   function tambahToast(tipe, pesan) {
+     const id = Date.now() + Math.random()
+     setToasts(function (prev) { return prev.concat([{ id: id, tipe: tipe, pesan: pesan }]) })
+     setTimeout(function () {
+       setToasts(function (prev) { return prev.filter(function (t) { return t.id !== id }) })
+     }, 4000)
+   }
+   function toastSukses(pesan) { tambahToast('sukses', pesan) }
+   function toastGagal(pesan) { tambahToast('gagal', pesan) }
+   return (
+     <ToastContext.Provider value={{ sukses: toastSukses, gagal: toastGagal }}>
+       {props.children}
+       <div className="fixed top-5 right-5 z-[100] flex w-full max-w-sm flex-col gap-3 pointer-events-none">
+         {toasts.map(function (t) {
+           const sukses = t.tipe === 'sukses'
+           return (
+             <div key={t.id} className={'anim-toast pointer-events-auto flex items-start gap-3 rounded-2xl border p-4 shadow-lg ' + (sukses ? 'toast-sukses' : 'toast-gagal')}>
+               <span className={'mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full ' + (sukses ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white')}>
+                 <SizedIcon name={sukses ? 'check' : 'close'} size={12} />
+               </span>
+               <p className={'flex-1 text-sm font-semibold toast-teks'}>{t.pesan}</p>
+               <button type="button" onClick={function () { tutupToast(t.id) }} className="toast-tutup shrink-0 text-slate-400 hover:text-slate-600">
+                 <SizedIcon name="close" size={14} />
+               </button>
+             </div>
+           )
+         })}
+       </div>
+     </ToastContext.Provider>
+   )
+ }
+ export function useToast() {
+   return useContext(ToastContext)
+ }
+
+export function SelubungPanel(props) {
+  const [tampil, setTampil] = useState(props.open)
+  const tutup = tampil && !props.open
+  useEffect(function () {
+    if (props.open) { setTampil(true); return undefined }
+    if (!tampil) return undefined
+    const t = setTimeout(function () { setTampil(false) }, 180)
+    return function () { clearTimeout(t) }
+  }, [props.open, tampil])
+  if (!tampil) return null
+  return <div className={'selubung-panel' + (tutup ? ' panel-tutup' : '')}>{props.children}</div>
+}
+```
+
 ## File: src/index.css
 ```css
 @tailwind base;
@@ -7863,7 +5932,7 @@ button:active, a:active, .clickable:active { transform: scale(.97); }
 .carousel-track { display: flex; height: 100%; transition: transform .5s ease; }
 .carousel-slide { position: relative; flex: 0 0 100%; height: 100%; }
 .carousel-slide img, .carousel-slide video { position: absolute; inset: 0; width: 100%; height: 100%; background: #020617; }
-.media-carousel button:active { transform: translateY(-50%) scale(.97); }
+.media-carousel button:active { transform: scale(.97); }
 
 /* ===== Filter ===== */
 .filter-input-wrap { position: relative; display: inline-flex; align-items: center; }
@@ -8255,7 +6324,7 @@ html { scroll-behavior: smooth; }
   z-index: 95;
   border-radius: 9999px;
   opacity: 0;
-  transition: opacity 0.25s ease;
+  transition: opacity 0.18s ease;
   pointer-events: none;
 }
 #scroll-indicator.aktif { opacity: 1; }
@@ -8289,12 +6358,12 @@ to { opacity: 1; transform: translateX(0) scale(1); }
 
 /* mode-smooth-v2: easing lebih lembut untuk masuk, bayangan cabang untuk keluar, tetangga bergeser mulus */
 @keyframes gantiBulan {
-from { opacity: 0; transform: translateX(-12px) scale(0.99); }
-to { opacity: 1; transform: translateX(0) scale(1); }
+from { opacity: 0; transform: translateY(6px) scale(0.99); }
+to { opacity: 1; transform: translateY(0) scale(1); }
 }
 @keyframes gantiRentang {
-from { opacity: 0; transform: translateX(12px) scale(0.99); }
-to { opacity: 1; transform: translateX(0) scale(1); }
+from { opacity: 0; transform: translateY(6px) scale(0.99); }
+to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .anim-ganti-bulan { animation: gantiBulan 0.32s cubic-bezier(0.22, 1, 0.36, 1); }
 .anim-ganti-rentang { animation: gantiRentang 0.32s cubic-bezier(0.22, 1, 0.36, 1); }
@@ -8385,6 +6454,8 @@ main { padding-bottom: 2.5rem !important; }
   transition: visibility 0.36s;
 }
 .filter-wrap-buka .filter-dalam { visibility: visible; }
+/* fix-filter-dropdown: clip dilepas setelah panel selesai mengembang supaya dropdown dan date picker bebas keluar panel seperti semula */
+.filter-dalam-santai { overflow: visible; }
 .filter-isi {
   margin-top: 1rem;
   opacity: 0;
@@ -8393,7 +6464,7 @@ main { padding-bottom: 2.5rem !important; }
 }
 .filter-wrap-buka .filter-isi {
   opacity: 1;
-  transform: translateY(0);
+  transform: none;
   transition: opacity 0.34s ease 0.06s, transform 0.4s cubic-bezier(0.32, 0.72, 0, 1) 0.04s;
 }
 .filter-isi > * {
@@ -8403,7 +6474,7 @@ main { padding-bottom: 2.5rem !important; }
 }
 .filter-wrap-buka .filter-isi > * {
   opacity: 1;
-  transform: translateY(0);
+  transform: none;
 }
 .filter-wrap-buka .filter-isi > *:nth-child(1) { transition-delay: 0.08s; }
 .filter-wrap-buka .filter-isi > *:nth-child(2) { transition-delay: 0.14s; }
@@ -8413,657 +6484,51 @@ main { padding-bottom: 2.5rem !important; }
 .filter-wrap-buka .filter-isi > *:nth-child(6) { transition-delay: 0.38s; }
 @media (min-width: 1280px) {
   .filter-wrap { grid-template-rows: 1fr; }
-  .filter-dalam { visibility: visible; }
+  .filter-dalam { visibility: visible; overflow: visible; }
   .filter-isi { opacity: 1; transform: none; }
   .filter-isi > * { opacity: 1; transform: none; transition: none; }
 }
-```
 
-## File: src/components/ui.jsx
-```javascript
-import { createPortal } from 'react-dom'
-import PemutarVideo from './PemutarVideo.jsx'
-import { drivePreviewUrl, driveDownloadUrl, driveThumbUrl } from '../lib/drive.js'
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
-import { SizedIcon } from './icons.jsx'
-function useBodyScrollLock(active) {
-  useEffect(function () {
-    if (!active) return undefined
-    const previous = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return function () {
-      document.body.style.overflow = previous
-    }
-  }, [active])
+/* transisi-tema-v4: capture snapshot bersih, navbar tidak berkedip dan tepi layar tidak menyala putih saat crossfade */
+.vt-tema, .vt-tema *, .vt-tema *::before, .vt-tema *::after {
+  transition: none !important;
+}
+.vt-tema [class*="backdrop-blur"] {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
+/* lightbox-anim-v1: masuk keluar lightbox mulus, keluar memakai animasi mundur sebelum dilepas */
+@keyframes lightboxIn {
+  from { opacity: 0; transform: scale(0.96) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes lightboxOut {
+  from { opacity: 1; transform: scale(1) translateY(0); }
+  to { opacity: 0; transform: scale(0.96) translateY(8px); }
+}
+.lightbox-isi { animation: lightboxIn 0.28s cubic-bezier(0.16, 1, 0.3, 1); }
+.lightbox-tutup { pointer-events: none; }
+.lightbox-tutup.anim-overlay { animation: overlayFadeOut 0.2s ease-in forwards; }
+.lightbox-tutup .lightbox-isi { animation: lightboxOut 0.2s ease-in forwards; }
 
-export const inputCls = 'mt-1.5 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-bsi-500'
-export const labelCls = 'text-sm font-semibold text-slate-700'
-export const btnPrimary = 'w-full rounded-2xl bg-bsi-800 px-6 py-4 text-white font-bold hover:bg-bsi-900'
-export const btnSmall = 'px-4 py-2 rounded-xl text-sm font-semibold'
-export const cardCls = 'card-hover bg-white rounded-3xl border border-slate-200 shadow-sm'
+/* sentuh-responsif-v1: matikan deteksi double-tap zoom supaya ketukan langsung menjadi klik tanpa jeda di browser tablet */
+* { touch-action: manipulation; }
+/* umpan balik tekan lebih sigap di layar sentuh: efek mengecil terjadi hampir instan, saat dilepas tetap mulus */
+button:active:not(:disabled), a:active, .clickable:active { transition-duration: 0.06s; }
 
-export function StatCard(props) {
-  return (
-    <div className={cardCls + ' p-6'}>
-      <p className="text-sm text-slate-500">{props.label}</p>
-      <p className="mt-2 text-3xl font-black text-bsi-900">{props.value}</p>
-      {props.sub ? <p className="mt-1 text-xs text-slate-500">{props.sub}</p> : null}
-    </div>
-  )
+/* klik-halus-v1: kartu clickable menekan dan melepas pakai kurva mulus, hentakan saat kartu galeri diketuk hilang */
+.clickable {
+  transition: transform 0.24s cubic-bezier(0.32, 0.72, 0, 1), box-shadow 0.24s ease, opacity 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.clickable:active {
+  transform: scale(0.985);
+  transition-duration: 0.09s;
 }
 
-export function EmptyState(props) {
-  return (
-    <div className={cardCls + ' border-dashed p-10 text-center'}>
-      <div className="mx-auto h-14 w-14 rounded-2xl bg-slate-100 grid place-items-center text-slate-400">
-        <SizedIcon name={props.icon || 'file'} size={24} />
-      </div>
-      <h3 className="mt-4 text-lg font-bold text-slate-800">{props.title}</h3>
-      <p className="mt-2 text-sm text-slate-500 max-w-md mx-auto">{props.desc}</p>
-    </div>
-  )
-}
-
-export function StatusBadge(props) {
-  const publik = props.status === 'publik'
-  return (
-    <span className={'px-3 py-1 rounded-full text-xs font-semibold ' + (publik ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800')}>
-      {publik ? 'Published' : 'Draft'}
-    </span>
-  )
-}
-
-export function CategoryBadge(props) {
-  return <span className="px-3 py-1 rounded-full text-xs font-semibold bg-bsi-100 text-bsi-900">{props.value || 'Lainnya'}</span>
-}
-
-export function AttendanceBadge(props) {
-  const map = {
-    Masuk: 'bg-emerald-100 text-emerald-800',
-    Izin: 'bg-amber-100 text-amber-800',
-    Bolos: 'bg-red-100 text-red-700'
-  }
-  return <span className={'px-3 py-1 rounded-full text-xs font-semibold ' + (map[props.status] || 'bg-slate-100 text-slate-700')}>{props.status}</span>
-}
-
-export function Modal(props) {
-  const [tampil, setTampil] = useState(props.open)
-  const [tutup, setTutup] = useState(false)
-  const isiSimpan = useRef(null)
-  if (props.open) isiSimpan.current = props.children
-  useBodyScrollLock(!!props.open)
-  useEffect(function () {
-    if (props.open) {
-      setTampil(true)
-      setTutup(false)
-      return undefined
-    }
-    if (!tampil) return undefined
-    setTutup(true)
-    const t = setTimeout(function () {
-      setTampil(false)
-      setTutup(false)
-    }, 200)
-    return function () { clearTimeout(t) }
-  }, [props.open])
-  if (!tampil) return null
-  return (
-    <div className={'anim-overlay fixed inset-0 z-[60] overflow-y-auto overscroll-contain bg-slate-900/60 p-4' + (tutup ? ' modal-tutup' : '')} onClick={props.onClose}>
-      <div className="min-h-full flex items-center justify-center py-8">
-        <div className="anim-modal w-full max-w-3xl rounded-[2rem] bg-white shadow-2xl max-h-[88vh] overflow-y-auto overscroll-contain" onClick={function (e) { e.stopPropagation() }}>
-          <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-            <p className="font-bold text-slate-900">{props.title || 'Detail'}</p>
-            <button onClick={props.onClose} className="h-9 w-9 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 grid place-items-center">
-              <SizedIcon name="close" size={16} />
-            </button>
-          </div>
-          <div className="p-6">{props.open ? props.children : isiSimpan.current}</div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export function AutoTextArea(props) {
-  const ref = useRef(null)
-
-  useEffect(function () {
-    const el = ref.current
-    if (!el) return
-    el.style.height = 'auto'
-    el.style.height = el.scrollHeight + 'px'
-  }, [props.value])
-
-  return (
-    <textarea
-      ref={ref}
-      className={props.className}
-      rows={props.rows || 2}
-      value={props.value}
-      placeholder={props.placeholder}
-      onChange={props.onChange}
-      disabled={props.disabled || false}
-    />
-  )
-}
-
-export function ConfirmModal(props) {
-const [tampil, setTampil] = useState(props.open)
-const propsSimpan = useRef(null)
-if (props.open) propsSimpan.current = props
-const p = props.open ? props : (propsSimpan.current || props)
-const tutup = tampil && !props.open
-useBodyScrollLock(!!props.open)
-useEffect(function () {
-if (props.open) { setTampil(true); return undefined }
-if (!tampil) return undefined
-const t = setTimeout(function () { setTampil(false) }, 200)
-return function () { clearTimeout(t) }
-}, [props.open, tampil])
-if (!tampil) return null
-return (
-<div className={'anim-overlay fixed inset-0 z-[70] overflow-y-auto overscroll-contain bg-slate-900/60 p-4' + (tutup ? ' modal-tutup' : '')} onClick={p.onCancel}>
-<div className="min-h-full flex items-center justify-center py-8">
-<div className="anim-modal w-full max-w-md rounded-[2rem] bg-white shadow-2xl" onClick={function (e) { e.stopPropagation() }}>
-<div className="p-6 space-y-4">
-<div className="mx-auto h-14 w-14 rounded-2xl bg-red-100 text-red-600 grid place-items-center">
-<SizedIcon name="trash" size={24} />
-</div>
-<div className="text-center">
-<h3 className="text-xl font-black text-slate-900">{p.title || 'Hapus data ini?'}</h3>
-<p className="mt-2 text-sm text-slate-500">{p.message}</p>
-</div>
-<div className="grid grid-cols-2 gap-3">
-<button type="button" onClick={p.onCancel} className="rounded-2xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100">
-Batal
-</button>
-<button type="button" onClick={p.onConfirm} className="rounded-2xl bg-red-500 px-4 py-3 text-sm font-bold text-white hover:bg-red-600">
-{p.confirmLabel || 'Ya, Hapus'}
-</button>
-</div>
-</div>
-</div>
-</div>
-</div>
-)
-}
-
-
-export function MediaDrive(props) {
-  const [gagal, setGagal] = useState(false)
-  useEffect(function () {
-    setGagal(false)
-  }, [props.driveId])
-  if (gagal) {
-    return (
-      <div className={'grid place-items-center bg-gradient-to-br from-slate-800 to-slate-900 ' + (props.className || 'absolute inset-0 h-full w-full')}>
-        <div className="flex flex-col items-center gap-2 text-slate-300">
-          <span className="grid h-12 w-12 place-items-center rounded-full bg-white/10">
-            <SizedIcon name="image" size={22} />
-          </span>
-          <p className="px-2 text-center text-[11px] font-semibold">Video Google Drive</p>
-        </div>
-      </div>
-    )
-  }
-  return (
-    <img
-      src={driveThumbUrl(props.driveId)}
-      alt={props.alt || 'Video Google Drive'}
-      onClick={props.onClick || undefined}
-      onError={function () { setGagal(true) }}
-      className={(props.className || 'absolute inset-0 h-full w-full object-cover') + (props.onClick ? ' cursor-zoom-in' : '')}
-    />
-  )
-}
-export function Lightbox(props) {
-  useBodyScrollLock(true)
-  const [busyUnduh, setBusyUnduh] = useState(false)
-  useEffect(function () {
-    function onKey(e) {
-      if (e.key === 'Escape') props.onClose()
-    }
-    document.addEventListener('keydown', onKey)
-    return function () { document.removeEventListener('keydown', onKey) }
-  }, [])
-  async function unduh() {
-    if (busyUnduh) return
-    setBusyUnduh(true)
-    if (props.driveId) {
-      try {
-        const nama = (props.title ? props.title.replace(/[\/\\:*?"<>|]/g, '').replace(/\s+/g, '-').substring(0, 60) : 'video-' + props.driveId) + '.mp4'
-        const a = document.createElement('a')
-        a.href = driveDownloadUrl(props.driveId)
-        a.download = nama
-        a.target = '_blank'
-        a.rel = 'noopener noreferrer'
-        a.style.display = 'none'
-        document.body.appendChild(a)
-        a.click()
-        setTimeout(function () { a.remove() }, 1000)
-      } catch (err) {
-        window.open(driveDownloadUrl(props.driveId), '_blank')
-      }
-      setBusyUnduh(false)
-      return
-    }
-    let nama = 'media'
-    try {
-      const urlAsli = new URL(props.src)
-      const ekstensi = urlAsli.pathname.split('.').pop().split('?')[0] || 'jpg'
-      if (props.title && props.title.trim()) {
-        const judulAman = props.title.trim().replace(/[\/\\:*?"<>|]/g, '').replace(/\s+/g, '-').substring(0, 60)
-        nama = judulAman + '.' + ekstensi
-      } else {
-        nama = urlAsli.pathname.split('/').pop() || ('media.' + ekstensi)
-      }
-    } catch (e) {
-      nama = (props.title || 'media') + '.jpg'
-    }
-    try {
-      const urlUnduh = props.src + (props.src.includes('?') ? '&' : '?') + 'unduh=1'
-      const res = await fetch(urlUnduh, { cache: 'no-store' })
-      if (!res.ok) throw new Error('status ' + res.status)
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = nama
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      setTimeout(function () { URL.revokeObjectURL(url) }, 2000)
-    } catch (err) {
-      window.open(props.src, '_blank')
-    }
-    setBusyUnduh(false)
-  }
-  const tombolUnduhTerlihat = !!props.driveId || !props.youtubeId
-  return createPortal(
-    <div className="anim-overlay fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/95 p-4" onClick={props.onClose}>
-      <div className="relative w-full max-w-5xl" onClick={function (e) { e.stopPropagation() }}>
-        {props.youtubeId ? (
-          <PemutarVideo key={props.youtubeId} youtubeId={props.youtubeId} title={props.title || 'Video'} className="mx-auto aspect-video w-full rounded-2xl" />
-        ) : props.type === 'video' ? (
-          <video src={props.src} controls autoPlay className="mx-auto max-h-[85vh] w-full rounded-2xl bg-slate-900 object-contain" />
-        ) : (
-          <img
-            src={props.src}
-            alt={props.title || 'Media'}
-            onClick={props.onClose}
-            className="mx-auto max-h-[85vh] w-auto max-w-full cursor-zoom-out rounded-2xl object-contain"
-          />
-        )}
-        {props.title ? <p className="mt-3 truncate text-center text-sm text-slate-300">{props.title}</p> : null}
-      </div>
-      <div className="absolute right-4 top-4 flex gap-2">
-        <button
-          type="button"
-          title={busyUnduh ? 'Menyiapkan unduhan...' : (props.driveId ? 'Unduh video dari Google Drive' : 'Unduh media')}
-          onClick={unduh}
-          disabled={busyUnduh}
-          style={tombolUnduhTerlihat ? undefined : { display: 'none' }}
-          className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20 disabled:opacity-50"
-        >
-          <SizedIcon name="download" size={18} />
-        </button>
-        <button
-          type="button"
-          title="Tutup (Esc)"
-          onClick={props.onClose}
-          className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
-        >
-          <SizedIcon name="close" size={18} />
-        </button>
-      </div>
-      <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-slate-400">
-        {props.driveId ? 'Video diputar dari YouTube, unduhan diambil dari Google Drive' : 'Klik media atau tekan Esc untuk menutup'}
-      </p>
-    </div>
-  , document.body)
-}
-export function ZoomableMedia(props) {
-  const [open, setOpen] = useState(false)
-  const isVideo = props.type === 'video'
-  return (
-    <div className={'relative group ' + (props.className || '')}>
-      <SmartFit
-        src={props.src}
-        type={props.type}
-        alt={props.title || 'Media'}
-        full={props.full || props.src}
-         controls={isVideo}
-        onClick={isVideo ? null : function (e) { e.stopPropagation(); setOpen(true) }}
-      />
-      <button
-        type="button"
-        title="Perbesar media"
-        onClick={function (e) { e.stopPropagation(); setOpen(true) }}
-        className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100"
-      >
-        <SizedIcon name="expand" size={15} />
-      </button>
-      {open ? <Lightbox src={props.full || props.src} type={props.type} title={props.title} onClose={function () { setOpen(false) }} /> : null}
-    </div>
-  )
-}
-
-
-export function SmartFit(props) {
-  const [ratio, setRatio] = useState(null)
-  const [near, setNear] = useState(false)
-  const mediaRef = useRef(null)
-  const isVideo = props.type === 'video'
-  if (!isVideo && String(props.src || '').indexOf('i.ytimg.com') !== -1) {
-    return <MediaYouTube src={props.src} alt={props.alt} onClick={props.onClick} className="absolute inset-0 h-full w-full object-cover" />
-  }
-  useEffect(function () {
-    const el = mediaRef.current
-    if (!el) return undefined
-    if (typeof IntersectionObserver === 'undefined') {
-      setNear(true)
-      return undefined
-    }
-    const io = new IntersectionObserver(function (entries) {
-      for (let i = 0; i < entries.length; i++) {
-        if (entries[i].isIntersecting) {
-          setNear(true)
-          io.disconnect()
-          break
-        }
-      }
-    }, { rootMargin: '400px' })
-    io.observe(el)
-    return function () { io.disconnect() }
-  }, [])
-  function bacaUkuran(e) {
-    const el = e.target
-    const w = isVideo ? el.videoWidth : el.naturalWidth
-    const h = isVideo ? el.videoHeight : el.naturalHeight
-    if (w && h) setRatio(w / h)
-  }
-  function cadangkan(e) {
-    const el = e.currentTarget
-    const cad = props.full && props.full !== props.src ? props.full : props.src
-    if (cad && el.src !== cad) el.src = cad
-  }
-  const cover = ratio !== null && ratio > 1
-  const potret = ratio !== null && ratio <= 1
-  return (
-    <>
-      {potret && !isVideo ? (
-        <img src={props.src} alt="" aria-hidden="true" loading="lazy" decoding="async" onError={cadangkan} className="absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-xl" />
-      ) : null}
-      {isVideo ? (
-        <video
-          ref={mediaRef}
-          src={near ? props.src : undefined}
-          muted={props.controls ? false : true}
-          preload="metadata"
-          controls={props.controls || false}
-          onLoadedMetadata={bacaUkuran}
-          className={'absolute inset-0 h-full w-full ' + (cover ? 'object-cover' : 'object-contain')}
-        />
-      ) : (
-        <img
-          ref={mediaRef}
-          src={near ? props.src : undefined}
-          alt={props.alt || 'Media'}
-          loading="lazy"
-          decoding="async"
-          onLoad={bacaUkuran}
-          onError={cadangkan}
-          onClick={props.onClick || undefined}
-          className={'absolute inset-0 h-full w-full ' + (cover ? 'object-cover' : 'object-contain') + (props.onClick ? ' cursor-zoom-in' : '')}
-        />
-      )}
-    </>
-  )
-}
-
-export function MediaYouTube(props) {
-  const [status, setStatus] = useState('muat')
-  const [coba, setCoba] = useState(0)
-  useEffect(function () {
-    if (status !== 'tunggu') return undefined
-    const t = setTimeout(function () {
-      setCoba(function (c) { return c + 1 })
-      setStatus('muat')
-    }, 15000)
-    return function () { clearTimeout(t) }
-  }, [status])
-  if (status === 'tunggu' || status === 'habis') {
-    return (
-      <div className={'grid place-items-center bg-slate-800 ' + (props.className || 'absolute inset-0 h-full w-full')}>
-        <div className="flex flex-col items-center gap-2 text-slate-400">
-          <SizedIcon name="video" size={26} />
-          <p className="px-2 text-center text-[11px] font-semibold">{status === 'habis' ? 'Pratinjau video belum siap' : 'Menyiapkan pratinjau video'}</p>
-        </div>
-      </div>
-    )
-  }
-  return (
-    <img
-      src={props.src + (coba > 0 ? (String(props.src).indexOf('?') === -1 ? '?' : '&') + 'r=' + coba : '')}
-      alt={props.alt || 'Pratinjau video'}
-      onClick={props.onClick || undefined}
-      onError={function () { setStatus(coba >= 3 ? 'habis' : 'tunggu') }}
-      onLoad={function () { setStatus('muat') }}
-      className={props.className || 'absolute inset-0 h-full w-full object-cover'}
-    />
-  )
-}
-
-export function TitikAnim() {
-
-  return (
-    <span className="titik-anim" aria-hidden="true">
-      <i></i>
-      <i></i>
-      <i></i>
-    </span>
-  )
-}
-export function LabelProses(props) {
-  const bersih = String(props.teks || '').replace(/\.{3}/g, '').replace(/\s+/g, ' ').trim()
-  return (
-    <span className="inline-flex items-center justify-center">
-      <span>{bersih}</span>
-      <TitikAnim />
-    </span>
-  )
-}
-
-export function Avatar(props) {
-  const ukuran = { sm: 36, md: 44, lg: 56, xl: 96, '2xl': 160 }
-  const px = ukuran[props.size] || 44
-  const radius = Math.round(px * 0.28) + 'px'
-  const nama = props.nama || ''
-  const kata = nama.trim().split(/\s+/)
-  const inisial = nama ? ((kata[0] ? kata[0].charAt(0) : '') + (kata[1] ? kata[1].charAt(0) : '')).toUpperCase() : '?'
-  const palet = ['#166534', '#15803d', '#a16207', '#ca8a04', '#334155', '#047857']
-  let hash = 0
-  for (let i = 0; i < nama.length; i++) hash = (hash * 31 + nama.charCodeAt(i)) >>> 0
-  const warna = palet[hash % palet.length]
-  const bisaKlik = typeof props.onClick === 'function'
-  const gaya = {
-    boxSizing: 'content-box',
-    display: 'inline-block',
-    width: px + 'px',
-    height: px + 'px',
-    padding: 0,
-    margin: 0,
-    borderRadius: radius,
-    overflow: 'hidden',
-    position: 'relative',
-    verticalAlign: 'middle',
-    flexShrink: 0,
-    background: props.src ? '#ffffff' : warna,
-    boxShadow: '0 1px 2px rgba(15, 23, 42, 0.10), 0 10px 28px rgba(15, 23, 42, 0.22)',
-    cursor: bisaKlik ? 'pointer' : 'default',
-    outline: 'none',
-    lineHeight: 0
-  }
-  const gayaFoto = {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-    objectPosition: 'center',
-    display: 'block',
-    borderRadius: radius
-  }
-  const gayaTeks = {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    color: '#ffffff',
-    fontWeight: 800,
-    fontSize: Math.round(px * 0.36) + 'px'
-  }
-  if (bisaKlik) {
-    return (
-      <button type="button" onClick={props.onClick} title={props.title} style={gaya}>
-        {props.src ? <img src={props.src} alt={nama || 'Foto profil'} style={gayaFoto} /> : <span style={gayaTeks}>{inisial}</span>}
-      </button>
-    )
-  }
-  return (
-    <span style={gaya}>
-      {props.src ? <img src={props.src} alt={nama || 'Foto profil'} style={gayaFoto} /> : <span style={gayaTeks}>{inisial}</span>}
-    </span>
-  )
-}
-
-export function Pagination(props) {
-  /* pagination-v2: tombol nomor halaman sesuai tema BSI */
-  const totalItems = props.totalItems || 0
-  const perPage = props.perPage || 10
-  const page = props.page || 1
-  const onPageChange = props.onPageChange || function () {}
-  const totalPages = Math.ceil(totalItems / perPage)
-  if (!totalItems) return null
-  const halaman = []
-  if (totalPages <= 7) {
-    for (let i = 1; i <= totalPages; i++) halaman.push(i)
-  } else {
-    for (let i = 1; i <= totalPages; i++) {
-      if (i === 1 || i === totalPages || (i >= page - 1 && i <= page + 1)) {
-        halaman.push(i)
-      } else if (halaman[halaman.length - 1] !== '...') {
-        halaman.push('...')
-      }
-    }
-  }
-  const clsAngka = 'grid h-10 min-w-10 place-items-center rounded-xl px-3 text-sm font-bold transition '
-  const clsNav = 'flex h-10 items-center rounded-xl px-4 text-sm font-semibold transition '
-  const clsNetral = 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 hover:text-bsi-800'
-  return (
-    <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
-      {totalPages > 1 ? (
-        <button
-          type="button"
-          disabled={page <= 1}
-          onClick={function () { onPageChange(page - 1) }}
-          className={clsNav + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}
-        >
-          Sebelumnya
-        </button>
-      ) : null}
-      {halaman.map(function (h, idx) {
-        if (h === '...') {
-          return <span key={'lompat' + idx} className="px-1 text-sm font-bold text-slate-400">...</span>
-        }
-        const aktif = h === page
-        return (
-          <button
-            key={'hal' + h}
-            type="button"
-            onClick={function () { onPageChange(h) }}
-            className={clsAngka + (aktif
-              ? 'bg-bsi-800 text-white shadow-lg shadow-bsi-900/25'
-              : clsNetral)}
-          >
-            {h}
-          </button>
-        )
-      })}
-      {totalPages > 1 ? (
-        <button
-          type="button"
-          disabled={page >= totalPages}
-          onClick={function () { onPageChange(page + 1) }}
-          className={clsNav + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}
-        >
-          Berikutnya
-        </button>
-      ) : null}
-    </div>
-  )
-}
-
-const ToastContext = createContext(null)
- export function ToastProvider(props) {
-   const [toasts, setToasts] = useState([])
-   function tutupToast(id) {
-     setToasts(function (prev) { return prev.filter(function (t) { return t.id !== id }) })
-   }
-   function tambahToast(tipe, pesan) {
-     const id = Date.now() + Math.random()
-     setToasts(function (prev) { return prev.concat([{ id: id, tipe: tipe, pesan: pesan }]) })
-     setTimeout(function () {
-       setToasts(function (prev) { return prev.filter(function (t) { return t.id !== id }) })
-     }, 4000)
-   }
-   function toastSukses(pesan) { tambahToast('sukses', pesan) }
-   function toastGagal(pesan) { tambahToast('gagal', pesan) }
-   return (
-     <ToastContext.Provider value={{ sukses: toastSukses, gagal: toastGagal }}>
-       {props.children}
-       <div className="fixed top-5 right-5 z-[100] flex w-full max-w-sm flex-col gap-3 pointer-events-none">
-         {toasts.map(function (t) {
-           const sukses = t.tipe === 'sukses'
-           return (
-             <div key={t.id} className={'anim-toast pointer-events-auto flex items-start gap-3 rounded-2xl border p-4 shadow-lg ' + (sukses ? 'toast-sukses' : 'toast-gagal')}>
-               <span className={'mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full ' + (sukses ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white')}>
-                 <SizedIcon name={sukses ? 'check' : 'close'} size={12} />
-               </span>
-               <p className={'flex-1 text-sm font-semibold toast-teks'}>{t.pesan}</p>
-               <button type="button" onClick={function () { tutupToast(t.id) }} className="toast-tutup shrink-0 text-slate-400 hover:text-slate-600">
-                 <SizedIcon name="close" size={14} />
-               </button>
-             </div>
-           )
-         })}
-       </div>
-     </ToastContext.Provider>
-   )
- }
- export function useToast() {
-   return useContext(ToastContext)
- }
-
-export function SelubungPanel(props) {
-  const [tampil, setTampil] = useState(props.open)
-  const tutup = tampil && !props.open
-  useEffect(function () {
-    if (props.open) { setTampil(true); return undefined }
-    if (!tampil) return undefined
-    const t = setTimeout(function () { setTampil(false) }, 180)
-    return function () { clearTimeout(t) }
-  }, [props.open, tampil])
-  if (!tampil) return null
-  return <div className={'selubung-panel' + (tutup ? ' panel-tutup' : '')}>{props.children}</div>
-}
+/* rentang-tablet-v1: jaring pengaman agar isi panel filter tidak bisa menonjol keluar lebar baris saat cabang waktu muncul */
+.filter-isi { overflow-x: clip; }
 ```
 
 ## File: src/pages/DashboardPage.jsx

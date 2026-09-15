@@ -2,8 +2,29 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { loginWithNim } from '../lib/auth.js'
 import { inputCls, labelCls, btnPrimary } from '../components/ui.jsx'
-import { EyeToggle } from '../components/icons.jsx'
+import { EyeToggle, SizedIcon } from '../components/icons.jsx'
 
+function pesanErrorLogin(err) {
+  const pesan = String((err && err.message) || '')
+  const rendah = pesan.toLowerCase()
+  if (rendah.indexOf('invalid login credentials') !== -1) {
+    return 'NIM atau kode akses yang kamu masukkan tidak cocok dengan data kami. Periksa kembali penulisannya, pastikan tidak ada spasi berlebih, lalu coba lagi.'
+  }
+  if (rendah.indexOf('not confirmed') !== -1) {
+    return 'Akun untuk NIM ini belum diaktifkan. Hubungi admin tim magang untuk mengaktifkan akunmu terlebih dahulu.'
+  }
+  if (rendah.indexOf('too many requests') !== -1 || rendah.indexOf('try again after') !== -1 || rendah.indexOf('rate limit') !== -1) {
+    return 'Terlalu banyak percobaan masuk dalam waktu singkat demi keamanan. Tunggu sekitar satu menit, lalu coba lagi.'
+  }
+  if (rendah.indexOf('fetch') !== -1 || rendah.indexOf('network') !== -1 || rendah.indexOf('failed to load') !== -1 || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+    return 'Tidak bisa terhubung ke server. Periksa koneksi internetmu, lalu coba lagi.'
+  }
+  if (rendah.indexOf('email') !== -1 && rendah.indexOf('format') !== -1) {
+    return 'Format NIM tidak terbaca. Masukkan NIM berupa angka tanpa spasi, contoh: 24070041.'
+  }
+  if (pesan) return 'Gagal masuk: ' + pesan + '. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
+  return 'Terjadi kesalahan tidak terduga saat masuk. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
+}
 export default function LoginPage() {
   const navigate = useNavigate()
   const [nim, setNim] = useState('')
@@ -20,7 +41,7 @@ export default function LoginPage() {
   await loginWithNim(nim, kode)
   navigate('/dashboard')
 } catch (err) {
-  setError(err.message)
+  setError(pesanErrorLogin(err))
 }
     setBusy(false)
   }
@@ -34,7 +55,17 @@ export default function LoginPage() {
       </div>
       <div className="card-hover bg-white rounded-[2rem] border border-slate-200 shadow-sm p-8 lg:p-10">
         <h2 className="text-2xl font-black text-slate-900">Login mahasiswa magang</h2>
-        {error ? <p className="mt-3 rounded-2xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</p> : null}
+        {error ? (
+          <div className="mt-3 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-red-100 text-red-600">
+              <SizedIcon name="close" size={12} />
+            </span>
+            <div className="min-w-0">
+              <p className="font-bold">Gagal masuk</p>
+              <p className="mt-1 leading-relaxed">{error}</p>
+            </div>
+          </div>
+        ) : null}
         <form onSubmit={submit} className="mt-6 space-y-5">
           <div>
             <label className={labelCls}>NIM <span className="text-red-500">*</span></label>
