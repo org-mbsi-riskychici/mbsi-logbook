@@ -81,6 +81,12 @@ supabase/
   schema.sql
 .env.example
 .gitignore
+apply-fix-skeleton-ekspor.cjs
+apply-fix-tahun-footer.cjs
+apply-footer-ramping.cjs
+apply-scroll-ke-form.cjs
+apply-skeleton-ui-baru.cjs
+apply-transisi-tema-v3.cjs
 index.html
 package.json
 postcss.config.js
@@ -504,108 +510,6 @@ export default function PemutarVideo(props) {
 }
 ```
 
-## File: src/components/Skeleton.jsx
-```javascript
-export function SkeletonStatCard() {
-  return (
-    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
-      <div className="skeleton h-4 w-28"></div>
-      <div className="skeleton h-9 w-16 mt-3"></div>
-      <div className="skeleton h-3 w-36 mt-2"></div>
-    </div>
-  )
-}
-
-export function SkeletonLogbookCard() {
-  return (
-    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 flex flex-col gap-4">
-      <div className="skeleton h-40 w-full rounded-2xl"></div>
-      <div className="flex gap-2">
-        <div className="skeleton h-6 w-24 rounded-full"></div>
-        <div className="skeleton h-6 w-20 rounded-full"></div>
-      </div>
-      <div className="skeleton h-4 w-32"></div>
-      <div className="skeleton h-6 w-3/4"></div>
-      <div className="skeleton h-4 w-full"></div>
-      <div className="skeleton h-4 w-2/3"></div>
-      <div className="flex items-center gap-3 pt-2">
-        <div className="skeleton h-11 w-11 rounded-2xl"></div>
-        <div className="flex-1 space-y-2">
-          <div className="skeleton h-4 w-32"></div>
-          <div className="skeleton h-3 w-24"></div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonGalleryCard() {
-  return (
-    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-      <div className="skeleton aspect-video w-full rounded-none"></div>
-      <div className="p-5 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="skeleton h-6 w-24 rounded-full"></div>
-          <div className="skeleton h-4 w-16"></div>
-        </div>
-        <div className="skeleton h-5 w-3/4"></div>
-        <div className="skeleton h-4 w-full"></div>
-        <div className="skeleton h-4 w-1/2"></div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonAttendanceCard() {
-  return (
-    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="space-y-2">
-          <div className="skeleton h-4 w-40"></div>
-          <div className="skeleton h-5 w-32"></div>
-        </div>
-        <div className="skeleton h-6 w-16 rounded-full"></div>
-      </div>
-      <div className="skeleton h-16 w-full rounded-2xl"></div>
-    </div>
-  )
-}
-
-export function SkeletonPersonCard() {
-  return (
-    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
-      <div className="flex items-center gap-4">
-        <div className="skeleton h-14 w-14 rounded-3xl"></div>
-        <div className="flex-1 space-y-2">
-          <div className="skeleton h-5 w-32"></div>
-          <div className="skeleton h-4 w-24"></div>
-          <div className="skeleton h-4 w-28 rounded-full"></div>
-        </div>
-      </div>
-      <div className="mt-5 grid grid-cols-2 gap-3">
-        <div className="skeleton h-20 rounded-2xl"></div>
-        <div className="skeleton h-20 rounded-2xl"></div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonChartRow() {
-  return (
-    <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5">
-      <div className="flex items-center justify-between">
-        <div className="space-y-2">
-          <div className="skeleton h-4 w-32"></div>
-          <div className="skeleton h-3 w-24"></div>
-        </div>
-        <div className="skeleton h-4 w-40"></div>
-      </div>
-      <div className="skeleton h-4 w-full rounded-full mt-4"></div>
-    </div>
-  )
-}
-```
-
 ## File: src/lib/profil.js
 ```javascript
 import { supabase } from './supabase.js'
@@ -653,36 +557,6 @@ export const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
   import.meta.env.VITE_SUPABASE_ANON_KEY
 )
-```
-
-## File: src/lib/theme.jsx
-```javascript
-import { createContext, useContext, useEffect, useState } from 'react'
-
-const ThemeContext = createContext(null)
-
-export function ThemeProvider(props) {
-  const [dark, setDark] = useState(function () {
-    const saved = localStorage.getItem('mbsi-theme')
-    if (saved) return saved === 'dark'
-    return window.matchMedia('(prefers-color-scheme: dark)').matches
-  })
-
-  useEffect(function () {
-    document.documentElement.classList.toggle('dark', dark)
-    localStorage.setItem('mbsi-theme', dark ? 'dark' : 'light')
-  }, [dark])
-
-  return (
-    <ThemeContext.Provider value={{ dark: dark, toggle: function () { setDark(function (d) { return !d }) } }}>
-      {props.children}
-    </ThemeContext.Provider>
-  )
-}
-
-export function useTheme() {
-  return useContext(ThemeContext)
-}
 ```
 
 ## File: src/lib/youtube.js
@@ -798,20 +672,6 @@ export async function ambilTokenSesi() {
 }
 ```
 
-## File: src/main.jsx
-```javascript
-import React from 'react'
-import ReactDOM from 'react-dom/client'
-import App from './App.jsx'
-import './index.css'
-
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-)
-```
-
 ## File: .env.example
 ```
 VITE_SUPABASE_URL=
@@ -821,6 +681,660 @@ R2_ACCESS_KEY_ID=
 R2_SECRET_ACCESS_KEY=
 R2_BUCKET_NAME=mbsi-media
 R2_PUBLIC_BASE_URL=
+```
+
+## File: apply-fix-skeleton-ekspor.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+const FILE_S = 'src/components/Skeleton.jsx'
+if (!fs.existsSync(path.join(root, FILE_S))) {
+  console.log('[GAGAL] Skeleton.jsx tidak ditemukan')
+  process.exit(1)
+}
+let s = fs.readFileSync(path.join(root, FILE_S), 'utf8').replace(/\r\n/g, '\n')
+let berubah = false
+
+console.log('Mulai mengembalikan ekspor skeleton yang hilang...')
+console.log('')
+
+const STAT = `
+export function SkeletonStatCard() {
+  return (
+    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
+      <div className="skeleton h-4 w-28"></div>
+      <div className="skeleton h-9 w-16 mt-3"></div>
+      <div className="skeleton h-3 w-36 mt-2"></div>
+    </div>
+  )
+}
+`
+const CHART = `
+export function SkeletonChartRow() {
+  return (
+    <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5">
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <div className="skeleton h-4 w-32"></div>
+          <div className="skeleton h-3 w-24"></div>
+        </div>
+        <div className="skeleton h-4 w-40"></div>
+      </div>
+      <div className="skeleton h-4 w-full rounded-full mt-4"></div>
+    </div>
+  )
+}
+`
+
+if (s.includes('export function SkeletonStatCard')) {
+  console.log('[SUDAH ADA] SkeletonStatCard di Skeleton.jsx')
+} else {
+  s = s.trimEnd() + '\n' + STAT
+  berubah = true
+  console.log('[BERHASIL] SkeletonStatCard dikembalikan ke Skeleton.jsx')
+}
+if (s.includes('export function SkeletonChartRow')) {
+  console.log('[SUDAH ADA] SkeletonChartRow di Skeleton.jsx')
+} else {
+  s = s.trimEnd() + '\n' + CHART
+  berubah = true
+  console.log('[BERHASIL] SkeletonChartRow dikembalikan ke Skeleton.jsx')
+}
+if (berubah) fs.writeFileSync(path.join(root, FILE_S), s, 'utf8')
+
+/* ===== Verifikasi menyeluruh: semua impor skeleton di proyek harus punya ekspor ===== */
+function daftarFile(dir) {
+  let out = []
+  const nama = fs.readdirSync(dir)
+  for (let i = 0; i < nama.length; i++) {
+    const p = path.join(dir, nama[i])
+    const st = fs.statSync(p)
+    if (st.isDirectory()) out = out.concat(daftarFile(p))
+    else if (p.endsWith('.jsx') || p.endsWith('.js')) out.push(p)
+  }
+  return out
+}
+s = fs.readFileSync(path.join(root, FILE_S), 'utf8')
+const file = daftarFile(path.join(root, 'src'))
+let masalah = 0
+for (let i = 0; i < file.length; i++) {
+  const isi = fs.readFileSync(file[i], 'utf8')
+  const re = /import\s*\{([^}]*)\}\s*from\s*['"][^'"]*Skeleton\.jsx['"]/g
+  let m
+  while ((m = re.exec(isi)) !== null) {
+    const nama = m[1].split(',').map(function (x) { return x.trim() }).filter(Boolean)
+    for (let j = 0; j < nama.length; j++) {
+      if (!s.includes('export function ' + nama[j])) {
+        masalah++
+        console.log('[KURANG] Ekspor ' + nama[j] + ' belum ada (dipakai di ' + path.relative(root, file[i]) + ')')
+      }
+    }
+  }
+}
+console.log('')
+console.log('Verifikasi:')
+console.log((s.includes('export function SkeletonStatCard') ? '[OK] ' : '[BELUM] ') + 'SkeletonStatCard')
+console.log((s.includes('export function SkeletonChartRow') ? '[OK] ' : '[BELUM] ') + 'SkeletonChartRow')
+console.log((s.includes('export function SkeletonLogbookCard') ? '[OK] ' : '[BELUM] ') + 'SkeletonLogbookCard')
+console.log((s.includes('export function SkeletonGalleryCard') ? '[OK] ' : '[BELUM] ') + 'SkeletonGalleryCard')
+console.log((s.includes('export function SkeletonAttendanceCard') ? '[OK] ' : '[BELUM] ') + 'SkeletonAttendanceCard')
+console.log((s.includes('export function SkeletonPersonCard') ? '[OK] ' : '[BELUM] ') + 'SkeletonPersonCard')
+console.log((s.includes('export function SkeletonDashboard') ? '[OK] ' : '[BELUM] ') + 'SkeletonDashboard')
+console.log((masalah === 0 ? '[OK] ' : '[BELUM] ') + 'Seluruh impor skeleton di proyek terpenuhi (' + masalah + ' kekurangan)')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Penjelasan perbaikan:')
+console.log('1. Layar blank terjadi karena HomePage dan AttendancePage masih mengimpor SkeletonStatCard dan SkeletonChartRow yang sempat hilang dari Skeleton.jsx.')
+console.log('2. Kedua komponen itu kini dikembalikan dengan bentuk yang sama seperti sebelumnya, jadi statistik dan baris grafik kehadiran kembali punya skeleton.')
+console.log('3. Script sekaligus menyisir semua file di src dan mencocokkan setiap impor dari Skeleton.jsx dengan ekspor yang ada, sehingga bila masih ada yang kurang akan langsung terlihat di daftar KURANG.')
+console.log('4. Tidak ada komponen skeleton lain yang diubah, jadi tampilan skeleton versi UI baru tetap utuh.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Muat ulang browser: aplikasi tidak lagi blank dan halaman Beranda tampil normal.')
+console.log('2. Buka halaman Daftar Hadir saat memuat: kartu statistik dan baris grafik per orang tampil sebagai skeleton.')
+console.log('3. Buka dashboard dan halaman publik lain: semua skeleton muncul sesuai bentuk kartu terkini.')
+console.log('4. Bila konsol bersih dari error modul, berarti seluruh impor dan ekspor skeleton sudah sinkron.')
+```
+
+## File: apply-fix-tahun-footer.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+const FILE_L = 'src/components/Layout.jsx'
+
+console.log('Mulai mengubah tahun footer menjadi statis 2026...')
+console.log('')
+
+if (!fs.existsSync(path.join(root, FILE_L))) {
+  console.log('[GAGAL] Layout.jsx tidak ditemukan')
+  process.exit(1)
+}
+
+let l = fs.readFileSync(path.join(root, FILE_L), 'utf8').replace(/\r\n/g, '\n')
+
+if (l.includes('2026 Tim Magang BSI') && !l.includes('new Date().getFullYear()')) {
+  console.log('[SUDAH ADA] Tahun footer sudah statis 2026')
+} else if (l.includes('{new Date().getFullYear()}')) {
+  l = l.replace('{new Date().getFullYear()}', '2026')
+  fs.writeFileSync(path.join(root, FILE_L), l, 'utf8')
+  console.log('[BERHASIL] Tahun footer diubah menjadi statis 2026')
+} else {
+  console.log('[TIDAK KETEMU] Pola tahun dinamis di Layout.jsx')
+}
+
+l = fs.readFileSync(path.join(root, FILE_L), 'utf8')
+console.log('')
+console.log('Verifikasi:')
+console.log((l.includes('2026 Tim Magang BSI') ? '[OK] ' : '[BELUM] ') + 'Teks footer memuat angka 2026 secara statis')
+console.log((!l.includes('new Date().getFullYear()') ? '[OK] ' : '[BELUM] ') + 'Fungsi new Date() sudah tidak dipakai di footer')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Perubahan:')
+console.log('1. Teks footer kini tertulis paten: © 2026 Tim Magang BSI.')
+console.log('2. Tidak ada lagi pemanggilan fungsi waktu sistem, sehingga footer tidak akan pernah berubah meski dibuka pada tahun 2027 atau seterusnya.')
+console.log('3. Ukuran file sedikit lebih ringan karena tidak perlu mengevaluasi ekspresi JavaScript saat merender footer.')
+```
+
+## File: apply-footer-ramping.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai merampingkan footer sesuai Opsi A...')
+console.log('')
+
+/* ===== 1. Layout.jsx: footer satu baris ramping dengan tahun otomatis ===== */
+const FILE_L = 'src/components/Layout.jsx'
+const FOOTER_BARU = `<footer className="footer-ramping border-t border-slate-200 bg-white">
+<div className="mx-auto max-w-7xl px-4 py-4 text-center">
+<p className="text-xs text-slate-500">© {new Date().getFullYear()} Tim Magang BSI</p>
+</div>
+</footer>`
+if (!fs.existsSync(path.join(root, FILE_L))) {
+  console.log('[GAGAL] Layout.jsx tidak ditemukan')
+  process.exit(1)
+}
+let l = baca(FILE_L)
+if (l.includes('footer-ramping')) {
+  console.log('[SUDAH ADA] Footer ramping di Layout.jsx')
+} else {
+  const iF = l.indexOf('<footer')
+  const iE = l.indexOf('</footer>', iF)
+  if (iF === -1 || iE === -1) {
+    console.log('[TIDAK KETEMU] Blok footer di Layout.jsx')
+  } else {
+    l = l.slice(0, iF) + FOOTER_BARU + l.slice(iE + '</footer>'.length)
+    simpan(FILE_L, l)
+    console.log('[BERHASIL] Footer diganti menjadi satu baris ramping dengan tahun otomatis')
+  }
+}
+
+/* ===== 2. index.css: rapatkan ruang mati di atas footer ===== */
+const FILE_CSS = 'src/index.css'
+const CSS_BLOK = `/* footer-ramping: ruang bawah halaman dirapatkan supaya footer slim terasa pas */
+main { padding-bottom: 2.5rem !important; }
+`
+if (!fs.existsSync(path.join(root, FILE_CSS))) {
+  console.log('[LEWATI] index.css tidak ditemukan')
+} else {
+  let css = baca(FILE_CSS)
+  if (css.includes('footer-ramping:')) {
+    console.log('[SUDAH ADA] CSS perapat ruang bawah di index.css')
+  } else {
+    simpan(FILE_CSS, css.trimEnd() + '\n\n' + CSS_BLOK)
+    console.log('[BERHASIL] Ruang bawah halaman dirapatkan lewat index.css')
+  }
+}
+
+/* ===== 3. Verifikasi ===== */
+l = baca(FILE_L)
+const css2 = baca(FILE_CSS)
+console.log('')
+console.log('Verifikasi:')
+console.log((l.includes('footer-ramping') ? '[OK] ' : '[BELUM] ') + 'Footer ramping terpasang di Layout.jsx')
+console.log((l.includes('new Date().getFullYear()') ? '[OK] ' : '[BELUM] ') + 'Tahun footer otomatis mengikuti tanggal sistem')
+console.log((css2.includes('main { padding-bottom: 2.5rem') ? '[OK] ' : '[BELUM] ') + 'Ruang mati di atas footer dirapatkan')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Hasil akhir Opsi A:')
+console.log('1. Footer kini hanya satu baris teks kecil di tengah dengan padding vertikal 16 piksel, total tinggi sekitar 48 piksel termasuk garis pemisah.')
+console.log('2. Tahun tidak lagi ditulis manual melainkan diambil dari tanggal sistem, jadi tidak perlu diedit tiap pergantian tahun.')
+console.log('3. Ruang kosong antara konten terakhir atau pagination dengan footer dipangkas menjadi 40 piksel, sehingga ujung halaman terasa rapat dan tidak mengambang.')
+console.log('4. Garis pemisah atas dan pembeda warna tipis dipertahankan, jadi halaman tetap terasa berhenti dengan rapi di kedua mode.')
+console.log('5. Pada halaman berisi sedikit konten, footer tetap menempel di bawah layar karena struktur flex layout tidak diubah.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka halaman Daftar Hadir atau halaman berisi sedikit data: footer terlihat sebagai bar tipis yang rapi, bukan kotak tinggi.')
+console.log('2. Gulir ke ujung halaman: jarak antara pagination dan footer kini pendek dan proporsional.')
+console.log('3. Aktifkan mode gelap: warna footer menyesuaikan latar gelap dengan garis pemisah lembut seperti sebelumnya.')
+console.log('4. Periksa teks footer: tahun tampil sesuai tahun berjalan tanpa perlu diubah manual.')
+console.log('5. Buka halaman panjang seperti Logbook publik: footer tetap berada di ujung dokumen tanpa memakan ruang berlebihan.')
+```
+
+## File: apply-scroll-ke-form.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+const FILE_D = 'src/pages/DashboardPage.jsx'
+if (!fs.existsSync(path.join(root, FILE_D))) {
+  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
+  process.exit(1)
+}
+let d = fs.readFileSync(path.join(root, FILE_D), 'utf8').replace(/\r\n/g, '\n')
+
+console.log('Mulai mengarahkan scroll tombol Edit ke kartu form, bukan ke puncak halaman...')
+console.log('')
+
+/* ===== 1. Tambahkan tiga ref untuk kartu form ===== */
+if (d.includes('const refFormLog = useRef(null)')) {
+  console.log('[SUDAH ADA] Ref kartu form di DashboardPage')
+} else if (d.includes('const refListLog = useRef(null)')) {
+  d = d.replace('const refListLog = useRef(null)',
+    'const refListLog = useRef(null)\nconst refFormLog = useRef(null)\nconst refFormGal = useRef(null)\nconst refFormHadir = useRef(null)')
+  console.log('[BERHASIL] Ref kartu form ditambahkan')
+} else if (d.includes('const toast = useToast()')) {
+  d = d.replace('const toast = useToast()',
+    'const toast = useToast()\nconst refFormLog = useRef(null)\nconst refFormGal = useRef(null)\nconst refFormHadir = useRef(null)')
+  console.log('[BERHASIL] Ref kartu form ditambahkan lewat anchor toast')
+} else {
+  console.log('[TIDAK KETEMU] Anchor untuk menyisipkan ref kartu form')
+}
+
+/* ===== 2. Tambahkan fungsi bantu gulirKeForm ===== */
+const HELPER = `function gulirKeForm(ref) {
+requestAnimationFrame(function () {
+if (ref && ref.current) ref.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+})
+}
+`
+if (d.includes('function gulirKeForm(')) {
+  console.log('[SUDAH ADA] Fungsi bantu gulirKeForm')
+} else if (d.includes('function startEditLog(')) {
+  d = d.replace('function startEditLog(', HELPER + 'function startEditLog(')
+  console.log('[BERHASIL] Fungsi bantu gulirKeForm ditambahkan')
+} else {
+  console.log('[TIDAK KETEMU] Anchor fungsi startEditLog')
+}
+
+/* ===== 3. Ganti window.scrollTo di dalam tiap startEdit ===== */
+const TARGET = "window.scrollTo({ top: 0, behavior: 'smooth' })"
+function gantiScrollDalam(namaFn, pengganti) {
+  const idx = d.indexOf('function ' + namaFn + '(')
+  if (idx === -1) { console.log('[TIDAK KETEMU] Fungsi ' + namaFn); return }
+  const nextFn = d.indexOf('\nfunction ', idx + 5)
+  const batas = nextFn === -1 ? d.length : nextFn
+  const seg = d.slice(idx, batas)
+  if (seg.includes(pengganti)) { console.log('[SUDAH ADA] Scroll ke form di ' + namaFn); return }
+  if (!seg.includes(TARGET)) { console.log('[TIDAK KETEMU] window.scrollTo di ' + namaFn); return }
+  d = d.slice(0, idx) + seg.replace(TARGET, pengganti) + d.slice(batas)
+  console.log('[BERHASIL] Scroll ' + namaFn + ' diarahkan ke kartu form')
+}
+gantiScrollDalam('startEditLog', 'gulirKeForm(refFormLog)')
+gantiScrollDalam('startEditGal', 'gulirKeForm(refFormGal)')
+gantiScrollDalam('startEditHadir', 'gulirKeForm(refFormHadir)')
+
+/* ===== 4. Pasang ref dan scroll margin pada ketiga kartu form ===== */
+const pasangan = [
+  ['editLogId', 'refFormLog'],
+  ['editGalId', 'refFormGal'],
+  ['editHadirId', 'refFormHadir']
+]
+pasangan.forEach(function (p) {
+  const re = new RegExp("<div className=\\{'card-hover bg-white rounded-\\[2rem\\] border shadow-sm p-8 min-w-0 ' \\+ \\(" + p[0])
+  if (d.includes('ref={' + p[1] + '}')) {
+    console.log('[SUDAH ADA] Ref terpasang di kartu form ' + p[0])
+  } else if (re.test(d)) {
+    d = d.replace(re, "<div ref={" + p[1] + "} className={'card-hover scroll-mt-24 bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (" + p[0])
+    console.log('[BERHASIL] Ref dan scroll margin terpasang di kartu form ' + p[0])
+  } else {
+    console.log('[TIDAK KETEMU] Pola kartu form ' + p[0])
+  }
+})
+
+fs.writeFileSync(path.join(root, FILE_D), d, 'utf8')
+
+/* ===== 5. Verifikasi ===== */
+d = fs.readFileSync(path.join(root, FILE_D), 'utf8')
+console.log('')
+console.log('Verifikasi:')
+console.log((d.includes('const refFormLog = useRef(null)') ? '[OK] ' : '[BELUM] ') + 'Ref kartu form tersedia')
+console.log((d.includes('function gulirKeForm(') ? '[OK] ' : '[BELUM] ') + 'Fungsi bantu gulirKeForm tersedia')
+console.log((d.includes('gulirKeForm(refFormLog)') ? '[OK] ' : '[BELUM] ') + 'Edit logbook menggulir ke form')
+console.log((d.includes('gulirKeForm(refFormGal)') ? '[OK] ' : '[BELUM] ') + 'Edit galeri menggulir ke form')
+console.log((d.includes('gulirKeForm(refFormHadir)') ? '[OK] ' : '[BELUM] ') + 'Edit daftar hadir menggulir ke form')
+console.log((d.includes('scroll-mt-24 bg-white rounded-[2rem]') ? '[OK] ' : '[BELUM] ') + 'Scroll margin agar form berhenti di bawah header')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Perilaku baru:')
+console.log('1. Klik Edit pada kartu logbook, galeri, atau daftar hadir: layar menggulir mulus hanya sampai kartu form edit, bukan ke puncak halaman.')
+console.log('2. Kartu form berhenti tepat di bawah header sticky berkat scroll margin 96 piksel, jadi judul form dan badge Mode Edit langsung terlihat seperti lampiranmu.')
+console.log('3. Pengguliran dijalankan satu frame setelah state edit aktif, sehingga posisi form sudah final sebelum scroll dimulai dan tidak meleset.')
+console.log('4. Tombol Batal Edit dan alur simpan tidak disentuh sama sekali, jadi perilaku lainnya tetap identik.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka dashboard, gulir daftar logbook sampai bawah, lalu klik Edit pada kartu mana pun.')
+console.log('2. Perhatikan layar berhenti dengan kartu form Ubah logbook harian terlihat penuh di area pandang, bukan layar paling atas.')
+console.log('3. Ulangi pada tab Galeri dan Daftar Hadir: perilaku sama pada form masing masing.')
+console.log('4. Klik Batal Edit lalu Edit lagi: scroll tetap konsisten berhenti di posisi form.')
+```
+
+## File: apply-skeleton-ui-baru.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai menulis ulang skeleton agar identik dengan UI kartu saat ini...')
+console.log('')
+
+/* ===== 1. Baca bentuk borderRadius yang dipakai komponen Avatar saat ini ===== */
+const FILE_U = 'src/components/ui.jsx'
+let RAD = '9999px'
+if (fs.existsSync(path.join(root, FILE_U))) {
+  const u = baca(FILE_U)
+  const idx = u.indexOf('function Avatar(')
+  if (idx !== -1) {
+    const idxOpen = u.indexOf('{', idx)
+    let brace = 0, akhir = -1, inStr = false, strCh = ''
+    for (let i = idxOpen; i < u.length; i++) {
+      const ch = u[i]
+      const prev = i > 0 ? u[i - 1] : ''
+      if (inStr) { if (ch === strCh && prev !== '\\') inStr = false; continue }
+      if (ch === '"' || ch === "'" || ch === '`') { inStr = true; strCh = ch; continue }
+      if (ch === '{') brace++
+      if (ch === '}') { brace--; if (brace === 0) { akhir = i + 1; break } }
+    }
+    if (akhir !== -1) {
+      const span = u.slice(idx, akhir)
+      const m = span.match(/borderRadius:\s*['"]([^'"]+)['"]/) || span.match(/borderRadius:\s*([^,'}\s]+)/)
+      if (m) RAD = m[1]
+    }
+  }
+  console.log('[INFO] Bentuk avatar saat ini memakai borderRadius: ' + RAD)
+} else {
+  console.log('[LEWATI] ui.jsx tidak ditemukan, memakai borderRadius bawaan')
+}
+
+/* ===== 2. Tulis ulang Skeleton.jsx sesuai UI kartu terkini ===== */
+const FILE_S = 'src/components/Skeleton.jsx'
+const ISI = `export function SkeletonLogbookCard() {
+  return (
+    <div className="card-hover flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="skeleton aspect-video w-full rounded-2xl"></div>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="skeleton h-6 w-24 rounded-full"></div>
+        <div className="skeleton h-6 w-20 rounded-full"></div>
+        <div className="skeleton ml-auto h-6 w-20 rounded-full"></div>
+      </div>
+      <div className="skeleton h-4 w-36 rounded-full"></div>
+      <div className="skeleton h-6 w-40 rounded-full"></div>
+      <div className="skeleton h-4 w-32 rounded-full"></div>
+      <div className="skeleton h-3 w-24 rounded-full"></div>
+      <div className="mt-auto flex items-center gap-3 border-t border-slate-100 pt-4">
+        <div className="skeleton h-10 w-10" style={{ borderRadius: '${RAD}' }}></div>
+        <div className="flex-1 space-y-2">
+          <div className="skeleton h-4 w-36 rounded-full"></div>
+          <div className="skeleton h-3 w-24 rounded-full"></div>
+        </div>
+        <div className="skeleton h-9 w-20 rounded-2xl"></div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonGalleryCard() {
+  return (
+    <div className="card-hover flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="skeleton aspect-video w-full rounded-2xl"></div>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="skeleton h-6 w-24 rounded-full"></div>
+        <div className="skeleton ml-auto h-6 w-20 rounded-full"></div>
+      </div>
+      <div className="skeleton h-4 w-36 rounded-full"></div>
+      <div className="skeleton h-6 w-44 rounded-full"></div>
+      <div className="mt-auto flex items-center gap-3 border-t border-slate-100 pt-4">
+        <div className="skeleton h-10 w-10" style={{ borderRadius: '${RAD}' }}></div>
+        <div className="flex-1 space-y-2">
+          <div className="skeleton h-4 w-36 rounded-full"></div>
+          <div className="skeleton h-3 w-24 rounded-full"></div>
+        </div>
+        <div className="skeleton h-9 w-20 rounded-2xl"></div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonAttendanceCard() {
+  return (
+    <div className="card-hover flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="flex items-center justify-between">
+        <div className="skeleton h-6 w-20 rounded-full"></div>
+        <div className="skeleton h-4 w-32 rounded-full"></div>
+      </div>
+      <div className="skeleton h-5 w-28 rounded-full"></div>
+      <div className="skeleton h-4 w-full rounded-full"></div>
+      <div className="mt-auto flex items-center gap-3 border-t border-slate-100 pt-4">
+        <div className="skeleton h-10 w-10" style={{ borderRadius: '${RAD}' }}></div>
+        <div className="flex-1 space-y-2">
+          <div className="skeleton h-4 w-36 rounded-full"></div>
+          <div className="skeleton h-3 w-24 rounded-full"></div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonPersonCard() {
+  return (
+    <div className="card-hover flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-center gap-4">
+        <div className="skeleton h-14 w-14" style={{ borderRadius: '${RAD}' }}></div>
+        <div className="flex-1 space-y-2">
+          <div className="skeleton h-5 w-40 rounded-full"></div>
+          <div className="skeleton h-3 w-24 rounded-full"></div>
+          <div className="skeleton h-5 w-28 rounded-full"></div>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="skeleton h-16 rounded-2xl"></div>
+        <div className="skeleton h-16 rounded-2xl"></div>
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        <div className="skeleton h-12 rounded-xl"></div>
+        <div className="skeleton h-12 rounded-xl"></div>
+        <div className="skeleton h-12 rounded-xl"></div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonDashboard() {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-4 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="skeleton h-14 w-14" style={{ borderRadius: '${RAD}' }}></div>
+        <div className="flex-1 space-y-2">
+          <div className="skeleton h-4 w-44 rounded-full"></div>
+          <div className="skeleton h-3 w-28 rounded-full"></div>
+        </div>
+        <div className="skeleton h-10 w-28 rounded-2xl"></div>
+      </div>
+      <div className="grid items-start gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+        <div className="space-y-4 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="skeleton h-5 w-36 rounded-full"></div>
+          <div className="skeleton h-10 w-full rounded-2xl"></div>
+          <div className="skeleton h-10 w-full rounded-2xl"></div>
+          <div className="skeleton h-20 w-full rounded-2xl"></div>
+          <div className="skeleton h-11 w-44 rounded-2xl"></div>
+        </div>
+        <div className="space-y-5">
+          <div className="skeleton h-6 w-32 rounded-full"></div>
+          <div className="grid gap-5 md:grid-cols-2">
+            <SkeletonLogbookCard />
+            <SkeletonLogbookCard />
+            <SkeletonLogbookCard />
+            <SkeletonLogbookCard />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+`
+simpan(FILE_S, ISI)
+console.log('[BERHASIL] Skeleton.jsx ditulis ulang dengan lima komponen sesuai UI terkini')
+
+/* ===== 3. Verifikasi ===== */
+const s2 = baca(FILE_S)
+console.log('')
+console.log('Verifikasi:')
+console.log((s2.includes('export function SkeletonLogbookCard') ? '[OK] ' : '[BELUM] ') + 'SkeletonLogbookCard')
+console.log((s2.includes('export function SkeletonGalleryCard') ? '[OK] ' : '[BELUM] ') + 'SkeletonGalleryCard')
+console.log((s2.includes('export function SkeletonAttendanceCard') ? '[OK] ' : '[BELUM] ') + 'SkeletonAttendanceCard')
+console.log((s2.includes('export function SkeletonPersonCard') ? '[OK] ' : '[BELUM] ') + 'SkeletonPersonCard')
+console.log((s2.includes('export function SkeletonDashboard') ? '[OK] ' : '[BELUM] ') + 'SkeletonDashboard')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Penyesuaian skeleton terhadap UI saat ini:')
+console.log('1. Skeleton logbook dan galeri kini punya blok media aspect-video di bagian atas, meniru kartu yang menampilkan foto atau video.')
+console.log('2. Baris chip dibuat tiga bagian dengan chip status terdorong ke kanan, sama seperti chip kategori, unit, dan Siap dilihat pada kartu asli.')
+console.log('3. Ditambahkan baris pendek peniru daftar kegiatan dan tanggal, sehingga tinggi skeleton mendekati kartu berisi.')
+console.log('4. Bentuk blok avatar dibaca langsung dari komponen Avatar di ui.jsx, jadi skeleton selalu mengikuti bentuk avatar yang berlaku tanpa perlu ditebak.')
+console.log('5. Skeleton kartu profil meniru kotak statistik Logbook dan Media serta tiga kotak rekap kehadiran, sesuai kartu di halaman Tim & Dospem.')
+console.log('6. Skeleton dashboard meniru kartu kepala profil, panel form kiri, dan grid daftar kanan, sehingga layar memuat sesi terlihat seperti dashboard sungguhan.')
+console.log('7. Semua blok memakai kelas skeleton bawaan yang sudah punya efek shimmer dan varian mode gelap, jadi tidak ada CSS baru yang perlu dipelihara.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Muat halaman Logbook publik dalam kondisi jaringan lambat atau saat data belum siap: skeleton kartu kini berbentuk sama dengan kartu asli termasuk blok media.')
+console.log('2. Buka dashboard saat sesi masih dimuat: kerangka dua kolom muncul dan begitu data siap pergantiannya mulus tanpa lompatan bentuk.')
+console.log('3. Buka halaman Tim & Dospem saat memuat: skeleton profil menampilkan kotak statistik dan rekap kehadiran tiruan.')
+console.log('4. Aktifkan mode gelap: seluruh skeleton menyesuaikan warna gelap dengan kilau lembut yang sama.')
+console.log('5. Ganti halaman pagination dengan cepat: skeleton tidak lagi muncul karena data sudah termuat, tetapi saat muat ulang penuh bentuknya konsisten.')
+```
+
+## File: apply-transisi-tema-v3.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai memasang crossfade kompositor untuk pergantian tema...')
+console.log('')
+
+/* ===== 1. theme.jsx: bungkus pergantian tema dengan startViewTransition ===== */
+const FILE_T = 'src/lib/theme.jsx'
+if (!fs.existsSync(path.join(root, FILE_T))) {
+  console.log('[GAGAL] theme.jsx tidak ditemukan')
+  process.exit(1)
+}
+let t = baca(FILE_T)
+if (t.includes('startViewTransition')) {
+  console.log('[SUDAH ADA] Toggle tema memakai startViewTransition')
+} else {
+  const RE_INLINE = /toggle: function \(\) \{ setDark\(function \(d\) \{ return !d \}\) \}/
+  const RE_STANDALONE = /function toggle\(\) \{\s*setDark\(function \(d\) \{ return !d \}\)\s*\}/
+  const BADAN = "const ganti = function () { setDark(function (d) { return !d }) }\nif (document.startViewTransition && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) document.startViewTransition(ganti)\nelse ganti()"
+  if (RE_INLINE.test(t)) {
+    t = t.replace(RE_INLINE, 'toggle: function () {\n' + BADAN + '\n}')
+    simpan(FILE_T, t)
+    console.log('[BERHASIL] Toggle tema dibungkus startViewTransition')
+  } else if (RE_STANDALONE.test(t)) {
+    t = t.replace(RE_STANDALONE, 'function toggle() {\n' + BADAN + '\n}')
+    simpan(FILE_T, t)
+    console.log('[BERHASIL] Fungsi toggle tema dibungkus startViewTransition')
+  } else {
+    console.log('[TIDAK KETEMU] Pola fungsi toggle di theme.jsx')
+  }
+}
+
+/* ===== 2. main.jsx: lewati transisi fallback bila View Transitions tersedia ===== */
+const FILE_M = 'src/main.jsx'
+if (fs.existsSync(path.join(root, FILE_M))) {
+  let m = baca(FILE_M)
+  const RE_OBS = /gelap = sekarang(\s*)akar\.classList\.add\('theme-transition'\)/
+  if (m.includes("if (document.startViewTransition) return")) {
+    console.log('[SUDAH ADA] Penjaga View Transitions di pengamat main.jsx')
+  } else if (RE_OBS.test(m)) {
+    m = m.replace(RE_OBS, "gelap = sekarang$1if (document.startViewTransition) return$1akar.classList.add('theme-transition')")
+    simpan(FILE_M, m)
+    console.log('[BERHASIL] Pengamat tema melewati fallback bila View Transitions tersedia')
+  } else {
+    console.log('[TIDAK KETEMU] Pola pengamat tema di main.jsx')
+  }
+} else {
+  console.log('[LEWATI] main.jsx tidak ditemukan')
+}
+
+/* ===== 3. index.css: aturan crossfade snapshot dan pemutus blur saat fallback ===== */
+const FILE_CSS = 'src/index.css'
+const CSS_BLOK = `/* transisi-tema-v3: crossfade snapshot di kompositor, bebas lukis ulang elemen */
+::view-transition-old(root), ::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-old(root) { z-index: 1; }
+::view-transition-new(root) { z-index: 2; }
+@keyframes vtTema {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+::view-transition-new(root) { animation: vtTema 0.4s ease; }
+/* selama fallback transisi warna berjalan, matikan blur mahal supaya tidak patah */
+.theme-transition [class*="backdrop-blur"] { backdrop-filter: none !important; }
+`
+if (!fs.existsSync(path.join(root, FILE_CSS))) {
+  console.log('[LEWATI] index.css tidak ditemukan')
+} else {
+  let css = baca(FILE_CSS)
+  if (css.includes('transisi-tema-v3')) {
+    console.log('[SUDAH ADA] CSS transisi-tema-v3 di index.css')
+  } else {
+    simpan(FILE_CSS, css.trimEnd() + '\n\n' + CSS_BLOK)
+    console.log('[BERHASIL] CSS crossfade snapshot ditambahkan di index.css')
+  }
+}
+
+/* ===== 4. Verifikasi ===== */
+t = baca(FILE_T)
+const m2 = fs.existsSync(path.join(root, FILE_M)) ? baca(FILE_M) : ''
+const css2 = baca(FILE_CSS)
+console.log('')
+console.log('Verifikasi:')
+console.log((t.includes('startViewTransition') ? '[OK] ' : '[BELUM] ') + 'Toggle tema memakai View Transitions')
+console.log((m2.includes('if (document.startViewTransition) return') ? '[OK] ' : '[BELUM] ') + 'Fallback dilewati bila View Transitions ada')
+console.log((css2.includes('::view-transition-new(root)') ? '[OK] ' : '[BELUM] ') + 'Aturan crossfade snapshot tersedia')
+console.log((css2.includes('.theme-transition [class*="backdrop-blur"]') ? '[OK] ' : '[BELUM] ') + 'Blur mahal dimatikan selama fallback')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Kenapa versi ini akhirnya mulus:')
+console.log('1. Pergantian tema tidak lagi mentransisikan warna ratusan elemen satu per satu yang memaksa lukis ulang tiap frame.')
+console.log('2. Browser mengambil snapshot layar lama dan baru sebagai tekstur, lalu crossfade 0.4 detik dikerjakan kompositor GPU, jadi terasa seperti video lembut.')
+console.log('3. Elemen ber-backdrop-blur tidak lagi menghitung ulang blur tiap frame karena tidak ada warna yang beranimasi di bawahnya pada jalur View Transitions.')
+console.log('4. Bila browser belum mendukung View Transitions, fallback transisi warna tetap jalan tetapi blur header dimatikan sementara selama jendela transisi, sumber patah utama ikut hilang.')
+console.log('5. Pengguna dengan reduce motion langsung mendapat pergantian instan tanpa animasi, sesuai standar aksesibilitas.')
+console.log('6. Klik beruntun tetap aman karena transisi yang sedang berjalan otomatis dibatalkan oleh transisi baru.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Klik tombol bulan atau matahari: seluruh layar luluh berganti mode dalam satu gerakan crossfade lembut tanpa sendatan.')
+console.log('2. Perhatikan header berblur: tidak ada lagi getar atau patah saat warna berganti.')
+console.log('3. Klik bolak balik dengan cepat: setiap pergantian tetap halus dan tidak menumpuk.')
+console.log('4. Uji di browser lama bila ada: pergantian tetap beranimasi lewat fallback tanpa blur yang memberatkan.')
 ```
 
 ## File: postcss.config.js
@@ -2161,254 +2675,6 @@ export default async function handler(req, res) {
 }
 ```
 
-## File: src/components/controls.jsx
-```javascript
-import { useEffect, useRef, useState } from 'react'
-import { ICONS } from './icons.jsx'
-
-const BULAN_NAMA = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
-const BULAN_PENDEK = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
-const HARI_NAMA = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
-
-const defaultBtn = 'flex w-full items-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-bsi-500'
-
-function pad(n) {
-  return (n < 10 ? '0' : '') + n
-}
-
-function parseValue(value, mode) {
-  if (!value) return null
-  const p = String(value).split('-')
-  if (mode === 'month') {
-    if (p.length < 2) return null
-    const y = parseInt(p[0], 10)
-    const m = parseInt(p[1], 10) - 1
-    if (isNaN(y) || isNaN(m) || m < 0 || m > 11) return null
-    return { y: y, m: m }
-  }
-  if (p.length < 3) return null
-  const y = parseInt(p[0], 10)
-  const m = parseInt(p[1], 10) - 1
-  const d = parseInt(p[2], 10)
-  if (isNaN(y) || isNaN(m) || isNaN(d)) return null
-  return { y: y, m: m, d: d }
-}
-
-function useOutside(ref, open, setOpen) {
-  useEffect(function () {
-    if (!open) return undefined
-    function handler(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return function () { document.removeEventListener('mousedown', handler) }
-  }, [open])
-}
-
-export function CustomSelect(props) {
-  const [open, setOpen] = useState(false)
-  const boxRef = useRef(null)
-  useOutside(boxRef, open, setOpen)
-  const options = props.options || []
-  const current = options.find(function (o) { return o.value === props.value }) || null
-
-  return (
-    <div ref={boxRef} className={'relative ' + (props.className || '')}>
-      <button
-        type="button"
-        onClick={function () { setOpen(function (o) { return !o }) }}
-        className={(props.buttonCls || defaultBtn) + ' text-left'}
-      >
-        {props.icon ? <span className="shrink-0 text-slate-400">{props.icon}</span> : null}
-        <span className={'flex-1 truncate ' + (current ? 'text-slate-800' : 'text-slate-400')}>
-          {current ? current.label : (props.placeholder || 'Pilih')}
-        </span>
-        <span className={'shrink-0 text-slate-400 transition-transform duration-200 ' + (open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
-      </button>
-      {open ? (
-        <div className="anim-modal absolute z-30 mt-2 max-h-64 w-full overflow-y-auto rounded-2xl border border-slate-200 bg-white py-1 shadow-xl">
-          {options.map(function (o) {
-            const active = o.value === props.value
-            return (
-              <button
-                type="button"
-                key={String(o.value)}
-                onClick={function () { props.onChange(o.value); setOpen(false) }}
-                className={'flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left text-sm ' + (active ? 'bg-bsi-800 text-white' : 'text-slate-700 hover:bg-slate-100')}
-              >
-                <span className="truncate">{o.label}</span>
-                {active ? <span className="shrink-0">{ICONS.check}</span> : null}
-              </button>
-            )
-          })}
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
-export function CustomDateInput(props) {
-  const mode = props.mode || 'date'
-  const [open, setOpen] = useState(false)
-  const [view, setView] = useState(function () {
-    const p = parseValue(props.value, mode)
-    const t = new Date()
-    return p ? { y: p.y, m: p.m } : { y: t.getFullYear(), m: t.getMonth() }
-  })
-  const boxRef = useRef(null)
-  useOutside(boxRef, open, setOpen)
-
-  const sel = parseValue(props.value, mode)
-  const today = new Date()
-
-  function toggle() {
-    if (!open) {
-      const p = parseValue(props.value, mode)
-      if (p) setView({ y: p.y, m: p.m })
-    }
-    setOpen(function (o) { return !o })
-  }
-
-  function shift(delta) {
-    setView(function (v) {
-      if (mode === 'month') return { y: v.y + delta, m: v.m }
-      let m = v.m + delta
-      let y = v.y
-      if (m < 0) { m = 11; y -= 1 }
-      if (m > 11) { m = 0; y += 1 }
-      return { y: y, m: m }
-    })
-  }
-
-  function pickDay(d) {
-    props.onChange(view.y + '-' + pad(view.m + 1) + '-' + pad(d))
-    setOpen(false)
-  }
-
-  function pickMonth(m) {
-    props.onChange(view.y + '-' + pad(m + 1))
-    setOpen(false)
-  }
-
-  function pickToday() {
-    const t = new Date()
-    if (mode === 'month') props.onChange(t.getFullYear() + '-' + pad(t.getMonth() + 1))
-    else props.onChange(t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate()))
-    setOpen(false)
-  }
-
-  const label = sel
-    ? (mode === 'month' ? BULAN_NAMA[sel.m] + ' ' + sel.y : sel.d + ' ' + BULAN_PENDEK[sel.m] + ' ' + sel.y)
-    : ''
-
-  const firstDay = new Date(view.y, view.m, 1).getDay()
-  const daysCount = new Date(view.y, view.m + 1, 0).getDate()
-  const cells = []
-  for (let i = 0; i < firstDay; i++) cells.push(null)
-  for (let d = 1; d <= daysCount; d++) cells.push(d)
-
-  return (
-    <div ref={boxRef} className={'relative ' + (props.className || '')}>
-      <button type="button" onClick={toggle} className={(props.buttonCls || defaultBtn) + ' text-left'}>
-        <span className="shrink-0 text-slate-400">{ICONS.calendar}</span>
-        <span className={'flex-1 truncate ' + (props.value ? 'text-slate-800' : 'text-slate-400')}>
-          {label || (mode === 'month' ? 'Pilih bulan' : 'Pilih tanggal')}
-        </span>
-        <span className={'shrink-0 text-slate-400 transition-transform duration-200 ' + (open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
-      </button>
-      {open ? (
-        <div className="anim-modal absolute z-30 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
-          <div className="flex items-center justify-between">
-            <button type="button" onClick={function () { shift(-1) }} className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-100">&#8249;</button>
-            <p className="text-sm font-bold text-slate-800">
-              {mode === 'month' ? String(view.y) : BULAN_NAMA[view.m] + ' ' + view.y}
-            </p>
-            <button type="button" onClick={function () { shift(1) }} className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-100">&#8250;</button>
-          </div>
-
-          {mode === 'date' ? (
-            <div className="mt-3 grid grid-cols-7 gap-1 text-center">
-              {HARI_NAMA.map(function (h) {
-                return <span key={h} className="py-1 text-[11px] font-semibold text-slate-400">{h}</span>
-              })}
-              {cells.map(function (d, i) {
-                if (d === null) return <span key={'kosong' + i} />
-                const isSel = sel && sel.y === view.y && sel.m === view.m && sel.d === d
-                const isToday = today.getFullYear() === view.y && today.getMonth() === view.m && today.getDate() === d
-                return (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={function () { pickDay(d) }}
-                    className={'mx-auto grid h-8 w-8 place-items-center rounded-lg text-sm ' + (isSel ? 'bg-bsi-800 font-semibold text-white' : isToday ? 'font-bold text-bsi-700 ring-1 ring-bsi-500' : 'text-slate-700 hover:bg-slate-100')}
-                  >
-                    {d}
-                  </button>
-                )
-              })}
-            </div>
-          ) : (
-            <div className="mt-3 grid grid-cols-3 gap-2">
-              {BULAN_NAMA.map(function (nama, m) {
-                const isSel = sel && sel.y === view.y && sel.m === m
-                const isNow = today.getFullYear() === view.y && today.getMonth() === m
-                return (
-                  <button
-                    key={nama}
-                    type="button"
-                    onClick={function () { pickMonth(m) }}
-                    className={'rounded-lg px-2 py-2 text-xs font-semibold ' + (isSel ? 'bg-bsi-800 text-white' : isNow ? 'text-bsi-700 ring-1 ring-bsi-500' : 'text-slate-700 hover:bg-slate-100')}
-                  >
-                    {nama}
-                  </button>
-                )
-              })}
-            </div>
-          )}
-
-          <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
-            <button type="button" onClick={function () { props.onChange(''); setOpen(false) }} className="text-sm font-semibold text-slate-500 hover:text-red-600">Hapus</button>
-            <button type="button" onClick={pickToday} className="text-sm font-semibold text-bsi-700 hover:text-bsi-900">Hari ini</button>
-          </div>
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
-export function FileInput(props) {
-  const inputRef = useRef(null)
-  return (
-    <div className={props.className || ''}>
-      <input
-        ref={inputRef}
-        type="file"
-        accept={props.accept || 'image/*,video/*'}
-        className="hidden"
-        onChange={function (e) {
-          if (props.onChange) props.onChange(e)
-          e.target.value = ''
-        }}
-      />
-      <button
-        type="button"
-        onClick={function () { inputRef.current.click() }}
-        className="flex w-full items-center gap-3 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-4 py-4 text-left transition hover:border-bsi-500 hover:bg-slate-100"
-      >
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-bsi-100 text-bsi-800">{ICONS.image}</span>
-        <span className="min-w-0 flex-1">
-          <span className={'block truncate text-sm font-semibold ' + (props.fileName ? 'text-slate-800' : 'text-slate-500')}>
-            {props.fileName || 'Klik untuk pilih foto atau video'}
-          </span>
-          <span className="block text-xs text-slate-400">{props.hint || 'Foto JPG, PNG, atau HEIC otomatis dikonversi. Video maks 50 MB.'}</span>
-        </span>
-        {props.fileName ? <span className="shrink-0 text-xs font-semibold text-bsi-700">Ganti</span> : null}
-      </button>
-    </div>
-  )
-}
-```
-
 ## File: src/lib/auth.js
 ```javascript
 import { useEffect, useState } from 'react'
@@ -2488,6 +2754,40 @@ export const GALERI_KEGIATAN = [
   'Operasional',
   'Lainnya'
 ]
+```
+
+## File: src/lib/theme.jsx
+```javascript
+import { createContext, useContext, useEffect, useState } from 'react'
+
+const ThemeContext = createContext(null)
+
+export function ThemeProvider(props) {
+  const [dark, setDark] = useState(function () {
+    const saved = localStorage.getItem('mbsi-theme')
+    if (saved) return saved === 'dark'
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  })
+
+  useEffect(function () {
+    document.documentElement.classList.toggle('dark', dark)
+    localStorage.setItem('mbsi-theme', dark ? 'dark' : 'light')
+  }, [dark])
+
+  return (
+    <ThemeContext.Provider value={{ dark: dark, toggle: function () {
+const ganti = function () { setDark(function (d) { return !d }) }
+if (document.startViewTransition && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) document.startViewTransition(ganti)
+else ganti()
+} }}>
+      {props.children}
+    </ThemeContext.Provider>
+  )
+}
+
+export function useTheme() {
+  return useContext(ThemeContext)
+}
 ```
 
 ## File: supabase/schema.sql
@@ -2641,6 +2941,407 @@ dist
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
+```
+
+## File: src/components/controls.jsx
+```javascript
+import { SelubungPanel } from './ui.jsx'
+import { useEffect, useRef, useState } from 'react'
+import { ICONS } from './icons.jsx'
+
+const BULAN_NAMA = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
+const BULAN_PENDEK = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
+const HARI_NAMA = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
+
+const defaultBtn = 'flex w-full items-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-bsi-500'
+
+function pad(n) {
+  return (n < 10 ? '0' : '') + n
+}
+
+function parseValue(value, mode) {
+  if (!value) return null
+  const p = String(value).split('-')
+  if (mode === 'month') {
+    if (p.length < 2) return null
+    const y = parseInt(p[0], 10)
+    const m = parseInt(p[1], 10) - 1
+    if (isNaN(y) || isNaN(m) || m < 0 || m > 11) return null
+    return { y: y, m: m }
+  }
+  if (p.length < 3) return null
+  const y = parseInt(p[0], 10)
+  const m = parseInt(p[1], 10) - 1
+  const d = parseInt(p[2], 10)
+  if (isNaN(y) || isNaN(m) || isNaN(d)) return null
+  return { y: y, m: m, d: d }
+}
+
+function useOutside(ref, open, setOpen) {
+  useEffect(function () {
+    if (!open) return undefined
+    function handler(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return function () { document.removeEventListener('mousedown', handler) }
+  }, [open])
+}
+
+export function CustomSelect(props) {
+  const [open, setOpen] = useState(false)
+  const boxRef = useRef(null)
+  useOutside(boxRef, open, setOpen)
+  const options = props.options || []
+  const current = options.find(function (o) { return o.value === props.value }) || null
+
+  return (
+    <div ref={boxRef} className={'relative ' + (props.className || '')}>
+      <button
+        type="button"
+        onClick={function () { setOpen(function (o) { return !o }) }}
+        className={(props.buttonCls || defaultBtn) + ' text-left'}
+      >
+        {props.icon ? <span className="shrink-0 text-slate-400">{props.icon}</span> : null}
+        <span className={'flex-1 truncate ' + (current ? 'text-slate-800' : 'text-slate-400')}>
+          {current ? current.label : (props.placeholder || 'Pilih')}
+        </span>
+        <span className={'shrink-0 text-slate-400 transition-transform duration-200 ' + (open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
+      </button>
+      <SelubungPanel open={open}>
+<div className="anim-modal absolute z-30 mt-2 max-h-64 w-full overflow-y-auto rounded-2xl border border-slate-200 bg-white py-1 shadow-xl">
+          {options.map(function (o) {
+            const active = o.value === props.value
+            return (
+              <button
+                type="button"
+                key={String(o.value)}
+                onClick={function () { props.onChange(o.value); setOpen(false) }}
+                className={'flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left text-sm ' + (active ? 'bg-bsi-800 text-white' : 'text-slate-700 hover:bg-slate-100')}
+              >
+                <span className="truncate">{o.label}</span>
+                {active ? <span className="shrink-0">{ICONS.check}</span> : null}
+              </button>
+            )
+          })}
+        </div>
+</SelubungPanel>
+    </div>
+  )
+}
+
+export function CustomDateInput(props) {
+  const mode = props.mode || 'date'
+  const [open, setOpen] = useState(false)
+  const [view, setView] = useState(function () {
+    const p = parseValue(props.value, mode)
+    const t = new Date()
+    return p ? { y: p.y, m: p.m } : { y: t.getFullYear(), m: t.getMonth() }
+  })
+  const boxRef = useRef(null)
+  useOutside(boxRef, open, setOpen)
+
+  const sel = parseValue(props.value, mode)
+  const today = new Date()
+
+  function toggle() {
+    if (!open) {
+      const p = parseValue(props.value, mode)
+      if (p) setView({ y: p.y, m: p.m })
+    }
+    setOpen(function (o) { return !o })
+  }
+
+  function shift(delta) {
+    setView(function (v) {
+      if (mode === 'month') return { y: v.y + delta, m: v.m }
+      let m = v.m + delta
+      let y = v.y
+      if (m < 0) { m = 11; y -= 1 }
+      if (m > 11) { m = 0; y += 1 }
+      return { y: y, m: m }
+    })
+  }
+
+  function pickDay(d) {
+    props.onChange(view.y + '-' + pad(view.m + 1) + '-' + pad(d))
+    setOpen(false)
+  }
+
+  function pickMonth(m) {
+    props.onChange(view.y + '-' + pad(m + 1))
+    setOpen(false)
+  }
+
+  function pickToday() {
+    const t = new Date()
+    if (mode === 'month') props.onChange(t.getFullYear() + '-' + pad(t.getMonth() + 1))
+    else props.onChange(t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate()))
+    setOpen(false)
+  }
+
+  const label = sel
+    ? (mode === 'month' ? BULAN_NAMA[sel.m] + ' ' + sel.y : sel.d + ' ' + BULAN_PENDEK[sel.m] + ' ' + sel.y)
+    : ''
+
+  const firstDay = new Date(view.y, view.m, 1).getDay()
+  const daysCount = new Date(view.y, view.m + 1, 0).getDate()
+  const cells = []
+  for (let i = 0; i < firstDay; i++) cells.push(null)
+  for (let d = 1; d <= daysCount; d++) cells.push(d)
+
+  return (
+    <div ref={boxRef} className={'relative ' + (props.className || '')}>
+      <button type="button" onClick={toggle} className={(props.buttonCls || defaultBtn) + ' text-left'}>
+        <span className="shrink-0 text-slate-400">{ICONS.calendar}</span>
+        <span className={'flex-1 truncate ' + (props.value ? 'text-slate-800' : 'text-slate-400')}>
+          {label || (mode === 'month' ? 'Pilih bulan' : 'Pilih tanggal')}
+        </span>
+        <span className={'shrink-0 text-slate-400 transition-transform duration-200 ' + (open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
+      </button>
+      <SelubungPanel open={open}>
+<div className="anim-modal absolute z-30 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
+          <div className="flex items-center justify-between">
+            <button type="button" onClick={function () { shift(-1) }} className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-100">&#8249;</button>
+            <p className="text-sm font-bold text-slate-800">
+              {mode === 'month' ? String(view.y) : BULAN_NAMA[view.m] + ' ' + view.y}
+            </p>
+            <button type="button" onClick={function () { shift(1) }} className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-100">&#8250;</button>
+          </div>
+
+          {mode === 'date' ? (
+            <div className="mt-3 grid grid-cols-7 gap-1 text-center">
+              {HARI_NAMA.map(function (h) {
+                return <span key={h} className="py-1 text-[11px] font-semibold text-slate-400">{h}</span>
+              })}
+              {cells.map(function (d, i) {
+                if (d === null) return <span key={'kosong' + i} />
+                const isSel = sel && sel.y === view.y && sel.m === view.m && sel.d === d
+                const isToday = today.getFullYear() === view.y && today.getMonth() === view.m && today.getDate() === d
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={function () { pickDay(d) }}
+                    className={'mx-auto grid h-8 w-8 place-items-center rounded-lg text-sm ' + (isSel ? 'bg-bsi-800 font-semibold text-white' : isToday ? 'font-bold text-bsi-700 ring-1 ring-bsi-500' : 'text-slate-700 hover:bg-slate-100')}
+                  >
+                    {d}
+                  </button>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {BULAN_NAMA.map(function (nama, m) {
+                const isSel = sel && sel.y === view.y && sel.m === m
+                const isNow = today.getFullYear() === view.y && today.getMonth() === m
+                return (
+                  <button
+                    key={nama}
+                    type="button"
+                    onClick={function () { pickMonth(m) }}
+                    className={'rounded-lg px-2 py-2 text-xs font-semibold ' + (isSel ? 'bg-bsi-800 text-white' : isNow ? 'text-bsi-700 ring-1 ring-bsi-500' : 'text-slate-700 hover:bg-slate-100')}
+                  >
+                    {nama}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
+            <button type="button" onClick={function () { props.onChange(''); setOpen(false) }} className="text-sm font-semibold text-slate-500 hover:text-red-600">Hapus</button>
+            <button type="button" onClick={pickToday} className="text-sm font-semibold text-bsi-700 hover:text-bsi-900">Hari ini</button>
+          </div>
+        </div>
+</SelubungPanel>
+    </div>
+  )
+}
+
+export function FileInput(props) {
+  const inputRef = useRef(null)
+  return (
+    <div className={props.className || ''}>
+      <input
+        ref={inputRef}
+        type="file"
+        accept={props.accept || 'image/*,video/*'}
+        className="hidden"
+        onChange={function (e) {
+          if (props.onChange) props.onChange(e)
+          e.target.value = ''
+        }}
+      />
+      <button
+        type="button"
+        onClick={function () { inputRef.current.click() }}
+        className="flex w-full items-center gap-3 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-4 py-4 text-left transition hover:border-bsi-500 hover:bg-slate-100"
+      >
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-bsi-100 text-bsi-800">{ICONS.image}</span>
+        <span className="min-w-0 flex-1">
+          <span className={'block truncate text-sm font-semibold ' + (props.fileName ? 'text-slate-800' : 'text-slate-500')}>
+            {props.fileName || 'Klik untuk pilih foto atau video'}
+          </span>
+          <span className="block text-xs text-slate-400">{props.hint || 'Foto JPG, PNG, atau HEIC otomatis dikonversi. Video maks 50 MB.'}</span>
+        </span>
+        {props.fileName ? <span className="shrink-0 text-xs font-semibold text-bsi-700">Ganti</span> : null}
+      </button>
+    </div>
+  )
+}
+```
+
+## File: src/components/Skeleton.jsx
+```javascript
+export function SkeletonLogbookCard() {
+  return (
+    <div className="card-hover flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="skeleton aspect-video w-full rounded-2xl"></div>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="skeleton h-6 w-24 rounded-full"></div>
+        <div className="skeleton h-6 w-20 rounded-full"></div>
+        <div className="skeleton ml-auto h-6 w-20 rounded-full"></div>
+      </div>
+      <div className="skeleton h-4 w-36 rounded-full"></div>
+      <div className="skeleton h-6 w-40 rounded-full"></div>
+      <div className="skeleton h-4 w-32 rounded-full"></div>
+      <div className="skeleton h-3 w-24 rounded-full"></div>
+      <div className="mt-auto flex items-center gap-3 border-t border-slate-100 pt-4">
+        <div className="skeleton h-10 w-10" style={{ borderRadius: 'radius' }}></div>
+        <div className="flex-1 space-y-2">
+          <div className="skeleton h-4 w-36 rounded-full"></div>
+          <div className="skeleton h-3 w-24 rounded-full"></div>
+        </div>
+        <div className="skeleton h-9 w-20 rounded-2xl"></div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonGalleryCard() {
+  return (
+    <div className="card-hover flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="skeleton aspect-video w-full rounded-2xl"></div>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="skeleton h-6 w-24 rounded-full"></div>
+        <div className="skeleton ml-auto h-6 w-20 rounded-full"></div>
+      </div>
+      <div className="skeleton h-4 w-36 rounded-full"></div>
+      <div className="skeleton h-6 w-44 rounded-full"></div>
+      <div className="mt-auto flex items-center gap-3 border-t border-slate-100 pt-4">
+        <div className="skeleton h-10 w-10" style={{ borderRadius: 'radius' }}></div>
+        <div className="flex-1 space-y-2">
+          <div className="skeleton h-4 w-36 rounded-full"></div>
+          <div className="skeleton h-3 w-24 rounded-full"></div>
+        </div>
+        <div className="skeleton h-9 w-20 rounded-2xl"></div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonAttendanceCard() {
+  return (
+    <div className="card-hover flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="flex items-center justify-between">
+        <div className="skeleton h-6 w-20 rounded-full"></div>
+        <div className="skeleton h-4 w-32 rounded-full"></div>
+      </div>
+      <div className="skeleton h-5 w-28 rounded-full"></div>
+      <div className="skeleton h-4 w-full rounded-full"></div>
+      <div className="mt-auto flex items-center gap-3 border-t border-slate-100 pt-4">
+        <div className="skeleton h-10 w-10" style={{ borderRadius: 'radius' }}></div>
+        <div className="flex-1 space-y-2">
+          <div className="skeleton h-4 w-36 rounded-full"></div>
+          <div className="skeleton h-3 w-24 rounded-full"></div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonPersonCard() {
+  return (
+    <div className="card-hover flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-center gap-4">
+        <div className="skeleton h-14 w-14" style={{ borderRadius: 'radius' }}></div>
+        <div className="flex-1 space-y-2">
+          <div className="skeleton h-5 w-40 rounded-full"></div>
+          <div className="skeleton h-3 w-24 rounded-full"></div>
+          <div className="skeleton h-5 w-28 rounded-full"></div>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="skeleton h-16 rounded-2xl"></div>
+        <div className="skeleton h-16 rounded-2xl"></div>
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        <div className="skeleton h-12 rounded-xl"></div>
+        <div className="skeleton h-12 rounded-xl"></div>
+        <div className="skeleton h-12 rounded-xl"></div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonDashboard() {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-4 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="skeleton h-14 w-14" style={{ borderRadius: 'radius' }}></div>
+        <div className="flex-1 space-y-2">
+          <div className="skeleton h-4 w-44 rounded-full"></div>
+          <div className="skeleton h-3 w-28 rounded-full"></div>
+        </div>
+        <div className="skeleton h-10 w-28 rounded-2xl"></div>
+      </div>
+      <div className="grid items-start gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+        <div className="space-y-4 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="skeleton h-5 w-36 rounded-full"></div>
+          <div className="skeleton h-10 w-full rounded-2xl"></div>
+          <div className="skeleton h-10 w-full rounded-2xl"></div>
+          <div className="skeleton h-20 w-full rounded-2xl"></div>
+          <div className="skeleton h-11 w-44 rounded-2xl"></div>
+        </div>
+        <div className="space-y-5">
+          <div className="skeleton h-6 w-32 rounded-full"></div>
+          <div className="grid gap-5 md:grid-cols-2">
+            <SkeletonLogbookCard />
+            <SkeletonLogbookCard />
+            <SkeletonLogbookCard />
+            <SkeletonLogbookCard />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonStatCard() {
+  return (
+    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
+      <div className="skeleton h-4 w-28"></div>
+      <div className="skeleton h-9 w-16 mt-3"></div>
+      <div className="skeleton h-3 w-36 mt-2"></div>
+    </div>
+  )
+}
+
+export function SkeletonChartRow() {
+  return (
+    <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5">
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <div className="skeleton h-4 w-32"></div>
+          <div className="skeleton h-3 w-24"></div>
+        </div>
+        <div className="skeleton h-4 w-40"></div>
+      </div>
+      <div className="skeleton h-4 w-full rounded-full mt-4"></div>
+    </div>
+  )
+}
 ```
 
 ## File: src/lib/konversi.js
@@ -2830,114 +3531,6 @@ Buat user Auth dengan pola email NIM@mbsi.local dan isi tabel mahasiswa beserta 
 
 ## Deploy
 Push ke GitHub, import di Vercel, salin isi .env.local ke Environment Variables Vercel.
-```
-
-## File: src/components/FilterBar.jsx
-```javascript
-import { ICONS } from './icons.jsx'
-import { CustomSelect, CustomDateInput } from './controls.jsx'
-
-export function FilterSelect(props) {
-  return (
-    <CustomSelect
-      icon={props.icon}
-      value={props.value}
-      onChange={props.onChange}
-      options={props.options}
-      className="min-w-[190px]"
-      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
-    />
-  )
-}
-
-export function FilterDate(props) {
-  return (
-    <CustomDateInput
-      mode={props.mode || 'date'}
-      value={props.value}
-      onChange={props.onChange}
-      className="min-w-[170px]"
-      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
-    />
-  )
-}
-
-export function TimeFilter(props) {
-  const f = props.filter
-  const set = props.set
-  return (
-    <div className="flex flex-wrap items-center gap-3">
-      <div className="time-toggle">
-        <button type="button" className={f.timeMode === 'bulan' ? 'active' : ''}
-          onClick={function () { set(Object.assign({}, f, { timeMode: 'bulan', bulan: '', dari: '', sampai: '' })) }}>Bulan</button>
-        <button type="button" className={f.timeMode === 'rentang' ? 'active' : ''}
-          onClick={function () { set(Object.assign({}, f, { timeMode: 'rentang', bulan: '', dari: '', sampai: '' })) }}>Rentang Waktu</button>
-      </div>
-      {f.timeMode === 'bulan'
-        ? <FilterDate mode="month" value={f.bulan} onChange={function (v) { set(Object.assign({}, f, { bulan: v })) }} />
-        : <div className="flex flex-wrap items-center gap-2">
-            <FilterDate value={f.dari} onChange={function (v) { set(Object.assign({}, f, { dari: v })) }} />
-            <span className="text-slate-400 text-sm">sampai</span>
-            <FilterDate value={f.sampai} onChange={function (v) { set(Object.assign({}, f, { sampai: v })) }} />
-          </div>}
-    </div>
-  )
-}
-
-export function FilterBar(props) {
-  return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-4 lg:p-5 shadow-sm">
-      <div className="flex items-center justify-between gap-3">
-        <button onClick={props.onToggle}
-          className="xl:hidden flex items-center gap-2 px-4 py-2.5 rounded-2xl border border-slate-200 bg-slate-50 text-sm font-semibold text-slate-700 hover:bg-slate-100">
-          <span className="text-bsi-700">{ICONS.funnel}</span>
-          <span>Filter</span>
-          {props.activeCount > 0 ? (
-            <span className="inline-flex items-center justify-center h-6 min-w-6 px-2 rounded-full bg-bsi-800 text-white text-xs font-bold">{props.activeCount}</span>
-          ) : null}
-          <span className={'transition-transform duration-200 text-slate-400 ' + (props.open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
-        </button>
-        <div className="hidden xl:block text-sm text-slate-500">
-          {props.activeCount > 0
-            ? <span className="inline-flex items-center gap-2"><span className="text-bsi-700">{ICONS.funnel}</span><span><strong className="text-slate-900">{props.activeCount}</strong> filter aktif</span></span>
-            : <span className="inline-flex items-center gap-2"><span className="text-slate-400">{ICONS.funnel}</span><span>Belum ada filter aktif</span></span>}
-        </div>
-      </div>
-      <div className={props.open ? 'anim-page mt-4' : 'hidden xl:block xl:mt-4'}>
-        <div className="flex flex-wrap items-center gap-3">
-          {props.children}
-          {props.activeCount > 0 ? (
-            <button onClick={props.onReset}
-              className="inline-flex items-center gap-2 rounded-2xl bg-red-50 border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100">
-              {ICONS.close}<span>Reset</span>
-            </button>
-          ) : null}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export function SortSelect(props) {
-  return (
-    <CustomSelect
-      icon={ICONS.sort}
-      value={props.value}
-      onChange={props.onChange}
-      options={[{ value: 'terbaru', label: 'Terbaru' }, { value: 'terlama', label: 'Terlama' }]}
-      className="min-w-[150px]"
-      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
-    />
-  )
-}
-export function countActiveFilters(o) {
-  let c = 0
-  for (const k in o) {
-    if (k === 'timeMode') continue
-    if (o[k]) c++
-  }
-  return c
-}
 ```
 
 ## File: src/lib/format.js
@@ -3358,101 +3951,113 @@ export default function Carousel(props) {
 }
 ```
 
-## File: src/components/Layout.jsx
+## File: src/components/FilterBar.jsx
 ```javascript
-import { Outlet, Link, NavLink } from 'react-router-dom'
-import { useTheme } from '../lib/theme.jsx'
-import { useAuth, logoutMahasiswa } from '../lib/auth.js'
-import { SizedIcon } from './icons.jsx'
-import { useState } from 'react'
+import { ICONS } from './icons.jsx'
+import { CustomSelect, CustomDateInput } from './controls.jsx'
 
-const LINKS = [
-  { to: '/', label: 'Beranda' },
-  { to: '/logbook', label: 'Logbook' },
-  { to: '/galeri', label: 'Galeri' },
-  { to: '/absen', label: 'Daftar Hadir' },
-  { to: '/dospem', label: 'Tim & Dospem' }
-]
-
-export default function Layout() {
-  const theme = useTheme()
-  const { mahasiswa } = useAuth()
-  const [open, setOpen] = useState(false)
-
-  const linkCls = function (active) {
-    return 'px-3 py-2 rounded-xl text-sm font-semibold ' + (active ? 'bg-bsi-900 text-white' : 'text-slate-600 hover:bg-slate-100')
-  }
-
-  const themeBtn = function (extra) {
-    return (
-      <button onClick={theme.toggle} className={'rounded-xl border border-slate-300 grid place-items-center hover:bg-slate-100 text-slate-700 ' + (extra || 'h-10 w-10')} title="Ganti tema">
-        <SizedIcon name={theme.dark ? 'sun' : 'moon'} size={18} />
-      </button>
-    )
-  }
-
+export function FilterSelect(props) {
   return (
-    <div className="flex flex-col min-h-screen">
-      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="h-16 flex items-center justify-between gap-4">
-            <Link to="/" className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-gradient-to-tr from-bsi-800 to-gold-500 text-white grid place-items-center font-black">BSI</div>
-              <div>
-                <p className="font-bold leading-none text-slate-900">Logbook Magang</p>
-                <p className="text-xs text-slate-500 mt-1">Bank Syariah Indonesia</p>
-              </div>
-            </Link>
-            <nav className="hidden xl:flex items-center gap-1">
-              {LINKS.map(function (l) {
-                return <NavLink key={l.to} to={l.to} className={function (s) { return linkCls(s.isActive) }}>{l.label}</NavLink>
-              })}
-            </nav>
-            <div className="hidden xl:flex items-center gap-3">
-              {themeBtn()}
-              {mahasiswa ? (
-                <>
-                  <Link to="/dashboard" className="px-4 py-2 rounded-xl bg-bsi-800 text-white text-sm font-semibold hover:bg-bsi-900">Dashboard</Link>
-                  <Link to="/" onClick={function () { logoutMahasiswa() }} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-100">Keluar</Link>
-                </>
-              ) : (
-                <Link to="/login" className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-700">Masuk Intern</Link>
-              )}
-            </div>
-            <div className="flex xl:hidden items-center gap-2">
-              {themeBtn()}
-              <button onClick={function () { setOpen(function (o) { return !o }) }} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700">Menu</button>
-            </div>
-          </div>
-        </div>
-        {open ? (
-          <div className="xl:hidden border-t border-slate-200 bg-white px-4 py-4 space-y-2">
-            {LINKS.map(function (l) {
-              return <Link key={l.to} to={l.to} onClick={function () { setOpen(false) }} className="block px-4 py-3 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100">{l.label}</Link>
-            })}
-            {mahasiswa ? (
-              <>
-                <Link to="/dashboard" onClick={function () { setOpen(false) }} className="block px-4 py-3 rounded-xl bg-bsi-800 text-white text-sm font-semibold">Dashboard</Link>
-                <Link to="/" onClick={function () { setOpen(false); logoutMahasiswa() }} className="block px-4 py-3 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700">Keluar</Link>
-              </>
-            ) : (
-              <Link to="/login" onClick={function () { setOpen(false) }} className="block px-4 py-3 rounded-xl bg-slate-900 text-white text-sm font-semibold">Masuk Intern</Link>
-            )}
-          </div>
-        ) : null}
-      </header>
+    <CustomSelect
+      icon={props.icon}
+      value={props.value}
+      onChange={props.onChange}
+      options={props.options}
+      className="min-w-[190px]"
+      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+    />
+  )
+}
 
-      <main className="anim-page max-w-7xl mx-auto px-4 py-8 lg:py-10 flex-1 w-full">
-        <Outlet />
-      </main>
+export function FilterDate(props) {
+  return (
+    <CustomDateInput
+      mode={props.mode || 'date'}
+      value={props.value}
+      onChange={props.onChange}
+      className="min-w-[170px]"
+      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+    />
+  )
+}
 
-      <footer className="mt-auto border-t border-slate-200 bg-white">
-        <div className="max-w-7xl mx-auto px-4 py-4 text-center text-xs text-slate-500">
-          &copy; {new Date().getFullYear()} Tim Magang BSI
-        </div>
-      </footer>
+export function TimeFilter(props) {
+  const f = props.filter
+  const set = props.set
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <div className="time-toggle">
+        <button type="button" className={f.timeMode === 'bulan' ? 'active' : ''}
+          onClick={function () { set(Object.assign({}, f, { timeMode: 'bulan', bulan: '', dari: '', sampai: '' })) }}>Bulan</button>
+        <button type="button" className={f.timeMode === 'rentang' ? 'active' : ''}
+          onClick={function () { set(Object.assign({}, f, { timeMode: 'rentang', bulan: '', dari: '', sampai: '' })) }}>Rentang Waktu</button>
+      </div>
+      {f.timeMode === 'bulan'
+        ? <div key="bulan" className="anim-ganti-bulan flex flex-wrap items-center gap-2">
+<FilterDate mode="month" value={f.bulan} onChange={function (v) { set(Object.assign({}, f, { bulan: v })) }} />
+</div>
+        : <div key="rentang" className="anim-ganti-rentang flex flex-wrap items-center gap-2">
+            <FilterDate value={f.dari} onChange={function (v) { set(Object.assign({}, f, { dari: v })) }} />
+            <span className="text-slate-400 text-sm">sampai</span>
+            <FilterDate value={f.sampai} onChange={function (v) { set(Object.assign({}, f, { sampai: v })) }} />
+          </div>}
     </div>
   )
+}
+
+export function FilterBar(props) {
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-4 lg:p-5 shadow-sm">
+      <div className="flex items-center justify-between gap-3">
+        <button onClick={props.onToggle}
+          className="xl:hidden flex items-center gap-2 px-4 py-2.5 rounded-2xl border border-slate-200 bg-slate-50 text-sm font-semibold text-slate-700 hover:bg-slate-100">
+          <span className="text-bsi-700">{ICONS.funnel}</span>
+          <span>Filter</span>
+          {props.activeCount > 0 ? (
+            <span className="inline-flex items-center justify-center h-6 min-w-6 px-2 rounded-full bg-bsi-800 text-white text-xs font-bold">{props.activeCount}</span>
+          ) : null}
+          <span className={'transition-transform duration-200 text-slate-400 ' + (props.open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
+        </button>
+        <div className="hidden xl:block text-sm text-slate-500">
+          {props.activeCount > 0
+            ? <span className="inline-flex items-center gap-2"><span className="text-bsi-700">{ICONS.funnel}</span><span><strong className="text-slate-900">{props.activeCount}</strong> filter aktif</span></span>
+            : <span className="inline-flex items-center gap-2"><span className="text-slate-400">{ICONS.funnel}</span><span>Belum ada filter aktif</span></span>}
+        </div>
+      </div>
+      <div className={props.open ? 'anim-page mt-4' : 'hidden xl:block xl:mt-4'}>
+        <div className="flex flex-wrap items-center gap-3">
+          {props.children}
+          {props.activeCount > 0 ? (
+            <button onClick={props.onReset}
+              className="inline-flex items-center gap-2 rounded-2xl bg-red-50 border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100">
+              {ICONS.close}<span>Reset</span>
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function SortSelect(props) {
+  return (
+    <CustomSelect
+      icon={ICONS.sort}
+      value={props.value}
+      onChange={props.onChange}
+      options={[{ value: 'terbaru', label: 'Terbaru' }, { value: 'terlama', label: 'Terlama' }]}
+      className="min-w-[150px]"
+      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+    />
+  )
+}
+export function countActiveFilters(o) {
+  let c = 0
+  for (const k in o) {
+    if (k === 'timeMode') continue
+    if (o[k]) c++
+  }
+  return c
 }
 ```
 
@@ -3679,6 +4284,301 @@ export default function LoginPage() {
 }
 ```
 
+## File: src/main.jsx
+```javascript
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import App from './App.jsx'
+import './index.css'
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+)
+
+/* ===== Indikator scrollbar auto hide, overlay tanpa menggeser layout ===== */
+;(function () {
+  if (typeof document === 'undefined') return
+  function pasang() {
+    if (document.getElementById('scroll-indicator')) return
+    const track = document.createElement('div')
+    track.id = 'scroll-indicator'
+    const thumb = document.createElement('div')
+    thumb.id = 'scroll-thumb'
+    track.appendChild(thumb)
+    document.body.appendChild(track)
+    let timer = null
+    function sembunyikan() { track.classList.remove('aktif') }
+    function tampilkan() {
+      track.classList.add('aktif')
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(sembunyikan, 900)
+    }
+    function ukur(el, adalahWindow, rect) {
+      const scrollTop = adalahWindow ? (window.scrollY || document.documentElement.scrollTop) : el.scrollTop
+      const scrollHeight = adalahWindow ? document.documentElement.scrollHeight : el.scrollHeight
+      const clientHeight = adalahWindow ? window.innerHeight : el.clientHeight
+      const selisih = scrollHeight - clientHeight
+      if (selisih <= 4) { sembunyikan(); return }
+      const ratio = clientHeight / scrollHeight
+      const trackTinggi = rect.height - 8
+      const thumbTinggi = Math.max(36, trackTinggi * ratio)
+      const maxTop = trackTinggi - thumbTinggi
+      let gerak = scrollTop / selisih
+      if (gerak < 0) gerak = 0
+      if (gerak > 1) gerak = 1
+      thumb.style.height = thumbTinggi + 'px'
+      thumb.style.transform = 'translateY(' + (4 + gerak * maxTop) + 'px)'
+      track.style.top = rect.top + 'px'
+      track.style.height = rect.height + 'px'
+      track.style.right = (window.innerWidth - rect.right + 3) + 'px'
+    }
+    function onScroll(e) {
+      const t = e.target
+      if (t === document || t === document.documentElement || t === window || !t || t.nodeType !== 1) {
+        ukur(null, true, { top: 0, height: window.innerHeight, right: window.innerWidth })
+      } else {
+        const r = t.getBoundingClientRect()
+        ukur(t, false, { top: r.top, height: r.height, right: r.right })
+      }
+      tampilkan()
+    }
+    window.addEventListener('scroll', onScroll, true)
+    document.addEventListener('scroll', onScroll, true)
+    window.addEventListener('resize', sembunyikan)
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pasang)
+  else pasang()
+})()
+
+/* ===== Pergeseran mulus isi filter saat mode waktu berganti (bayangan keluar plus FLIP) ===== */
+;(function () {
+  if (typeof document === 'undefined') return
+  function pasang() {
+    document.addEventListener('click', function (e) {
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+      const tombol = e.target && e.target.closest ? e.target.closest('.time-toggle button') : null
+      if (!tombol) return
+      if ((' ' + tombol.className + ' ').indexOf(' active ') !== -1) return
+      const toggle = tombol.closest('.time-toggle')
+      if (!toggle || !toggle.parentElement) return
+      const wadah = tombol.closest('.rounded-3xl') || toggle.parentElement.parentElement || toggle.parentElement
+      const cabang = toggle.parentElement.querySelector('.anim-ganti-bulan, .anim-ganti-rentang')
+      if (cabang) {
+        const r = cabang.getBoundingClientRect()
+        if (r.width > 0) {
+          const hantu = cabang.cloneNode(true)
+          hantu.style.position = 'fixed'
+          hantu.style.left = r.left + 'px'
+          hantu.style.top = r.top + 'px'
+          hantu.style.width = r.width + 'px'
+          hantu.style.height = r.height + 'px'
+          hantu.style.margin = '0'
+          hantu.style.zIndex = '45'
+          hantu.classList.add('hantu-cabang')
+          document.body.appendChild(hantu)
+          hantu.style.animation = 'none'
+          const turunan = hantu.querySelectorAll('*')
+          for (let i = 0; i < turunan.length; i++) turunan[i].style.animation = 'none'
+          const keBulan = !tombol.previousElementSibling
+          if (hantu.animate) {
+            hantu.animate([
+              { opacity: 1, transform: 'translateX(0)' },
+              { opacity: 0, transform: keBulan ? 'translateX(10px)' : 'translateX(-10px)' }
+            ], { duration: 180, easing: 'ease-in' }).onfinish = function () { if (hantu.parentNode) hantu.parentNode.removeChild(hantu) }
+          } else {
+            setTimeout(function () { if (hantu.parentNode) hantu.parentNode.removeChild(hantu) }, 200)
+          }
+        }
+      }
+      const snap = new Map()
+      const els = wadah.querySelectorAll('*')
+      for (let i = 0; i < els.length; i++) snap.set(els[i], els[i].getBoundingClientRect())
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          snap.forEach(function (rect, el) {
+            if (!el.isConnected || !el.animate) return
+            const r = el.getBoundingClientRect()
+            const dx = rect.left - r.left
+            const dy = rect.top - r.top
+            if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return
+            el.animate([
+              { transform: 'translate(' + dx + 'px, ' + dy + 'px)' },
+              { transform: 'translate(0, 0)' }
+            ], { duration: 320, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' })
+          })
+        })
+      })
+    }, true)
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pasang)
+  else pasang()
+})()
+
+/* ===== transisi-halaman-v1: picu ulang animasi saat pindah rute dan pindah halaman pagination ===== */
+;(function () {
+  if (typeof document === 'undefined') return
+  function ulangAnimasi(el) {
+    if (!el) return
+    el.style.animation = 'none'
+    void el.offsetWidth
+    el.style.animation = ''
+  }
+  function pasang() {
+    document.addEventListener('click', function (e) {
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+      const t = e.target
+      if (!t || !t.closest) return
+      const link = t.closest('a[href]')
+      if (link) {
+        const href = link.getAttribute('href') || ''
+        const eksternal = link.target === '_blank' || href.indexOf('http') === 0 || href.indexOf('#') === 0
+        if (!eksternal) {
+          requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+              ulangAnimasi(document.querySelector('main.anim-page') || document.querySelector('.anim-page'))
+            })
+          })
+        }
+        return
+      }
+      const pag = t.closest('.mt-8.flex.flex-wrap.items-center.justify-center.gap-2')
+      if (pag && t.closest('button')) {
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            const grid = document.querySelectorAll('.grid-pusat, .grid-pusat-rapat, .kartu-grid')
+            for (let i = 0; i < grid.length; i++) {
+              const anak = grid[i].children
+              for (let j = 0; j < anak.length; j++) ulangAnimasi(anak[j])
+            }
+          })
+        })
+      }
+    }, true)
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pasang)
+  else pasang()
+})()
+
+/* ===== transisi-tema: aktifkan transisi pelan hanya pada momen pergantian mode ===== */
+;(function () {
+  if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  const akar = document.documentElement
+  let gelap = akar.classList.contains('dark')
+  let timer = null
+  const obs = new MutationObserver(function () {
+    const sekarang = akar.classList.contains('dark')
+    if (sekarang === gelap) return
+    gelap = sekarang
+    if (document.startViewTransition) return
+    akar.classList.add('theme-transition')
+    if (timer) clearTimeout(timer)
+    timer = setTimeout(function () { akar.classList.remove('theme-transition') }, 400)
+  })
+  obs.observe(akar, { attributes: true, attributeFilter: ['class'] })
+})()
+```
+
+## File: src/components/Layout.jsx
+```javascript
+import { Outlet, Link, NavLink } from 'react-router-dom'
+import { useTheme } from '../lib/theme.jsx'
+import { useAuth, logoutMahasiswa } from '../lib/auth.js'
+import { SizedIcon } from './icons.jsx'
+import { useState } from 'react'
+
+const LINKS = [
+  { to: '/', label: 'Beranda' },
+  { to: '/logbook', label: 'Logbook' },
+  { to: '/galeri', label: 'Galeri' },
+  { to: '/absen', label: 'Daftar Hadir' },
+  { to: '/dospem', label: 'Tim & Dospem' }
+]
+
+export default function Layout() {
+  const theme = useTheme()
+  const { mahasiswa } = useAuth()
+  const [open, setOpen] = useState(false)
+
+  const linkCls = function (active) {
+    return 'px-3 py-2 rounded-xl text-sm font-semibold ' + (active ? 'bg-bsi-900 text-white' : 'text-slate-600 hover:bg-slate-100')
+  }
+
+  const themeBtn = function (extra) {
+    return (
+      <button onClick={theme.toggle} className={'rounded-xl border border-slate-300 grid place-items-center hover:bg-slate-100 text-slate-700 ' + (extra || 'h-10 w-10')} title="Ganti tema">
+        <SizedIcon name={theme.dark ? 'sun' : 'moon'} size={18} />
+      </button>
+    )
+  }
+
+  return (
+    <div className="flex flex-col min-h-screen">
+      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="h-16 flex items-center justify-between gap-4">
+            <Link to="/" className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-2xl bg-gradient-to-tr from-bsi-800 to-gold-500 text-white grid place-items-center font-black">BSI</div>
+              <div>
+                <p className="font-bold leading-none text-slate-900">Logbook Magang</p>
+                <p className="text-xs text-slate-500 mt-1">Bank Syariah Indonesia</p>
+              </div>
+            </Link>
+            <nav className="hidden xl:flex items-center gap-1">
+              {LINKS.map(function (l) {
+                return <NavLink key={l.to} to={l.to} className={function (s) { return linkCls(s.isActive) }}>{l.label}</NavLink>
+              })}
+            </nav>
+            <div className="hidden xl:flex items-center gap-3">
+              {themeBtn()}
+              {mahasiswa ? (
+                <>
+                  <Link to="/dashboard" className="px-4 py-2 rounded-xl bg-bsi-800 text-white text-sm font-semibold hover:bg-bsi-900">Dashboard</Link>
+                  <Link to="/" onClick={function () { logoutMahasiswa() }} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-100">Keluar</Link>
+                </>
+              ) : (
+                <Link to="/login" className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-700">Masuk Intern</Link>
+              )}
+            </div>
+            <div className="flex xl:hidden items-center gap-2">
+              {themeBtn()}
+              <button onClick={function () { setOpen(function (o) { return !o }) }} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700">Menu</button>
+            </div>
+          </div>
+        </div>
+        {open ? (
+          <div className="xl:hidden border-t border-slate-200 bg-white px-4 py-4 space-y-2">
+            {LINKS.map(function (l) {
+              return <Link key={l.to} to={l.to} onClick={function () { setOpen(false) }} className="block px-4 py-3 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100">{l.label}</Link>
+            })}
+            {mahasiswa ? (
+              <>
+                <Link to="/dashboard" onClick={function () { setOpen(false) }} className="block px-4 py-3 rounded-xl bg-bsi-800 text-white text-sm font-semibold">Dashboard</Link>
+                <Link to="/" onClick={function () { setOpen(false); logoutMahasiswa() }} className="block px-4 py-3 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700">Keluar</Link>
+              </>
+            ) : (
+              <Link to="/login" onClick={function () { setOpen(false) }} className="block px-4 py-3 rounded-xl bg-slate-900 text-white text-sm font-semibold">Masuk Intern</Link>
+            )}
+          </div>
+        ) : null}
+      </header>
+
+      <main className="anim-page max-w-7xl mx-auto px-4 py-8 lg:py-10 flex-1 w-full">
+        <Outlet />
+      </main>
+
+      <footer className="footer-ramping border-t border-slate-200 bg-white">
+<div className="mx-auto max-w-7xl px-4 py-4 text-center">
+<p className="text-xs text-slate-500">© 2026 Tim Magang BSI</p>
+</div>
+</footer>
+    </div>
+  )
+}
+```
+
 ## File: src/pages/TimPage.jsx
 ```javascript
 import { useEffect, useState } from 'react'
@@ -3736,63 +4636,6 @@ export default function TimPage() {
             })}
       </section>
     </div>
-  )
-}
-```
-
-## File: src/App.jsx
-```javascript
-import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import { ThemeProvider } from './lib/theme.jsx'
- import { ToastProvider } from './components/ui.jsx'
-import { useAuth } from './lib/auth.js'
-import Layout from './components/Layout.jsx'
-import HomePage from './pages/HomePage.jsx'
-import LogbookPage from './pages/LogbookPage.jsx'
-import GalleryPage from './pages/GalleryPage.jsx'
-import AttendancePage from './pages/AttendancePage.jsx'
-import DospemPage from './pages/DospemPage.jsx'
-import TimPage from './pages/TimPage.jsx'
-import LoginPage from './pages/LoginPage.jsx'
-import DashboardPage from './pages/DashboardPage.jsx'
-
-function ScrollToTop() {
-  const { pathname } = useLocation()
-  useEffect(function () {
-    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
-  }, [pathname])
-  return null
-}
-function RequireAuth(props) {
-  const { mahasiswa, loading } = useAuth()
-  if (loading) return <div className="p-10 text-center text-slate-500">Memuat sesi...</div>
-  if (!mahasiswa) return <Navigate to="/login" replace />
-  return props.children
-}
-
-export default function App() {
-  return (
-    <ThemeProvider>
-      <ToastProvider>
-      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <ScrollToTop />
-        <Routes>
-          <Route element={<Layout />}>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/logbook" element={<LogbookPage />} />
-            <Route path="/galeri" element={<GalleryPage />} />
-            <Route path="/absen" element={<AttendancePage />} />
-            <Route path="/dospem" element={<DospemPage />} />
-            <Route path="/tim" element={<Navigate to="/dospem" replace />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-      </ToastProvider>
-    </ThemeProvider>
   )
 }
 ```
@@ -4046,6 +4889,64 @@ export default function HomePage() {
         {detail ? <LogbookDetail log={detail} /> : null}
       </Modal>
     </div>
+  )
+}
+```
+
+## File: src/App.jsx
+```javascript
+import { SkeletonDashboard } from './components/Skeleton.jsx'
+import { useEffect } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { ThemeProvider } from './lib/theme.jsx'
+ import { ToastProvider } from './components/ui.jsx'
+import { useAuth } from './lib/auth.js'
+import Layout from './components/Layout.jsx'
+import HomePage from './pages/HomePage.jsx'
+import LogbookPage from './pages/LogbookPage.jsx'
+import GalleryPage from './pages/GalleryPage.jsx'
+import AttendancePage from './pages/AttendancePage.jsx'
+import DospemPage from './pages/DospemPage.jsx'
+import TimPage from './pages/TimPage.jsx'
+import LoginPage from './pages/LoginPage.jsx'
+import DashboardPage from './pages/DashboardPage.jsx'
+
+function ScrollToTop() {
+  const { pathname } = useLocation()
+  useEffect(function () {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+  }, [pathname])
+  return null
+}
+function RequireAuth(props) {
+  const { mahasiswa, loading } = useAuth()
+  if (loading) return <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:py-8"><SkeletonDashboard /></div>
+  if (!mahasiswa) return <Navigate to="/login" replace />
+  return props.children
+}
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <ToastProvider>
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ScrollToTop />
+        <Routes>
+          <Route element={<Layout />}>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/logbook" element={<LogbookPage />} />
+            <Route path="/galeri" element={<GalleryPage />} />
+            <Route path="/absen" element={<AttendancePage />} />
+            <Route path="/dospem" element={<DospemPage />} />
+            <Route path="/tim" element={<Navigate to="/dospem" replace />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+      </ToastProvider>
+    </ThemeProvider>
   )
 }
 ```
@@ -5276,6 +6177,127 @@ html { scroll-behavior: smooth; }
 .modal-tutup.anim-overlay { animation: overlayFadeOut 0.2s ease-in forwards; }
 .modal-tutup .anim-modal { animation: modalPopOut 0.2s ease-in forwards; }
 .modal-tutup .anim-overlay { animation: overlayFadeOut 0.2s ease-in forwards; }
+
+/* header-detail-sticky: judul dan tombol tutup popup detail tetap terlihat saat isi digulir di dalam panel */
+.anim-modal > div:first-child {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: inherit;
+}
+.anim-modal > * + * {
+  position: relative;
+  z-index: 1;
+  isolation: isolate;
+}
+
+/* scrollbar-otohide: scrollbar bawaan dinolkan lebarnya, indikator overlay muncul hanya saat menggulir */
+* {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+*::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+}
+#scroll-indicator {
+  position: fixed;
+  right: 3px;
+  top: 0;
+  width: 8px;
+  z-index: 95;
+  border-radius: 9999px;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+#scroll-indicator.aktif { opacity: 1; }
+#scroll-thumb {
+  width: 6px;
+  margin-left: 1px;
+  border-radius: 9999px;
+  background: rgba(100, 116, 139, 0.55);
+}
+.dark #scroll-thumb { background: rgba(148, 163, 184, 0.55); }
+
+/* panel-keluar: animasi keluar dropdown, date picker, dan panel filter */
+@keyframes panelOut {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(-6px) scale(0.98); }
+}
+.panel-tutup { pointer-events: none; }
+.panel-tutup .anim-modal, .panel-tutup .anim-filter { animation: panelOut 0.18s ease-in forwards; }
+
+/* ganti-mode-waktu: animasi halus saat berpindah antara pilihan bulan dan rentang waktu */
+@keyframes gantiBulan {
+from { opacity: 0; transform: translateX(-10px) scale(0.98); }
+to { opacity: 1; transform: translateX(0) scale(1); }
+}
+@keyframes gantiRentang {
+from { opacity: 0; transform: translateX(10px) scale(0.98); }
+to { opacity: 1; transform: translateX(0) scale(1); }
+}
+.anim-ganti-bulan { animation: gantiBulan 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
+.anim-ganti-rentang { animation: gantiRentang 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
+
+/* mode-smooth-v2: easing lebih lembut untuk masuk, bayangan cabang untuk keluar, tetangga bergeser mulus */
+@keyframes gantiBulan {
+from { opacity: 0; transform: translateX(-12px) scale(0.99); }
+to { opacity: 1; transform: translateX(0) scale(1); }
+}
+@keyframes gantiRentang {
+from { opacity: 0; transform: translateX(12px) scale(0.99); }
+to { opacity: 1; transform: translateX(0) scale(1); }
+}
+.anim-ganti-bulan { animation: gantiBulan 0.32s cubic-bezier(0.22, 1, 0.36, 1); }
+.anim-ganti-rentang { animation: gantiRentang 0.32s cubic-bezier(0.22, 1, 0.36, 1); }
+.hantu-cabang { pointer-events: none; }
+
+/* transisi-tema: pergantian mode pelan dan mulus, hanya aktif sesaat saat mode diganti supaya interaksi biasa tetap ringan */
+.theme-transition, .theme-transition *, .theme-transition *::before, .theme-transition *::after {
+  transition: background-color 0.35s cubic-bezier(0.4, 0, 0.2, 1), color 0.35s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.35s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  transition-delay: 0s !important;
+}
+
+/* skeleton-sesi: bar berkilau untuk tampilan memuat sesi dashboard */
+.skeleton-bar {
+  position: relative;
+  overflow: hidden;
+  background: #e2e8f0;
+}
+.dark .skeleton-bar { background: #1e293b; }
+.skeleton-bar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  animation: skeletonSweep 1.4s ease-in-out infinite;
+}
+.dark .skeleton-bar::after {
+  background: linear-gradient(90deg, transparent, rgba(148, 163, 184, 0.18), transparent);
+}
+@keyframes skeletonSweep {
+  100% { transform: translateX(100%); }
+}
+
+/* transisi-tema-v3: crossfade snapshot di kompositor, bebas lukis ulang elemen */
+::view-transition-old(root), ::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-old(root) { z-index: 1; }
+::view-transition-new(root) { z-index: 2; }
+@keyframes vtTema {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+::view-transition-new(root) { animation: vtTema 0.4s ease; }
+/* selama fallback transisi warna berjalan, matikan blur mahal supaya tidak patah */
+.theme-transition [class*="backdrop-blur"] { backdrop-filter: none !important; }
+
+/* footer-ramping: ruang bawah halaman dirapatkan supaya footer slim terasa pas */
+main { padding-bottom: 2.5rem !important; }
 ```
 
 ## File: src/components/ui.jsx
@@ -5370,7 +6392,7 @@ export function Modal(props) {
   return (
     <div className={'anim-overlay fixed inset-0 z-[60] overflow-y-auto overscroll-contain bg-slate-900/60 p-4' + (tutup ? ' modal-tutup' : '')} onClick={props.onClose}>
       <div className="min-h-full flex items-center justify-center py-8">
-        <div className="anim-modal w-full max-w-3xl rounded-[2rem] bg-white shadow-2xl" onClick={function (e) { e.stopPropagation() }}>
+        <div className="anim-modal w-full max-w-3xl rounded-[2rem] bg-white shadow-2xl max-h-[88vh] overflow-y-auto overscroll-contain" onClick={function (e) { e.stopPropagation() }}>
           <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
             <p className="font-bold text-slate-900">{props.title || 'Detail'}</p>
             <button onClick={props.onClose} className="h-9 w-9 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 grid place-items-center">
@@ -5862,6 +6884,19 @@ const ToastContext = createContext(null)
  export function useToast() {
    return useContext(ToastContext)
  }
+
+export function SelubungPanel(props) {
+  const [tampil, setTampil] = useState(props.open)
+  const tutup = tampil && !props.open
+  useEffect(function () {
+    if (props.open) { setTampil(true); return undefined }
+    if (!tampil) return undefined
+    const t = setTimeout(function () { setTampil(false) }, 180)
+    return function () { clearTimeout(t) }
+  }, [props.open, tampil])
+  if (!tampil) return null
+  return <div className={'selubung-panel' + (tutup ? ' panel-tutup' : '')}>{props.children}</div>
+}
 ```
 
 ## File: src/pages/DashboardPage.jsx
@@ -5958,6 +6993,9 @@ export default function DashboardPage() {
    const [galPage, setGalPage] = useState(1)
    const [hadirPage, setHadirPage] = useState(1)
    const refListLog = useRef(null)
+const refFormLog = useRef(null)
+const refFormGal = useRef(null)
+const refFormHadir = useRef(null)
    const refListGal = useRef(null)
    const refListHadir = useRef(null)
 
@@ -5991,7 +7029,33 @@ export default function DashboardPage() {
    }, [logFilter, galFilter, hadirFilter, sort])
 
   if (loading || !mahasiswa) {
-    return <div className="p-10 text-center text-slate-500">Memuat sesi...</div>
+    return <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:py-8">
+<div className="space-y-6">
+<div className="flex items-center gap-4 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+<div className="skeleton h-14 w-14 rounded-2xl"></div>
+<div className="flex-1 space-y-2">
+<div className="skeleton h-4 w-44 rounded-full"></div>
+<div className="skeleton h-3 w-28 rounded-full"></div>
+</div>
+<div className="skeleton h-10 w-28 rounded-2xl"></div>
+</div>
+<div className="grid items-start gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+<div className="space-y-4 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+<div className="skeleton h-5 w-36 rounded-full"></div>
+<div className="skeleton h-10 w-full rounded-2xl"></div>
+<div className="skeleton h-10 w-full rounded-2xl"></div>
+<div className="skeleton h-20 w-full rounded-2xl"></div>
+<div className="skeleton h-11 w-44 rounded-2xl"></div>
+</div>
+<div className="grid gap-5 md:grid-cols-2">
+<div className="skeleton h-64 rounded-3xl"></div>
+<div className="skeleton h-64 rounded-3xl"></div>
+<div className="skeleton h-64 rounded-3xl"></div>
+<div className="skeleton h-64 rounded-3xl"></div>
+</div>
+</div>
+</div>
+</div>
   }
 
   function getItemMode(i) { return itemMode[i] || 'foto' }
@@ -6149,7 +7213,12 @@ export default function DashboardPage() {
     setBusy(false)
   }
 
-  function startEditLog(log) {
+  function gulirKeForm(ref) {
+requestAnimationFrame(function () {
+if (ref && ref.current) ref.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+})
+}
+function startEditLog(log) {
     setEditLogId(log.id)
     setForm({
       tanggal: log.tanggal, unit: log.unit || '', kategori: log.kategori, judul: log.judul,
@@ -6160,7 +7229,7 @@ export default function DashboardPage() {
     })
     setItems(mapped.length ? mapped : [newItem()])
     setTab('logbook')
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    gulirKeForm(refFormLog)
   }
 
   function cancelEditLog() {
@@ -6175,7 +7244,7 @@ export default function DashboardPage() {
     setGalMode(g.media_source === 'youtube' ? 'video' : (g.media_type === 'video' ? 'video' : 'foto'))
     setGalYtLink(g.media_source === 'youtube' && g.youtube_id ? 'https://youtu.be/' + g.youtube_id : '')
     setGalOldYt(g.youtube_id || null)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    gulirKeForm(refFormGal)
   }
 
   function cancelEditGal() {
@@ -6189,7 +7258,7 @@ export default function DashboardPage() {
   function startEditHadir(h) {
     setEditHadirId(h.id)
     setHadirForm({ tanggal: h.tanggal, status: h.status, alasan: h.alasan || '' })
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    gulirKeForm(refFormHadir)
   }
 
   function cancelEditHadir() {
@@ -6502,7 +7571,7 @@ async function submitHadir(e) {
 </div></section>
 
       {tab === 'profil' ? (
-<section className="mt-8 grid gap-6 lg:grid-cols-[0.85fr_1.15fr] items-start">
+<section className="anim-tab mt-8 grid gap-6 lg:grid-cols-[0.85fr_1.15fr] items-start">
 <div className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 shadow-sm flex flex-col items-center text-center">
 <Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="2xl" />
 <h2 className="mt-4 text-xl font-black text-slate-900">{mahasiswa.nama}</h2>
@@ -6545,7 +7614,7 @@ async function submitHadir(e) {
 
 {tab === 'logbook' ? (
         <section className="anim-tab mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
-          <div className={'card-hover bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editLogId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
+          <div ref={refFormLog} className={'card-hover scroll-mt-24 bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editLogId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
             <ModeIndicator edit={!!editLogId} onCancel={cancelEditLog} />
             <h2 className="mt-3 text-2xl font-black text-slate-900">{editLogId ? 'Ubah logbook harian' : 'Tambah logbook harian'}</h2>
             <form onSubmit={submitLogbook} className="mt-6 space-y-4">
@@ -6687,7 +7756,7 @@ async function submitHadir(e) {
 
       {tab === 'galeri' ? (
         <section className="anim-tab mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
-          <div className={'card-hover bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editGalId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
+          <div ref={refFormGal} className={'card-hover scroll-mt-24 bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editGalId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
             <ModeIndicator edit={!!editGalId} onCancel={cancelEditGal} />
             <h2 className="mt-3 text-2xl font-black text-slate-900">{editGalId ? 'Ubah media galeri' : 'Tambah media galeri'}</h2>
             <form onSubmit={submitGaleri} className="mt-6 space-y-4">
@@ -6799,7 +7868,7 @@ async function submitHadir(e) {
 
       {tab === 'absen' ? (
         <section className="anim-tab mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
-          <div className={'card-hover bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editHadirId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
+          <div ref={refFormHadir} className={'card-hover scroll-mt-24 bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editHadirId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
             <ModeIndicator edit={!!editHadirId} onCancel={cancelEditHadir} />
             <h2 className="mt-3 text-2xl font-black text-slate-900">{editHadirId ? 'Ubah daftar hadir' : 'Isi daftar hadir'}</h2>
             <form onSubmit={submitHadir} className="mt-6 space-y-4">

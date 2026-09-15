@@ -90,6 +90,9 @@ export default function DashboardPage() {
    const [galPage, setGalPage] = useState(1)
    const [hadirPage, setHadirPage] = useState(1)
    const refListLog = useRef(null)
+const refFormLog = useRef(null)
+const refFormGal = useRef(null)
+const refFormHadir = useRef(null)
    const refListGal = useRef(null)
    const refListHadir = useRef(null)
 
@@ -307,7 +310,12 @@ export default function DashboardPage() {
     setBusy(false)
   }
 
-  function startEditLog(log) {
+  function gulirKeForm(ref) {
+requestAnimationFrame(function () {
+if (ref && ref.current) ref.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+})
+}
+function startEditLog(log) {
     setEditLogId(log.id)
     setForm({
       tanggal: log.tanggal, unit: log.unit || '', kategori: log.kategori, judul: log.judul,
@@ -318,7 +326,7 @@ export default function DashboardPage() {
     })
     setItems(mapped.length ? mapped : [newItem()])
     setTab('logbook')
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    gulirKeForm(refFormLog)
   }
 
   function cancelEditLog() {
@@ -333,7 +341,7 @@ export default function DashboardPage() {
     setGalMode(g.media_source === 'youtube' ? 'video' : (g.media_type === 'video' ? 'video' : 'foto'))
     setGalYtLink(g.media_source === 'youtube' && g.youtube_id ? 'https://youtu.be/' + g.youtube_id : '')
     setGalOldYt(g.youtube_id || null)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    gulirKeForm(refFormGal)
   }
 
   function cancelEditGal() {
@@ -347,7 +355,7 @@ export default function DashboardPage() {
   function startEditHadir(h) {
     setEditHadirId(h.id)
     setHadirForm({ tanggal: h.tanggal, status: h.status, alasan: h.alasan || '' })
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    gulirKeForm(refFormHadir)
   }
 
   function cancelEditHadir() {
@@ -703,7 +711,7 @@ async function submitHadir(e) {
 
 {tab === 'logbook' ? (
         <section className="anim-tab mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
-          <div className={'card-hover bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editLogId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
+          <div ref={refFormLog} className={'card-hover scroll-mt-24 bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editLogId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
             <ModeIndicator edit={!!editLogId} onCancel={cancelEditLog} />
             <h2 className="mt-3 text-2xl font-black text-slate-900">{editLogId ? 'Ubah logbook harian' : 'Tambah logbook harian'}</h2>
             <form onSubmit={submitLogbook} className="mt-6 space-y-4">
@@ -845,7 +853,7 @@ async function submitHadir(e) {
 
       {tab === 'galeri' ? (
         <section className="anim-tab mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
-          <div className={'card-hover bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editGalId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
+          <div ref={refFormGal} className={'card-hover scroll-mt-24 bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editGalId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
             <ModeIndicator edit={!!editGalId} onCancel={cancelEditGal} />
             <h2 className="mt-3 text-2xl font-black text-slate-900">{editGalId ? 'Ubah media galeri' : 'Tambah media galeri'}</h2>
             <form onSubmit={submitGaleri} className="mt-6 space-y-4">
@@ -957,7 +965,7 @@ async function submitHadir(e) {
 
       {tab === 'absen' ? (
         <section className="anim-tab mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
-          <div className={'card-hover bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editHadirId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
+          <div ref={refFormHadir} className={'card-hover scroll-mt-24 bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editHadirId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
             <ModeIndicator edit={!!editHadirId} onCancel={cancelEditHadir} />
             <h2 className="mt-3 text-2xl font-black text-slate-900">{editHadirId ? 'Ubah daftar hadir' : 'Isi daftar hadir'}</h2>
             <form onSubmit={submitHadir} className="mt-6 space-y-4">
