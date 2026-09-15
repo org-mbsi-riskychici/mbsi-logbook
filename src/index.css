@@ -387,3 +387,16 @@ html { scroll-behavior: smooth; }
 .modal-tutup.anim-overlay { animation: overlayFadeOut 0.2s ease-in forwards; }
 .modal-tutup .anim-modal { animation: modalPopOut 0.2s ease-in forwards; }
 .modal-tutup .anim-overlay { animation: overlayFadeOut 0.2s ease-in forwards; }
+
+/* header-detail-sticky: judul dan tombol tutup popup detail tetap terlihat saat isi digulir di dalam panel */
+.anim-modal > div:first-child {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: inherit;
+}
+.anim-modal > * + * {
+  position: relative;
+  z-index: 1;
+  isolation: isolate;
+}
