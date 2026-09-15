@@ -81,6 +81,10 @@ supabase/
   schema.sql
 .env.example
 .gitignore
+apply-animasi-modal-semua.cjs
+apply-animasi-modal-tutup.cjs
+apply-animasi-modal-tutup2.cjs
+apply-animasi-smooth.cjs
 apply-auto-rotate-youtube.cjs
 apply-avatar-bulat-v3.cjs
 apply-avatar-final.cjs
@@ -96,11 +100,17 @@ apply-cek-urutan.cjs
 apply-diagnosis-dan-bersih.cjs
 apply-final-cleanup.cjs
 apply-fix-chip-galeri.cjs
+apply-fix-confirm-keluar.cjs
 apply-fix-dospem-pusat.cjs
 apply-fix-dospem-syntax.cjs
 apply-fix-export-unggah.cjs
 apply-fix-galeri-pagination.cjs
 apply-fix-ganti-foto.cjs
+apply-fix-glitch-confirm.cjs
+apply-fix-isi-modal.cjs
+apply-fix-lightbox-portal.cjs
+apply-fix-lightbox-portal2.cjs
+apply-fix-modal-konfirmasi.cjs
 apply-fix-nim-text.cjs
 apply-fix-pagination-galeri.cjs
 apply-fix-prodi-final.cjs
@@ -176,812 +186,165 @@ vite.config.js
 
 # Files
 
-## File: apply-cek-urutan.cjs
+## File: apply-fix-lightbox-portal.cjs
 ```javascript
 const fs = require('fs')
 const path = require('path')
 const root = process.cwd()
-function baca(rel) {
-  const p = path.join(root, rel)
-  if (!fs.existsSync(p)) return null
-  return fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n')
-}
-
-console.log('Mulai memeriksa status perbaikan urutan...')
-console.log('')
-
-const f = baca('src/lib/format.js')
-const h = baca('src/pages/HomePage.jsx')
-const d = baca('src/pages/DospemPage.jsx')
-if (f === null || h === null || d === null) {
-  console.log('[GAGAL] Salah satu file tidak ditemukan')
+const FILE_U = 'src/components/ui.jsx'
+if (!fs.existsSync(path.join(root, FILE_U))) {
+  console.log('[GAGAL] ui.jsx tidak ditemukan')
   process.exit(1)
 }
+let u = fs.readFileSync(path.join(root, FILE_U), 'utf8').replace(/\r\n/g, '\n')
 
-const cek = [
-  [f.includes('function waktuUrut'), 'format.js: fungsi tiebreaker waktuUrut sudah ada'],
-  [f.includes('waktuUrut(a)') && f.includes('waktuUrut(b)'), 'format.js: pembanding urutkanTanggal memakai created_at'],
-  [h.includes("urutkanTanggal(logs, 'terbaru').slice(0, 6)"), 'HomePage.jsx: slice 6 data lewat urutkanTanggal'],
-  [/import[^\n]*urutkanTanggal[^\n]*format\.js/.test(h), 'HomePage.jsx: import urutkanTanggal ada'],
-  [d.includes("urutkanTanggal(logs, 'terbaru').slice(0, 6)"), 'DospemPage.jsx: slice 6 data lewat urutkanTanggal'],
-  [/import[^\n]*urutkanTanggal[^\n]*format\.js/.test(d), 'DospemPage.jsx: import urutkanTanggal ada']
-]
-let semuaOk = true
-cek.forEach(function (c) {
-  console.log((c[0] ? '[OK] ' : '[BELUM] ') + c[1])
-  if (!c[0]) semuaOk = false
-})
-
+console.log('Mulai memindahkan Lightbox ke portal document.body...')
 console.log('')
-if (semuaOk) {
-  console.log('Semua bagian aktif. Perbaikan urutan berlaku penuh di seluruh halaman.')
+
+/* ===== 1. Pastikan createPortal tersedia ===== */
+if (u.includes("createPortal } from 'react-dom'")) {
+  console.log('[SUDAH ADA] Import createPortal di ui.jsx')
 } else {
-  console.log('Masih ada bagian yang belum aktif:')
-  console.log('1. Bila baris format.js yang BELUM: jalankan node apply-fix-urutan2.cjs')
-  console.log('2. Bila baris HomePage atau DospemPage yang BELUM: jalankan node apply-fix-urutan.cjs lagi')
+  u = "import { createPortal } from 'react-dom'\n" + u
+  console.log('[BERHASIL] Import createPortal ditambahkan di baris pertama ui.jsx')
 }
+
+/* ===== 2. Bungkus return Lightbox dengan createPortal ===== */
+const idx = u.indexOf('function Lightbox(')
+if (idx === -1) {
+  console.log('[TIDAK KETEMU] Fungsi Lightbox di ui.jsx')
+} else {
+  const idxOpen = u.indexOf('{', idx)
+  let brace = 0, akhir = -1, inStr = false, strCh = ''
+  for (let i = idxOpen; i < u.length; i++) {
+    const ch = u[i]
+    const prev = i > 0 ? u[i - 1] : ''
+    if (inStr) { if (ch === strCh && prev !== '\\') inStr = false; continue }
+    if (ch === '"' || ch === "'" || ch === '`') { inStr = true; strCh = ch; continue }
+    if (ch === '{') brace++
+    if (ch === '}') { brace--; if (brace === 0) { akhir = i + 1; break } }
+  }
+  if (akhir === -1) {
+    console.log('[GAGAL] Batas fungsi Lightbox tidak terbaca')
+  } else {
+    let span = u.slice(idx, akhir)
+    if (span.includes('createPortal(')) {
+      console.log('[SUDAH ADA] Lightbox sudah memakai portal')
+    } else if (!/return \(/.test(span)) {
+      console.log('[TIDAK KETEMU] Pola return ( di dalam Lightbox')
+    } else if (!span.endsWith(')\n}')) {
+      console.log('[TIDAK KETEMU] Pola penutup return di Lightbox')
+    } else {
+      span = span.replace(/return \(/, 'return createPortal(')
+      span = span.slice(0, span.length - 3) + ', document.body)\n}'
+      u = u.slice(0, idx) + span + u.slice(akhir)
+      fs.writeFileSync(path.join(root, FILE_U), u, 'utf8')
+      console.log('[BERHASIL] Lightbox kini dirender lewat portal ke document.body')
+    }
+  }
+}
+
+/* ===== 3. Verifikasi ===== */
+u = fs.readFileSync(path.join(root, FILE_U), 'utf8')
 console.log('')
-console.log('Ringkasan alur akhir di Beranda dan Tim & Dospem:')
-console.log('1. Data diambil dari database apa adanya.')
-console.log('2. Data diurutkan ulang di frontend pakai urutkanTanggal: tanggal dulu, bila kembar maka created_at paling baru menang.')
-console.log('3. Baru kemudian dipotong 6 teratas, jadi yang tampil dijamin 6 yang benar benar terbaru.')
+console.log('Verifikasi:')
+console.log((u.includes("import { createPortal } from 'react-dom'") ? '[OK] ' : '[BELUM] ') + 'Import createPortal ada di ui.jsx')
+console.log((u.includes('return createPortal(') ? '[OK] ' : '[BELUM] ') + 'Return Lightbox dibungkus createPortal')
+console.log((u.includes(', document.body)') ? '[OK] ' : '[BELUM] ') + 'Target portal document.body')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Penjelasan perbaikan:')
+console.log('1. Lightbox tetap dikendalikan oleh state komponen kartu, tetapi elemen DOM-nya kini hidup langsung di body.')
+console.log('2. Karena tidak ada lagi leluhur ber-transform, position fixed inset-0 kembali berarti sepenuh viewport.')
+console.log('3. Efek hover terangkat dan animasi masuk kartu tidak dikurangi sedikit pun, jadi tampilan tetap hidup.')
+console.log('4. Lightbox yang dibuka dari dalam modal detail juga ikut aman karena portal menembus keluar dari panel modal.')
+console.log('5. Tombol unduh, tombol X, klik latar, dan tombol Esc tetap bekerja karena semua logika masih di komponen yang sama.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka halaman Logbook atau Galeri, arahkan kursor ke kartu lalu klik ikon perbesar tanpa membuka Detail.')
+console.log('2. Lightbox kini menutup seluruh layar dengan latar gelap penuh dan gambar berada tepat di tengah.')
+console.log('3. Klik ikon perbesar segera setelah halaman dimuat, saat kartu masih beranimasi masuk: posisi Lightbox tetap benar.')
+console.log('4. Buka Detail sebuah media lalu perbesar dari dalam modal: Lightbox menutupi modal dengan rapi.')
+console.log('5. Tutup lewat X, klik latar, atau Esc: semuanya kembali normal tanpa sisa overlay.')
 ```
 
-## File: apply-fix-toast-hapus.cjs
+## File: apply-fix-lightbox-portal2.cjs
 ```javascript
 const fs = require('fs')
 const path = require('path')
 const root = process.cwd()
-const FILE_D = 'src/pages/DashboardPage.jsx'
-if (!fs.existsSync(path.join(root, FILE_D))) {
-  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
+const FILE_U = 'src/components/ui.jsx'
+if (!fs.existsSync(path.join(root, FILE_U))) {
+  console.log('[GAGAL] ui.jsx tidak ditemukan')
   process.exit(1)
 }
-let d = fs.readFileSync(path.join(root, FILE_D), 'utf8').replace(/\r\n/g, '\n')
+let u = fs.readFileSync(path.join(root, FILE_U), 'utf8').replace(/\r\n/g, '\n')
+let berubah = false
 
-console.log('Mulai memasang toast sukses hapus data...')
+console.log('Mulai memasang portal Lightbox tanpa pencocokan kurung...')
 console.log('')
 
-const MARK = "toast.sukses('Data berhasil dihapus')"
-if (d.includes(MARK)) {
-  console.log('[SUDAH ADA] Toast sukses hapus data')
+if (u.includes('return createPortal(')) {
+  console.log('[SUDAH ADA] Lightbox sudah dibungkus createPortal')
 } else {
-  // Cari pola: await refresh() yang berada di dalam fungsi executeConfirm
-  // lalu sisipkan toast.sukses tepat setelah await refresh()
-  const regex = /(await refresh\(\)\n)([\s\S]*?)(function confirmInfo)/
-  const match = d.match(regex)
-  if (match) {
-    // Cek apakah blok antara await refresh() dan function confirmInfo 
-    // tidak sudah mengandung toast sukses
-    const blokAntara = match[2]
-    if (!blokAntara.includes('toast.sukses')) {
-      // Ambil indentasi dari baris await refresh()
-      const barisRefresh = d.substring(d.lastIndexOf('\n', d.indexOf(match[0])) + 1, d.indexOf(match[0]) + match[1].length)
-      const spasi = barisRefresh.match(/^(\s*)/)[1]
-      
-      d = d.replace(regex, '$1' + spasi + "toast.sukses('Data berhasil dihapus')\n$2$3")
-      fs.writeFileSync(path.join(root, FILE_D), d, 'utf8')
-      console.log('[BERHASIL] Toast sukses hapus data dipasang')
-    }
+  const start = u.indexOf('function Lightbox(')
+  if (start === -1) {
+    console.log('[TIDAK KETEMU] Fungsi Lightbox di ui.jsx')
   } else {
-    // Fallback: cari await refresh() terakhir sebelum confirmInfo
-    const idxConfirm = d.indexOf('function confirmInfo')
-    if (idxConfirm !== -1) {
-      const bagianAtas = d.substring(0, idxConfirm)
-      const idxRefresh = bagianAtas.lastIndexOf('await refresh()')
-      if (idxRefresh !== -1) {
-        const akhirBaris = d.indexOf('\n', idxRefresh)
-        const awalBaris = d.lastIndexOf('\n', idxRefresh) + 1
-        const spasi = d.substring(awalBaris, idxRefresh).match(/^(\s*)/)[1]
-        d = d.substring(0, akhirBaris) + '\n' + spasi + "toast.sukses('Data berhasil dihapus')" + d.substring(akhirBaris)
-        fs.writeFileSync(path.join(root, FILE_D), d, 'utf8')
-        console.log('[BERHASIL] Toast sukses hapus data dipasang (fallback)')
+    const idxReturn = u.indexOf('return (', start)
+    if (idxReturn === -1) {
+      console.log('[TIDAK KETEMU] Pola return ( di dalam Lightbox')
+    } else {
+      u = u.slice(0, idxReturn) + 'return createPortal(' + u.slice(idxReturn + 'return ('.length)
+      let end = u.indexOf('const ToastContext', start)
+      if (end === -1) end = u.indexOf('export function ToastProvider', start)
+      if (end === -1) end = u.length
+      const span = u.slice(start, end)
+      const pos = span.lastIndexOf('\n)\n}')
+      if (pos === -1) {
+        console.log('[TIDAK KETEMU] Pola penutup return Lightbox')
       } else {
-        console.log('[TIDAK KETEMU] Pola await refresh() sebelum confirmInfo')
+        const spanBaru = span.slice(0, pos) + '\n, document.body)\n}' + span.slice(pos + '\n)\n}'.length)
+        u = u.slice(0, start) + spanBaru + u.slice(end)
+        berubah = true
+        console.log('[BERHASIL] Return Lightbox dibungkus createPortal ke document.body')
       }
-    } else {
-      console.log('[TIDAK KETEMU] function confirmInfo di DashboardPage')
     }
   }
 }
 
-// Verifikasi
-d = fs.readFileSync(path.join(root, FILE_D), 'utf8')
+if (!u.includes("createPortal } from 'react-dom'")) {
+  u = "import { createPortal } from 'react-dom'\n" + u
+  berubah = true
+  console.log('[BERHASIL] Import createPortal ditambahkan di baris pertama ui.jsx')
+} else {
+  console.log('[SUDAH ADA] Import createPortal di ui.jsx')
+}
+
+if (berubah) fs.writeFileSync(path.join(root, FILE_U), u, 'utf8')
+
+const u2 = fs.readFileSync(path.join(root, FILE_U), 'utf8')
 console.log('')
 console.log('Verifikasi:')
-console.log((d.includes(MARK) ? '[OK] ' : '[BELUM] ') + 'Toast sukses hapus data')
+console.log((u2.includes("import { createPortal } from 'react-dom'") ? '[OK] ' : '[BELUM] ') + 'Import createPortal ada di ui.jsx')
+console.log((u2.includes('return createPortal(') ? '[OK] ' : '[BELUM] ') + 'Return Lightbox dibungkus createPortal')
+console.log((u2.includes(', document.body)') ? '[OK] ' : '[BELUM] ') + 'Target portal document.body')
 console.log('')
 console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-```
-
-## File: apply-fix-toast-hapus2.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-const FILE_D = 'src/pages/DashboardPage.jsx'
-if (!fs.existsSync(path.join(root, FILE_D))) {
-  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
-  process.exit(1)
-}
-let d = fs.readFileSync(path.join(root, FILE_D), 'utf8').replace(/\r\n/g, '\n')
-const MARK = "toast.sukses('Data berhasil dihapus')"
-
-console.log('Mulai memasang toast sukses hapus data (versi 2, target executeDelete)...')
 console.log('')
-
-if (d.includes(MARK)) {
-  console.log('[SUDAH ADA] Toast sukses hapus data')
-} else {
-  let pasang = false
-
-  /* Cara 1: masuk ke fungsi executeDelete, sisip setelah await refresh() pertama di dalamnya */
-  const mulai = d.indexOf('async function executeDelete')
-  if (mulai !== -1) {
-    const idxRefresh = d.indexOf('await refresh()', mulai)
-    if (idxRefresh !== -1) {
-      const akhirBaris = d.indexOf('\n', idxRefresh)
-      const awalBaris = d.lastIndexOf('\n', idxRefresh) + 1
-      const spasi = d.slice(awalBaris, idxRefresh).match(/^([ \t]*)/)[1]
-      d = d.slice(0, akhirBaris) + '\n' + spasi + MARK + d.slice(akhirBaris)
-      pasang = true
-      console.log('[BERHASIL] Toast sukses disisipkan setelah await refresh() di dalam executeDelete')
-    } else {
-      console.log('[INFO] executeDelete ketemu tetapi tidak ada await refresh() di dalamnya')
-    }
-  } else {
-    console.log('[INFO] Fungsi executeDelete tidak ketemu, coba pola cadangan')
-  }
-
-  /* Cara 2: pola cadangan lewat cabang hapus daftar hadir */
-  if (!pasang) {
-    const re = /(await supabase\.from\('daftar_hadir'\)\.delete\(\)\.eq\('id', target\.data\.id\)\n[ \t]*\}\n([ \t]*)await refresh\(\))/
-    if (re.test(d)) {
-      d = d.replace(re, function (m, semua, spasiRef) { return semua + '\n' + spasiRef + MARK })
-      pasang = true
-      console.log('[BERHASIL] Toast sukses disisipkan lewat pola cabang daftar hadir')
-    }
-  }
-
-  if (!pasang) {
-    console.log('[TIDAK KETEMU] Pola executeDelete maupun cabang hapus daftar hadir')
-    console.log('Kirim cuplikan fungsi executeDelete dari DashboardPage.jsx ke chat supaya dikunci manual.')
-  } else {
-    fs.writeFileSync(path.join(root, FILE_D), d, 'utf8')
-  }
-}
-
-/* Verifikasi */
-d = fs.readFileSync(path.join(root, FILE_D), 'utf8')
-console.log('')
-console.log('Verifikasi:')
-console.log((d.includes(MARK) ? '[OK] ' : '[BELUM] ') + 'Toast sukses hapus data')
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('Perbedaan versi ini:')
+console.log('1. Tidak ada lagi pencocokan kurung kurawal yang bisa kacau oleh literal regex atau tanda kutip di dalam Lightbox.')
+console.log('2. Hanya dua titik yang disentuh: pembuka return dan tanda tutup return paling akhir di dalam fungsi Lightbox.')
+console.log('3. Pencarian penutup dibatasi oleh deklarasi berikutnya, sehingga kode ToastProvider dan komponen lain tidak tersentuh.')
+console.log('4. File kini ditulis sekali di akhir bila ada perubahan apa pun, jadi import tidak akan tertinggal lagi di memori.')
 console.log('')
 console.log('Langkah uji:')
-console.log('1. Buka dashboard, hapus salah satu logbook, media galeri, atau catatan hadir lewat modal konfirmasi.')
-console.log('2. Setelah data hilang dari daftar, toast hijau Data berhasil dihapus muncul di pojok kanan atas.')
-console.log('3. Toast otomatis hilang setelah 4 detik atau bisa ditutup manual.')
-```
-
-## File: apply-fix-toast.cjs
-```javascript
-const fs = require('fs')
- const path = require('path')
- const root = process.cwd()
- function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
- function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-
- console.log('Mulai memperbaiki pemasangan toast yang belum selesai...')
- console.log('')
-
- /* ===== 1. App.jsx: bungkus ToastProvider di dalam ThemeProvider ===== */
- let a = baca('src/App.jsx')
- let aBerubah = false
- if (!a.includes('<ToastProvider>')) {
-   const baru = a.replace(/(<ThemeProvider>\n)([ \t]*)(<BrowserRouter)/, '$1$2<ToastProvider>\n$2$3')
-   if (baru !== a) { a = baru; aBerubah = true; console.log('[BERHASIL] Pembukaan <ToastProvider> di App.jsx') }
-   else console.log('[TIDAK KETEMU] Pola pembukaan ToastProvider di App.jsx')
- } else console.log('[SUDAH ADA] Pembukaan <ToastProvider>')
- if (!a.includes('</ToastProvider>')) {
-   const baru = a.replace(/([ \t]*)<\/BrowserRouter>/, '$1</BrowserRouter>\n$1</ToastProvider>')
-   if (baru !== a) { a = baru; aBerubah = true; console.log('[BERHASIL] Penutup </ToastProvider> di App.jsx') }
-   else console.log('[TIDAK KETEMU] Pola penutup ToastProvider di App.jsx')
- } else console.log('[SUDAH ADA] Penutup </ToastProvider>')
- if (aBerubah) simpan('src/App.jsx', a)
-
- /* ===== 2. DashboardPage: inisialisasi useToast ===== */
- let d = baca('src/pages/DashboardPage.jsx')
- let dBerubah = false
- if (!d.includes('const toast = useToast()')) {
-   const baru = d.replace(/const \{ mahasiswa, loading \} = useAuth\(\)\n([ \t]*)const \[tab, setTab\]/, 'const { mahasiswa, loading } = useAuth()\n$1const toast = useToast()\n$1const [tab, setTab]')
-   if (baru !== d) { d = baru; dBerubah = true; console.log('[BERHASIL] Inisialisasi const toast = useToast()') }
-   else console.log('[TIDAK KETEMU] Pola inisialisasi useToast')
- } else console.log('[SUDAH ADA] Inisialisasi useToast')
-
- /* ===== 3. Toast sukses untuk setiap operasi CRUD ===== */
- const daftarSukses = [
-   {
-     nama: 'toast sukses logbook',
-     cek: 'toast.sukses(menambahLog',
-     pola: /([ \t]*)if \(menambahLog\) setLogPage\(1\)/,
-     ganti: '$1if (menambahLog) setLogPage(1)\n$1toast.sukses(menambahLog ? \'Logbook berhasil disimpan\' : \'Logbook berhasil diperbarui\')'
-   },
-   {
-     nama: 'toast sukses galeri',
-     cek: 'toast.sukses(menambahGal',
-     pola: /([ \t]*)if \(menambahGal\) setGalPage\(1\)/,
-     ganti: '$1if (menambahGal) setGalPage(1)\n$1toast.sukses(menambahGal ? \'Media galeri berhasil disimpan\' : \'Media galeri berhasil diperbarui\')'
-   },
-   {
-     nama: 'toast sukses daftar hadir',
-     cek: 'toast.sukses(menambahHadir',
-     pola: /([ \t]*)if \(menambahHadir\) setHadirPage\(1\)/,
-     ganti: '$1if (menambahHadir) setHadirPage(1)\n$1toast.sukses(menambahHadir ? \'Daftar hadir berhasil disimpan\' : \'Daftar hadir berhasil diperbarui\')'
-   },
-   {
-     nama: 'toast sukses simpan foto profil',
-     cek: "toast.sukses('Foto profil berhasil disimpan')",
-     pola: /([ \t]*)setFotoFile\(null\)\n([ \t]*)\} catch \(err\) \{\n([ \t]*)toast\.gagal\('Gagal upload foto profil: ' \+ err\.message\)/,
-     ganti: '$1setFotoFile(null)\n$1toast.sukses(\'Foto profil berhasil disimpan\')\n$2} catch (err) {\n$3toast.gagal(\'Gagal upload foto profil: \' + err.message)'
-   },
-   {
-     nama: 'toast sukses hapus foto profil',
-     cek: "toast.sukses('Foto profil berhasil dihapus')",
-     pola: /([ \t]*)setVersiFoto\(function \(v\) \{ return v \+ 1 \}\)\n([ \t]*)\} catch \(err\) \{\n([ \t]*)toast\.gagal\('Gagal menghapus foto profil: ' \+ err\.message\)/,
-     ganti: '$1setVersiFoto(function (v) { return v + 1 })\n$1toast.sukses(\'Foto profil berhasil dihapus\')\n$2} catch (err) {\n$3toast.gagal(\'Gagal menghapus foto profil: \' + err.message)'
-   },
-   {
-     nama: 'toast sukses hapus data',
-     cek: "toast.sukses('Data berhasil dihapus')",
-     pola: /([ \t]*)await refresh\(\)\n([ \t]*)\}\n([ \t]*)function confirmInfo/,
-     ganti: '$1await refresh()\n$1toast.sukses(\'Data berhasil dihapus\')\n$2}\n$3function confirmInfo'
-   }
- ]
- daftarSukses.forEach(function (s) {
-   if (d.includes(s.cek)) { console.log('[SUDAH ADA] ' + s.nama); return }
-   if (s.pola.test(d)) {
-     d = d.replace(s.pola, s.ganti)
-     dBerubah = true
-     console.log('[BERHASIL] ' + s.nama)
-   } else {
-     console.log('[TIDAK KETEMU] ' + s.nama)
-   }
- })
- if (dBerubah) simpan('src/pages/DashboardPage.jsx', d)
-
- /* ===== 4. Verifikasi akhir ===== */
- a = baca('src/App.jsx')
- d = baca('src/pages/DashboardPage.jsx')
- console.log('')
- console.log('Verifikasi akhir:')
- console.log((a.includes('<ToastProvider>') ? '[OK] ' : '[BELUM] ') + 'ToastProvider terpasang di App.jsx')
- console.log((d.includes('const toast = useToast()') ? '[OK] ' : '[BELUM] ') + 'useToast terinisialisasi di DashboardPage')
- console.log((d.includes('toast.sukses(menambahLog') ? '[OK] ' : '[BELUM] ') + 'Toast sukses logbook')
- console.log((d.includes('toast.sukses(menambahGal') ? '[OK] ' : '[BELUM] ') + 'Toast sukses galeri')
- console.log((d.includes('toast.sukses(menambahHadir') ? '[OK] ' : '[BELUM] ') + 'Toast sukses daftar hadir')
- console.log((d.includes("toast.sukses('Foto profil berhasil disimpan')") ? '[OK] ' : '[BELUM] ') + 'Toast sukses simpan foto profil')
- console.log((d.includes("toast.sukses('Foto profil berhasil dihapus')") ? '[OK] ' : '[BELUM] ') + 'Toast sukses hapus foto profil')
- console.log((d.includes("toast.sukses('Data berhasil dihapus')") ? '[OK] ' : '[BELUM] ') + 'Toast sukses hapus data')
- console.log('')
- console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-```
-
-## File: apply-fix-urutan.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-
-console.log('Mulai memperbaiki urutan kartu dengan tiebreaker created_at...')
-console.log('')
-
-/* ===== 1. format.js: ganti urutkanTanggal dengan versi bertiebreaker ===== */
-const FILE_F = 'src/lib/format.js'
-if (!fs.existsSync(path.join(root, FILE_F))) {
-  console.log('[GAGAL] format.js tidak ditemukan')
-  process.exit(1)
-}
-let f = baca(FILE_F)
-const RE_FUNGSI = /export function urutkanTanggal\(list, mode\) \{[\s\S]*?\n\}/
-const FUNGSI_BARU = `export function waktuUrut(x) {
-  if (!x) return 0
-  const src = x.created_at || x.updated_at || ''
-  if (!src) return 0
-  const t = new Date(src).getTime()
-  return isNaN(t) ? 0 : t
-}
-export function urutkanTanggal(list, mode) {
-  const arr = (list || []).slice()
-  arr.sort(function (a, b) {
-    const ta = new Date(a.tanggal + 'T00:00:00').getTime()
-    const tb = new Date(b.tanggal + 'T00:00:00').getTime()
-    if (ta !== tb) return mode === 'terlama' ? ta - tb : tb - ta
-    const ca = waktuUrut(a)
-    const cb = waktuUrut(b)
-    if (ca !== cb) return mode === 'terlama' ? ca - cb : cb - ca
-    const ia = a.id || ''
-    const ib = b.id || ''
-    if (ia !== ib) return ia < ib ? (mode === 'terlama' ? -1 : 1) : (mode === 'terlama' ? 1 : -1)
-    return 0
-  })
-  return arr
-}`
-if (f.includes('export function waktuUrut')) {
-  console.log('[SUDAH ADA] Tiebreaker created_at di format.js')
-} else if (RE_FUNGSI.test(f)) {
-  f = f.replace(RE_FUNGSI, FUNGSI_BARU)
-  simpan(FILE_F, f)
-  console.log('[BERHASIL] urutkanTanggal kini memakai tiebreaker created_at lalu id')
-} else {
-  console.log('[TIDAK KETEMU] Fungsi urutkanTanggal di format.js')
-}
-
-/* ===== 2. Beranda dan Tim & Dospem: urutkan dulu sebelum slice 6 ===== */
-;['src/pages/HomePage.jsx', 'src/pages/DospemPage.jsx'].forEach(function (rel) {
-  if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan'); return }
-  let isi = baca(rel)
-  let berubah = false
-  const MARK_SLICE = "urutkanTanggal(logs, 'terbaru').slice(0, 6)"
-  if (!isi.includes(MARK_SLICE)) {
-    if (isi.includes('logs.slice(0, 6)')) {
-      isi = isi.split('logs.slice(0, 6)').join(MARK_SLICE)
-      berubah = true
-      console.log('[BERHASIL] Slice 6 data kini lewat urutkanTanggal di ' + rel)
-    } else {
-      console.log('[TIDAK KETEMU] Pola logs.slice(0, 6) di ' + rel)
-    }
-  } else {
-    console.log('[SUDAH ADA] Slice terurut di ' + rel)
-  }
-  const RE_IMP = /import \{ ([^}']*) \} from '\.\.\/lib\/format\.js'/
-  if (isi.includes("urutkanTanggal } from '../lib/format.js'") || (RE_IMP.test(isi) && isi.match(RE_IMP)[1].includes('urutkanTanggal'))) {
-    console.log('[SUDAH ADA] Import urutkanTanggal di ' + rel)
-  } else if (RE_IMP.test(isi)) {
-    isi = isi.replace(RE_IMP, function (m, daftar) { return "import { " + daftar + ", urutkanTanggal } from '../lib/format.js'" })
-    berubah = true
-    console.log('[BERHASIL] Import urutkanTanggal ditambahkan di ' + rel)
-  } else {
-    isi = isi.replace(/import /, "import { urutkanTanggal } from '../lib/format.js'\nimport ")
-    berubah = true
-    console.log('[BERHASIL] Baris import format.js baru ditambahkan di ' + rel)
-  }
-  if (berubah) simpan(rel, isi)
-})
-
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Hasil analisis keberadaan bug sebelum perbaikan:')
-console.log('1. Dashboard tab Logbook: ada, memakai urutkanTanggal tanpa tiebreaker.')
-console.log('2. Dashboard tab Galeri: ada, penyebab sama.')
-console.log('3. Dashboard tab Daftar Hadir: ada, penyebab sama.')
-console.log('4. Publik Logbook, Galeri, Daftar Hadir: ada, penyebab sama.')
-console.log('5. Beranda: ada, slice 6 memakai urutan mentah query yang hanya order tanggal.')
-console.log('6. Tim & Dospem: ada, slice 6 aktivitas memakai urutan mentah query.')
-console.log('')
-console.log('Perilaku baru setelah perbaikan:')
-console.log('1. Data dengan tanggal sama diurutkan berdasarkan waktu dibuat, jadi logbook yang baru ditambah langsung maju ke posisi terdepan kelompok tanggalnya.')
-console.log('2. Kartu kiri dan kanan kini benar benar bergeser saat data ditambah atau dihapus, sesuai harapanmu.')
-console.log('3. Mode terlama juga konsisten: dalam tanggal yang sama, yang lebih dulu dibuat tampil lebih dulu.')
-console.log('4. Bila created_at tidak ada di suatu tabel, urutan jatuh ke id sehingga tetap stabil dan tidak acak acakan.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Buat dua logbook dengan tanggal yang sama, catat posisi kiri dan kanannya.')
-console.log('2. Tambah logbook ketiga dengan tanggal yang sama: kartu baru muncul paling depan, kartu lama tergeser ke kanan lalu ke baris bawah.')
-console.log('3. Hapus kartu paling kiri: sisa kartu langsung bergeser mengisi posisi kiri.')
-console.log('4. Ganti sortir ke terlama: urutan dalam tanggal yang sama berbalik rapi.')
-console.log('5. Ulangi pengecekan cepat di tab Galeri, Daftar Hadir, halaman publik, Beranda, dan Tim & Dospem.')
-```
-
-## File: apply-fix-urutan2.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-const FILE_F = 'src/lib/format.js'
-if (!fs.existsSync(path.join(root, FILE_F))) {
-  console.log('[GAGAL] format.js tidak ditemukan')
-  process.exit(1)
-}
-let f = fs.readFileSync(path.join(root, FILE_F), 'utf8').replace(/\r\n/g, '\n')
-
-const FUNGSI_BARU = `export function waktuUrut(x) {
-  if (!x) return 0
-  const src = x.created_at || x.updated_at || ''
-  if (!src) return 0
-  const t = new Date(src).getTime()
-  return isNaN(t) ? 0 : t
-}
-export function urutkanTanggal(list, mode) {
-  const arr = (list || []).slice()
-  arr.sort(function (a, b) {
-    const ta = new Date(a.tanggal + 'T00:00:00').getTime()
-    const tb = new Date(b.tanggal + 'T00:00:00').getTime()
-    if (ta !== tb) return mode === 'terlama' ? ta - tb : tb - ta
-    const ca = waktuUrut(a)
-    const cb = waktuUrut(b)
-    if (ca !== cb) return mode === 'terlama' ? ca - cb : cb - ca
-    const ia = a.id || ''
-    const ib = b.id || ''
-    if (ia !== ib) return ia < ib ? (mode === 'terlama' ? -1 : 1) : (mode === 'terlama' ? 1 : -1)
-    return 0
-  })
-  return arr
-}`
-
-console.log('Mulai mengganti urutkanTanggal di format.js (versi tahan pola)...')
-console.log('')
-
-if (f.includes('function waktuUrut')) {
-  console.log('[SUDAH ADA] Tiebreaker created_at sudah terpasang di format.js')
-} else {
-  const POLA = [
-    /export\s+function\s+urutkanTanggal\s*\([^)]*\)\s*\{/,
-    /function\s+urutkanTanggal\s*\([^)]*\)\s*\{/,
-    /(?:export\s+)?const\s+urutkanTanggal\s*=\s*function\s*\([^)]*\)\s*\{/,
-    /(?:export\s+)?const\s+urutkanTanggal\s*=\s*\([^)]*\)\s*=>\s*\{/
-  ]
-  let m = null
-  for (let i = 0; i < POLA.length; i++) { m = POLA[i].exec(f); if (m) break }
-  if (!m) {
-    if (f.includes('urutkanTanggal')) {
-      console.log('[TIDAK KETEMU] Pola fungsi urutkanTanggal, kirim isi format.js ke chat')
-    } else {
-      f = f.trimEnd() + '\n\n' + FUNGSI_BARU + '\n'
-      fs.writeFileSync(path.join(root, FILE_F), f, 'utf8')
-      console.log('[BERHASIL] Fungsi urutkanTanggal baru ditambahkan di akhir format.js')
-    }
-  } else {
-    const mulai = m.index
-    const idxOpen = m.index + m[0].length - 1
-    let brace = 0, akhir = -1, inStr = false, strCh = ''
-    for (let i = idxOpen; i < f.length; i++) {
-      const ch = f[i]
-      const prev = i > 0 ? f[i - 1] : ''
-      if (inStr) { if (ch === strCh && prev !== '\\') inStr = false; continue }
-      if (ch === '"' || ch === "'" || ch === '`') { inStr = true; strCh = ch; continue }
-      if (ch === '{') brace++
-      if (ch === '}') { brace--; if (brace === 0) { akhir = i + 1; break } }
-    }
-    if (akhir === -1) {
-      console.log('[GAGAL] Batas fungsi urutkanTanggal tidak terbaca')
-    } else {
-      const pakaiExport = m[0].indexOf('export') === 0
-      const teks = pakaiExport ? FUNGSI_BARU : FUNGSI_BARU.replace(/export function/g, 'function')
-      f = f.slice(0, mulai) + teks + f.slice(akhir)
-      fs.writeFileSync(path.join(root, FILE_F), f, 'utf8')
-      console.log('[BERHASIL] urutkanTanggal diganti versi bertiebreaker created_at dan id')
-    }
-  }
-}
-
-/* Verifikasi menyeluruh */
-f = fs.readFileSync(path.join(root, FILE_F), 'utf8')
-const h = fs.readFileSync(path.join(root, 'src/pages/HomePage.jsx'), 'utf8')
-const dd = fs.readFileSync(path.join(root, 'src/pages/DospemPage.jsx'), 'utf8')
-console.log('')
-console.log('Verifikasi:')
-console.log((f.includes('function waktuUrut') ? '[OK] ' : '[BELUM] ') + 'fungsi waktuUrut ada di format.js')
-console.log((f.includes('waktuUrut(a)') ? '[OK] ' : '[BELUM] ') + 'tiebreaker created_at dipakai di pembanding')
-console.log((h.includes("urutkanTanggal(logs, 'terbaru').slice(0, 6)") ? '[OK] ' : '[BELUM] ') + 'slice 6 data Beranda lewat urutkanTanggal')
-console.log((dd.includes("urutkanTanggal(logs, 'terbaru').slice(0, 6)") ? '[OK] ' : '[BELUM] ') + 'slice 6 data Tim & Dospem lewat urutkanTanggal')
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Catatan:')
-console.log('1. Perubahan Beranda dan Tim & Dospem dari script sebelumnya sudah aman terpasang dan tetap kompatibel karena nama fungsinya tidak berubah.')
-console.log('2. Begitu format.js terganti, seluruh daftar di dashboard, halaman publik, Beranda, dan Tim & Dospem otomatis memakai tiebreaker baru.')
-console.log('3. Bila masih ada baris TIDAK KETEMU, salin isi file src/lib/format.js ke chat supaya saya ganti manual sesuai bentuk aslinya.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Buat dua logbook bertanggal sama, catat posisi kiri dan kanannya.')
-console.log('2. Tambah logbook ketiga bertanggal sama: kartu baru langsung muncul paling depan dan kartu lama bergeser ke kanan lalu ke baris bawah.')
-console.log('3. Hapus kartu paling kiri: sisa kartu langsung bergeser mengisi posisi yang kosong.')
-console.log('4. Ganti sortir ke terlama: urutan dalam tanggal yang sama berbalik rapi.')
-```
-
-## File: apply-toast-crud.cjs
-```javascript
-const fs = require('fs')
- const path = require('path')
- const root = process.cwd()
- function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
- function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
- function ganti(rel, cari, gantiDengan, label) {
-   if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan (' + label + ')'); return }
-   let isi = baca(rel)
-   if (isi.includes(gantiDengan)) { console.log('[SUDAH ADA] ' + label); return }
-   if (!isi.includes(cari)) { console.log('[TIDAK KETEMU] ' + label + ' di ' + rel); return }
-   isi = isi.replace(cari, gantiDengan)
-   simpan(rel, isi)
-   console.log('[BERHASIL] ' + label)
- }
- function gantiSemua(rel, cari, gantiDengan, label) {
-   if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan (' + label + ')'); return }
-   let isi = baca(rel)
-   if (isi.includes(gantiDengan)) { console.log('[SUDAH ADA] ' + label); return }
-   if (!isi.includes(cari)) { console.log('[TIDAK KETEMU] ' + label + ' di ' + rel); return }
-   isi = isi.split(cari).join(gantiDengan)
-   simpan(rel, isi)
-   console.log('[BERHASIL] ' + label)
- }
- function sisipAkhir(rel, cari, teks, label) {
-   if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan (' + label + ')'); return }
-   let isi = baca(rel)
-   if (isi.includes(label)) { console.log('[SUDAH ADA] ' + label); return }
-   isi = isi.trimEnd() + '\n\n' + teks + '\n'
-   simpan(rel, isi)
-   console.log('[BERHASIL] ' + label)
- }
- console.log('Mulai memasang sistem notifikasi toast untuk CRUD...')
- console.log('')
- /* ===== 1. ui.jsx: tambahkan createContext dan useContext ke import ===== */
- ganti('src/components/ui.jsx',
-   "import { useEffect, useRef, useState } from 'react'",
-   "import { createContext, useContext, useEffect, useRef, useState } from 'react'",
-   'import createContext dan useContext di ui.jsx')
- /* ===== 2. ui.jsx: tambahkan ToastProvider dan useToast ===== */
- sisipAkhir('src/components/ui.jsx',
-   'ToastProvider',
-   `const ToastContext = createContext(null)
- export function ToastProvider(props) {
-   const [toasts, setToasts] = useState([])
-   function tutupToast(id) {
-     setToasts(function (prev) { return prev.filter(function (t) { return t.id !== id }) })
-   }
-   function tambahToast(tipe, pesan) {
-     const id = Date.now() + Math.random()
-     setToasts(function (prev) { return prev.concat([{ id: id, tipe: tipe, pesan: pesan }]) })
-     setTimeout(function () {
-       setToasts(function (prev) { return prev.filter(function (t) { return t.id !== id }) })
-     }, 4000)
-   }
-   function toastSukses(pesan) { tambahToast('sukses', pesan) }
-   function toastGagal(pesan) { tambahToast('gagal', pesan) }
-   return (
-     <ToastContext.Provider value={{ sukses: toastSukses, gagal: toastGagal }}>
-       {props.children}
-       <div className="fixed top-5 right-5 z-[100] flex w-full max-w-sm flex-col gap-3 pointer-events-none">
-         {toasts.map(function (t) {
-           const sukses = t.tipe === 'sukses'
-           return (
-             <div key={t.id} className={'anim-toast pointer-events-auto flex items-start gap-3 rounded-2xl border p-4 shadow-lg ' + (sukses ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50')}>
-               <span className={'mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full ' + (sukses ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white')}>
-                 <SizedIcon name={sukses ? 'check' : 'close'} size={12} />
-               </span>
-               <p className={'flex-1 text-sm font-semibold ' + (sukses ? 'text-emerald-800' : 'text-red-700')}>{t.pesan}</p>
-               <button type="button" onClick={function () { tutupToast(t.id) }} className="shrink-0 text-slate-400 hover:text-slate-600">
-                 <SizedIcon name="close" size={14} />
-               </button>
-             </div>
-           )
-         })}
-       </div>
-     </ToastContext.Provider>
-   )
- }
- export function useToast() {
-   return useContext(ToastContext)
- }`,
-   'ToastProvider dan useToast di ui.jsx')
- /* ===== 3. App.jsx: import ToastProvider ===== */
- ganti('src/App.jsx',
-   "import { ThemeProvider } from './lib/theme.jsx'",
-   "import { ThemeProvider } from './lib/theme.jsx'\n import { ToastProvider } from './components/ui.jsx'",
-   'import ToastProvider di App.jsx')
- /* ===== 4. App.jsx: wrap dengan ToastProvider ===== */
- ganti('src/App.jsx',
-   `<ThemeProvider>
-       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-         <ScrollToTop />`,
-   `<ThemeProvider>
-       <ToastProvider>
-       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-         <ScrollToTop />`,
-   'wrap buka ToastProvider')
- ganti('src/App.jsx',
-   `</BrowserRouter>
-     </ThemeProvider>`,
-   `</BrowserRouter>
-       </ToastProvider>
-     </ThemeProvider>`,
-   'wrap tutup ToastProvider')
- /* ===== 5. DashboardPage.jsx: import useToast ===== */
- ganti('src/pages/DashboardPage.jsx',
-   "import { EmptyState, Modal, ConfirmModal, inputCls, labelCls, btnPrimary, btnSmall, AutoTextArea, Pagination } from '../components/ui.jsx'",
-   "import { EmptyState, Modal, ConfirmModal, inputCls, labelCls, btnPrimary, btnSmall, AutoTextArea, Pagination, useToast } from '../components/ui.jsx'",
-   'import useToast di DashboardPage')
- /* ===== 6. DashboardPage.jsx: inisialisasi useToast ===== */
- ganti('src/pages/DashboardPage.jsx',
-   'const { mahasiswa, loading } = useAuth()\n    const [tab, setTab]',
-   'const { mahasiswa, loading } = useAuth()\n    const toast = useToast()\n    const [tab, setTab]',
-   'inisialisasi useToast di DashboardPage')
- /* ===== 7. DashboardPage.jsx: ganti alert error jadi toast gagal ===== */
- ganti('src/pages/DashboardPage.jsx',
-   "if (!id) { alert('Link video tidak valid pada kegiatan ' + (i + 1) + '.'); setBusy(false); return }",
-   "if (!id) { toast.gagal('Link video tidak valid pada kegiatan ' + (i + 1) + '.'); setBusy(false); return }",
-   'toast link video tidak valid logbook')
- gantiSemua('src/pages/DashboardPage.jsx',
-   "if (ytQuota.remaining <= 0) { alert('Kuota upload video hari ini sudah habis. Gunakan link video.'); setBusy(false); return }",
-   "if (ytQuota.remaining <= 0) { toast.gagal('Kuota upload video hari ini sudah habis. Gunakan link video.'); setBusy(false); return }",
-   'toast kuota habis')
- ganti('src/pages/DashboardPage.jsx',
-   "alert('Tambahkan minimal satu kegiatan dengan judul.'); setBusy(false); return",
-   "toast.gagal('Tambahkan minimal satu kegiatan dengan judul.'); setBusy(false); return",
-   'toast minimal satu kegiatan')
- ganti('src/pages/DashboardPage.jsx',
-   "alert('Gagal menyimpan logbook: ' + err.message)",
-   "toast.gagal('Gagal menyimpan logbook: ' + err.message)",
-   'toast gagal simpan logbook')
- ganti('src/pages/DashboardPage.jsx',
-   "if (!id) { alert('Link video tidak valid.'); setBusy(false); return }",
-   "if (!id) { toast.gagal('Link video tidak valid.'); setBusy(false); return }",
-   'toast link video tidak valid galeri')
- ganti('src/pages/DashboardPage.jsx',
-   "alert('Galeri wajib memiliki media. Pilih file foto atau video terlebih dahulu.'); setBusy(false); return",
-   "toast.gagal('Galeri wajib memiliki media. Pilih file foto atau video terlebih dahulu.'); setBusy(false); return",
-   'toast galeri wajib media')
- ganti('src/pages/DashboardPage.jsx',
-   "alert('Gagal menyimpan galeri: ' + err.message)",
-   "toast.gagal('Gagal menyimpan galeri: ' + err.message)",
-   'toast gagal simpan galeri')
- ganti('src/pages/DashboardPage.jsx',
-   "if (f.size > 5 * 1024 * 1024) { alert('Ukuran foto maksimal 5 MB.'); e.target.value = ''; return }",
-   "if (f.size > 5 * 1024 * 1024) { toast.gagal('Ukuran foto maksimal 5 MB.'); e.target.value = ''; return }",
-   'toast ukuran foto maksimal')
- ganti('src/pages/DashboardPage.jsx',
-   "if (!fotoFile) { alert('Pilih file foto terlebih dahulu.'); return }",
-   "if (!fotoFile) { toast.gagal('Pilih file foto terlebih dahulu.'); return }",
-   'toast pilih foto dulu')
- ganti('src/pages/DashboardPage.jsx',
-   "alert('Gagal upload foto profil: ' + err.message)",
-   "toast.gagal('Gagal upload foto profil: ' + err.message)",
-   'toast gagal upload foto')
- ganti('src/pages/DashboardPage.jsx',
-   "alert('Gagal menghapus foto profil: ' + err.message)",
-   "toast.gagal('Gagal menghapus foto profil: ' + err.message)",
-   'toast gagal hapus foto')
- ganti('src/pages/DashboardPage.jsx',
-   "if (res.error) { alert('Kamu sudah punya catatan hadir di tanggal tersebut.'); setBusy(false); return }",
-   "if (res.error) { toast.gagal('Kamu sudah punya catatan hadir di tanggal tersebut.'); setBusy(false); return }",
-   'toast sudah punya catatan hadir')
- /* ===== 8. DashboardPage.jsx: tambahkan toast sukses setelah CRUD berhasil ===== */
- ganti('src/pages/DashboardPage.jsx',
-   'await refresh()\n        if (menambahLog) setLogPage(1)\n      } catch (err) {\n        toast.gagal(\'Gagal menyimpan logbook: \' + err.message)',
-   'await refresh()\n        if (menambahLog) setLogPage(1)\n        toast.sukses(menambahLog ? \'Logbook berhasil disimpan\' : \'Logbook berhasil diperbarui\')\n      } catch (err) {\n        toast.gagal(\'Gagal menyimpan logbook: \' + err.message)',
-   'toast sukses logbook')
- ganti('src/pages/DashboardPage.jsx',
-   'await refresh()\n         if (menambahGal) setGalPage(1)\n      } catch (err) {\n        toast.gagal(\'Gagal menyimpan galeri: \' + err.message)',
-   'await refresh()\n         if (menambahGal) setGalPage(1)\n        toast.sukses(menambahGal ? \'Media galeri berhasil disimpan\' : \'Media galeri berhasil diperbarui\')\n      } catch (err) {\n        toast.gagal(\'Gagal menyimpan galeri: \' + err.message)',
-   'toast sukses galeri')
- ganti('src/pages/DashboardPage.jsx',
-   'await refresh()\n       if (menambahHadir) setHadirPage(1)\n      setInfoProses(\'\')',
-   'await refresh()\n       if (menambahHadir) setHadirPage(1)\n      toast.sukses(menambahHadir ? \'Daftar hadir berhasil disimpan\' : \'Daftar hadir berhasil diperbarui\')\n      setInfoProses(\'\')',
-   'toast sukses daftar hadir')
- ganti('src/pages/DashboardPage.jsx',
-   'await refresh()\n    }\n    async function executeDelete()',
-   'await refresh()\n       toast.sukses(\'Foto profil berhasil disimpan\')\n    }\n    async function executeDelete()',
-   'toast sukses foto profil')
- ganti('src/pages/DashboardPage.jsx',
-   'setVersiFoto(function (v) { return v + 1 })\n      } catch (err) {\n        toast.gagal(\'Gagal menghapus foto profil: \' + err.message)',
-   'setVersiFoto(function (v) { return v + 1 })\n        toast.sukses(\'Foto profil berhasil dihapus\')\n      } catch (err) {\n        toast.gagal(\'Gagal menghapus foto profil: \' + err.message)',
-   'toast sukses hapus foto profil')
- ganti('src/pages/DashboardPage.jsx',
-   'await refresh()\n    }\n    function confirmInfo()',
-   'await refresh()\n       toast.sukses(\'Data berhasil dihapus\')\n    }\n    function confirmInfo()',
-   'toast sukses hapus data')
- console.log('')
- console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
- console.log('')
- console.log('Fitur toast yang terpasang:')
- console.log('1. Notifikasi muncul di pojok kanan atas dengan tema BSI (hijau untuk sukses, merah untuk gagal).')
- console.log('2. Otomatis hilang setelah 4 detik, atau bisa ditutup manual dengan tombol X.')
- console.log('3. Semua alert() sudah diganti dengan toast agar tidak memblokir interaksi user.')
- console.log('4. Toast sukses muncul setelah: simpan/edit logbook, simpan/edit galeri, simpan/edit daftar hadir, simpan/hapus foto profil, hapus data.')
- console.log('5. Toast gagal muncul untuk: link video tidak valid, kuota habis, validasi form, dan error dari server.')
-```
-
-## File: apply-toast-opaque.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-function ganti(rel, cari, gantiDengan, label) {
-  if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan (' + label + ')'); return }
-  let isi = baca(rel)
-  if (isi.includes(gantiDengan)) { console.log('[SUDAH ADA] ' + label); return }
-  if (!isi.includes(cari)) { console.log('[TIDAK KETEMU] ' + label + ' di ' + rel); return }
-  isi = isi.replace(cari, gantiDengan)
-  simpan(rel, isi)
-  console.log('[BERHASIL] ' + label)
-}
-
-console.log('Mulai membuat toast opaque yang ringan untuk device low end...')
-console.log('')
-
-/* ===== 1. ui.jsx: ganti kelas warna toast ke kelas khusus ===== */
-ganti('src/components/ui.jsx',
-  "(sukses ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50')",
-  "(sukses ? 'toast-sukses' : 'toast-gagal')",
-  'Kelas wadah toast diganti toast-sukses / toast-gagal')
-ganti('src/components/ui.jsx',
-  "'flex-1 text-sm font-semibold ' + (sukses ? 'text-emerald-800' : 'text-red-700')",
-  "'flex-1 text-sm font-semibold toast-teks'",
-  'Kelas teks toast diganti toast-teks')
-ganti('src/components/ui.jsx',
-  "onClick={function () { tutupToast(t.id) }} className=\"shrink-0 text-slate-400 hover:text-slate-600\"",
-  "onClick={function () { tutupToast(t.id) }} className=\"toast-tutup shrink-0 text-slate-400 hover:text-slate-600\"",
-  'Kelas tombol tutup toast ditambah toast-tutup')
-
-/* ===== 2. index.css: gaya toast opaque tanpa backdrop-filter ===== */
-const FILE_CSS = 'src/index.css'
-const CSS_TOAST = `/* toast-opaque: latar solid bergradasi lembut, tanpa backdrop-filter agar ringan di device low end */
-@keyframes anim-toast {
-  from { opacity: 0; transform: translateX(14px) scale(0.98); }
-  to { opacity: 1; transform: translateX(0) scale(1); }
-}
-.anim-toast { animation: anim-toast 0.22s ease-out; opacity: 1; }
-.toast-sukses {
-  background: linear-gradient(180deg, #ffffff 0%, #ecfdf5 100%);
-  border-color: #a7f3d0;
-  box-shadow: 0 10px 30px rgba(6, 95, 70, 0.16);
-}
-.toast-gagal {
-  background: linear-gradient(180deg, #ffffff 0%, #fef2f2 100%);
-  border-color: #fecaca;
-  box-shadow: 0 10px 30px rgba(153, 27, 27, 0.16);
-}
-.toast-sukses .toast-teks { color: #065f46; }
-.toast-gagal .toast-teks { color: #991b1b; }
-.toast-tutup:hover { color: #334155; }
-.dark .toast-sukses {
-  background: linear-gradient(180deg, #065f46 0%, #064e3b 100%);
-  border-color: rgba(52, 211, 153, 0.45);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
-}
-.dark .toast-gagal {
-  background: linear-gradient(180deg, #991b1b 0%, #7f1d1d 100%);
-  border-color: rgba(248, 113, 113, 0.45);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
-}
-.dark .toast-sukses .toast-teks { color: #d1fae5 !important; }
-.dark .toast-gagal .toast-teks { color: #fee2e2 !important; }
-.dark .toast-tutup { color: #cbd5e1 !important; }
-.dark .toast-tutup:hover { color: #ffffff !important; }
-`
-if (!fs.existsSync(path.join(root, FILE_CSS))) {
-  console.log('[LEWATI] index.css tidak ditemukan')
-} else {
-  let css = baca(FILE_CSS)
-  if (css.includes('/* toast-opaque */')) {
-    console.log('[SUDAH ADA] CSS toast-opaque di index.css')
-  } else {
-    simpan(FILE_CSS, css.trimEnd() + '\n\n' + CSS_TOAST)
-    console.log('[BERHASIL] CSS toast-opaque ditambahkan di index.css')
-  }
-}
-
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Kenapa versi ini ringan di device jadul:')
-console.log('1. Tidak memakai backdrop-filter blur sama sekali, jadi GPU tidak perlu merender ulang area di belakang toast setiap frame.')
-console.log('2. Latar diganti gradasi solid yang hanya dirasterisasi sekali, bukan warna semi transparan yang tembus pandang.')
-console.log('3. Animasi masuk hanya memakai opacity dan transform, dua properti termurah yang dikerjakan kompositor GPU.')
-console.log('4. Kedalaman visual didapat dari box-shadow statis, bukan dari efek blur hidup.')
-console.log('5. Mode gelap memakai hijau tua dan merah tua pekat dengan teks terang, kontras nyaman dibaca dan tidak tembus.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Mode gelap: hapus sebuah data, toast muncul hijau tua pekat, tombol Dashboard dan Keluar di belakangnya tidak lagi tembus.')
-console.log('2. Mode terang: toast sukses putih kehijauan lembut, toast gagal putih kemerah-merahan, keduanya solid.')
-console.log('3. Scroll halaman saat toast tampil: tidak ada patah patah karena tidak ada blur yang dihitung ulang.')
-console.log('4. Tombol X tetap jelas di kedua mode dan berubah putih saat disentuh di mode gelap.')
+console.log('1. Buka Logbook atau Galeri publik, arahkan kursor ke kartu lalu klik ikon perbesar tanpa membuka Detail.')
+console.log('2. Lightbox menutup seluruh viewport dengan latar gelap penuh dan media berada tepat di tengah.')
+console.log('3. Perbesar media saat kartu masih beranimasi masuk atau saat kursor masih membuat kartu terangkat: posisi tetap benar.')
+console.log('4. Perbesar dari dalam modal detail: Lightbox menimpa modal dengan rapi karena hidup di body.')
+console.log('5. Tutup lewat X, klik latar, atau Esc: semuanya bersih tanpa sisa overlay.')
 ```
 
 ## File: api/r2/delete.js
@@ -1711,6 +1074,534 @@ R2_ACCESS_KEY_ID=
 R2_SECRET_ACCESS_KEY=
 R2_BUCKET_NAME=mbsi-media
 R2_PUBLIC_BASE_URL=
+```
+
+## File: apply-animasi-modal-semua.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai memasang animasi muncul dan menghilang pada ConfirmModal dan Lightbox...')
+console.log('')
+
+/* ===== 1. index.css: aturan fade keluar untuk overlay yang dibungkus modal-tutup ===== */
+const FILE_CSS = 'src/index.css'
+let css = baca(FILE_CSS)
+const RULE_BARU = '.modal-tutup .anim-overlay { animation: overlayFadeOut 0.2s ease-in forwards; }'
+if (css.includes('.modal-tutup .anim-overlay')) {
+  console.log('[SUDAH ADA] Aturan fade keluar overlay turunan di index.css')
+} else {
+  simpan(FILE_CSS, css.trimEnd() + '\n' + RULE_BARU + '\n')
+  console.log('[BERHASIL] Aturan fade keluar overlay turunan ditambahkan di index.css')
+}
+
+/* ===== 2. ui.jsx: transformasi ConfirmModal dan Lightbox ===== */
+const FILE_U = 'src/components/ui.jsx'
+let u = baca(FILE_U)
+
+function batasFungsi(isi, nama) {
+  const idx = isi.indexOf('export function ' + nama + '(')
+  if (idx === -1) return null
+  const idxOpen = isi.indexOf('{', idx)
+  let brace = 0, akhir = -1, inStr = false, strCh = ''
+  for (let i = idxOpen; i < isi.length; i++) {
+    const ch = isi[i]
+    const prev = i > 0 ? isi[i - 1] : ''
+    if (inStr) { if (ch === strCh && prev !== '\\') inStr = false; continue }
+    if (ch === '"' || ch === "'" || ch === '`') { inStr = true; strCh = ch; continue }
+    if (ch === '{') brace++
+    if (ch === '}') { brace--; if (brace === 0) { akhir = i + 1; break } }
+  }
+  if (akhir === -1) return null
+  return { mulai: idx, akhir: akhir }
+}
+
+function transformModal(isi, rentang, nama, kondisiOpen, depsOpen) {
+  let span = isi.slice(rentang.mulai, rentang.akhir)
+  if (span.includes('const isiSimpan = useRef(null)')) return { isi: isi, berubah: false, alasan: 'sudah' }
+  const RE_KEPALA = new RegExp('export function ' + nama + '\\(props\\) \\{[\\s\\S]*?if \\(!props\\.' + kondisiOpen + '\\) return null')
+  if (!RE_KEPALA.test(span)) return { isi: isi, berubah: false, alasan: 'kepala' }
+  const KEPALA = 'export function ' + nama + '(props) {\n' +
+    'const buka = !!props.' + kondisiOpen + '\n' +
+    'const [tampil, setTampil] = useState(buka)\n' +
+    'const [tutup, setTutup] = useState(false)\n' +
+    'const isiSimpan = useRef(null)\n' +
+    'useBodyScrollLock(buka)\n' +
+    'useEffect(function () {\n' +
+    'if (buka) { setTampil(true); setTutup(false); return undefined }\n' +
+    'if (!tampil) return undefined\n' +
+    'setTutup(true)\n' +
+    'const t = setTimeout(function () { setTampil(false); setTutup(false) }, 200)\n' +
+    'return function () { clearTimeout(t) }\n' +
+    '}, [' + depsOpen + '])'
+  span = span.replace(RE_KEPALA, KEPALA)
+  if (!/return \(/.test(span)) return { isi: isi, berubah: false, alasan: 'return' }
+  span = span.replace(/return \(/, 'let isiAktif = null\ntry {\nisiAktif = (')
+  if (!span.endsWith(')\n}')) return { isi: isi, berubah: false, alasan: 'ekor' }
+  const EKOR = ')\n} catch (err) { isiAktif = null }\n' +
+    'if (buka && isiAktif) isiSimpan.current = isiAktif\n' +
+    'if (!tampil) return null\n' +
+    'if (tutup && isiSimpan.current) return <div className="modal-tutup">{isiSimpan.current}</div>\n' +
+    'return isiAktif\n}'
+  span = span.slice(0, span.length - 3) + EKOR
+  return { isi: isi.slice(0, rentang.mulai) + span + isi.slice(rentang.akhir), berubah: true, alasan: '' }
+}
+
+const target = [
+  { nama: 'ConfirmModal', kondisi: 'open', deps: 'buka', label: 'ConfirmModal' },
+  { nama: 'Lightbox', kondisi: 'item', deps: 'buka', label: 'Lightbox' }
+]
+target.forEach(function (t) {
+  const rentang = batasFungsi(u, t.nama)
+  if (!rentang) { console.log('[LEWATI] Fungsi ' + t.nama + ' tidak ditemukan di ui.jsx'); return }
+  const hasil = transformModal(u, rentang, t.nama, t.kondisi, t.deps)
+  if (hasil.ubah) {
+    u = hasil.isi
+    simpan(FILE_U, u)
+    console.log('[BERHASIL] ' + t.label + ' kini beranimasi masuk dan keluar')
+  } else if (hasil.alasan === 'sudah') {
+    console.log('[SUDAH ADA] Animasi keluar di ' + t.label)
+  } else {
+    console.log('[TIDAK KETEMU] Pola ' + hasil.alasan + ' pada ' + t.label)
+  }
+})
+
+/* ===== 3. Verifikasi ===== */
+u = baca(FILE_U)
+css = baca(FILE_CSS)
+console.log('')
+console.log('Verifikasi:')
+console.log((css.includes('.modal-tutup .anim-overlay') ? '[OK] ' : '[BELUM] ') + 'Aturan fade keluar overlay turunan')
+console.log((u.includes('export function ConfirmModal(props) {\nconst buka = !!props.open') ? '[OK] ' : '[BELUM] ') + 'ConfirmModal memakai penunda unmount')
+console.log((u.includes('export function Lightbox(props) {\nconst buka = !!props.item') ? '[OK] ' : '[BELUM] ') + 'Lightbox memakai penunda unmount')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Perilaku baru:')
+console.log('1. Modal konfirmasi hapus muncul dengan pop halus dan kini menghilang dengan mengecil plus memudar, tidak lagi lenyap seketika.')
+console.log('2. Lightbox zoom media juga mendapat animasi masuk dan keluar yang sama.')
+console.log('3. Isi kedua modal disalin lebih dulu, jadi teks konfirmasi dan media tetap utuh terlihat selama animasi keluar.')
+console.log('4. Membungkus salinan isi dengan kelas modal-tutup membuat keyframe keluar yang sudah ada dipakai ulang, tanpa keyframe baru.')
+console.log('5. Bila pembangunan isi gagal karena data sudah kosong, blok try catch menjaga modal tetap aman memakai salinan terakhir.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka dashboard, klik Hapus pada salah satu kartu: modal konfirmasi muncul dengan pop.')
+console.log('2. Klik batal atau konfirmasi: modal mengecil dan memudar selama 0.2 detik, teks di dalamnya tidak kosong.')
+console.log('3. Buka galeri, klik media untuk zoom: Lightbox muncul dengan fade.')
+console.log('4. Tutup Lightbox lewat tombol X atau klik latar: ia memudar keluar dengan mulus.')
+console.log('5. Modal detail logbook tetap berperilaku sama seperti sebelumnya.')
+```
+
+## File: apply-animasi-modal-tutup.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai memasang animasi tutup untuk Modal detail...')
+console.log('')
+
+/* ===== 1. ui.jsx: buat Modal menunda unmount 200ms sambil memainkan animasi keluar ===== */
+const FILE_U = 'src/components/ui.jsx'
+if (!fs.existsSync(path.join(root, FILE_U))) {
+  console.log('[GAGAL] ui.jsx tidak ditemukan')
+  process.exit(1)
+}
+let u = baca(FILE_U)
+
+if (u.includes('const [tampil, setTampil]')) {
+  console.log('[SUDAH ADA] Logika animasi tutup di Modal')
+} else {
+  const idx = u.indexOf('export function Modal(')
+  if (idx === -1) {
+    console.log('[TIDAK KETEMU] Fungsi Modal di ui.jsx')
+  } else {
+    /* cari batas akhir fungsi Modal dengan menghitung kurung kurawal */
+    const idxOpen = u.indexOf('{', idx)
+    let brace = 0, akhir = -1, inStr = false, strCh = ''
+    for (let i = idxOpen; i < u.length; i++) {
+      const ch = u[i]
+      const prev = i > 0 ? u[i - 1] : ''
+      if (inStr) { if (ch === strCh && prev !== '\\') inStr = false; continue }
+      if (ch === '"' || ch === "'" || ch === '`') { inStr = true; strCh = ch; continue }
+      if (ch === '{') brace++
+      if (ch === '}') { brace--; if (brace === 0) { akhir = i + 1; break } }
+    }
+    if (akhir === -1) {
+      console.log('[GAGAL] Batas fungsi Modal tidak terbaca')
+    } else {
+      let span = u.slice(idx, akhir)
+      const RE_KEPALA = /export function Modal\(props\) \{[\s\S]*?if \(!props\.open\) return null/
+      const KEPALA_BARU = `export function Modal(props) {
+  const [tampil, setTampil] = useState(props.open)
+  const [tutup, setTutup] = useState(false)
+  useBodyScrollLock(!!props.open)
+  useEffect(function () {
+    if (props.open) {
+      setTampil(true)
+      setTutup(false)
+      return undefined
+    }
+    if (!tampil) return undefined
+    setTutup(true)
+    const t = setTimeout(function () {
+      setTampil(false)
+      setTutup(false)
+    }, 200)
+    return function () { clearTimeout(t) }
+  }, [props.open])
+  if (!tampil) return null`
+      if (!RE_KEPALA.test(span)) {
+        console.log('[TIDAK KETEMU] Pola kepala fungsi Modal')
+      } else {
+        span = span.replace(RE_KEPALA, KEPALA_BARU)
+        const sebelum = span
+        span = span.replace(/<div className="(fixed inset-0 z-50[^"]*)">/, function (m, cls) {
+          return "<div className={'" + cls + "' + (tutup ? ' modal-tutup' : '')}>"
+        })
+        if (span === sebelum) {
+          console.log('[TIDAK KETEMU] Pola div pembungkus Modal')
+        } else {
+          u = u.slice(0, idx) + span + u.slice(akhir)
+          simpan(FILE_U, u)
+          console.log('[BERHASIL] Modal kini menunda unmount dan memakai kelas modal-tutup')
+        }
+      }
+    }
+  }
+}
+
+/* ===== 2. index.css: keyframe animasi keluar ===== */
+const FILE_CSS = 'src/index.css'
+const CSS_TUTUP = `/* modal-tutup: animasi keluar saat detail ditutup, memakai struktur anak supaya tidak bergantung nama kelas */
+@keyframes modalPopOut {
+  from { opacity: 1; transform: scale(1) translateY(0); }
+  to { opacity: 0; transform: scale(0.94) translateY(12px); }
+}
+@keyframes overlayFadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+.modal-tutup { pointer-events: none; }
+.modal-tutup > *:first-child { animation: overlayFadeOut 0.2s ease-in forwards; }
+.modal-tutup > *:last-child { animation: modalPopOut 0.2s ease-in forwards; }
+`
+if (!fs.existsSync(path.join(root, FILE_CSS))) {
+  console.log('[LEWATI] index.css tidak ditemukan')
+} else {
+  let css = baca(FILE_CSS)
+  if (css.includes('/* modal-tutup')) {
+    console.log('[SUDAH ADA] CSS modal-tutup di index.css')
+  } else {
+    simpan(FILE_CSS, css.trimEnd() + '\n\n' + CSS_TUTUP)
+    console.log('[BERHASIL] CSS modal-tutup ditambahkan di index.css')
+  }
+}
+
+/* ===== 3. Verifikasi ===== */
+u = baca(FILE_U)
+const css2 = baca(FILE_CSS)
+console.log('')
+console.log('Verifikasi:')
+console.log((u.includes('const [tampil, setTampil]') ? '[OK] ' : '[BELUM] ') + 'State penunda unmount di Modal')
+console.log((u.includes('modal-tutup') ? '[OK] ' : '[BELUM] ') + 'Kelas modal-tutup di pembungkus Modal')
+console.log((css2.includes('@keyframes modalPopOut') ? '[OK] ' : '[BELUM] ') + 'Keyframe panel mengecil dan memudar')
+console.log((css2.includes('@keyframes overlayFadeOut') ? '[OK] ' : '[BELUM] ') + 'Keyframe latar gelap memudar')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Perilaku baru:')
+console.log('1. Menutup detail lewat tombol X, tombol tutup mana pun, atau klik latar gelap kini memainkan animasi keluar selama 0.2 detik.')
+console.log('2. Panel detail mengecil ke 94 persen sambil turun 12 piksel dan memudar, latar gelap memudar bersamaan, lalu modal benar benar dilepas dari DOM.')
+console.log('3. Membuka detail tetap memakai animasi masuk yang lama, tidak berubah sama sekali.')
+console.log('4. Selama animasi keluar, pointer-events dimatikan supaya klik ganda tidak menembus ke halaman di belakangnya.')
+console.log('5. Scope terbatas pada komponen Modal dan satu blok CSS, tidak ada komponen atau halaman lain yang disentuh.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka halaman Logbook publik, klik tombol Detail pada kartu mana pun.')
+console.log('2. Klik tombol X: panel mengecil halus ke bawah dan latar memudar, bukan hilang seketika.')
+console.log('3. Ulangi dengan klik latar gelap di luar panel: efek keluar yang sama muncul.')
+console.log('4. Buka detail galeri dan daftar hadir: keduanya ikut mendapat animasi keluar karena memakai komponen Modal yang sama.')
+console.log('5. Pastikan animasi masuk saat membuka detail tetap sama seperti sebelumnya.')
+```
+
+## File: apply-animasi-modal-tutup2.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai memasang ulang animasi tutup Modal sesuai struktur asli...')
+console.log('')
+
+/* ===== 1. ui.jsx: state penunda unmount dan kelas modal-tutup pada div anim-overlay ===== */
+const FILE_U = 'src/components/ui.jsx'
+if (!fs.existsSync(path.join(root, FILE_U))) {
+  console.log('[GAGAL] ui.jsx tidak ditemukan')
+  process.exit(1)
+}
+let u = baca(FILE_U)
+
+if (u.includes('const [tampil, setTampil]')) {
+  console.log('[SUDAH ADA] Logika animasi tutup di Modal')
+} else {
+  const idx = u.indexOf('export function Modal(')
+  if (idx === -1) {
+    console.log('[TIDAK KETEMU] Fungsi Modal di ui.jsx')
+  } else {
+    const idxOpen = u.indexOf('{', idx)
+    let brace = 0, akhir = -1, inStr = false, strCh = ''
+    for (let i = idxOpen; i < u.length; i++) {
+      const ch = u[i]
+      const prev = i > 0 ? u[i - 1] : ''
+      if (inStr) { if (ch === strCh && prev !== '\\') inStr = false; continue }
+      if (ch === '"' || ch === "'" || ch === '`') { inStr = true; strCh = ch; continue }
+      if (ch === '{') brace++
+      if (ch === '}') { brace--; if (brace === 0) { akhir = i + 1; break } }
+    }
+    if (akhir === -1) {
+      console.log('[GAGAL] Batas fungsi Modal tidak terbaca')
+    } else {
+      let span = u.slice(idx, akhir)
+      const RE_KEPALA = /export function Modal\(props\) \{[\s\S]*?if \(!props\.open\) return null/
+      const KEPALA_BARU = `export function Modal(props) {
+  const [tampil, setTampil] = useState(props.open)
+  const [tutup, setTutup] = useState(false)
+  useBodyScrollLock(!!props.open)
+  useEffect(function () {
+    if (props.open) {
+      setTampil(true)
+      setTutup(false)
+      return undefined
+    }
+    if (!tampil) return undefined
+    setTutup(true)
+    const t = setTimeout(function () {
+      setTampil(false)
+      setTutup(false)
+    }, 200)
+    return function () { clearTimeout(t) }
+  }, [props.open])
+  if (!tampil) return null`
+      if (!RE_KEPALA.test(span)) {
+        console.log('[TIDAK KETEMU] Pola kepala fungsi Modal')
+      } else {
+        span = span.replace(RE_KEPALA, KEPALA_BARU)
+        let ganti = false
+        span = span.replace(/<div className="(anim-overlay[^"]*)"/, function (m, cls) {
+          ganti = true
+          return "<div className={'" + cls + "' + (tutup ? ' modal-tutup' : '')}"
+        })
+        if (!ganti) {
+          console.log('[TIDAK KETEMU] Pola div anim-overlay pembungkus Modal')
+        } else {
+          u = u.slice(0, idx) + span + u.slice(akhir)
+          simpan(FILE_U, u)
+          console.log('[BERHASIL] Modal menunda unmount 200ms dan pembungkus memakai kelas modal-tutup')
+        }
+      }
+    }
+  }
+}
+
+/* ===== 2. index.css: luruskan selector animasi keluar sesuai susunan overlay lalu panel ===== */
+const FILE_CSS = 'src/index.css'
+if (!fs.existsSync(path.join(root, FILE_CSS))) {
+  console.log('[LEWATI] index.css tidak ditemukan')
+} else {
+  let css = baca(FILE_CSS)
+  const SALAH1 = '.modal-tutup > *:first-child { animation: overlayFadeOut 0.2s ease-in forwards; }'
+  const SALAH2 = '.modal-tutup > *:last-child { animation: modalPopOut 0.2s ease-in forwards; }'
+  const BENAR1 = '.modal-tutup.anim-overlay { animation: overlayFadeOut 0.2s ease-in forwards; }'
+  const BENAR2 = '.modal-tutup .anim-modal { animation: modalPopOut 0.2s ease-in forwards; }'
+  if (css.includes(BENAR1)) {
+    console.log('[SUDAH ADA] Selector animasi keluar yang benar di index.css')
+  } else if (css.includes(SALAH1)) {
+    css = css.split(SALAH1).join(BENAR1).split(SALAH2).join(BENAR2)
+    simpan(FILE_CSS, css)
+    console.log('[BERHASIL] Selector animasi keluar disesuaikan dengan struktur Modal asli')
+  } else {
+    console.log('[TIDAK KETEMU] Blok selector modal-tutup lama di index.css')
+  }
+}
+
+/* ===== 3. Verifikasi ===== */
+u = baca(FILE_U)
+const css2 = baca(FILE_CSS)
+console.log('')
+console.log('Verifikasi:')
+console.log((u.includes('const [tampil, setTampil]') ? '[OK] ' : '[BELUM] ') + 'State penunda unmount di Modal')
+console.log((u.includes("modal-tutup' : ''") ? '[OK] ' : '[BELUM] ') + 'Kelas modal-tutup pada div anim-overlay')
+console.log((css2.includes('.modal-tutup.anim-overlay') ? '[OK] ' : '[BELUM] ') + 'Selector latar gelap memudar')
+console.log((css2.includes('.modal-tutup .anim-modal') ? '[OK] ' : '[BELUM] ') + 'Selector panel mengecil dan memudar')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Perbedaan perbaikan versi ini:')
+console.log('1. Pola div pembungkus kini mencari kelas anim-overlay yang memang dipakai Modal aslimu, lengkap dengan z-[60] dan onClick penutup.')
+console.log('2. Selector CSS animasi keluar diubah menjadi menarget overlay itu sendiri dan panel berkelas anim-modal, sesuai susunan overlay lalu pembungkus penyeret lalu panel.')
+console.log('3. ConfirmModal tidak disentuh sama sekali, jadi modal konfirmasi hapus tetap berperilaku seperti sebelumnya sesuai batasan scope.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka halaman Logbook publik lalu klik Detail pada kartu mana pun.')
+console.log('2. Klik tombol X: panel mengecil halus sambil turun dan latar gelap memudar selama 0.2 detik, baru modal benar benar hilang.')
+console.log('3. Buka detail lagi lalu klik latar gelap di luar panel: animasi keluar yang sama bermain.')
+console.log('4. Buka detail galeri dan daftar hadir: keduanya ikut beranimasi keluar karena memakai komponen Modal yang sama.')
+console.log('5. Tutup lalu buka lagi dengan cepat di tengah animasi: modal kembali muncul mulus tanpa nyangkut.')
+```
+
+## File: apply-animasi-smooth.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai memasang paket animasi halus menyeluruh...')
+console.log('')
+
+/* ===== 1. index.css: semua keyframe dan aturan animasi baru ===== */
+const FILE_CSS = 'src/index.css'
+const CSS_BLOK = `/* animasi-halus-v1: seluruh animasi tambahan hanya memakai transform dan opacity agar ringan di device low end */
+@keyframes cardFadeIn {
+  from { opacity: 0; transform: translateY(14px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.grid-pusat > *, .grid-pusat-rapat > *, .kartu-grid > * {
+  animation: cardFadeIn 0.45s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  backface-visibility: hidden;
+}
+.grid-pusat > *:nth-child(1), .grid-pusat-rapat > *:nth-child(1), .kartu-grid > *:nth-child(1) { animation-delay: 0s; }
+.grid-pusat > *:nth-child(2), .grid-pusat-rapat > *:nth-child(2), .kartu-grid > *:nth-child(2) { animation-delay: 0.05s; }
+.grid-pusat > *:nth-child(3), .grid-pusat-rapat > *:nth-child(3), .kartu-grid > *:nth-child(3) { animation-delay: 0.1s; }
+.grid-pusat > *:nth-child(4), .grid-pusat-rapat > *:nth-child(4), .kartu-grid > *:nth-child(4) { animation-delay: 0.15s; }
+.grid-pusat > *:nth-child(5), .grid-pusat-rapat > *:nth-child(5), .kartu-grid > *:nth-child(5) { animation-delay: 0.2s; }
+.grid-pusat > *:nth-child(6), .grid-pusat-rapat > *:nth-child(6), .kartu-grid > *:nth-child(6) { animation-delay: 0.25s; }
+.grid-pusat > *:nth-child(7), .grid-pusat-rapat > *:nth-child(7), .kartu-grid > *:nth-child(7) { animation-delay: 0.3s; }
+.grid-pusat > *:nth-child(8), .grid-pusat-rapat > *:nth-child(8), .kartu-grid > *:nth-child(8) { animation-delay: 0.35s; }
+.grid-pusat > *:nth-child(9), .grid-pusat-rapat > *:nth-child(9), .kartu-grid > *:nth-child(9) { animation-delay: 0.4s; }
+.grid-pusat > *:nth-child(10), .grid-pusat-rapat > *:nth-child(10), .kartu-grid > *:nth-child(10) { animation-delay: 0.45s; }
+.grid-pusat > *:nth-child(11), .grid-pusat-rapat > *:nth-child(11), .kartu-grid > *:nth-child(11) { animation-delay: 0.5s; }
+.grid-pusat > *:nth-child(12), .grid-pusat-rapat > *:nth-child(12), .kartu-grid > *:nth-child(12) { animation-delay: 0.55s; }
+/* efek terangkat hanya untuk kartu, tidak untuk panel form */
+.kolom-kartu > .card-hover, .kolom-kartu-rapat > .card-hover, .kartu-grid > .card-hover {
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s ease, border-color 0.25s ease, background-color 0.2s ease;
+}
+.kolom-kartu > .card-hover:hover, .kolom-kartu-rapat > .card-hover:hover, .kartu-grid > .card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 14px 28px -10px rgba(15, 23, 42, 0.14);
+}
+.dark .kolom-kartu > .card-hover:hover, .dark .kolom-kartu-rapat > .card-hover:hover, .dark .kartu-grid > .card-hover:hover {
+  box-shadow: 0 14px 28px -10px rgba(0, 0, 0, 0.55);
+}
+/* transisi tombol dan tautan ditambah transform supaya efek tekan terasa mulus */
+button, a {
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease, transform 0.15s ease;
+}
+button:active:not(:disabled) { transform: scale(0.96); }
+/* konten tab dashboard beranimasi setiap kali tab diganti */
+.anim-tab { animation: appFadeUp 0.28s ease; }
+/* filterSlide versi murah: tanpa max-height supaya tidak memicu layout tiap frame */
+@keyframes filterSlide {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.anim-filter { animation: filterSlide 0.28s ease; }
+html { scroll-behavior: smooth; }
+* { -webkit-tap-highlight-color: transparent; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+`
+if (!fs.existsSync(path.join(root, FILE_CSS))) {
+  console.log('[LEWATI] index.css tidak ditemukan')
+} else {
+  let css = baca(FILE_CSS)
+  if (css.includes('animasi-halus-v1')) {
+    console.log('[SUDAH ADA] Paket CSS animasi halus di index.css')
+  } else {
+    simpan(FILE_CSS, css.trimEnd() + '\n\n' + CSS_BLOK)
+    console.log('[BERHASIL] Paket CSS animasi halus ditambahkan di index.css')
+  }
+}
+
+/* ===== 2. DashboardPage: grid daftar memakai kartu-grid agar kartu muncul berurutan ===== */
+const FILE_D = 'src/pages/DashboardPage.jsx'
+if (!fs.existsSync(path.join(root, FILE_D))) {
+  console.log('[LEWATI] DashboardPage.jsx tidak ditemukan')
+} else {
+  let d = baca(FILE_D)
+  let berubah = false
+  const GRID_LAMA = '<div className="grid gap-5 md:grid-cols-2">'
+  const GRID_BARU = '<div className="grid gap-5 md:grid-cols-2 kartu-grid">'
+  if (d.includes('kartu-grid')) {
+    console.log('[SUDAH ADA] Kelas kartu-grid di grid daftar dashboard')
+  } else if (d.includes(GRID_LAMA)) {
+    d = d.split(GRID_LAMA).join(GRID_BARU)
+    berubah = true
+    console.log('[BERHASIL] Grid daftar Logbook, Galeri, dan Daftar Hadir memakai kartu-grid')
+  } else {
+    console.log('[TIDAK KETEMU] Pola grid daftar di DashboardPage')
+  }
+  const SEC_LAMA = '<section className="mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">'
+  const SEC_BARU = '<section className="anim-tab mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">'
+  if (d.includes('anim-tab mt-8')) {
+    console.log('[SUDAH ADA] Kelas anim-tab di section tab dashboard')
+  } else if (d.includes(SEC_LAMA)) {
+    d = d.split(SEC_LAMA).join(SEC_BARU)
+    berubah = true
+    console.log('[BERHASIL] Section tiap tab dashboard memakai anim-tab')
+  } else {
+    console.log('[TIDAK KETEMU] Pola section tab di DashboardPage')
+  }
+  if (berubah) simpan(FILE_D, d)
+}
+
+/* ===== 3. Verifikasi ===== */
+const css = baca(FILE_CSS)
+const d2 = fs.existsSync(path.join(root, FILE_D)) ? baca(FILE_D) : ''
+console.log('')
+console.log('Verifikasi:')
+console.log((css.includes('animasi-halus-v1') ? '[OK] ' : '[BELUM] ') + 'Paket CSS animasi halus')
+console.log((css.includes('@keyframes cardFadeIn') ? '[OK] ' : '[BELUM] ') + 'Keyframe kartu muncul berurutan')
+console.log((css.includes('prefers-reduced-motion') ? '[OK] ' : '[BELUM] ') + 'Penghormatan preferensi gerak pengguna')
+console.log((d2.includes('kartu-grid') ? '[OK] ' : '[BELUM] ') + 'Grid daftar dashboard siap stagger')
+console.log((d2.includes('anim-tab mt-8') ? '[OK] ' : '[BELUM] ') + 'Transisi pindah tab dashboard')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Animasi baru yang kini aktif:')
+console.log('1. Kartu di semua grid (publik, beranda, tim & dospem, dashboard) muncul berurutan seperti air terjun tiap kali data dimuat, ganti halaman, atau ganti tab.')
+console.log('2. Kartu terangkat 4 piksel dengan bayangan melebar saat kursor di atasnya, lengkap dengan varian mode gelap.')
+console.log('3. Pindah tab di dashboard kini beranimasi fade naik, tidak lagi kedip instan.')
+console.log('4. Semua tombol punya efek tekan mengecil sesaat, memberi rasa fisik saat diklik.')
+console.log('')
+console.log('Penyehatan performa supaya semuanya smooth:')
+console.log('1. Semua animasi hanya memakai transform dan opacity, dua properti yang dikerjakan kompositor GPU tanpa menghitung ulang layout.')
+console.log('2. Animasi filterSlide lama yang memakai max-height diganti versi transform, karena max-height memaksa browser menghitung layout tiap frame dan itu penyebab utama patah patah di device jadul.')
+console.log('3. Tidak ada will-change berlebihan maupun blur backdrop baru, jadi memori GPU tetap hemat.')
+console.log('4. Durasi dijaga di bawah 600 milidetik dan delay stagger dibatasi sampai 0.55 detik supaya tidak terasa lambat.')
+console.log('5. Pengguna yang mengaktifkan pengaturan reduce motion di sistem operasinya otomatis mendapat versi tanpa animasi, sesuai standar aksesibilitas.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka halaman Logbook publik: kartu muncul satu per satu dari kiri ke kanan, lalu coba pindah halaman 2 dan perhatikan efeknya berulang.')
+console.log('2. Arahkan kursor ke kartu mana pun: kartu terangkat halus dan turun lagi saat kursor keluar.')
+console.log('3. Buka dashboard dan pindah pindah tab: konten berganti dengan fade naik yang lembut.')
+console.log('4. Klik tombol pagination atau tombol simpan: terasa efek tekan mengecil sesaat.')
+console.log('5. Buka panel filter: kini meluncur turun tanpa tersendat karena tidak lagi menganimasikan tinggi elemen.')
 ```
 
 ## File: apply-auto-rotate-youtube.cjs
@@ -3085,6 +2976,57 @@ console.log('4. Kartu logbook, galeri, dan baris daftar hadir: PersonChip menamp
 console.log('5. Mahasiswa tanpa foto tetap melihat lingkaran inisial berwarna tema dengan bentuk yang sama persis.')
 ```
 
+## File: apply-cek-urutan.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+function baca(rel) {
+  const p = path.join(root, rel)
+  if (!fs.existsSync(p)) return null
+  return fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n')
+}
+
+console.log('Mulai memeriksa status perbaikan urutan...')
+console.log('')
+
+const f = baca('src/lib/format.js')
+const h = baca('src/pages/HomePage.jsx')
+const d = baca('src/pages/DospemPage.jsx')
+if (f === null || h === null || d === null) {
+  console.log('[GAGAL] Salah satu file tidak ditemukan')
+  process.exit(1)
+}
+
+const cek = [
+  [f.includes('function waktuUrut'), 'format.js: fungsi tiebreaker waktuUrut sudah ada'],
+  [f.includes('waktuUrut(a)') && f.includes('waktuUrut(b)'), 'format.js: pembanding urutkanTanggal memakai created_at'],
+  [h.includes("urutkanTanggal(logs, 'terbaru').slice(0, 6)"), 'HomePage.jsx: slice 6 data lewat urutkanTanggal'],
+  [/import[^\n]*urutkanTanggal[^\n]*format\.js/.test(h), 'HomePage.jsx: import urutkanTanggal ada'],
+  [d.includes("urutkanTanggal(logs, 'terbaru').slice(0, 6)"), 'DospemPage.jsx: slice 6 data lewat urutkanTanggal'],
+  [/import[^\n]*urutkanTanggal[^\n]*format\.js/.test(d), 'DospemPage.jsx: import urutkanTanggal ada']
+]
+let semuaOk = true
+cek.forEach(function (c) {
+  console.log((c[0] ? '[OK] ' : '[BELUM] ') + c[1])
+  if (!c[0]) semuaOk = false
+})
+
+console.log('')
+if (semuaOk) {
+  console.log('Semua bagian aktif. Perbaikan urutan berlaku penuh di seluruh halaman.')
+} else {
+  console.log('Masih ada bagian yang belum aktif:')
+  console.log('1. Bila baris format.js yang BELUM: jalankan node apply-fix-urutan2.cjs')
+  console.log('2. Bila baris HomePage atau DospemPage yang BELUM: jalankan node apply-fix-urutan.cjs lagi')
+}
+console.log('')
+console.log('Ringkasan alur akhir di Beranda dan Tim & Dospem:')
+console.log('1. Data diambil dari database apa adanya.')
+console.log('2. Data diurutkan ulang di frontend pakai urutkanTanggal: tanggal dulu, bila kembar maka created_at paling baru menang.')
+console.log('3. Baru kemudian dipotong 6 teratas, jadi yang tampil dijamin 6 yang benar benar terbaru.')
+```
+
 ## File: apply-diagnosis-dan-bersih.cjs
 ```javascript
 const fs = require('fs')
@@ -3401,6 +3343,129 @@ console.log('1. Buka halaman Logbook dan Galeri berdampingan: bandingkan chip pe
 console.log('2. Buka halaman Galeri saat login: semua kartu menampilkan teks bantuan klik, termasuk kartu milik sendiri.')
 console.log('3. Buka tab Galeri di dashboard: kartu milik sendiri menampilkan tombol Edit dan Hapus tanpa teks bantuan.')
 console.log('4. Buka modal detail galeri: chip di dalam modal tetap rapi dengan ukuran teks yang sama.')
+```
+
+## File: apply-fix-confirm-keluar.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai memperbaiki animasi keluar ConfirmModal dari akar masalahnya...')
+console.log('')
+
+/* ===== 1. ui.jsx: ConfirmModal punya penunda lepas dan penyangga isi ===== */
+const FILE_U = 'src/components/ui.jsx'
+if (!fs.existsSync(path.join(root, FILE_U))) {
+  console.log('[GAGAL] ui.jsx tidak ditemukan')
+  process.exit(1)
+}
+let u = baca(FILE_U)
+const idx = u.indexOf('function ConfirmModal(')
+if (idx === -1) {
+  console.log('[TIDAK KETEMU] Fungsi ConfirmModal di ui.jsx')
+} else {
+  const idxOpen = u.indexOf('{', idx)
+  let brace = 0, akhir = -1, inStr = false, strCh = ''
+  for (let i = idxOpen; i < u.length; i++) {
+    const ch = u[i]
+    const prev = i > 0 ? u[i - 1] : ''
+    if (inStr) { if (ch === strCh && prev !== '\\') inStr = false; continue }
+    if (ch === '"' || ch === "'" || ch === '`') { inStr = true; strCh = ch; continue }
+    if (ch === '{') brace++
+    if (ch === '}') { brace--; if (brace === 0) { akhir = i + 1; break } }
+  }
+  if (akhir === -1) {
+    console.log('[GAGAL] Batas fungsi ConfirmModal tidak terbaca')
+  } else {
+    let span = u.slice(idx, akhir)
+    if (span.includes('isiSimpan')) {
+      console.log('[SUDAH ADA] Penunda lepas di ConfirmModal')
+    } else {
+      const RE_KEPALA = /function ConfirmModal\(props\) \{\s*useBodyScrollLock\(props\.open\)\s*if \(!props\.open\) return null\s*return \(/
+      if (!RE_KEPALA.test(span)) {
+        console.log('[TIDAK KETEMU] Pola kepala ConfirmModal')
+      } else if (!span.endsWith(')\n}')) {
+        console.log('[TIDAK KETEMU] Pola ekor ConfirmModal')
+      } else {
+        const KEPALA = `function ConfirmModal(props) {
+const [tampil, setTampil] = useState(props.open)
+const [tutup, setTutup] = useState(false)
+const isiSimpan = useRef(null)
+useBodyScrollLock(!!props.open)
+useEffect(function () {
+if (props.open) { setTampil(true); setTutup(false); return undefined }
+if (!tampil) return undefined
+setTutup(true)
+const t = setTimeout(function () { setTampil(false); setTutup(false) }, 200)
+return function () { clearTimeout(t) }
+}, [props.open])
+const isiAktif = (`
+        span = span.replace(RE_KEPALA, KEPALA)
+        const EKOR = ')\n' +
+          'if (props.open) isiSimpan.current = isiAktif\n' +
+          'if (!tampil) return null\n' +
+          'if (tutup && isiSimpan.current) return <div className="modal-tutup">{isiSimpan.current}</div>\n' +
+          'return isiAktif\n}'
+        span = span.slice(0, span.length - 3) + EKOR
+        u = u.slice(0, idx) + span + u.slice(akhir)
+        simpan(FILE_U, u)
+        console.log('[BERHASIL] ConfirmModal kini menunda lepas 200ms dan menyimpan salinan isi')
+      }
+    }
+  }
+}
+
+/* ===== 2. DashboardPage: ConfirmModal tidak lagi dibuang paksa oleh induknya ===== */
+const FILE_D = 'src/pages/DashboardPage.jsx'
+if (!fs.existsSync(path.join(root, FILE_D))) {
+  console.log('[LEWATI] DashboardPage.jsx tidak ditemukan')
+} else {
+  let d = baca(FILE_D)
+  if (d.includes('open={!!pendingDelete}')) {
+    console.log('[SUDAH ADA] Pemakaian ConfirmModal selalu dirender')
+  } else {
+    const RE_PAKAI = /\{pendingDelete \? \(\s*<ConfirmModal\s*open=\{true\}\s*title=\{confirmInfo\(\)\.title\}\s*message=\{confirmInfo\(\)\.message\}\s*onCancel=\{function \(\) \{ setPendingDelete\(null\) \}\}\s*onConfirm=\{executeDelete\}\s*\/>\s*\) : null\}/
+    if (RE_PAKAI.test(d)) {
+      d = d.replace(RE_PAKAI, `<ConfirmModal
+open={!!pendingDelete}
+title={pendingDelete && confirmInfo() ? confirmInfo().title : ''}
+message={pendingDelete && confirmInfo() ? confirmInfo().message : ''}
+onCancel={function () { setPendingDelete(null) }}
+onConfirm={executeDelete}
+/>`)
+      simpan(FILE_D, d)
+      console.log('[BERHASIL] ConfirmModal kini selalu dirender dengan open mengikuti pendingDelete')
+    } else {
+      console.log('[TIDAK KETEMU] Pola pemakaian ConfirmModal di DashboardPage')
+    }
+  }
+}
+
+/* ===== 3. Verifikasi ===== */
+u = baca(FILE_U)
+const d2 = fs.existsSync(path.join(root, FILE_D)) ? baca(FILE_D) : ''
+console.log('')
+console.log('Verifikasi:')
+console.log((u.includes('const isiSimpan = useRef(null)') && u.indexOf('const isiSimpan = useRef(null)') > u.indexOf('function ConfirmModal(') ? '[OK] ' : '[BELUM] ') + 'Penunda lepas dan penyangga isi di ConfirmModal')
+console.log((u.includes('if (tutup && isiSimpan.current) return <div className="modal-tutup">') ? '[OK] ' : '[BELUM] ') + 'Pembungkus modal-tutup saat keluar')
+console.log((d2.includes('open={!!pendingDelete}') ? '[OK] ' : '[BELUM] ') + 'ConfirmModal tidak lagi dibuang paksa oleh induk')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Penjelasan akar masalah:')
+console.log('1. Sebelumnya induk merender ConfirmModal hanya saat pendingDelete ada, jadi komponen langsung dibuang sebelum animasi keluar sempat bermain.')
+console.log('2. Kini ConfirmModal selalu dirender dan hanya prop open yang berubah, sehingga penunda lepas 200 milidetik di dalamnya bisa memainkan animasi keluar.')
+console.log('3. Judul dan pesan diberi penjaga null supaya tidak error saat pendingDelete kosong, dan salinan isi menjaga teks pertanyaan tetap utuh selama animasi.')
+console.log('4. Markup tombol Batal, Ya Hapus, dan ikon sampah tidak disentuh sama sekali.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka dashboard lalu klik Hapus pada kartu mana pun: modal konfirmasi muncul dengan pop.')
+console.log('2. Klik Batal: modal mengecil dan memudar selama 0.2 detik dengan teks pertanyaan tetap terbaca, baru benar benar hilang.')
+console.log('3. Klik Hapus lagi lalu klik Ya Hapus: animasi keluar bermain sebentar lalu data terhapus dan toast sukses muncul.')
+console.log('4. Buka tutup modal berulang dengan cepat: tidak ada nyangkut atau kedip kosong.')
 ```
 
 ## File: apply-fix-dospem-pusat.cjs
@@ -3873,6 +3938,338 @@ console.log('')
 console.log('Pembersihan file lama yang sudah terlanjur menumpuk (opsional):')
 console.log('Buka Supabase Dashboard > Storage > bucket foto-profil > folder UUID user')
 console.log('Hapus manual file-file profil-xxxxx.webp yang lama (sisakan yang terbaru saja).')
+```
+
+## File: apply-fix-glitch-confirm.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+const FILE_U = 'src/components/ui.jsx'
+if (!fs.existsSync(path.join(root, FILE_U))) {
+  console.log('[GAGAL] ui.jsx tidak ditemukan')
+  process.exit(1)
+}
+let u = fs.readFileSync(path.join(root, FILE_U), 'utf8').replace(/\r\n/g, '\n')
+
+const CONFIRM_BARU = `export function ConfirmModal(props) {
+const [tampil, setTampil] = useState(props.open)
+const propsSimpan = useRef(null)
+if (props.open) propsSimpan.current = props
+const p = props.open ? props : (propsSimpan.current || props)
+const tutup = tampil && !props.open
+useBodyScrollLock(!!props.open)
+useEffect(function () {
+if (props.open) { setTampil(true); return undefined }
+if (!tampil) return undefined
+const t = setTimeout(function () { setTampil(false) }, 200)
+return function () { clearTimeout(t) }
+}, [props.open, tampil])
+if (!tampil) return null
+return (
+<div className={'anim-overlay fixed inset-0 z-[70] overflow-y-auto overscroll-contain bg-slate-900/60 p-4' + (tutup ? ' modal-tutup' : '')} onClick={p.onCancel}>
+<div className="min-h-full flex items-center justify-center py-8">
+<div className="anim-modal w-full max-w-md rounded-[2rem] bg-white shadow-2xl" onClick={function (e) { e.stopPropagation() }}>
+<div className="p-6 space-y-4">
+<div className="mx-auto h-14 w-14 rounded-2xl bg-red-100 text-red-600 grid place-items-center">
+<SizedIcon name="trash" size={24} />
+</div>
+<div className="text-center">
+<h3 className="text-xl font-black text-slate-900">{p.title || 'Hapus data ini?'}</h3>
+<p className="mt-2 text-sm text-slate-500">{p.message}</p>
+</div>
+<div className="grid grid-cols-2 gap-3">
+<button type="button" onClick={p.onCancel} className="rounded-2xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100">
+Batal
+</button>
+<button type="button" onClick={p.onConfirm} className="rounded-2xl bg-red-500 px-4 py-3 text-sm font-bold text-white hover:bg-red-600">
+{p.confirmLabel || 'Ya, Hapus'}
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+)
+}`
+
+console.log('Mulai menghilangkan glitch pada animasi keluar ConfirmModal...')
+console.log('')
+
+const idx = u.indexOf('function ConfirmModal(')
+if (idx === -1) {
+  console.log('[TIDAK KETEMU] Fungsi ConfirmModal di ui.jsx')
+} else {
+  const pakaiExport = u.slice(Math.max(0, idx - 7), idx) === 'export '
+  const mulai = pakaiExport ? idx - 7 : idx
+  const idxOpen = u.indexOf('{', idx)
+  let brace = 0, akhir = -1, inStr = false, strCh = ''
+  for (let i = idxOpen; i < u.length; i++) {
+    const ch = u[i]
+    const prev = i > 0 ? u[i - 1] : ''
+    if (inStr) { if (ch === strCh && prev !== '\\') inStr = false; continue }
+    if (ch === '"' || ch === "'" || ch === '`') { inStr = true; strCh = ch; continue }
+    if (ch === '{') brace++
+    if (ch === '}') { brace--; if (brace === 0) { akhir = i + 1; break } }
+  }
+  if (akhir === -1) {
+    console.log('[GAGAL] Batas fungsi ConfirmModal tidak terbaca')
+  } else {
+    const span = u.slice(mulai, akhir)
+    if (span.includes('propsSimpan')) {
+      console.log('[SUDAH ADA] ConfirmModal versi tanpa glitch')
+    } else {
+      const teks = pakaiExport ? CONFIRM_BARU : CONFIRM_BARU.replace('export function ConfirmModal', 'function ConfirmModal')
+      u = u.slice(0, mulai) + teks + u.slice(akhir)
+      fs.writeFileSync(path.join(root, FILE_U), u, 'utf8')
+      console.log('[BERHASIL] ConfirmModal ditulis ulang tanpa ganti bentuk pohon saat menutup')
+    }
+  }
+}
+
+u = fs.readFileSync(path.join(root, FILE_U), 'utf8')
+console.log('')
+console.log('Verifikasi:')
+console.log((u.includes('const propsSimpan = useRef(null)') ? '[OK] ' : '[BELUM] ') + 'Salinan props untuk fase menutup')
+console.log((u.includes("const tutup = tampil && !props.open") ? '[OK] ' : '[BELUM] ') + 'Status tutup dihitung langsung tanpa menunggu effect')
+console.log((u.includes("(tutup ? ' modal-tutup' : '')") ? '[OK] ' : '[BELUM] ') + 'Kelas modal-tutup ditempel pada overlay yang sama')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Kenapa versi ini tidak glitch:')
+console.log('1. Tidak ada lagi frame kosong karena status tutup dihitung langsung dari props, bukan menunggu effect berjalan setelah render.')
+console.log('2. Bentuk pohon JSX saat terbuka dan saat menutup identik, jadi React hanya memperbarui kelas pada node yang sama, bukan membongkar dan memasang ulang DOM.')
+console.log('3. Karena node tidak dipasang ulang, animasi masuk tidak pernah terpicu kedua kali. Animasi keluar bermain tepat satu kali.')
+console.log('4. Judul, pesan, dan tombol diambil dari salinan props yang disimpan saat modal masih terbuka, sehingga isi tetap utuh sampai modal benar benar lepas.')
+console.log('5. Latar gelap tidak lagi menghilang sesaat karena elemen overlay yang sama tetap hidup sepanjang animasi keluar.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka dashboard lalu klik Hapus pada kartu mana pun.')
+console.log('2. Klik tombol X atau Batal: modal langsung mengecil dan memudar mulus dalam satu gerakan, tanpa kedip hilang lalu muncul lagi.')
+console.log('3. Ulangi lewat klik latar gelap di luar panel: perilaku sama halusnya.')
+console.log('4. Klik Ya Hapus: animasi keluar bermain sekali lalu data terhapus dan toast sukses muncul.')
+console.log('5. Buka tutup cepat beberapa kali: tidak ada sisa modal yang nyangkut di layar.')
+```
+
+## File: apply-fix-isi-modal.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+const FILE_U = 'src/components/ui.jsx'
+if (!fs.existsSync(path.join(root, FILE_U))) {
+  console.log('[GAGAL] ui.jsx tidak ditemukan')
+  process.exit(1)
+}
+let u = fs.readFileSync(path.join(root, FILE_U), 'utf8').replace(/\r\n/g, '\n')
+
+console.log('Mulai menyimpan isi detail supaya tidak kosong saat animasi tutup...')
+console.log('')
+
+if (u.includes('isiSimpan')) {
+  console.log('[SUDAH ADA] Penyangga isiSimpan di Modal')
+} else {
+  const idx = u.indexOf('export function Modal(')
+  if (idx === -1) {
+    console.log('[TIDAK KETEMU] Fungsi Modal di ui.jsx')
+  } else {
+    const idxOpen = u.indexOf('{', idx)
+    let brace = 0, akhir = -1, inStr = false, strCh = ''
+    for (let i = idxOpen; i < u.length; i++) {
+      const ch = u[i]
+      const prev = i > 0 ? u[i - 1] : ''
+      if (inStr) { if (ch === strCh && prev !== '\\') inStr = false; continue }
+      if (ch === '"' || ch === "'" || ch === '`') { inStr = true; strCh = ch; continue }
+      if (ch === '{') brace++
+      if (ch === '}') { brace--; if (brace === 0) { akhir = i + 1; break } }
+    }
+    if (akhir === -1) {
+      console.log('[GAGAL] Batas fungsi Modal tidak terbaca')
+    } else {
+      let span = u.slice(idx, akhir)
+      const SISIP = '\n  const isiSimpan = useRef(null)\n  if (props.open) isiSimpan.current = props.children'
+      const ANCHOR1 = 'const [tutup, setTutup] = useState(false)'
+      const ANCHOR2 = 'const [tampil, setTampil] = useState(props.open)'
+      let ok = false
+      if (span.includes(ANCHOR1)) {
+        span = span.replace(ANCHOR1, ANCHOR1 + SISIP)
+        ok = true
+      } else if (span.includes(ANCHOR2)) {
+        span = span.replace(ANCHOR2, ANCHOR2 + SISIP)
+        ok = true
+      }
+      if (!ok) {
+        console.log('[TIDAK KETEMU] Anchor state di kepala Modal')
+      } else if (!span.includes('{props.children}')) {
+        console.log('[TIDAK KETEMU] Penempatan {props.children} di dalam Modal')
+      } else {
+        span = span.split('{props.children}').join('{props.open ? props.children : isiSimpan.current}')
+        u = u.slice(0, idx) + span + u.slice(akhir)
+        fs.writeFileSync(path.join(root, FILE_U), u, 'utf8')
+        console.log('[BERHASIL] Isi detail kini disimpan dan tetap tampil selama animasi tutup')
+      }
+    }
+  }
+}
+
+u = fs.readFileSync(path.join(root, FILE_U), 'utf8')
+console.log('')
+console.log('Verifikasi:')
+console.log((u.includes('const isiSimpan = useRef(null)') ? '[OK] ' : '[BELUM] ') + 'Ref penyangga isiSimpan ada di Modal')
+console.log((u.includes('{props.open ? props.children : isiSimpan.current}') ? '[OK] ' : '[BELUM] ') + 'Render memakai isi simpanan saat menutup')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Penjelasan penyebab dan perbaikan:')
+console.log('1. Saat tutup, halaman induk langsung mengosongkan state detail, sehingga props.children menjadi null di tengah animasi keluar.')
+console.log('2. Modal kini menyalin isi terakhirnya ke ref isiSimpan setiap kali dalam keadaan terbuka.')
+console.log('3. Selama fase menutup, panel merender isiSimpan.current, jadi kartu detail tetap utuh terlihat sambil mengecil dan memudar.')
+console.log('4. Saat membuka kembali, render tetap memakai props.children asli sehingga data selalu segar dan tidak pernah basi.')
+console.log('5. Perubahan terbatas di dalam fungsi Modal, jadi ConfirmModal, Lightbox, dan seluruh halaman tidak tersentuh.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka halaman Logbook publik lalu klik Detail pada kartu mana pun.')
+console.log('2. Klik tombol X: panel mengecil dan memudar sambil tetap menampilkan judul, kegiatan, dan isi logbook sampai benar benar hilang.')
+console.log('3. Klik Detail kartu lain segera setelahnya: isi yang terbuka adalah data kartu yang baru diklik, bukan sisa kartu sebelumnya.')
+console.log('4. Ulangi pada detail galeri dan daftar hadir: perilaku sama, isi tidak lagi kosong saat animasi tutup.')
+```
+
+## File: apply-fix-modal-konfirmasi.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+const FILE_U = 'src/components/ui.jsx'
+if (!fs.existsSync(path.join(root, FILE_U))) {
+  console.log('[GAGAL] ui.jsx tidak ditemukan')
+  process.exit(1)
+}
+let u = fs.readFileSync(path.join(root, FILE_U), 'utf8').replace(/\r\n/g, '\n')
+let berubah = false
+
+function rentangFungsi(isi, nama) {
+  const idx = isi.indexOf('function ' + nama + '(')
+  if (idx === -1) return null
+  const pakaiExport = isi.slice(Math.max(0, idx - 7), idx) === 'export '
+  const mulai = pakaiExport ? idx - 7 : idx
+  const idxOpen = isi.indexOf('{', idx)
+  let brace = 0, akhir = -1, inStr = false, strCh = ''
+  for (let i = idxOpen; i < isi.length; i++) {
+    const ch = isi[i]
+    const prev = i > 0 ? isi[i - 1] : ''
+    if (inStr) { if (ch === strCh && prev !== '\\') inStr = false; continue }
+    if (ch === '"' || ch === "'" || ch === '`') { inStr = true; strCh = ch; continue }
+    if (ch === '{') brace++
+    if (ch === '}') { brace--; if (brace === 0) { akhir = i + 1; break } }
+  }
+  if (akhir === -1) return null
+  return { mulai: mulai, akhir: akhir, pakaiExport: pakaiExport }
+}
+
+/* ConfirmModal ditulis ulang: markup identik dengan aslinya, ditambah animasi masuk dan keluar */
+const CONFIRM_BARU = `export function ConfirmModal(props) {
+const [tampil, setTampil] = useState(props.open)
+const [tutup, setTutup] = useState(false)
+const isiSimpan = useRef(null)
+useBodyScrollLock(!!props.open)
+useEffect(function () {
+if (props.open) { setTampil(true); setTutup(false); return undefined }
+if (!tampil) return undefined
+setTutup(true)
+const t = setTimeout(function () { setTampil(false); setTutup(false) }, 200)
+return function () { clearTimeout(t) }
+}, [props.open])
+const isiAktif = (
+<div className="anim-overlay fixed inset-0 z-[70] overflow-y-auto overscroll-contain bg-slate-900/60 p-4" onClick={props.onCancel}>
+<div className="min-h-full flex items-center justify-center py-8">
+<div className="anim-modal w-full max-w-md rounded-[2rem] bg-white shadow-2xl" onClick={function (e) { e.stopPropagation() }}>
+<div className="p-6 space-y-4">
+<div className="mx-auto h-14 w-14 rounded-2xl bg-red-100 text-red-600 grid place-items-center">
+<SizedIcon name="trash" size={24} />
+</div>
+<div className="text-center">
+<h3 className="text-xl font-black text-slate-900">{props.title || 'Hapus data ini?'}</h3>
+<p className="mt-2 text-sm text-slate-500">{props.message}</p>
+</div>
+<div className="grid grid-cols-2 gap-3">
+<button type="button" onClick={props.onCancel} className="rounded-2xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100">
+Batal
+</button>
+<button type="button" onClick={props.onConfirm} className="rounded-2xl bg-red-500 px-4 py-3 text-sm font-bold text-white hover:bg-red-600">
+{props.confirmLabel || 'Ya, Hapus'}
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+)
+if (props.open) isiSimpan.current = isiAktif
+if (!tampil) return null
+if (tutup && isiSimpan.current) return <div className="modal-tutup">{isiSimpan.current}</div>
+return isiAktif
+}`
+
+console.log('Mulai menulis ulang ConfirmModal dengan animasi masuk dan keluar...')
+console.log('')
+
+/* ===== 1. ConfirmModal: ganti utuh satu fungsi ===== */
+const rC = rentangFungsi(u, 'ConfirmModal')
+if (!rC) {
+  console.log('[TIDAK KETEMU] Fungsi ConfirmModal di ui.jsx')
+} else if (u.slice(rC.mulai, rC.akhir).includes('isiSimpan')) {
+  console.log('[SUDAH ADA] Animasi keluar di ConfirmModal')
+} else {
+  const teks = rC.pakaiExport ? CONFIRM_BARU : CONFIRM_BARU.replace('export function ConfirmModal', 'function ConfirmModal')
+  u = u.slice(0, rC.mulai) + teks + u.slice(rC.akhir)
+  berubah = true
+  console.log('[BERHASIL] ConfirmModal ditulis ulang dengan animasi masuk dan keluar')
+}
+
+/* ===== 2. Lightbox: pastikan punya animasi masuk bila belum ===== */
+const rL = rentangFungsi(u, 'Lightbox')
+if (!rL) {
+  console.log('[LEWATI] Fungsi Lightbox tidak ditemukan di ui.jsx')
+} else {
+  let span = u.slice(rL.mulai, rL.akhir)
+  if (span.includes('anim-overlay')) {
+    console.log('[SUDAH ADA] Kelas anim-overlay di Lightbox')
+  } else if (span.includes('className="fixed inset-0')) {
+    span = span.replace('className="fixed inset-0', 'className="anim-overlay fixed inset-0')
+    u = u.slice(0, rL.mulai) + span + u.slice(rL.akhir)
+    berubah = true
+    console.log('[BERHASIL] Animasi masuk Lightbox ditambahkan')
+  } else {
+    console.log('[TIDAK KETEMU] Div fixed inset-0 di Lightbox')
+  }
+}
+
+if (berubah) fs.writeFileSync(path.join(root, FILE_U), u, 'utf8')
+
+/* ===== 3. Verifikasi ===== */
+u = fs.readFileSync(path.join(root, FILE_U), 'utf8')
+console.log('')
+console.log('Verifikasi:')
+console.log((u.includes('const [tampil, setTampil] = useState(props.open)\nconst [tutup, setTutup] = useState(false)\nconst isiSimpan = useRef(null)\nuseBodyScrollLock(!!props.open)') ? '[OK] ' : '[BELUM] ') + 'ConfirmModal memakai penunda unmount dan penyangga isi')
+console.log((u.includes('if (tutup && isiSimpan.current) return <div className="modal-tutup">') ? '[OK] ' : '[BELUM] ') + 'ConfirmModal membungkus salinan isi dengan modal-tutup saat keluar')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Perilaku baru:')
+console.log('1. Modal konfirmasi hapus muncul dengan pop halus seperti sebelumnya.')
+console.log('2. Saat ditutup lewat Batal, tombol Ya Hapus, atau klik latar, ia mengecil dan memudar selama 0.2 detik dengan teks pertanyaan tetap utuh.')
+console.log('3. Markup di dalam ConfirmModal tidak berubah sedikit pun: ikon sampah, judul, pesan, dan kedua tombol sama persis dengan sebelumnya.')
+console.log('4. Lightbox dipastikan punya animasi masuk; animasi keluarnya sengaja tidak dipaksa karena Lightbox dilepas langsung oleh induknya di beberapa tempat sekaligus.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka dashboard, klik Hapus pada kartu logbook: modal konfirmasi muncul dengan pop.')
+console.log('2. Klik Batal: modal mengecil memudar, tidak lagi lenyap seketika.')
+console.log('3. Ulangi lalu klik Ya Hapus: animasi keluar bermain sebentar lalu data terhapus dan toast sukses muncul.')
+console.log('4. Buka detail dan lightbox media: animasi masuk tetap halus seperti biasa.')
+console.log('')
+console.log('Catatan jujur soal Lightbox:')
+console.log('Animasi keluar Lightbox butuh perubahan di setiap pemanggilnya (kartu galeri, detail logbook, dashboard) karena induknya langsung melepas komponen saat ditutup.')
+console.log('Bila kamu mau itu juga, bilang saja dan saya buatkan script terpisah yang menyentuh titik titik pemanggil tersebut secara hati hati.')
 ```
 
 ## File: apply-fix-nim-text.cjs
@@ -4434,6 +4831,247 @@ console.log('3. Sapu beranda, logbook, galeri, dan dashboard: tidak ada lagi tek
 console.log('4. Buka Tim & Dospem: pil prodi di kartu Profil tim magang tetap tampil sebagai satu-satunya pengecualian.')
 ```
 
+## File: apply-fix-toast-hapus.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+const FILE_D = 'src/pages/DashboardPage.jsx'
+if (!fs.existsSync(path.join(root, FILE_D))) {
+  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
+  process.exit(1)
+}
+let d = fs.readFileSync(path.join(root, FILE_D), 'utf8').replace(/\r\n/g, '\n')
+
+console.log('Mulai memasang toast sukses hapus data...')
+console.log('')
+
+const MARK = "toast.sukses('Data berhasil dihapus')"
+if (d.includes(MARK)) {
+  console.log('[SUDAH ADA] Toast sukses hapus data')
+} else {
+  // Cari pola: await refresh() yang berada di dalam fungsi executeConfirm
+  // lalu sisipkan toast.sukses tepat setelah await refresh()
+  const regex = /(await refresh\(\)\n)([\s\S]*?)(function confirmInfo)/
+  const match = d.match(regex)
+  if (match) {
+    // Cek apakah blok antara await refresh() dan function confirmInfo 
+    // tidak sudah mengandung toast sukses
+    const blokAntara = match[2]
+    if (!blokAntara.includes('toast.sukses')) {
+      // Ambil indentasi dari baris await refresh()
+      const barisRefresh = d.substring(d.lastIndexOf('\n', d.indexOf(match[0])) + 1, d.indexOf(match[0]) + match[1].length)
+      const spasi = barisRefresh.match(/^(\s*)/)[1]
+      
+      d = d.replace(regex, '$1' + spasi + "toast.sukses('Data berhasil dihapus')\n$2$3")
+      fs.writeFileSync(path.join(root, FILE_D), d, 'utf8')
+      console.log('[BERHASIL] Toast sukses hapus data dipasang')
+    }
+  } else {
+    // Fallback: cari await refresh() terakhir sebelum confirmInfo
+    const idxConfirm = d.indexOf('function confirmInfo')
+    if (idxConfirm !== -1) {
+      const bagianAtas = d.substring(0, idxConfirm)
+      const idxRefresh = bagianAtas.lastIndexOf('await refresh()')
+      if (idxRefresh !== -1) {
+        const akhirBaris = d.indexOf('\n', idxRefresh)
+        const awalBaris = d.lastIndexOf('\n', idxRefresh) + 1
+        const spasi = d.substring(awalBaris, idxRefresh).match(/^(\s*)/)[1]
+        d = d.substring(0, akhirBaris) + '\n' + spasi + "toast.sukses('Data berhasil dihapus')" + d.substring(akhirBaris)
+        fs.writeFileSync(path.join(root, FILE_D), d, 'utf8')
+        console.log('[BERHASIL] Toast sukses hapus data dipasang (fallback)')
+      } else {
+        console.log('[TIDAK KETEMU] Pola await refresh() sebelum confirmInfo')
+      }
+    } else {
+      console.log('[TIDAK KETEMU] function confirmInfo di DashboardPage')
+    }
+  }
+}
+
+// Verifikasi
+d = fs.readFileSync(path.join(root, FILE_D), 'utf8')
+console.log('')
+console.log('Verifikasi:')
+console.log((d.includes(MARK) ? '[OK] ' : '[BELUM] ') + 'Toast sukses hapus data')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+```
+
+## File: apply-fix-toast-hapus2.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+const FILE_D = 'src/pages/DashboardPage.jsx'
+if (!fs.existsSync(path.join(root, FILE_D))) {
+  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
+  process.exit(1)
+}
+let d = fs.readFileSync(path.join(root, FILE_D), 'utf8').replace(/\r\n/g, '\n')
+const MARK = "toast.sukses('Data berhasil dihapus')"
+
+console.log('Mulai memasang toast sukses hapus data (versi 2, target executeDelete)...')
+console.log('')
+
+if (d.includes(MARK)) {
+  console.log('[SUDAH ADA] Toast sukses hapus data')
+} else {
+  let pasang = false
+
+  /* Cara 1: masuk ke fungsi executeDelete, sisip setelah await refresh() pertama di dalamnya */
+  const mulai = d.indexOf('async function executeDelete')
+  if (mulai !== -1) {
+    const idxRefresh = d.indexOf('await refresh()', mulai)
+    if (idxRefresh !== -1) {
+      const akhirBaris = d.indexOf('\n', idxRefresh)
+      const awalBaris = d.lastIndexOf('\n', idxRefresh) + 1
+      const spasi = d.slice(awalBaris, idxRefresh).match(/^([ \t]*)/)[1]
+      d = d.slice(0, akhirBaris) + '\n' + spasi + MARK + d.slice(akhirBaris)
+      pasang = true
+      console.log('[BERHASIL] Toast sukses disisipkan setelah await refresh() di dalam executeDelete')
+    } else {
+      console.log('[INFO] executeDelete ketemu tetapi tidak ada await refresh() di dalamnya')
+    }
+  } else {
+    console.log('[INFO] Fungsi executeDelete tidak ketemu, coba pola cadangan')
+  }
+
+  /* Cara 2: pola cadangan lewat cabang hapus daftar hadir */
+  if (!pasang) {
+    const re = /(await supabase\.from\('daftar_hadir'\)\.delete\(\)\.eq\('id', target\.data\.id\)\n[ \t]*\}\n([ \t]*)await refresh\(\))/
+    if (re.test(d)) {
+      d = d.replace(re, function (m, semua, spasiRef) { return semua + '\n' + spasiRef + MARK })
+      pasang = true
+      console.log('[BERHASIL] Toast sukses disisipkan lewat pola cabang daftar hadir')
+    }
+  }
+
+  if (!pasang) {
+    console.log('[TIDAK KETEMU] Pola executeDelete maupun cabang hapus daftar hadir')
+    console.log('Kirim cuplikan fungsi executeDelete dari DashboardPage.jsx ke chat supaya dikunci manual.')
+  } else {
+    fs.writeFileSync(path.join(root, FILE_D), d, 'utf8')
+  }
+}
+
+/* Verifikasi */
+d = fs.readFileSync(path.join(root, FILE_D), 'utf8')
+console.log('')
+console.log('Verifikasi:')
+console.log((d.includes(MARK) ? '[OK] ' : '[BELUM] ') + 'Toast sukses hapus data')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka dashboard, hapus salah satu logbook, media galeri, atau catatan hadir lewat modal konfirmasi.')
+console.log('2. Setelah data hilang dari daftar, toast hijau Data berhasil dihapus muncul di pojok kanan atas.')
+console.log('3. Toast otomatis hilang setelah 4 detik atau bisa ditutup manual.')
+```
+
+## File: apply-fix-toast.cjs
+```javascript
+const fs = require('fs')
+ const path = require('path')
+ const root = process.cwd()
+ function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+ function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+ console.log('Mulai memperbaiki pemasangan toast yang belum selesai...')
+ console.log('')
+
+ /* ===== 1. App.jsx: bungkus ToastProvider di dalam ThemeProvider ===== */
+ let a = baca('src/App.jsx')
+ let aBerubah = false
+ if (!a.includes('<ToastProvider>')) {
+   const baru = a.replace(/(<ThemeProvider>\n)([ \t]*)(<BrowserRouter)/, '$1$2<ToastProvider>\n$2$3')
+   if (baru !== a) { a = baru; aBerubah = true; console.log('[BERHASIL] Pembukaan <ToastProvider> di App.jsx') }
+   else console.log('[TIDAK KETEMU] Pola pembukaan ToastProvider di App.jsx')
+ } else console.log('[SUDAH ADA] Pembukaan <ToastProvider>')
+ if (!a.includes('</ToastProvider>')) {
+   const baru = a.replace(/([ \t]*)<\/BrowserRouter>/, '$1</BrowserRouter>\n$1</ToastProvider>')
+   if (baru !== a) { a = baru; aBerubah = true; console.log('[BERHASIL] Penutup </ToastProvider> di App.jsx') }
+   else console.log('[TIDAK KETEMU] Pola penutup ToastProvider di App.jsx')
+ } else console.log('[SUDAH ADA] Penutup </ToastProvider>')
+ if (aBerubah) simpan('src/App.jsx', a)
+
+ /* ===== 2. DashboardPage: inisialisasi useToast ===== */
+ let d = baca('src/pages/DashboardPage.jsx')
+ let dBerubah = false
+ if (!d.includes('const toast = useToast()')) {
+   const baru = d.replace(/const \{ mahasiswa, loading \} = useAuth\(\)\n([ \t]*)const \[tab, setTab\]/, 'const { mahasiswa, loading } = useAuth()\n$1const toast = useToast()\n$1const [tab, setTab]')
+   if (baru !== d) { d = baru; dBerubah = true; console.log('[BERHASIL] Inisialisasi const toast = useToast()') }
+   else console.log('[TIDAK KETEMU] Pola inisialisasi useToast')
+ } else console.log('[SUDAH ADA] Inisialisasi useToast')
+
+ /* ===== 3. Toast sukses untuk setiap operasi CRUD ===== */
+ const daftarSukses = [
+   {
+     nama: 'toast sukses logbook',
+     cek: 'toast.sukses(menambahLog',
+     pola: /([ \t]*)if \(menambahLog\) setLogPage\(1\)/,
+     ganti: '$1if (menambahLog) setLogPage(1)\n$1toast.sukses(menambahLog ? \'Logbook berhasil disimpan\' : \'Logbook berhasil diperbarui\')'
+   },
+   {
+     nama: 'toast sukses galeri',
+     cek: 'toast.sukses(menambahGal',
+     pola: /([ \t]*)if \(menambahGal\) setGalPage\(1\)/,
+     ganti: '$1if (menambahGal) setGalPage(1)\n$1toast.sukses(menambahGal ? \'Media galeri berhasil disimpan\' : \'Media galeri berhasil diperbarui\')'
+   },
+   {
+     nama: 'toast sukses daftar hadir',
+     cek: 'toast.sukses(menambahHadir',
+     pola: /([ \t]*)if \(menambahHadir\) setHadirPage\(1\)/,
+     ganti: '$1if (menambahHadir) setHadirPage(1)\n$1toast.sukses(menambahHadir ? \'Daftar hadir berhasil disimpan\' : \'Daftar hadir berhasil diperbarui\')'
+   },
+   {
+     nama: 'toast sukses simpan foto profil',
+     cek: "toast.sukses('Foto profil berhasil disimpan')",
+     pola: /([ \t]*)setFotoFile\(null\)\n([ \t]*)\} catch \(err\) \{\n([ \t]*)toast\.gagal\('Gagal upload foto profil: ' \+ err\.message\)/,
+     ganti: '$1setFotoFile(null)\n$1toast.sukses(\'Foto profil berhasil disimpan\')\n$2} catch (err) {\n$3toast.gagal(\'Gagal upload foto profil: \' + err.message)'
+   },
+   {
+     nama: 'toast sukses hapus foto profil',
+     cek: "toast.sukses('Foto profil berhasil dihapus')",
+     pola: /([ \t]*)setVersiFoto\(function \(v\) \{ return v \+ 1 \}\)\n([ \t]*)\} catch \(err\) \{\n([ \t]*)toast\.gagal\('Gagal menghapus foto profil: ' \+ err\.message\)/,
+     ganti: '$1setVersiFoto(function (v) { return v + 1 })\n$1toast.sukses(\'Foto profil berhasil dihapus\')\n$2} catch (err) {\n$3toast.gagal(\'Gagal menghapus foto profil: \' + err.message)'
+   },
+   {
+     nama: 'toast sukses hapus data',
+     cek: "toast.sukses('Data berhasil dihapus')",
+     pola: /([ \t]*)await refresh\(\)\n([ \t]*)\}\n([ \t]*)function confirmInfo/,
+     ganti: '$1await refresh()\n$1toast.sukses(\'Data berhasil dihapus\')\n$2}\n$3function confirmInfo'
+   }
+ ]
+ daftarSukses.forEach(function (s) {
+   if (d.includes(s.cek)) { console.log('[SUDAH ADA] ' + s.nama); return }
+   if (s.pola.test(d)) {
+     d = d.replace(s.pola, s.ganti)
+     dBerubah = true
+     console.log('[BERHASIL] ' + s.nama)
+   } else {
+     console.log('[TIDAK KETEMU] ' + s.nama)
+   }
+ })
+ if (dBerubah) simpan('src/pages/DashboardPage.jsx', d)
+
+ /* ===== 4. Verifikasi akhir ===== */
+ a = baca('src/App.jsx')
+ d = baca('src/pages/DashboardPage.jsx')
+ console.log('')
+ console.log('Verifikasi akhir:')
+ console.log((a.includes('<ToastProvider>') ? '[OK] ' : '[BELUM] ') + 'ToastProvider terpasang di App.jsx')
+ console.log((d.includes('const toast = useToast()') ? '[OK] ' : '[BELUM] ') + 'useToast terinisialisasi di DashboardPage')
+ console.log((d.includes('toast.sukses(menambahLog') ? '[OK] ' : '[BELUM] ') + 'Toast sukses logbook')
+ console.log((d.includes('toast.sukses(menambahGal') ? '[OK] ' : '[BELUM] ') + 'Toast sukses galeri')
+ console.log((d.includes('toast.sukses(menambahHadir') ? '[OK] ' : '[BELUM] ') + 'Toast sukses daftar hadir')
+ console.log((d.includes("toast.sukses('Foto profil berhasil disimpan')") ? '[OK] ' : '[BELUM] ') + 'Toast sukses simpan foto profil')
+ console.log((d.includes("toast.sukses('Foto profil berhasil dihapus')") ? '[OK] ' : '[BELUM] ') + 'Toast sukses hapus foto profil')
+ console.log((d.includes("toast.sukses('Data berhasil dihapus')") ? '[OK] ' : '[BELUM] ') + 'Toast sukses hapus data')
+ console.log('')
+ console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+```
+
 ## File: apply-fix-token-aman.cjs
 ```javascript
 const fs = require('fs')
@@ -4518,6 +5156,222 @@ console.log('1. Buka dashboard, pilih mode Video dengan file video kecil, lalu s
 console.log('2. Bila sesi login valid, progres upload berjalan dan logbook tersimpan.')
 console.log('3. Bila sesi kedaluwarsa, pesan yang muncul kini kalimat ramah, bukan error access_token.')
 console.log('4. Uji juga mode Foto dan mode link YouTube untuk memastikan tidak ada regresi.')
+```
+
+## File: apply-fix-urutan.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai memperbaiki urutan kartu dengan tiebreaker created_at...')
+console.log('')
+
+/* ===== 1. format.js: ganti urutkanTanggal dengan versi bertiebreaker ===== */
+const FILE_F = 'src/lib/format.js'
+if (!fs.existsSync(path.join(root, FILE_F))) {
+  console.log('[GAGAL] format.js tidak ditemukan')
+  process.exit(1)
+}
+let f = baca(FILE_F)
+const RE_FUNGSI = /export function urutkanTanggal\(list, mode\) \{[\s\S]*?\n\}/
+const FUNGSI_BARU = `export function waktuUrut(x) {
+  if (!x) return 0
+  const src = x.created_at || x.updated_at || ''
+  if (!src) return 0
+  const t = new Date(src).getTime()
+  return isNaN(t) ? 0 : t
+}
+export function urutkanTanggal(list, mode) {
+  const arr = (list || []).slice()
+  arr.sort(function (a, b) {
+    const ta = new Date(a.tanggal + 'T00:00:00').getTime()
+    const tb = new Date(b.tanggal + 'T00:00:00').getTime()
+    if (ta !== tb) return mode === 'terlama' ? ta - tb : tb - ta
+    const ca = waktuUrut(a)
+    const cb = waktuUrut(b)
+    if (ca !== cb) return mode === 'terlama' ? ca - cb : cb - ca
+    const ia = a.id || ''
+    const ib = b.id || ''
+    if (ia !== ib) return ia < ib ? (mode === 'terlama' ? -1 : 1) : (mode === 'terlama' ? 1 : -1)
+    return 0
+  })
+  return arr
+}`
+if (f.includes('export function waktuUrut')) {
+  console.log('[SUDAH ADA] Tiebreaker created_at di format.js')
+} else if (RE_FUNGSI.test(f)) {
+  f = f.replace(RE_FUNGSI, FUNGSI_BARU)
+  simpan(FILE_F, f)
+  console.log('[BERHASIL] urutkanTanggal kini memakai tiebreaker created_at lalu id')
+} else {
+  console.log('[TIDAK KETEMU] Fungsi urutkanTanggal di format.js')
+}
+
+/* ===== 2. Beranda dan Tim & Dospem: urutkan dulu sebelum slice 6 ===== */
+;['src/pages/HomePage.jsx', 'src/pages/DospemPage.jsx'].forEach(function (rel) {
+  if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan'); return }
+  let isi = baca(rel)
+  let berubah = false
+  const MARK_SLICE = "urutkanTanggal(logs, 'terbaru').slice(0, 6)"
+  if (!isi.includes(MARK_SLICE)) {
+    if (isi.includes('logs.slice(0, 6)')) {
+      isi = isi.split('logs.slice(0, 6)').join(MARK_SLICE)
+      berubah = true
+      console.log('[BERHASIL] Slice 6 data kini lewat urutkanTanggal di ' + rel)
+    } else {
+      console.log('[TIDAK KETEMU] Pola logs.slice(0, 6) di ' + rel)
+    }
+  } else {
+    console.log('[SUDAH ADA] Slice terurut di ' + rel)
+  }
+  const RE_IMP = /import \{ ([^}']*) \} from '\.\.\/lib\/format\.js'/
+  if (isi.includes("urutkanTanggal } from '../lib/format.js'") || (RE_IMP.test(isi) && isi.match(RE_IMP)[1].includes('urutkanTanggal'))) {
+    console.log('[SUDAH ADA] Import urutkanTanggal di ' + rel)
+  } else if (RE_IMP.test(isi)) {
+    isi = isi.replace(RE_IMP, function (m, daftar) { return "import { " + daftar + ", urutkanTanggal } from '../lib/format.js'" })
+    berubah = true
+    console.log('[BERHASIL] Import urutkanTanggal ditambahkan di ' + rel)
+  } else {
+    isi = isi.replace(/import /, "import { urutkanTanggal } from '../lib/format.js'\nimport ")
+    berubah = true
+    console.log('[BERHASIL] Baris import format.js baru ditambahkan di ' + rel)
+  }
+  if (berubah) simpan(rel, isi)
+})
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Hasil analisis keberadaan bug sebelum perbaikan:')
+console.log('1. Dashboard tab Logbook: ada, memakai urutkanTanggal tanpa tiebreaker.')
+console.log('2. Dashboard tab Galeri: ada, penyebab sama.')
+console.log('3. Dashboard tab Daftar Hadir: ada, penyebab sama.')
+console.log('4. Publik Logbook, Galeri, Daftar Hadir: ada, penyebab sama.')
+console.log('5. Beranda: ada, slice 6 memakai urutan mentah query yang hanya order tanggal.')
+console.log('6. Tim & Dospem: ada, slice 6 aktivitas memakai urutan mentah query.')
+console.log('')
+console.log('Perilaku baru setelah perbaikan:')
+console.log('1. Data dengan tanggal sama diurutkan berdasarkan waktu dibuat, jadi logbook yang baru ditambah langsung maju ke posisi terdepan kelompok tanggalnya.')
+console.log('2. Kartu kiri dan kanan kini benar benar bergeser saat data ditambah atau dihapus, sesuai harapanmu.')
+console.log('3. Mode terlama juga konsisten: dalam tanggal yang sama, yang lebih dulu dibuat tampil lebih dulu.')
+console.log('4. Bila created_at tidak ada di suatu tabel, urutan jatuh ke id sehingga tetap stabil dan tidak acak acakan.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buat dua logbook dengan tanggal yang sama, catat posisi kiri dan kanannya.')
+console.log('2. Tambah logbook ketiga dengan tanggal yang sama: kartu baru muncul paling depan, kartu lama tergeser ke kanan lalu ke baris bawah.')
+console.log('3. Hapus kartu paling kiri: sisa kartu langsung bergeser mengisi posisi kiri.')
+console.log('4. Ganti sortir ke terlama: urutan dalam tanggal yang sama berbalik rapi.')
+console.log('5. Ulangi pengecekan cepat di tab Galeri, Daftar Hadir, halaman publik, Beranda, dan Tim & Dospem.')
+```
+
+## File: apply-fix-urutan2.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+const FILE_F = 'src/lib/format.js'
+if (!fs.existsSync(path.join(root, FILE_F))) {
+  console.log('[GAGAL] format.js tidak ditemukan')
+  process.exit(1)
+}
+let f = fs.readFileSync(path.join(root, FILE_F), 'utf8').replace(/\r\n/g, '\n')
+
+const FUNGSI_BARU = `export function waktuUrut(x) {
+  if (!x) return 0
+  const src = x.created_at || x.updated_at || ''
+  if (!src) return 0
+  const t = new Date(src).getTime()
+  return isNaN(t) ? 0 : t
+}
+export function urutkanTanggal(list, mode) {
+  const arr = (list || []).slice()
+  arr.sort(function (a, b) {
+    const ta = new Date(a.tanggal + 'T00:00:00').getTime()
+    const tb = new Date(b.tanggal + 'T00:00:00').getTime()
+    if (ta !== tb) return mode === 'terlama' ? ta - tb : tb - ta
+    const ca = waktuUrut(a)
+    const cb = waktuUrut(b)
+    if (ca !== cb) return mode === 'terlama' ? ca - cb : cb - ca
+    const ia = a.id || ''
+    const ib = b.id || ''
+    if (ia !== ib) return ia < ib ? (mode === 'terlama' ? -1 : 1) : (mode === 'terlama' ? 1 : -1)
+    return 0
+  })
+  return arr
+}`
+
+console.log('Mulai mengganti urutkanTanggal di format.js (versi tahan pola)...')
+console.log('')
+
+if (f.includes('function waktuUrut')) {
+  console.log('[SUDAH ADA] Tiebreaker created_at sudah terpasang di format.js')
+} else {
+  const POLA = [
+    /export\s+function\s+urutkanTanggal\s*\([^)]*\)\s*\{/,
+    /function\s+urutkanTanggal\s*\([^)]*\)\s*\{/,
+    /(?:export\s+)?const\s+urutkanTanggal\s*=\s*function\s*\([^)]*\)\s*\{/,
+    /(?:export\s+)?const\s+urutkanTanggal\s*=\s*\([^)]*\)\s*=>\s*\{/
+  ]
+  let m = null
+  for (let i = 0; i < POLA.length; i++) { m = POLA[i].exec(f); if (m) break }
+  if (!m) {
+    if (f.includes('urutkanTanggal')) {
+      console.log('[TIDAK KETEMU] Pola fungsi urutkanTanggal, kirim isi format.js ke chat')
+    } else {
+      f = f.trimEnd() + '\n\n' + FUNGSI_BARU + '\n'
+      fs.writeFileSync(path.join(root, FILE_F), f, 'utf8')
+      console.log('[BERHASIL] Fungsi urutkanTanggal baru ditambahkan di akhir format.js')
+    }
+  } else {
+    const mulai = m.index
+    const idxOpen = m.index + m[0].length - 1
+    let brace = 0, akhir = -1, inStr = false, strCh = ''
+    for (let i = idxOpen; i < f.length; i++) {
+      const ch = f[i]
+      const prev = i > 0 ? f[i - 1] : ''
+      if (inStr) { if (ch === strCh && prev !== '\\') inStr = false; continue }
+      if (ch === '"' || ch === "'" || ch === '`') { inStr = true; strCh = ch; continue }
+      if (ch === '{') brace++
+      if (ch === '}') { brace--; if (brace === 0) { akhir = i + 1; break } }
+    }
+    if (akhir === -1) {
+      console.log('[GAGAL] Batas fungsi urutkanTanggal tidak terbaca')
+    } else {
+      const pakaiExport = m[0].indexOf('export') === 0
+      const teks = pakaiExport ? FUNGSI_BARU : FUNGSI_BARU.replace(/export function/g, 'function')
+      f = f.slice(0, mulai) + teks + f.slice(akhir)
+      fs.writeFileSync(path.join(root, FILE_F), f, 'utf8')
+      console.log('[BERHASIL] urutkanTanggal diganti versi bertiebreaker created_at dan id')
+    }
+  }
+}
+
+/* Verifikasi menyeluruh */
+f = fs.readFileSync(path.join(root, FILE_F), 'utf8')
+const h = fs.readFileSync(path.join(root, 'src/pages/HomePage.jsx'), 'utf8')
+const dd = fs.readFileSync(path.join(root, 'src/pages/DospemPage.jsx'), 'utf8')
+console.log('')
+console.log('Verifikasi:')
+console.log((f.includes('function waktuUrut') ? '[OK] ' : '[BELUM] ') + 'fungsi waktuUrut ada di format.js')
+console.log((f.includes('waktuUrut(a)') ? '[OK] ' : '[BELUM] ') + 'tiebreaker created_at dipakai di pembanding')
+console.log((h.includes("urutkanTanggal(logs, 'terbaru').slice(0, 6)") ? '[OK] ' : '[BELUM] ') + 'slice 6 data Beranda lewat urutkanTanggal')
+console.log((dd.includes("urutkanTanggal(logs, 'terbaru').slice(0, 6)") ? '[OK] ' : '[BELUM] ') + 'slice 6 data Tim & Dospem lewat urutkanTanggal')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Catatan:')
+console.log('1. Perubahan Beranda dan Tim & Dospem dari script sebelumnya sudah aman terpasang dan tetap kompatibel karena nama fungsinya tidak berubah.')
+console.log('2. Begitu format.js terganti, seluruh daftar di dashboard, halaman publik, Beranda, dan Tim & Dospem otomatis memakai tiebreaker baru.')
+console.log('3. Bila masih ada baris TIDAK KETEMU, salin isi file src/lib/format.js ke chat supaya saya ganti manual sesuai bentuk aslinya.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buat dua logbook bertanggal sama, catat posisi kiri dan kanannya.')
+console.log('2. Tambah logbook ketiga bertanggal sama: kartu baru langsung muncul paling depan dan kartu lama bergeser ke kanan lalu ke baris bawah.')
+console.log('3. Hapus kartu paling kiri: sisa kartu langsung bergeser mengisi posisi yang kosong.')
+console.log('4. Ganti sortir ke terlama: urutan dalam tanggal yang sama berbalik rapi.')
 ```
 
 ## File: apply-fix-video-galeri.cjs
@@ -9876,6 +10730,306 @@ console.log('4. Peringatan React Router di konsol tidak muncul lagi.')
 console.log('5. Baris CORS dan pesan internal pemain YouTube tetap ada tetapi tidak mengganggu fungsi.')
 ```
 
+## File: apply-toast-crud.cjs
+```javascript
+const fs = require('fs')
+ const path = require('path')
+ const root = process.cwd()
+ function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+ function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+ function ganti(rel, cari, gantiDengan, label) {
+   if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan (' + label + ')'); return }
+   let isi = baca(rel)
+   if (isi.includes(gantiDengan)) { console.log('[SUDAH ADA] ' + label); return }
+   if (!isi.includes(cari)) { console.log('[TIDAK KETEMU] ' + label + ' di ' + rel); return }
+   isi = isi.replace(cari, gantiDengan)
+   simpan(rel, isi)
+   console.log('[BERHASIL] ' + label)
+ }
+ function gantiSemua(rel, cari, gantiDengan, label) {
+   if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan (' + label + ')'); return }
+   let isi = baca(rel)
+   if (isi.includes(gantiDengan)) { console.log('[SUDAH ADA] ' + label); return }
+   if (!isi.includes(cari)) { console.log('[TIDAK KETEMU] ' + label + ' di ' + rel); return }
+   isi = isi.split(cari).join(gantiDengan)
+   simpan(rel, isi)
+   console.log('[BERHASIL] ' + label)
+ }
+ function sisipAkhir(rel, cari, teks, label) {
+   if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan (' + label + ')'); return }
+   let isi = baca(rel)
+   if (isi.includes(label)) { console.log('[SUDAH ADA] ' + label); return }
+   isi = isi.trimEnd() + '\n\n' + teks + '\n'
+   simpan(rel, isi)
+   console.log('[BERHASIL] ' + label)
+ }
+ console.log('Mulai memasang sistem notifikasi toast untuk CRUD...')
+ console.log('')
+ /* ===== 1. ui.jsx: tambahkan createContext dan useContext ke import ===== */
+ ganti('src/components/ui.jsx',
+   "import { useEffect, useRef, useState } from 'react'",
+   "import { createContext, useContext, useEffect, useRef, useState } from 'react'",
+   'import createContext dan useContext di ui.jsx')
+ /* ===== 2. ui.jsx: tambahkan ToastProvider dan useToast ===== */
+ sisipAkhir('src/components/ui.jsx',
+   'ToastProvider',
+   `const ToastContext = createContext(null)
+ export function ToastProvider(props) {
+   const [toasts, setToasts] = useState([])
+   function tutupToast(id) {
+     setToasts(function (prev) { return prev.filter(function (t) { return t.id !== id }) })
+   }
+   function tambahToast(tipe, pesan) {
+     const id = Date.now() + Math.random()
+     setToasts(function (prev) { return prev.concat([{ id: id, tipe: tipe, pesan: pesan }]) })
+     setTimeout(function () {
+       setToasts(function (prev) { return prev.filter(function (t) { return t.id !== id }) })
+     }, 4000)
+   }
+   function toastSukses(pesan) { tambahToast('sukses', pesan) }
+   function toastGagal(pesan) { tambahToast('gagal', pesan) }
+   return (
+     <ToastContext.Provider value={{ sukses: toastSukses, gagal: toastGagal }}>
+       {props.children}
+       <div className="fixed top-5 right-5 z-[100] flex w-full max-w-sm flex-col gap-3 pointer-events-none">
+         {toasts.map(function (t) {
+           const sukses = t.tipe === 'sukses'
+           return (
+             <div key={t.id} className={'anim-toast pointer-events-auto flex items-start gap-3 rounded-2xl border p-4 shadow-lg ' + (sukses ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50')}>
+               <span className={'mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full ' + (sukses ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white')}>
+                 <SizedIcon name={sukses ? 'check' : 'close'} size={12} />
+               </span>
+               <p className={'flex-1 text-sm font-semibold ' + (sukses ? 'text-emerald-800' : 'text-red-700')}>{t.pesan}</p>
+               <button type="button" onClick={function () { tutupToast(t.id) }} className="shrink-0 text-slate-400 hover:text-slate-600">
+                 <SizedIcon name="close" size={14} />
+               </button>
+             </div>
+           )
+         })}
+       </div>
+     </ToastContext.Provider>
+   )
+ }
+ export function useToast() {
+   return useContext(ToastContext)
+ }`,
+   'ToastProvider dan useToast di ui.jsx')
+ /* ===== 3. App.jsx: import ToastProvider ===== */
+ ganti('src/App.jsx',
+   "import { ThemeProvider } from './lib/theme.jsx'",
+   "import { ThemeProvider } from './lib/theme.jsx'\n import { ToastProvider } from './components/ui.jsx'",
+   'import ToastProvider di App.jsx')
+ /* ===== 4. App.jsx: wrap dengan ToastProvider ===== */
+ ganti('src/App.jsx',
+   `<ThemeProvider>
+       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+         <ScrollToTop />`,
+   `<ThemeProvider>
+       <ToastProvider>
+       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+         <ScrollToTop />`,
+   'wrap buka ToastProvider')
+ ganti('src/App.jsx',
+   `</BrowserRouter>
+     </ThemeProvider>`,
+   `</BrowserRouter>
+       </ToastProvider>
+     </ThemeProvider>`,
+   'wrap tutup ToastProvider')
+ /* ===== 5. DashboardPage.jsx: import useToast ===== */
+ ganti('src/pages/DashboardPage.jsx',
+   "import { EmptyState, Modal, ConfirmModal, inputCls, labelCls, btnPrimary, btnSmall, AutoTextArea, Pagination } from '../components/ui.jsx'",
+   "import { EmptyState, Modal, ConfirmModal, inputCls, labelCls, btnPrimary, btnSmall, AutoTextArea, Pagination, useToast } from '../components/ui.jsx'",
+   'import useToast di DashboardPage')
+ /* ===== 6. DashboardPage.jsx: inisialisasi useToast ===== */
+ ganti('src/pages/DashboardPage.jsx',
+   'const { mahasiswa, loading } = useAuth()\n    const [tab, setTab]',
+   'const { mahasiswa, loading } = useAuth()\n    const toast = useToast()\n    const [tab, setTab]',
+   'inisialisasi useToast di DashboardPage')
+ /* ===== 7. DashboardPage.jsx: ganti alert error jadi toast gagal ===== */
+ ganti('src/pages/DashboardPage.jsx',
+   "if (!id) { alert('Link video tidak valid pada kegiatan ' + (i + 1) + '.'); setBusy(false); return }",
+   "if (!id) { toast.gagal('Link video tidak valid pada kegiatan ' + (i + 1) + '.'); setBusy(false); return }",
+   'toast link video tidak valid logbook')
+ gantiSemua('src/pages/DashboardPage.jsx',
+   "if (ytQuota.remaining <= 0) { alert('Kuota upload video hari ini sudah habis. Gunakan link video.'); setBusy(false); return }",
+   "if (ytQuota.remaining <= 0) { toast.gagal('Kuota upload video hari ini sudah habis. Gunakan link video.'); setBusy(false); return }",
+   'toast kuota habis')
+ ganti('src/pages/DashboardPage.jsx',
+   "alert('Tambahkan minimal satu kegiatan dengan judul.'); setBusy(false); return",
+   "toast.gagal('Tambahkan minimal satu kegiatan dengan judul.'); setBusy(false); return",
+   'toast minimal satu kegiatan')
+ ganti('src/pages/DashboardPage.jsx',
+   "alert('Gagal menyimpan logbook: ' + err.message)",
+   "toast.gagal('Gagal menyimpan logbook: ' + err.message)",
+   'toast gagal simpan logbook')
+ ganti('src/pages/DashboardPage.jsx',
+   "if (!id) { alert('Link video tidak valid.'); setBusy(false); return }",
+   "if (!id) { toast.gagal('Link video tidak valid.'); setBusy(false); return }",
+   'toast link video tidak valid galeri')
+ ganti('src/pages/DashboardPage.jsx',
+   "alert('Galeri wajib memiliki media. Pilih file foto atau video terlebih dahulu.'); setBusy(false); return",
+   "toast.gagal('Galeri wajib memiliki media. Pilih file foto atau video terlebih dahulu.'); setBusy(false); return",
+   'toast galeri wajib media')
+ ganti('src/pages/DashboardPage.jsx',
+   "alert('Gagal menyimpan galeri: ' + err.message)",
+   "toast.gagal('Gagal menyimpan galeri: ' + err.message)",
+   'toast gagal simpan galeri')
+ ganti('src/pages/DashboardPage.jsx',
+   "if (f.size > 5 * 1024 * 1024) { alert('Ukuran foto maksimal 5 MB.'); e.target.value = ''; return }",
+   "if (f.size > 5 * 1024 * 1024) { toast.gagal('Ukuran foto maksimal 5 MB.'); e.target.value = ''; return }",
+   'toast ukuran foto maksimal')
+ ganti('src/pages/DashboardPage.jsx',
+   "if (!fotoFile) { alert('Pilih file foto terlebih dahulu.'); return }",
+   "if (!fotoFile) { toast.gagal('Pilih file foto terlebih dahulu.'); return }",
+   'toast pilih foto dulu')
+ ganti('src/pages/DashboardPage.jsx',
+   "alert('Gagal upload foto profil: ' + err.message)",
+   "toast.gagal('Gagal upload foto profil: ' + err.message)",
+   'toast gagal upload foto')
+ ganti('src/pages/DashboardPage.jsx',
+   "alert('Gagal menghapus foto profil: ' + err.message)",
+   "toast.gagal('Gagal menghapus foto profil: ' + err.message)",
+   'toast gagal hapus foto')
+ ganti('src/pages/DashboardPage.jsx',
+   "if (res.error) { alert('Kamu sudah punya catatan hadir di tanggal tersebut.'); setBusy(false); return }",
+   "if (res.error) { toast.gagal('Kamu sudah punya catatan hadir di tanggal tersebut.'); setBusy(false); return }",
+   'toast sudah punya catatan hadir')
+ /* ===== 8. DashboardPage.jsx: tambahkan toast sukses setelah CRUD berhasil ===== */
+ ganti('src/pages/DashboardPage.jsx',
+   'await refresh()\n        if (menambahLog) setLogPage(1)\n      } catch (err) {\n        toast.gagal(\'Gagal menyimpan logbook: \' + err.message)',
+   'await refresh()\n        if (menambahLog) setLogPage(1)\n        toast.sukses(menambahLog ? \'Logbook berhasil disimpan\' : \'Logbook berhasil diperbarui\')\n      } catch (err) {\n        toast.gagal(\'Gagal menyimpan logbook: \' + err.message)',
+   'toast sukses logbook')
+ ganti('src/pages/DashboardPage.jsx',
+   'await refresh()\n         if (menambahGal) setGalPage(1)\n      } catch (err) {\n        toast.gagal(\'Gagal menyimpan galeri: \' + err.message)',
+   'await refresh()\n         if (menambahGal) setGalPage(1)\n        toast.sukses(menambahGal ? \'Media galeri berhasil disimpan\' : \'Media galeri berhasil diperbarui\')\n      } catch (err) {\n        toast.gagal(\'Gagal menyimpan galeri: \' + err.message)',
+   'toast sukses galeri')
+ ganti('src/pages/DashboardPage.jsx',
+   'await refresh()\n       if (menambahHadir) setHadirPage(1)\n      setInfoProses(\'\')',
+   'await refresh()\n       if (menambahHadir) setHadirPage(1)\n      toast.sukses(menambahHadir ? \'Daftar hadir berhasil disimpan\' : \'Daftar hadir berhasil diperbarui\')\n      setInfoProses(\'\')',
+   'toast sukses daftar hadir')
+ ganti('src/pages/DashboardPage.jsx',
+   'await refresh()\n    }\n    async function executeDelete()',
+   'await refresh()\n       toast.sukses(\'Foto profil berhasil disimpan\')\n    }\n    async function executeDelete()',
+   'toast sukses foto profil')
+ ganti('src/pages/DashboardPage.jsx',
+   'setVersiFoto(function (v) { return v + 1 })\n      } catch (err) {\n        toast.gagal(\'Gagal menghapus foto profil: \' + err.message)',
+   'setVersiFoto(function (v) { return v + 1 })\n        toast.sukses(\'Foto profil berhasil dihapus\')\n      } catch (err) {\n        toast.gagal(\'Gagal menghapus foto profil: \' + err.message)',
+   'toast sukses hapus foto profil')
+ ganti('src/pages/DashboardPage.jsx',
+   'await refresh()\n    }\n    function confirmInfo()',
+   'await refresh()\n       toast.sukses(\'Data berhasil dihapus\')\n    }\n    function confirmInfo()',
+   'toast sukses hapus data')
+ console.log('')
+ console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+ console.log('')
+ console.log('Fitur toast yang terpasang:')
+ console.log('1. Notifikasi muncul di pojok kanan atas dengan tema BSI (hijau untuk sukses, merah untuk gagal).')
+ console.log('2. Otomatis hilang setelah 4 detik, atau bisa ditutup manual dengan tombol X.')
+ console.log('3. Semua alert() sudah diganti dengan toast agar tidak memblokir interaksi user.')
+ console.log('4. Toast sukses muncul setelah: simpan/edit logbook, simpan/edit galeri, simpan/edit daftar hadir, simpan/hapus foto profil, hapus data.')
+ console.log('5. Toast gagal muncul untuk: link video tidak valid, kuota habis, validasi form, dan error dari server.')
+```
+
+## File: apply-toast-opaque.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+function ganti(rel, cari, gantiDengan, label) {
+  if (!fs.existsSync(path.join(root, rel))) { console.log('[LEWATI] ' + rel + ' tidak ditemukan (' + label + ')'); return }
+  let isi = baca(rel)
+  if (isi.includes(gantiDengan)) { console.log('[SUDAH ADA] ' + label); return }
+  if (!isi.includes(cari)) { console.log('[TIDAK KETEMU] ' + label + ' di ' + rel); return }
+  isi = isi.replace(cari, gantiDengan)
+  simpan(rel, isi)
+  console.log('[BERHASIL] ' + label)
+}
+
+console.log('Mulai membuat toast opaque yang ringan untuk device low end...')
+console.log('')
+
+/* ===== 1. ui.jsx: ganti kelas warna toast ke kelas khusus ===== */
+ganti('src/components/ui.jsx',
+  "(sukses ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50')",
+  "(sukses ? 'toast-sukses' : 'toast-gagal')",
+  'Kelas wadah toast diganti toast-sukses / toast-gagal')
+ganti('src/components/ui.jsx',
+  "'flex-1 text-sm font-semibold ' + (sukses ? 'text-emerald-800' : 'text-red-700')",
+  "'flex-1 text-sm font-semibold toast-teks'",
+  'Kelas teks toast diganti toast-teks')
+ganti('src/components/ui.jsx',
+  "onClick={function () { tutupToast(t.id) }} className=\"shrink-0 text-slate-400 hover:text-slate-600\"",
+  "onClick={function () { tutupToast(t.id) }} className=\"toast-tutup shrink-0 text-slate-400 hover:text-slate-600\"",
+  'Kelas tombol tutup toast ditambah toast-tutup')
+
+/* ===== 2. index.css: gaya toast opaque tanpa backdrop-filter ===== */
+const FILE_CSS = 'src/index.css'
+const CSS_TOAST = `/* toast-opaque: latar solid bergradasi lembut, tanpa backdrop-filter agar ringan di device low end */
+@keyframes anim-toast {
+  from { opacity: 0; transform: translateX(14px) scale(0.98); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+.anim-toast { animation: anim-toast 0.22s ease-out; opacity: 1; }
+.toast-sukses {
+  background: linear-gradient(180deg, #ffffff 0%, #ecfdf5 100%);
+  border-color: #a7f3d0;
+  box-shadow: 0 10px 30px rgba(6, 95, 70, 0.16);
+}
+.toast-gagal {
+  background: linear-gradient(180deg, #ffffff 0%, #fef2f2 100%);
+  border-color: #fecaca;
+  box-shadow: 0 10px 30px rgba(153, 27, 27, 0.16);
+}
+.toast-sukses .toast-teks { color: #065f46; }
+.toast-gagal .toast-teks { color: #991b1b; }
+.toast-tutup:hover { color: #334155; }
+.dark .toast-sukses {
+  background: linear-gradient(180deg, #065f46 0%, #064e3b 100%);
+  border-color: rgba(52, 211, 153, 0.45);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+.dark .toast-gagal {
+  background: linear-gradient(180deg, #991b1b 0%, #7f1d1d 100%);
+  border-color: rgba(248, 113, 113, 0.45);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+.dark .toast-sukses .toast-teks { color: #d1fae5 !important; }
+.dark .toast-gagal .toast-teks { color: #fee2e2 !important; }
+.dark .toast-tutup { color: #cbd5e1 !important; }
+.dark .toast-tutup:hover { color: #ffffff !important; }
+`
+if (!fs.existsSync(path.join(root, FILE_CSS))) {
+  console.log('[LEWATI] index.css tidak ditemukan')
+} else {
+  let css = baca(FILE_CSS)
+  if (css.includes('/* toast-opaque */')) {
+    console.log('[SUDAH ADA] CSS toast-opaque di index.css')
+  } else {
+    simpan(FILE_CSS, css.trimEnd() + '\n\n' + CSS_TOAST)
+    console.log('[BERHASIL] CSS toast-opaque ditambahkan di index.css')
+  }
+}
+
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Kenapa versi ini ringan di device jadul:')
+console.log('1. Tidak memakai backdrop-filter blur sama sekali, jadi GPU tidak perlu merender ulang area di belakang toast setiap frame.')
+console.log('2. Latar diganti gradasi solid yang hanya dirasterisasi sekali, bukan warna semi transparan yang tembus pandang.')
+console.log('3. Animasi masuk hanya memakai opacity dan transform, dua properti termurah yang dikerjakan kompositor GPU.')
+console.log('4. Kedalaman visual didapat dari box-shadow statis, bukan dari efek blur hidup.')
+console.log('5. Mode gelap memakai hijau tua dan merah tua pekat dengan teks terang, kontras nyaman dibaca dan tidak tembus.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Mode gelap: hapus sebuah data, toast muncul hijau tua pekat, tombol Dashboard dan Keluar di belakangnya tidak lagi tembus.')
+console.log('2. Mode terang: toast sukses putih kehijauan lembut, toast gagal putih kemerah-merahan, keduanya solid.')
+console.log('3. Scroll halaman saat toast tampil: tidak ada patah patah karena tidak ada blur yang dihitung ulang.')
+console.log('4. Tombol X tetap jelas di kedua mode dan berubah putih saat disentuh di mode gelap.')
+```
+
 ## File: apply-youtube-backend.cjs
 ```javascript
 const fs = require('fs')
@@ -14028,73 +15182,6 @@ dist
 </html>
 ```
 
-## File: src/lib/format.js
-```javascript
-export function formatTanggal(s) {
-  if (!s) return 'Tanggal belum diisi'
-  const d = new Date(s + 'T00:00:00')
-  if (Number.isNaN(d.getTime())) return s
-  return d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-}
-
-export function formatTanggalShort(s) {
-  if (!s) return ''
-  const d = new Date(s + 'T00:00:00')
-  if (Number.isNaN(d.getTime())) return s
-  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
-}
-
-export function todayInput() {
-  const d = new Date()
-  const m = ('0' + (d.getMonth() + 1)).slice(-2)
-  const day = ('0' + d.getDate()).slice(-2)
-  return d.getFullYear() + '-' + m + '-' + day
-}
-
-export function detectMediaType(u) {
-  const ext = String(u || '').split('?')[0].split('.').pop().toLowerCase()
-  return ['mp4', 'webm', 'ogg', 'mov', 'm4v'].indexOf(ext) !== -1 ? 'video' : 'foto'
-}
-
-export function matchesDateFilters(dateString, f) {
-  if (!dateString) return false
-  if (f.timeMode === 'bulan') {
-    if (f.bulan) {
-      if (f.bulan.length === 7) return dateString.slice(0, 7) === f.bulan
-      const p = dateString.split('-')
-      if (p.length < 2 || p[1] !== f.bulan) return false
-    }
-  } else if (f.timeMode === 'rentang') {
-    if (f.dari && dateString < f.dari) return false
-    if (f.sampai && dateString > f.sampai) return false
-  }
-  return true
-}
-export function waktuUrut(x) {
-  if (!x) return 0
-  const src = x.created_at || x.updated_at || ''
-  if (!src) return 0
-  const t = new Date(src).getTime()
-  return isNaN(t) ? 0 : t
-}
-export function urutkanTanggal(list, mode) {
-  const arr = (list || []).slice()
-  arr.sort(function (a, b) {
-    const ta = new Date(a.tanggal + 'T00:00:00').getTime()
-    const tb = new Date(b.tanggal + 'T00:00:00').getTime()
-    if (ta !== tb) return mode === 'terlama' ? ta - tb : tb - ta
-    const ca = waktuUrut(a)
-    const cb = waktuUrut(b)
-    if (ca !== cb) return mode === 'terlama' ? ca - cb : cb - ca
-    const ia = a.id || ''
-    const ib = b.id || ''
-    if (ia !== ib) return ia < ib ? (mode === 'terlama' ? -1 : 1) : (mode === 'terlama' ? 1 : -1)
-    return 0
-  })
-  return arr
-}
-```
-
 ## File: src/lib/konversi.js
 ```javascript
 import heic2any from 'heic2any'
@@ -14389,6 +15476,73 @@ export function countActiveFilters(o) {
     if (o[k]) c++
   }
   return c
+}
+```
+
+## File: src/lib/format.js
+```javascript
+export function formatTanggal(s) {
+  if (!s) return 'Tanggal belum diisi'
+  const d = new Date(s + 'T00:00:00')
+  if (Number.isNaN(d.getTime())) return s
+  return d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+export function formatTanggalShort(s) {
+  if (!s) return ''
+  const d = new Date(s + 'T00:00:00')
+  if (Number.isNaN(d.getTime())) return s
+  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+export function todayInput() {
+  const d = new Date()
+  const m = ('0' + (d.getMonth() + 1)).slice(-2)
+  const day = ('0' + d.getDate()).slice(-2)
+  return d.getFullYear() + '-' + m + '-' + day
+}
+
+export function detectMediaType(u) {
+  const ext = String(u || '').split('?')[0].split('.').pop().toLowerCase()
+  return ['mp4', 'webm', 'ogg', 'mov', 'm4v'].indexOf(ext) !== -1 ? 'video' : 'foto'
+}
+
+export function matchesDateFilters(dateString, f) {
+  if (!dateString) return false
+  if (f.timeMode === 'bulan') {
+    if (f.bulan) {
+      if (f.bulan.length === 7) return dateString.slice(0, 7) === f.bulan
+      const p = dateString.split('-')
+      if (p.length < 2 || p[1] !== f.bulan) return false
+    }
+  } else if (f.timeMode === 'rentang') {
+    if (f.dari && dateString < f.dari) return false
+    if (f.sampai && dateString > f.sampai) return false
+  }
+  return true
+}
+export function waktuUrut(x) {
+  if (!x) return 0
+  const src = x.created_at || x.updated_at || ''
+  if (!src) return 0
+  const t = new Date(src).getTime()
+  return isNaN(t) ? 0 : t
+}
+export function urutkanTanggal(list, mode) {
+  const arr = (list || []).slice()
+  arr.sort(function (a, b) {
+    const ta = new Date(a.tanggal + 'T00:00:00').getTime()
+    const tb = new Date(b.tanggal + 'T00:00:00').getTime()
+    if (ta !== tb) return mode === 'terlama' ? ta - tb : tb - ta
+    const ca = waktuUrut(a)
+    const cb = waktuUrut(b)
+    if (ca !== cb) return mode === 'terlama' ? ca - cb : cb - ca
+    const ia = a.id || ''
+    const ib = b.id || ''
+    if (ia !== ib) return ia < ib ? (mode === 'terlama' ? -1 : 1) : (mode === 'terlama' ? 1 : -1)
+    return 0
+  })
+  return arr
 }
 ```
 
@@ -15064,6 +16218,67 @@ export default function LoginPage() {
 }
 ```
 
+## File: src/pages/TimPage.jsx
+```javascript
+import { useEffect, useState } from 'react'
+import { supabase } from '../lib/supabase.js'
+import { SkeletonPersonCard } from '../components/Skeleton.jsx'
+
+export default function TimPage() {
+  const [people, setPeople] = useState([])
+  const [logs, setLogs] = useState([])
+  const [galeri, setGaleri] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(function () {
+    async function load() {
+      const p = await supabase.from('mahasiswa').select('id, nama, nim, prodi, foto_profil').order('nama')
+      const l = await supabase.from('logbooks').select('id, mahasiswa_id, foto_profil').eq('status', 'publik')
+      const g = await supabase.from('galeri').select('id, mahasiswa_id, foto_profil')
+      setPeople(p.data || [])
+      setLogs(l.data || [])
+      setGaleri(g.data || [])
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  return (
+    <div>
+      <section className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Profil Mahasiswa</p>
+        <h1 className="mt-2 text-3xl lg:text-4xl font-black text-slate-900">Mahasiswa magang Bank BSI</h1>
+      </section>
+      <section className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        {loading
+          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <SkeletonPersonCard key={i} /> })
+          : people.map(function (p) {
+              const totalLog = logs.filter(function (l) { return l.mahasiswa_id === p.id }).length
+              const totalGal = galeri.filter(function (g) { return g.mahasiswa_id === p.id }).length
+              const initials = p.nama.split(' ').slice(0, 2).map(function (w) { return w.charAt(0) || '' }).join('').toUpperCase()
+              return (
+                <div key={p.id} className="card-hover bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
+                  <div className="flex items-center gap-4">
+                    <div className="h-14 w-14 rounded-3xl bg-bsi-800 text-white grid place-items-center text-xl font-black">{typeof p !== 'undefined' && p && p.foto_profil ? <img src={p.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : typeof m !== 'undefined' && m && m.foto_profil ? <img src={m.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : initials}</div>
+                    <div>
+                      <p className="text-lg font-bold text-slate-900">{p.nama}</p>
+                      <p className="text-sm text-slate-500">NIM {p.nim}</p>
+                      {p.prodi ? <span className="mt-1 inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-bsi-100 text-bsi-900">{p.prodi}</span> : null}
+                    </div>
+                  </div>
+                  <div className="mt-5 grid grid-cols-2 gap-3">
+                    <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Logbook publik</p><p className="mt-1 text-2xl font-black text-bsi-900">{totalLog}</p></div>
+                    <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Media galeri</p><p className="mt-1 text-2xl font-black text-bsi-900">{totalGal}</p></div>
+                  </div>
+                </div>
+              )
+            })}
+      </section>
+    </div>
+  )
+}
+```
+
 ## File: src/App.jsx
 ```javascript
 import { useEffect } from 'react'
@@ -15369,67 +16584,6 @@ export default function HomePage() {
       <Modal open={!!detail} onClose={function () { setDetail(null) }}>
         {detail ? <LogbookDetail log={detail} /> : null}
       </Modal>
-    </div>
-  )
-}
-```
-
-## File: src/pages/TimPage.jsx
-```javascript
-import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase.js'
-import { SkeletonPersonCard } from '../components/Skeleton.jsx'
-
-export default function TimPage() {
-  const [people, setPeople] = useState([])
-  const [logs, setLogs] = useState([])
-  const [galeri, setGaleri] = useState([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(function () {
-    async function load() {
-      const p = await supabase.from('mahasiswa').select('id, nama, nim, prodi, foto_profil').order('nama')
-      const l = await supabase.from('logbooks').select('id, mahasiswa_id, foto_profil').eq('status', 'publik')
-      const g = await supabase.from('galeri').select('id, mahasiswa_id, foto_profil')
-      setPeople(p.data || [])
-      setLogs(l.data || [])
-      setGaleri(g.data || [])
-      setLoading(false)
-    }
-    load()
-  }, [])
-
-  return (
-    <div>
-      <section className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Profil Mahasiswa</p>
-        <h1 className="mt-2 text-3xl lg:text-4xl font-black text-slate-900">Mahasiswa magang Bank BSI</h1>
-      </section>
-      <section className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-        {loading
-          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <SkeletonPersonCard key={i} /> })
-          : people.map(function (p) {
-              const totalLog = logs.filter(function (l) { return l.mahasiswa_id === p.id }).length
-              const totalGal = galeri.filter(function (g) { return g.mahasiswa_id === p.id }).length
-              const initials = p.nama.split(' ').slice(0, 2).map(function (w) { return w.charAt(0) || '' }).join('').toUpperCase()
-              return (
-                <div key={p.id} className="card-hover bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
-                  <div className="flex items-center gap-4">
-                    <div className="h-14 w-14 rounded-3xl bg-bsi-800 text-white grid place-items-center text-xl font-black">{typeof p !== 'undefined' && p && p.foto_profil ? <img src={p.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : typeof m !== 'undefined' && m && m.foto_profil ? <img src={m.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : initials}</div>
-                    <div>
-                      <p className="text-lg font-bold text-slate-900">{p.nama}</p>
-                      <p className="text-sm text-slate-500">NIM {p.nim}</p>
-                      {p.prodi ? <span className="mt-1 inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-bsi-100 text-bsi-900">{p.prodi}</span> : null}
-                    </div>
-                  </div>
-                  <div className="mt-5 grid grid-cols-2 gap-3">
-                    <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Logbook publik</p><p className="mt-1 text-2xl font-black text-bsi-900">{totalLog}</p></div>
-                    <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Media galeri</p><p className="mt-1 text-2xl font-black text-bsi-900">{totalGal}</p></div>
-                  </div>
-                </div>
-              )
-            })}
-      </section>
     </div>
   )
 }
@@ -16026,6 +17180,250 @@ export default function GalleryPage() {
 }
 ```
 
+## File: src/components/cards.jsx
+```javascript
+import { Avatar } from './ui.jsx'
+import PemutarVideo from './PemutarVideo.jsx'
+import Carousel from './Carousel.jsx'
+import { StatusBadge, CategoryBadge, AttendanceBadge, btnSmall, ZoomableMedia, SmartFit , MediaYouTube } from './ui.jsx'
+import { formatTanggal, formatTanggalShort } from '../lib/format.js'
+
+function PersonChip(props) {
+  const p = props.mahasiswa
+  const nama = p ? p.nama : 'Mahasiswa'
+  const nim = p ? p.nim : '-'
+  const prodi = p && p.prodi ? p.prodi : ''
+  const initials = nama.split(' ').slice(0, 2).map(function (w) { return w.charAt(0) || '' }).join('').toUpperCase()
+  return (
+    <div className="flex items-center gap-3">
+      <div className={'rounded-2xl bg-bsi-800 text-white grid place-items-center font-bold ' + (props.size === 'sm' ? 'h-9 w-9 text-xs' : 'h-11 w-11')}>
+        {typeof p !== 'undefined' && p && p.foto_profil ? <img src={p.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : typeof m !== 'undefined' && m && m.foto_profil ? <img src={m.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : initials}</div>
+      <div>
+        <p className="font-semibold text-slate-900">{nama}</p>
+        <p className="text-xs text-slate-500">NIM {nim}</p>
+      </div>
+    </div>
+  )
+}
+
+function ActionButtons(props) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      <button onClick={props.onDetail} className={btnSmall + ' bg-bsi-100 text-bsi-900 hover:bg-bsi-200'}>Detail</button>
+      {props.isOwner && props.onEdit ? (
+        <>
+          <button onClick={props.onEdit} className={btnSmall + ' bg-slate-900 text-white hover:bg-slate-700'}>Edit</button>
+          <button onClick={props.onDelete} className={btnSmall + ' bg-red-50 text-red-700 hover:bg-red-100'}>Hapus</button>
+        </>
+      ) : null}
+    </div>
+  )
+}
+
+export function slidesFromItems(items) {
+  return (items || []).filter(function (i) { return i.media_path }).map(function (i) {
+    return { src: i.media_thumb || i.media_path, full: i.media_path, type: i.media_source === 'youtube' ? 'foto' : i.media_type, title: i.judul, yt: i.youtube_id || null }
+  })
+}
+
+export function LogbookCard(props) {
+  const log = props.log
+  const items = log.logbook_items || []
+  const slides = slidesFromItems(items)
+  const preview = items.slice(0, 2)
+  return (
+    <article className="card-hover bg-white rounded-3xl border border-slate-200 shadow-sm p-6 flex flex-col gap-4">
+      {slides.length ? <Carousel slides={slides} /> : null}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-1.5">
+          <CategoryBadge value={log.kategori} />
+          <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">{log.unit || 'Unit belum diisi'}</span>
+        </div>
+        <StatusBadge status={log.status} />
+      </div>
+      <div>
+        <p className="text-sm text-slate-500">{formatTanggal(log.tanggal)}</p>
+        <h3 className="mt-2 text-xl font-bold text-slate-900">{log.judul}</h3>
+        <p className="mt-3 flex items-center gap-2 text-xs font-semibold text-bsi-800">Terdapat {items.length} kegiatan</p>
+        <div className="mt-2 space-y-1">
+          {preview.map(function (it, i) {
+            return <p key={it.id} className="text-xs text-slate-500 truncate">{i + 1}. {it.judul}</p>
+          })}
+          {items.length > 2 ? <p className="text-xs text-bsi-700 font-semibold">+{items.length - 2} kegiatan lainnya</p> : null}
+        </div>
+      </div>
+      <div className="mt-auto border-t border-slate-100 pt-4 flex flex-wrap items-center justify-between gap-4">
+        <PersonChip mahasiswa={log.mahasiswa} />
+        <ActionButtons isOwner={props.isOwner} onDetail={props.onDetail} onEdit={props.onEdit} onDelete={props.onDelete} />
+      </div>
+    </article>
+  )
+}
+
+export function LogbookDetail(props) {
+  const log = props.log
+  const items = log.logbook_items || []
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center gap-2">
+        <CategoryBadge value={log.kategori} />
+        <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">{log.unit || 'Unit belum diisi'}</span>
+        <StatusBadge status={log.status} />
+      </div>
+      <div>
+        <p className="text-sm text-slate-500">{formatTanggal(log.tanggal)}</p>
+        <h2 className="mt-1 text-2xl font-black text-slate-900">{log.judul}</h2>
+      </div>
+      <div>
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Rincian kegiatan</p>
+        <div className="mt-4">
+          {items.map(function (it, i) {
+            return (
+              <div key={it.id} className={'relative pl-12 ' + (i < items.length - 1 ? 'pb-6' : 'pb-0')}>
+                <span className="absolute left-0 top-0 h-9 w-9 rounded-full bg-bsi-800 text-white grid place-items-center text-sm font-bold">{i + 1}</span>
+                {i < items.length - 1 ? <span className="absolute left-4 top-9 bottom-0 w-px bg-slate-200 dark:bg-slate-700" /> : null}
+                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                   {it.media_path ? (
+                     it.media_source === 'youtube' ? (
+                       <PemutarVideo key={it.youtube_id} youtubeId={it.youtube_id} title={it.judul} className="aspect-video w-full rounded-2xl mb-3" />
+                     ) : (
+                       <ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3" />
+                     )
+                   ) : null}
+                  <p className="font-bold text-slate-900">
+                    {it.judul}
+                    {it.show_in_gallery && it.media_path ? <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gold-500/15 text-gold-600">Di galeri</span> : null}
+                  </p>
+                  {it.deskripsi ? <p className="mt-1 text-sm text-slate-600">{it.deskripsi}</p> : null}
+                  {it.hasil ? <p className="mt-2 inline-flex px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold">Hasil: {it.hasil}</p> : null}
+                </div>
+              </div>
+            )
+          })}
+          {!items.length ? <p className="text-sm text-slate-500">Belum ada rincian kegiatan.</p> : null}
+        </div>
+      </div>
+      {log.kendala || log.solusi || log.pembelajaran ? (
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Refleksi harian</p>
+          <div className="mt-3 grid gap-3 md:grid-cols-3">
+            {log.kendala ? <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs font-semibold uppercase text-slate-400">Kendala</p><p className="mt-1 text-sm text-slate-700">{log.kendala}</p></div> : null}
+            {log.solusi ? <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs font-semibold uppercase text-slate-400">Solusi</p><p className="mt-1 text-sm text-slate-700">{log.solusi}</p></div> : null}
+            {log.pembelajaran ? <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs font-semibold uppercase text-slate-400">Pembelajaran</p><p className="mt-1 text-sm text-slate-700">{log.pembelajaran}</p></div> : null}
+          </div>
+        </div>
+      ) : null}
+      <div className="border-t border-slate-100 pt-4"><PersonChip mahasiswa={log.mahasiswa} /></div>
+    </div>
+  )
+}
+
+export function GalleryCard(props) {
+  const item = props.item
+  return (
+    <article onClick={props.onDetail} className="clickable cursor-pointer bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full">
+      <div className="relative aspect-video w-full overflow-hidden bg-slate-900">
+        {item.media_source === 'youtube' ? (
+        <MediaYouTube src={item.media_path} alt={item.judul} />
+      ) : (
+        <SmartFit src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} alt={item.judul} />
+      )}
+      </div>
+      <div className="p-5 space-y-3 flex-1 flex flex-col">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap gap-1.5">
+            <CategoryBadge value={item.kegiatan} />
+            {item.logbook_item_id ? <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gold-500/15 text-gold-600">Dari logbook</span> : null}
+          </div>
+          <span className="text-xs text-slate-500">{formatTanggalShort(item.tanggal)}</span>
+        </div>
+        <h3 className="text-lg font-bold text-slate-900">{item.judul}</h3>
+        <p className="text-sm text-slate-600 line-clamp-2">{item.deskripsi || 'Tidak ada deskripsi.'}</p>
+        <div className="mt-auto pt-3 border-t border-slate-100 space-y-3">
+          <PersonChip mahasiswa={item.mahasiswa} />
+          {props.onEdit ? (
+            <div className="flex flex-wrap gap-2" onClick={function (e) { e.stopPropagation() }}>
+              <button onClick={props.onEdit} className={btnSmall + ' bg-slate-900 text-white hover:bg-slate-700'}>Edit</button>
+              <button onClick={props.onDelete} className={btnSmall + ' bg-red-50 text-red-700 hover:bg-red-100'}>Hapus</button>
+            </div>
+          ) : (
+            <span className="text-xs font-semibold text-bsi-800">Klik kartu untuk melihat detail</span>
+          )}
+        </div>
+      </div>
+    </article>
+  )
+}
+
+export function GalleryDetail(props) {
+  const item = props.item
+  return (
+    <div className="space-y-4">
+      {item.media_source === 'youtube' ? (
+        <PemutarVideo key={item.youtube_id} youtubeId={item.youtube_id} title={item.judul} className="aspect-video w-full rounded-2xl" />
+      ) : (
+        <ZoomableMedia src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} title={item.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900" />
+      )}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-2">
+          <CategoryBadge value={item.kegiatan} />
+          <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">{item.media_type === 'video' ? 'Video' : 'Foto'}</span>
+        </div>
+        <span className="text-sm text-slate-500">{formatTanggal(item.tanggal)}</span>
+      </div>
+      <div>
+        <h2 className="text-2xl font-black text-slate-900">{item.judul}</h2>
+        <p className="mt-3 text-slate-600 leading-relaxed">{item.deskripsi || 'Tidak ada deskripsi.'}</p>
+      </div>
+      <div className="border-t border-slate-100 pt-4"><PersonChip mahasiswa={item.mahasiswa} /></div>
+    </div>
+  )
+}
+
+export function AttendanceCard(props) {
+  const row = props.row
+  return (
+    <div className="card-hover bg-white rounded-3xl border border-slate-200 shadow-sm p-5 flex flex-col h-full">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-sm text-slate-500 pb-4">{formatTanggal(row.tanggal)}</p>
+          <div className="flex items-center gap-3"><Avatar src={props.row && props.row.mahasiswa && props.row.mahasiswa.foto_profil ? props.row.mahasiswa.foto_profil : null} nama={props.row && props.row.mahasiswa ? props.row.mahasiswa.nama : 'Mahasiswa'} size="md" /><div className="min-w-0 flex-1"><p className="mt-1 font-bold text-slate-900">{row.mahasiswa ? row.mahasiswa.nama : 'Mahasiswa'}</p>
+          <p className="text-xs text-slate-500">NIM {row.mahasiswa ? row.mahasiswa.nim : '-'}</p></div></div>
+        </div>
+        <AttendanceBadge status={row.status} />
+      </div>
+      <div className="mt-4 rounded-2xl bg-slate-50 p-4 flex-1">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Alasan atau keterangan</p>
+        <p className="mt-1 text-sm text-slate-700">{row.alasan || 'Tidak ada alasan.'}</p>
+      </div>
+      <div className="mt-4">
+        <ActionButtons isOwner={props.isOwner} onDetail={props.onDetail} onEdit={props.onEdit} onDelete={props.onDelete} />
+      </div>
+    </div>
+  )
+}
+
+export function AttendanceDetail(props) {
+  const row = props.row
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-sm text-slate-500">{formatTanggal(row.tanggal)}</p>
+          <h2 className="mt-1 text-2xl font-black text-slate-900">Detail daftar hadir</h2>
+        </div>
+        <AttendanceBadge status={row.status} />
+      </div>
+      <div className="rounded-2xl bg-slate-50 p-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Alasan atau keterangan</p>
+        <p className="mt-1 text-sm text-slate-700">{row.alasan || 'Tidak ada alasan.'}</p>
+      </div>
+      <div className="border-t border-slate-100 pt-4"><PersonChip mahasiswa={row.mahasiswa} /></div>
+    </div>
+  )
+}
+```
+
 ## File: src/index.css
 ```css
 @tailwind base;
@@ -16347,254 +17745,81 @@ textarea {
 .dark .toast-gagal .toast-teks { color: #fee2e2 !important; }
 .dark .toast-tutup { color: #cbd5e1 !important; }
 .dark .toast-tutup:hover { color: #ffffff !important; }
-```
 
-## File: src/components/cards.jsx
-```javascript
-import { Avatar } from './ui.jsx'
-import PemutarVideo from './PemutarVideo.jsx'
-import Carousel from './Carousel.jsx'
-import { StatusBadge, CategoryBadge, AttendanceBadge, btnSmall, ZoomableMedia, SmartFit , MediaYouTube } from './ui.jsx'
-import { formatTanggal, formatTanggalShort } from '../lib/format.js'
-
-function PersonChip(props) {
-  const p = props.mahasiswa
-  const nama = p ? p.nama : 'Mahasiswa'
-  const nim = p ? p.nim : '-'
-  const prodi = p && p.prodi ? p.prodi : ''
-  const initials = nama.split(' ').slice(0, 2).map(function (w) { return w.charAt(0) || '' }).join('').toUpperCase()
-  return (
-    <div className="flex items-center gap-3">
-      <div className={'rounded-2xl bg-bsi-800 text-white grid place-items-center font-bold ' + (props.size === 'sm' ? 'h-9 w-9 text-xs' : 'h-11 w-11')}>
-        {typeof p !== 'undefined' && p && p.foto_profil ? <img src={p.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : typeof m !== 'undefined' && m && m.foto_profil ? <img src={m.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : initials}</div>
-      <div>
-        <p className="font-semibold text-slate-900">{nama}</p>
-        <p className="text-xs text-slate-500">NIM {nim}</p>
-      </div>
-    </div>
-  )
+/* animasi-halus-v1: seluruh animasi tambahan hanya memakai transform dan opacity agar ringan di device low end */
+@keyframes cardFadeIn {
+  from { opacity: 0; transform: translateY(14px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.grid-pusat > *, .grid-pusat-rapat > *, .kartu-grid > * {
+  animation: cardFadeIn 0.45s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  backface-visibility: hidden;
+}
+.grid-pusat > *:nth-child(1), .grid-pusat-rapat > *:nth-child(1), .kartu-grid > *:nth-child(1) { animation-delay: 0s; }
+.grid-pusat > *:nth-child(2), .grid-pusat-rapat > *:nth-child(2), .kartu-grid > *:nth-child(2) { animation-delay: 0.05s; }
+.grid-pusat > *:nth-child(3), .grid-pusat-rapat > *:nth-child(3), .kartu-grid > *:nth-child(3) { animation-delay: 0.1s; }
+.grid-pusat > *:nth-child(4), .grid-pusat-rapat > *:nth-child(4), .kartu-grid > *:nth-child(4) { animation-delay: 0.15s; }
+.grid-pusat > *:nth-child(5), .grid-pusat-rapat > *:nth-child(5), .kartu-grid > *:nth-child(5) { animation-delay: 0.2s; }
+.grid-pusat > *:nth-child(6), .grid-pusat-rapat > *:nth-child(6), .kartu-grid > *:nth-child(6) { animation-delay: 0.25s; }
+.grid-pusat > *:nth-child(7), .grid-pusat-rapat > *:nth-child(7), .kartu-grid > *:nth-child(7) { animation-delay: 0.3s; }
+.grid-pusat > *:nth-child(8), .grid-pusat-rapat > *:nth-child(8), .kartu-grid > *:nth-child(8) { animation-delay: 0.35s; }
+.grid-pusat > *:nth-child(9), .grid-pusat-rapat > *:nth-child(9), .kartu-grid > *:nth-child(9) { animation-delay: 0.4s; }
+.grid-pusat > *:nth-child(10), .grid-pusat-rapat > *:nth-child(10), .kartu-grid > *:nth-child(10) { animation-delay: 0.45s; }
+.grid-pusat > *:nth-child(11), .grid-pusat-rapat > *:nth-child(11), .kartu-grid > *:nth-child(11) { animation-delay: 0.5s; }
+.grid-pusat > *:nth-child(12), .grid-pusat-rapat > *:nth-child(12), .kartu-grid > *:nth-child(12) { animation-delay: 0.55s; }
+/* efek terangkat hanya untuk kartu, tidak untuk panel form */
+.kolom-kartu > .card-hover, .kolom-kartu-rapat > .card-hover, .kartu-grid > .card-hover {
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s ease, border-color 0.25s ease, background-color 0.2s ease;
+}
+.kolom-kartu > .card-hover:hover, .kolom-kartu-rapat > .card-hover:hover, .kartu-grid > .card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 14px 28px -10px rgba(15, 23, 42, 0.14);
+}
+.dark .kolom-kartu > .card-hover:hover, .dark .kolom-kartu-rapat > .card-hover:hover, .dark .kartu-grid > .card-hover:hover {
+  box-shadow: 0 14px 28px -10px rgba(0, 0, 0, 0.55);
+}
+/* transisi tombol dan tautan ditambah transform supaya efek tekan terasa mulus */
+button, a {
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease, transform 0.15s ease;
+}
+button:active:not(:disabled) { transform: scale(0.96); }
+/* konten tab dashboard beranimasi setiap kali tab diganti */
+.anim-tab { animation: appFadeUp 0.28s ease; }
+/* filterSlide versi murah: tanpa max-height supaya tidak memicu layout tiap frame */
+@keyframes filterSlide {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.anim-filter { animation: filterSlide 0.28s ease; }
+html { scroll-behavior: smooth; }
+* { -webkit-tap-highlight-color: transparent; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
-function ActionButtons(props) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      <button onClick={props.onDetail} className={btnSmall + ' bg-bsi-100 text-bsi-900 hover:bg-bsi-200'}>Detail</button>
-      {props.isOwner && props.onEdit ? (
-        <>
-          <button onClick={props.onEdit} className={btnSmall + ' bg-slate-900 text-white hover:bg-slate-700'}>Edit</button>
-          <button onClick={props.onDelete} className={btnSmall + ' bg-red-50 text-red-700 hover:bg-red-100'}>Hapus</button>
-        </>
-      ) : null}
-    </div>
-  )
+/* modal-tutup: animasi keluar saat detail ditutup, memakai struktur anak supaya tidak bergantung nama kelas */
+@keyframes modalPopOut {
+  from { opacity: 1; transform: scale(1) translateY(0); }
+  to { opacity: 0; transform: scale(0.94) translateY(12px); }
 }
-
-export function slidesFromItems(items) {
-  return (items || []).filter(function (i) { return i.media_path }).map(function (i) {
-    return { src: i.media_thumb || i.media_path, full: i.media_path, type: i.media_source === 'youtube' ? 'foto' : i.media_type, title: i.judul, yt: i.youtube_id || null }
-  })
+@keyframes overlayFadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
-
-export function LogbookCard(props) {
-  const log = props.log
-  const items = log.logbook_items || []
-  const slides = slidesFromItems(items)
-  const preview = items.slice(0, 2)
-  return (
-    <article className="card-hover bg-white rounded-3xl border border-slate-200 shadow-sm p-6 flex flex-col gap-4">
-      {slides.length ? <Carousel slides={slides} /> : null}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-1.5">
-          <CategoryBadge value={log.kategori} />
-          <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">{log.unit || 'Unit belum diisi'}</span>
-        </div>
-        <StatusBadge status={log.status} />
-      </div>
-      <div>
-        <p className="text-sm text-slate-500">{formatTanggal(log.tanggal)}</p>
-        <h3 className="mt-2 text-xl font-bold text-slate-900">{log.judul}</h3>
-        <p className="mt-3 flex items-center gap-2 text-xs font-semibold text-bsi-800">Terdapat {items.length} kegiatan</p>
-        <div className="mt-2 space-y-1">
-          {preview.map(function (it, i) {
-            return <p key={it.id} className="text-xs text-slate-500 truncate">{i + 1}. {it.judul}</p>
-          })}
-          {items.length > 2 ? <p className="text-xs text-bsi-700 font-semibold">+{items.length - 2} kegiatan lainnya</p> : null}
-        </div>
-      </div>
-      <div className="mt-auto border-t border-slate-100 pt-4 flex flex-wrap items-center justify-between gap-4">
-        <PersonChip mahasiswa={log.mahasiswa} />
-        <ActionButtons isOwner={props.isOwner} onDetail={props.onDetail} onEdit={props.onEdit} onDelete={props.onDelete} />
-      </div>
-    </article>
-  )
-}
-
-export function LogbookDetail(props) {
-  const log = props.log
-  const items = log.logbook_items || []
-  return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center gap-2">
-        <CategoryBadge value={log.kategori} />
-        <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">{log.unit || 'Unit belum diisi'}</span>
-        <StatusBadge status={log.status} />
-      </div>
-      <div>
-        <p className="text-sm text-slate-500">{formatTanggal(log.tanggal)}</p>
-        <h2 className="mt-1 text-2xl font-black text-slate-900">{log.judul}</h2>
-      </div>
-      <div>
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Rincian kegiatan</p>
-        <div className="mt-4">
-          {items.map(function (it, i) {
-            return (
-              <div key={it.id} className={'relative pl-12 ' + (i < items.length - 1 ? 'pb-6' : 'pb-0')}>
-                <span className="absolute left-0 top-0 h-9 w-9 rounded-full bg-bsi-800 text-white grid place-items-center text-sm font-bold">{i + 1}</span>
-                {i < items.length - 1 ? <span className="absolute left-4 top-9 bottom-0 w-px bg-slate-200 dark:bg-slate-700" /> : null}
-                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                   {it.media_path ? (
-                     it.media_source === 'youtube' ? (
-                       <PemutarVideo key={it.youtube_id} youtubeId={it.youtube_id} title={it.judul} className="aspect-video w-full rounded-2xl mb-3" />
-                     ) : (
-                       <ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3" />
-                     )
-                   ) : null}
-                  <p className="font-bold text-slate-900">
-                    {it.judul}
-                    {it.show_in_gallery && it.media_path ? <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gold-500/15 text-gold-600">Di galeri</span> : null}
-                  </p>
-                  {it.deskripsi ? <p className="mt-1 text-sm text-slate-600">{it.deskripsi}</p> : null}
-                  {it.hasil ? <p className="mt-2 inline-flex px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold">Hasil: {it.hasil}</p> : null}
-                </div>
-              </div>
-            )
-          })}
-          {!items.length ? <p className="text-sm text-slate-500">Belum ada rincian kegiatan.</p> : null}
-        </div>
-      </div>
-      {log.kendala || log.solusi || log.pembelajaran ? (
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Refleksi harian</p>
-          <div className="mt-3 grid gap-3 md:grid-cols-3">
-            {log.kendala ? <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs font-semibold uppercase text-slate-400">Kendala</p><p className="mt-1 text-sm text-slate-700">{log.kendala}</p></div> : null}
-            {log.solusi ? <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs font-semibold uppercase text-slate-400">Solusi</p><p className="mt-1 text-sm text-slate-700">{log.solusi}</p></div> : null}
-            {log.pembelajaran ? <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs font-semibold uppercase text-slate-400">Pembelajaran</p><p className="mt-1 text-sm text-slate-700">{log.pembelajaran}</p></div> : null}
-          </div>
-        </div>
-      ) : null}
-      <div className="border-t border-slate-100 pt-4"><PersonChip mahasiswa={log.mahasiswa} /></div>
-    </div>
-  )
-}
-
-export function GalleryCard(props) {
-  const item = props.item
-  return (
-    <article onClick={props.onDetail} className="clickable cursor-pointer bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full">
-      <div className="relative aspect-video w-full overflow-hidden bg-slate-900">
-        {item.media_source === 'youtube' ? (
-        <MediaYouTube src={item.media_path} alt={item.judul} />
-      ) : (
-        <SmartFit src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} alt={item.judul} />
-      )}
-      </div>
-      <div className="p-5 space-y-3 flex-1 flex flex-col">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap gap-1.5">
-            <CategoryBadge value={item.kegiatan} />
-            {item.logbook_item_id ? <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gold-500/15 text-gold-600">Dari logbook</span> : null}
-          </div>
-          <span className="text-xs text-slate-500">{formatTanggalShort(item.tanggal)}</span>
-        </div>
-        <h3 className="text-lg font-bold text-slate-900">{item.judul}</h3>
-        <p className="text-sm text-slate-600 line-clamp-2">{item.deskripsi || 'Tidak ada deskripsi.'}</p>
-        <div className="mt-auto pt-3 border-t border-slate-100 space-y-3">
-          <PersonChip mahasiswa={item.mahasiswa} />
-          {props.onEdit ? (
-            <div className="flex flex-wrap gap-2" onClick={function (e) { e.stopPropagation() }}>
-              <button onClick={props.onEdit} className={btnSmall + ' bg-slate-900 text-white hover:bg-slate-700'}>Edit</button>
-              <button onClick={props.onDelete} className={btnSmall + ' bg-red-50 text-red-700 hover:bg-red-100'}>Hapus</button>
-            </div>
-          ) : (
-            <span className="text-xs font-semibold text-bsi-800">Klik kartu untuk melihat detail</span>
-          )}
-        </div>
-      </div>
-    </article>
-  )
-}
-
-export function GalleryDetail(props) {
-  const item = props.item
-  return (
-    <div className="space-y-4">
-      {item.media_source === 'youtube' ? (
-        <PemutarVideo key={item.youtube_id} youtubeId={item.youtube_id} title={item.judul} className="aspect-video w-full rounded-2xl" />
-      ) : (
-        <ZoomableMedia src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} title={item.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900" />
-      )}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2">
-          <CategoryBadge value={item.kegiatan} />
-          <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">{item.media_type === 'video' ? 'Video' : 'Foto'}</span>
-        </div>
-        <span className="text-sm text-slate-500">{formatTanggal(item.tanggal)}</span>
-      </div>
-      <div>
-        <h2 className="text-2xl font-black text-slate-900">{item.judul}</h2>
-        <p className="mt-3 text-slate-600 leading-relaxed">{item.deskripsi || 'Tidak ada deskripsi.'}</p>
-      </div>
-      <div className="border-t border-slate-100 pt-4"><PersonChip mahasiswa={item.mahasiswa} /></div>
-    </div>
-  )
-}
-
-export function AttendanceCard(props) {
-  const row = props.row
-  return (
-    <div className="card-hover bg-white rounded-3xl border border-slate-200 shadow-sm p-5 flex flex-col h-full">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-sm text-slate-500 pb-4">{formatTanggal(row.tanggal)}</p>
-          <div className="flex items-center gap-3"><Avatar src={props.row && props.row.mahasiswa && props.row.mahasiswa.foto_profil ? props.row.mahasiswa.foto_profil : null} nama={props.row && props.row.mahasiswa ? props.row.mahasiswa.nama : 'Mahasiswa'} size="md" /><div className="min-w-0 flex-1"><p className="mt-1 font-bold text-slate-900">{row.mahasiswa ? row.mahasiswa.nama : 'Mahasiswa'}</p>
-          <p className="text-xs text-slate-500">NIM {row.mahasiswa ? row.mahasiswa.nim : '-'}</p></div></div>
-        </div>
-        <AttendanceBadge status={row.status} />
-      </div>
-      <div className="mt-4 rounded-2xl bg-slate-50 p-4 flex-1">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Alasan atau keterangan</p>
-        <p className="mt-1 text-sm text-slate-700">{row.alasan || 'Tidak ada alasan.'}</p>
-      </div>
-      <div className="mt-4">
-        <ActionButtons isOwner={props.isOwner} onDetail={props.onDetail} onEdit={props.onEdit} onDelete={props.onDelete} />
-      </div>
-    </div>
-  )
-}
-
-export function AttendanceDetail(props) {
-  const row = props.row
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-sm text-slate-500">{formatTanggal(row.tanggal)}</p>
-          <h2 className="mt-1 text-2xl font-black text-slate-900">Detail daftar hadir</h2>
-        </div>
-        <AttendanceBadge status={row.status} />
-      </div>
-      <div className="rounded-2xl bg-slate-50 p-4">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Alasan atau keterangan</p>
-        <p className="mt-1 text-sm text-slate-700">{row.alasan || 'Tidak ada alasan.'}</p>
-      </div>
-      <div className="border-t border-slate-100 pt-4"><PersonChip mahasiswa={row.mahasiswa} /></div>
-    </div>
-  )
-}
+.modal-tutup { pointer-events: none; }
+.modal-tutup.anim-overlay { animation: overlayFadeOut 0.2s ease-in forwards; }
+.modal-tutup .anim-modal { animation: modalPopOut 0.2s ease-in forwards; }
+.modal-tutup .anim-overlay { animation: overlayFadeOut 0.2s ease-in forwards; }
 ```
 
 ## File: src/components/ui.jsx
 ```javascript
+import { createPortal } from 'react-dom'
 import PemutarVideo from './PemutarVideo.jsx'
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { SizedIcon } from './icons.jsx'
@@ -16661,10 +17886,28 @@ export function AttendanceBadge(props) {
 }
 
 export function Modal(props) {
-  useBodyScrollLock(props.open)
-  if (!props.open) return null
+  const [tampil, setTampil] = useState(props.open)
+  const [tutup, setTutup] = useState(false)
+  const isiSimpan = useRef(null)
+  if (props.open) isiSimpan.current = props.children
+  useBodyScrollLock(!!props.open)
+  useEffect(function () {
+    if (props.open) {
+      setTampil(true)
+      setTutup(false)
+      return undefined
+    }
+    if (!tampil) return undefined
+    setTutup(true)
+    const t = setTimeout(function () {
+      setTampil(false)
+      setTutup(false)
+    }, 200)
+    return function () { clearTimeout(t) }
+  }, [props.open])
+  if (!tampil) return null
   return (
-    <div className="anim-overlay fixed inset-0 z-[60] overflow-y-auto overscroll-contain bg-slate-900/60 p-4" onClick={props.onClose}>
+    <div className={'anim-overlay fixed inset-0 z-[60] overflow-y-auto overscroll-contain bg-slate-900/60 p-4' + (tutup ? ' modal-tutup' : '')} onClick={props.onClose}>
       <div className="min-h-full flex items-center justify-center py-8">
         <div className="anim-modal w-full max-w-3xl rounded-[2rem] bg-white shadow-2xl" onClick={function (e) { e.stopPropagation() }}>
           <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
@@ -16673,7 +17916,7 @@ export function Modal(props) {
               <SizedIcon name="close" size={16} />
             </button>
           </div>
-          <div className="p-6">{props.children}</div>
+          <div className="p-6">{props.open ? props.children : isiSimpan.current}</div>
         </div>
       </div>
     </div>
@@ -16704,35 +17947,44 @@ export function AutoTextArea(props) {
 }
 
 export function ConfirmModal(props) {
-  useBodyScrollLock(props.open)
-  if (!props.open) return null
-  return (
-    <div className="anim-overlay fixed inset-0 z-[70] overflow-y-auto overscroll-contain bg-slate-900/60 p-4" onClick={props.onCancel}>
-      <div className="min-h-full flex items-center justify-center py-8">
-        <div className="anim-modal w-full max-w-md rounded-[2rem] bg-white shadow-2xl" onClick={function (e) { e.stopPropagation() }}>
-          <div className="p-6 space-y-4">
-            <div className="mx-auto h-14 w-14 rounded-2xl bg-red-100 text-red-600 grid place-items-center">
-              <SizedIcon name="trash" size={24} />
-            </div>
-            <div className="text-center">
-              <h3 className="text-xl font-black text-slate-900">{props.title || 'Hapus data ini?'}</h3>
-              <p className="mt-2 text-sm text-slate-500">{props.message}</p>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <button type="button" onClick={props.onCancel}
-                className="rounded-2xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100">
-                Batal
-              </button>
-              <button type="button" onClick={props.onConfirm}
-                className="rounded-2xl bg-red-500 px-4 py-3 text-sm font-bold text-white hover:bg-red-600">
-                {props.confirmLabel || 'Ya, Hapus'}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
+const [tampil, setTampil] = useState(props.open)
+const propsSimpan = useRef(null)
+if (props.open) propsSimpan.current = props
+const p = props.open ? props : (propsSimpan.current || props)
+const tutup = tampil && !props.open
+useBodyScrollLock(!!props.open)
+useEffect(function () {
+if (props.open) { setTampil(true); return undefined }
+if (!tampil) return undefined
+const t = setTimeout(function () { setTampil(false) }, 200)
+return function () { clearTimeout(t) }
+}, [props.open, tampil])
+if (!tampil) return null
+return (
+<div className={'anim-overlay fixed inset-0 z-[70] overflow-y-auto overscroll-contain bg-slate-900/60 p-4' + (tutup ? ' modal-tutup' : '')} onClick={p.onCancel}>
+<div className="min-h-full flex items-center justify-center py-8">
+<div className="anim-modal w-full max-w-md rounded-[2rem] bg-white shadow-2xl" onClick={function (e) { e.stopPropagation() }}>
+<div className="p-6 space-y-4">
+<div className="mx-auto h-14 w-14 rounded-2xl bg-red-100 text-red-600 grid place-items-center">
+<SizedIcon name="trash" size={24} />
+</div>
+<div className="text-center">
+<h3 className="text-xl font-black text-slate-900">{p.title || 'Hapus data ini?'}</h3>
+<p className="mt-2 text-sm text-slate-500">{p.message}</p>
+</div>
+<div className="grid grid-cols-2 gap-3">
+<button type="button" onClick={p.onCancel} className="rounded-2xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100">
+Batal
+</button>
+<button type="button" onClick={p.onConfirm} className="rounded-2xl bg-red-500 px-4 py-3 text-sm font-bold text-white hover:bg-red-600">
+{p.confirmLabel || 'Ya, Hapus'}
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+)
 }
 
 
@@ -16780,7 +18032,7 @@ export function Lightbox(props) {
     }
     setBusyUnduh(false)
   }
-  return (
+  return createPortal(
     <div className="anim-overlay fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/95 p-4" onClick={props.onClose}>
       <div className="relative w-full max-w-5xl" onClick={function (e) { e.stopPropagation() }}>
         {props.youtubeId ? (
@@ -17831,7 +19083,7 @@ async function submitHadir(e) {
 ) : null}
 
 {tab === 'logbook' ? (
-        <section className="mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
+        <section className="anim-tab mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
           <div className={'card-hover bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editLogId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
             <ModeIndicator edit={!!editLogId} onCancel={cancelEditLog} />
             <h2 className="mt-3 text-2xl font-black text-slate-900">{editLogId ? 'Ubah logbook harian' : 'Tambah logbook harian'}</h2>
@@ -17958,7 +19210,7 @@ async function submitHadir(e) {
               <SortSelect value={sort} onChange={setSort} />
             </FilterBar>
             <p className="text-sm text-slate-500">Total {filteredLogs.length} logbook{logTotalPages > 1 ? ' • Halaman ' + logPageAman + ' dari ' + logTotalPages : ''}</p>
-            <div className="grid gap-5 md:grid-cols-2">
+            <div className="grid gap-5 md:grid-cols-2 kartu-grid">
               {paginatedLogs.map(function (l) {
                 return <LogbookCard key={l.id} log={l} isOwner
                   onDetail={function () { setDetail({ type: 'log', data: l }) }}
@@ -17973,7 +19225,7 @@ async function submitHadir(e) {
       ) : null}
 
       {tab === 'galeri' ? (
-        <section className="mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
+        <section className="anim-tab mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
           <div className={'card-hover bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editGalId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
             <ModeIndicator edit={!!editGalId} onCancel={cancelEditGal} />
             <h2 className="mt-3 text-2xl font-black text-slate-900">{editGalId ? 'Ubah media galeri' : 'Tambah media galeri'}</h2>
@@ -18070,7 +19322,7 @@ async function submitHadir(e) {
               <SortSelect value={sort} onChange={setSort} />
             </FilterBar>
             <p className="text-sm text-slate-500">Total {filteredGaleri.length} media{galTotalPages > 1 ? ' • Halaman ' + galPageAman + ' dari ' + galTotalPages : ''}</p>
-            <div className="grid gap-5 md:grid-cols-2">
+            <div className="grid gap-5 md:grid-cols-2 kartu-grid">
               {paginatedGaleri.map(function (g) {
                 return <GalleryCard key={g.id} item={g} isOwner
                   onDetail={function () { setDetail({ type: 'gal', data: g }) }}
@@ -18085,7 +19337,7 @@ async function submitHadir(e) {
       ) : null}
 
       {tab === 'absen' ? (
-        <section className="mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
+        <section className="anim-tab mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
           <div className={'card-hover bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editHadirId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
             <ModeIndicator edit={!!editHadirId} onCancel={cancelEditHadir} />
             <h2 className="mt-3 text-2xl font-black text-slate-900">{editHadirId ? 'Ubah daftar hadir' : 'Isi daftar hadir'}</h2>
@@ -18131,7 +19383,7 @@ async function submitHadir(e) {
               <SortSelect value={sort} onChange={setHadirFilterOpen && setSort ? setSort : setSort} />
             </FilterBar>
             <p className="text-sm text-slate-500">Total {filteredHadir.length} catatan{hadirTotalPages > 1 ? ' • Halaman ' + hadirPageAman + ' dari ' + hadirTotalPages : ''}</p>
-            <div className="grid gap-5 md:grid-cols-2">
+            <div className="grid gap-5 md:grid-cols-2 kartu-grid">
             {paginatedHadir.map(function (h) {
               return <AttendanceCard key={h.id} row={h} isOwner
                 onDetail={function () { setDetail({ type: 'hadir', data: h }) }}
@@ -18151,15 +19403,13 @@ async function submitHadir(e) {
         {detail && detail.type === 'hadir' ? <AttendanceDetail row={detail.data} /> : null}
       </Modal>
 
-      {pendingDelete ? (
-        <ConfirmModal
-          open={true}
-          title={confirmInfo().title}
-          message={confirmInfo().message}
-          onCancel={function () { setPendingDelete(null) }}
-          onConfirm={executeDelete}
-        />
-      ) : null}
+      <ConfirmModal
+open={!!pendingDelete}
+title={pendingDelete && confirmInfo() ? confirmInfo().title : ''}
+message={pendingDelete && confirmInfo() ? confirmInfo().message : ''}
+onCancel={function () { setPendingDelete(null) }}
+onConfirm={executeDelete}
+/>
     </div>
   )
 }

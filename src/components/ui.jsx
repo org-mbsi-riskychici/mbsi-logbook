@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import PemutarVideo from './PemutarVideo.jsx'
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { SizedIcon } from './icons.jsx'
@@ -210,7 +211,7 @@ export function Lightbox(props) {
     }
     setBusyUnduh(false)
   }
-  return (
+  return createPortal(
     <div className="anim-overlay fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/95 p-4" onClick={props.onClose}>
       <div className="relative w-full max-w-5xl" onClick={function (e) { e.stopPropagation() }}>
         {props.youtubeId ? (
@@ -249,7 +250,7 @@ export function Lightbox(props) {
       </div>
       <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-slate-400">Klik media atau tekan Esc untuk menutup</p>
     </div>
-  )
+  , document.body)
 }
 
 export function ZoomableMedia(props) {
