@@ -452,12 +452,12 @@ to { opacity: 1; transform: translateX(0) scale(1); }
 
 /* mode-smooth-v2: easing lebih lembut untuk masuk, bayangan cabang untuk keluar, tetangga bergeser mulus */
 @keyframes gantiBulan {
-from { opacity: 0; transform: translateX(-12px) scale(0.99); }
-to { opacity: 1; transform: translateX(0) scale(1); }
+from { opacity: 0; transform: translateY(6px) scale(0.99); }
+to { opacity: 1; transform: translateY(0) scale(1); }
 }
 @keyframes gantiRentang {
-from { opacity: 0; transform: translateX(12px) scale(0.99); }
-to { opacity: 1; transform: translateX(0) scale(1); }
+from { opacity: 0; transform: translateY(6px) scale(0.99); }
+to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .anim-ganti-bulan { animation: gantiBulan 0.32s cubic-bezier(0.22, 1, 0.36, 1); }
 .anim-ganti-rentang { animation: gantiRentang 0.32s cubic-bezier(0.22, 1, 0.36, 1); }
@@ -620,3 +620,6 @@ button:active:not(:disabled), a:active, .clickable:active { transition-duration:
   transform: scale(0.985);
   transition-duration: 0.09s;
 }
+
+/* rentang-tablet-v1: jaring pengaman agar isi panel filter tidak bisa menonjol keluar lebar baris saat cabang waktu muncul */
+.filter-isi { overflow-x: clip; }

@@ -99,7 +99,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       if ((' ' + tombol.className + ' ').indexOf(' active ') !== -1) return
       const toggle = tombol.closest('.time-toggle')
       if (!toggle || !toggle.parentElement) return
-      const wadah = tombol.closest('.rounded-3xl') || toggle.parentElement.parentElement || toggle.parentElement
+      if (window.innerWidth < 1280) return
+       const wadah = tombol.closest('.rounded-3xl') || toggle.parentElement.parentElement || toggle.parentElement
       const cabang = toggle.parentElement.querySelector('.anim-ganti-bulan, .anim-ganti-rentang')
       if (cabang) {
         const r = cabang.getBoundingClientRect()
