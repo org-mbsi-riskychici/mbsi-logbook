@@ -666,7 +666,7 @@ async function submitHadir(e) {
   }
 
   const tabCls = function (t) {
-    return 'px-5 py-3 rounded-2xl text-sm font-bold ' + (tab === t ? 'bg-bsi-800 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200')
+    return 'px-4 py-2.5 rounded-xl text-xs sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm font-bold ' + (tab === t ? 'bg-bsi-800 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200')
   }
 
   return (
@@ -674,12 +674,12 @@ async function submitHadir(e) {
       <section className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-6">
           <div>
-            <div className="flex flex-wrap items-center gap-6">
-<Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl"  onClick={function () { gantiTab('profil') }} title="Kelola foto profil" />
+            <div className="flex flex-wrap items-center gap-4 sm:gap-6">
+<div className="avatar-kepala-dash"><Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl" onClick={function () { gantiTab('profil') }} title="Kelola foto profil" /></div>
 <div className="min-w-0 flex-1">
-            <h1 className="text-2xl lg:text-3xl font-black text-slate-900">{mahasiswa.nama}</h1>
+            <h1 className="truncate text-lg sm:text-2xl lg:text-3xl font-black text-slate-900">{mahasiswa.nama}</h1>
             <p className="text-sm text-slate-500">NIM {mahasiswa.nim}</p>
-{mahasiswa.prodi ? <p className="text-sm text-slate-500">{mahasiswa.prodi}</p> : null}
+{mahasiswa.prodi ? <p className="truncate text-sm text-slate-500">{mahasiswa.prodi}</p> : null}
           </div>
         </div>
         </div>
@@ -695,12 +695,12 @@ async function submitHadir(e) {
       {tab === 'profil' ? (
 <section className="anim-tab mt-8 grid gap-6 lg:grid-cols-[0.85fr_1.15fr] items-start">
 <div className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 shadow-sm flex flex-col items-center text-center">
-<Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="2xl" />
+<div className="avatar-profil-tab"><Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="2xl" /></div>
 <h2 className="mt-4 text-xl font-black text-slate-900">{mahasiswa.nama}</h2>
 <p className="mt-1 text-sm text-slate-500">NIM {mahasiswa.nim}</p>
 <div className="mt-5 flex flex-wrap justify-center gap-2">
-<button type="button" onClick={function () { setShowUploadFoto(!showUploadFoto) }} className="px-4 py-2 rounded-xl text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition">{mahasiswa.foto_profil ? 'Ganti Foto' : 'Upload Foto'}</button>
-{mahasiswa.foto_profil ? <button type="button" onClick={hapusFotoProfilKu} className="px-4 py-2 rounded-xl text-sm font-bold bg-red-50 text-red-700 hover:bg-red-100 transition">Hapus Foto</button> : null}
+<button type="button" onClick={function () { setShowUploadFoto(!showUploadFoto) }} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition">{mahasiswa.foto_profil ? 'Ganti Foto' : 'Upload Foto'}</button>
+{mahasiswa.foto_profil ? <button type="button" onClick={hapusFotoProfilKu} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-red-50 text-red-700 hover:bg-red-100 transition">Hapus Foto</button> : null}
 </div>
 {showUploadFoto ? (
 <div className="mt-5 w-full border-t border-slate-200 pt-5 text-left">
@@ -712,18 +712,18 @@ async function submitHadir(e) {
 </div>
 </div>
 <div className="mt-4 flex gap-2">
-<button type="button" onClick={simpanFotoProfil} disabled={uploadingFoto || !fotoFile} className="px-4 py-2 rounded-xl text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition disabled:opacity-50">{uploadingFoto ? 'Mengunggah...' : 'Simpan Foto'}</button>
-<button type="button" onClick={function () { setShowUploadFoto(false); setFotoPreview(null); setFotoFile(null) }} className="px-4 py-2 rounded-xl text-sm font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition">Batal</button>
+<button type="button" onClick={simpanFotoProfil} disabled={uploadingFoto || !fotoFile} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition disabled:opacity-50">{uploadingFoto ? 'Mengunggah...' : 'Simpan Foto'}</button>
+<button type="button" onClick={function () { setShowUploadFoto(false); setFotoPreview(null); setFotoFile(null) }} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition">Batal</button>
 </div>
 </div>
 ) : null}
 </div>
 <div className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 shadow-sm">
 <h2 className="text-lg font-black text-slate-900">Ringkasan aktivitas magang</h2>
-<div className="mt-4 grid grid-cols-3 gap-4">
-<div className="rounded-2xl bg-slate-50 p-4 text-center"><p className="text-2xl font-black text-bsi-800">{typeof logs !== 'undefined' ? logs.length : 0}</p><p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Logbook</p></div>
-<div className="rounded-2xl bg-slate-50 p-4 text-center"><p className="text-2xl font-black text-bsi-800">{typeof galeri !== 'undefined' ? galeri.length : 0}</p><p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Media Galeri</p></div>
-<div className="rounded-2xl bg-slate-50 p-4 text-center"><p className="text-2xl font-black text-bsi-800">{typeof hadir !== 'undefined' ? hadir.length : 0}</p><p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Kehadiran</p></div>
+<div className="stats-profil-grid mt-4 grid grid-cols-3 gap-2">
+<div className="rounded-xl bg-slate-50 p-2 text-center"><p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Logbook</p><p className="text-base font-black text-bsi-800">{typeof logs !== 'undefined' ? logs.length : 0}</p></div>
+<div className="rounded-xl bg-slate-50 p-2 text-center"><p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Media</p><p className="text-base font-black text-bsi-800">{typeof galeri !== 'undefined' ? galeri.length : 0}</p></div>
+<div className="rounded-xl bg-slate-50 p-2 text-center"><p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Kehadiran</p><p className="text-base font-black text-bsi-800">{typeof hadir !== 'undefined' ? hadir.length : 0}</p></div>
 </div>
 <div className="mt-6 space-y-2 border-t border-slate-100 pt-4 text-sm text-slate-600">
 <p>Foto profil tampil otomatis di kartu kamu pada halaman publik, logbook, galeri, dan daftar hadir.</p>
@@ -780,9 +780,9 @@ async function submitHadir(e) {
               </div>
 
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-slate-700">Rincian kegiatan hari ini <span className="text-red-500">*</span></p>
-                  <button type="button" onClick={function () { setItems(function (p) { return p.concat([newItem()]) }) }} className={btnSmall + ' bg-bsi-100 text-bsi-900 hover:bg-bsi-200'}>+ Tambah kegiatan</button>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-slate-700">Rincian kegiatan hari ini <span className="text-red-500">*</span></p>
+                <button type="button" onClick={function () { setItems(function (p) { return p.concat([newItem()]) }) }} className={btnSmall + ' whitespace-nowrap shrink-0 bg-bsi-100 text-bsi-900 hover:bg-bsi-200'}>+ Tambah kegiatan</button>
                 </div>
                 {items.map(function (it, i) {
                   return (
@@ -821,7 +821,7 @@ async function submitHadir(e) {
                         <div className="space-y-2">
                           <p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuotaLoading ? <span className="inline-block w-3 h-3 ml-1 border-2 border-slate-400 border-t-transparent rounded-full animate-spin align-middle"></span> : <>{ytQuota.remaining} dari {ytQuota.limit}</>}</p>
                           <div className={ytQuota.remaining <= 0 && !it.file ? 'opacity-50 pointer-events-none' : ''}>
-                            <FileInput accept="video/*" fileName={it.file ? it.file.name : ''}
+                            <FileInput accept="video/*" fileName={it.file ? it.file.name : ''} label="Klik untuk pilih video" hint="Video maks 50 MB. Format MP4, MOV, WebM, atau MKV."
                               onChange={function (e) { onItemFile(i, e.target.files[0]) }} />
                           </div>
                           {ytQuota.remaining <= 0 ? <p className="text-xs text-red-600">Kuota habis. Gunakan link video di bawah.</p> : null}
@@ -829,7 +829,7 @@ async function submitHadir(e) {
                           <input className={inputCls} value={it.driveLink} onChange={function (e) { patchItem(i, { driveLink: e.target.value }) }} placeholder="Link Google Drive untuk unduhan (opsional)" />
                         </div>
                       ) : (
-                        <FileInput accept="image/*" fileName={it.file ? it.file.name : ''}
+                        <FileInput accept="image/*" fileName={it.file ? it.file.name : ''} label="Klik untuk pilih foto" hint="Foto JPG, PNG, atau HEIC otomatis dikonversi ke WebP ringan."
                           onChange={function (e) { onItemFile(i, e.target.files[0]) }} />
                       )}
                       <label className={'flex items-start gap-3 rounded-2xl border p-3 cursor-pointer w-full ' + (it.preview ? (it.show ? 'border-gold-500 bg-gold-500/5' : 'border-slate-200') : 'border-slate-200 bg-slate-50 opacity-50 cursor-not-allowed')}>
@@ -894,7 +894,7 @@ async function submitHadir(e) {
                     <div className="space-y-2">
                       <p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuotaLoading ? <span className="inline-block w-3 h-3 ml-1 border-2 border-slate-400 border-t-transparent rounded-full animate-spin align-middle"></span> : <>{ytQuota.remaining} dari {ytQuota.limit}</>}</p>
                       <div className={ytQuota.remaining <= 0 && !galForm.file ? 'opacity-50 pointer-events-none' : ''}>
-                        <FileInput accept="video/*" fileName={galForm.file ? galForm.file.name : ''}
+                        <FileInput accept="video/*" fileName={galForm.file ? galForm.file.name : ''} label="Klik untuk pilih video" hint="Video maks 50 MB. Format MP4, MOV, WebM, atau MKV."
                           onChange={function (e) {
                             const f = e.target.files[0]
                             if (!f) return
@@ -906,7 +906,7 @@ async function submitHadir(e) {
                        <input className={inputCls} value={galDriveLink} onChange={function (e) { setGalDriveLink(e.target.value) }} placeholder="Link Google Drive untuk unduhan (opsional)" />
                     </div>
                   ) : (
-                    <FileInput accept="image/*" fileName={galForm.file ? galForm.file.name : ''}
+                    <FileInput accept="image/*" fileName={galForm.file ? galForm.file.name : ''} label="Klik untuk pilih foto" hint="Foto JPG, PNG, atau HEIC otomatis dikonversi ke WebP ringan."
                       onChange={async function (e) {
                         const f = e.target.files[0]
                         if (!f) return

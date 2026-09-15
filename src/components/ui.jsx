@@ -17,8 +17,8 @@ function useBodyScrollLock(active) {
 
 export const inputCls = 'mt-1.5 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-bsi-500'
 export const labelCls = 'text-sm font-semibold text-slate-700'
-export const btnPrimary = 'w-full rounded-2xl bg-bsi-800 px-6 py-4 text-white font-bold hover:bg-bsi-900'
-export const btnSmall = 'px-4 py-2 rounded-xl text-sm font-semibold'
+export const btnPrimary = 'w-full rounded-xl bg-bsi-800 px-5 py-3 text-sm sm:rounded-2xl sm:px-6 sm:py-4 sm:text-base text-white font-bold hover:bg-bsi-900'
+export const btnSmall = 'px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-semibold'
 export const cardCls = 'card-hover bg-white rounded-3xl border border-slate-200 shadow-sm'
 
 export function StatCard(props) {

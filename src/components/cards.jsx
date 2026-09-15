@@ -104,7 +104,7 @@ export function LogbookDetail(props) {
                       it.media_source === 'youtube' ? (
                         <PemutarVideo key={it.youtube_id} youtubeId={it.youtube_id} title={it.judul} className="aspect-video w-full rounded-2xl mb-3" />
                       ) : it.media_source === 'drive' ? (
-                        <iframe key={it.media_path} src={drivePreviewUrl(it.media_path)} title={it.judul} allow="autoplay; encrypted-media; fullscreen" allowFullScreen className="aspect-video w-full rounded-2xl border-0 bg-black mb-3" />
+                        <div className="iframe-video-wrap mb-3"><iframe key={it.media_path} src={drivePreviewUrl(it.media_path)} title={it.judul} allow="autoplay; encrypted-media; fullscreen" allowFullScreen className="aspect-video w-full rounded-2xl border-0 bg-black" /></div>
                       ) : (
                         <ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3" />
                       )
@@ -183,7 +183,7 @@ export function GalleryDetail(props) {
       {item.media_source === 'youtube' ? (
         <PemutarVideo key={item.youtube_id} youtubeId={item.youtube_id} title={item.judul} className="aspect-video w-full rounded-2xl" />
       ) : item.media_source === 'drive' ? (
-        <iframe src={drivePreviewUrl(item.media_path)} title={item.judul} allow="autoplay; encrypted-media; fullscreen" allowFullScreen className="aspect-video w-full rounded-2xl border-0 bg-black" />
+        <div className="iframe-video-wrap"><iframe src={drivePreviewUrl(item.media_path)} title={item.judul} allow="autoplay; encrypted-media; fullscreen" allowFullScreen className="aspect-video w-full rounded-2xl border-0 bg-black" /></div>
       ) : (
         <ZoomableMedia src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} title={item.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900" />
       )}

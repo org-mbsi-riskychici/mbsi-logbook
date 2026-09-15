@@ -652,3 +652,41 @@ button:active:not(:disabled), a:active, .clickable:active { transition-duration:
 
 /* rentang-tablet-v1: jaring pengaman agar isi panel filter tidak bisa menonjol keluar lebar baris saat cabang waktu muncul */
 .filter-isi { overflow-x: clip; }
+
+/* kepala-dash-responsif: avatar header dashboard mengecil proporsional di layar sempit, desktop tetap 96px */
+@media (max-width: 639px) {
+  .avatar-kepala-dash > button, .avatar-kepala-dash > span {
+    width: 56px !important;
+    height: 56px !important;
+    border-radius: 16px !important;
+  }
+  .avatar-kepala-dash img { border-radius: 16px !important; }
+  .avatar-kepala-dash > button > span, .avatar-kepala-dash > span > span {
+    font-size: 20px !important;
+  }
+}
+
+/* proporsional-mobile-v1: teks header dashboard, avatar profil, dan iframe video menyesuaikan layar sempit */
+@media (max-width: 639px) {
+  .avatar-kepala-dash ~ div h1 { font-size: 1.125rem !important; line-height: 1.625rem !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }
+  .avatar-kepala-dash ~ div p { font-size: 0.75rem !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }
+  .avatar-kepala-dash ~ div .inline-flex { font-size: 0.625rem !important; padding: 0.25rem 0.5rem !important; }
+  
+  .avatar-profil-tab > button, .avatar-profil-tab > span {
+    width: 96px !important;
+    height: 96px !important;
+    border-radius: 24px !important;
+  }
+  .avatar-profil-tab img { border-radius: 24px !important; }
+  .avatar-profil-tab ~ h2 { font-size: 1.25rem !important; margin-top: 0.75rem !important; }
+  .avatar-profil-tab ~ p { font-size: 0.875rem !important; }
+  
+  .stats-profil-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 0.5rem !important; }
+  /* dihapus agar kolom ketiga tidak memanjang sendiri */
+  
+  .iframe-video-wrap { position: relative !important; padding-bottom: 56.25% !important; height: 0 !important; overflow: hidden !important; border-radius: 1rem !important; }
+  .iframe-video-wrap iframe { position: absolute !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; border: 0 !important; }
+}
+@media (min-width: 640px) {
+  .stats-profil-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}

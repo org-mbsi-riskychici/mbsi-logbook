@@ -234,7 +234,7 @@ export function FileInput(props) {
         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-bsi-100 text-bsi-800">{ICONS.image}</span>
         <span className="min-w-0 flex-1">
           <span className={'block truncate text-sm font-semibold ' + (props.fileName ? 'text-slate-800' : 'text-slate-500')}>
-            {props.fileName || 'Klik untuk pilih foto atau video'}
+            {props.fileName || props.label || 'Klik untuk pilih foto atau video'}
           </span>
           <span className="block text-xs text-slate-400">{props.hint || 'Foto JPG, PNG, atau HEIC otomatis dikonversi. Video maks 50 MB.'}</span>
         </span>
