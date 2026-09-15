@@ -317,3 +317,59 @@ textarea {
 .dark .toast-gagal .toast-teks { color: #fee2e2 !important; }
 .dark .toast-tutup { color: #cbd5e1 !important; }
 .dark .toast-tutup:hover { color: #ffffff !important; }
+
+/* animasi-halus-v1: seluruh animasi tambahan hanya memakai transform dan opacity agar ringan di device low end */
+@keyframes cardFadeIn {
+  from { opacity: 0; transform: translateY(14px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.grid-pusat > *, .grid-pusat-rapat > *, .kartu-grid > * {
+  animation: cardFadeIn 0.45s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  backface-visibility: hidden;
+}
+.grid-pusat > *:nth-child(1), .grid-pusat-rapat > *:nth-child(1), .kartu-grid > *:nth-child(1) { animation-delay: 0s; }
+.grid-pusat > *:nth-child(2), .grid-pusat-rapat > *:nth-child(2), .kartu-grid > *:nth-child(2) { animation-delay: 0.05s; }
+.grid-pusat > *:nth-child(3), .grid-pusat-rapat > *:nth-child(3), .kartu-grid > *:nth-child(3) { animation-delay: 0.1s; }
+.grid-pusat > *:nth-child(4), .grid-pusat-rapat > *:nth-child(4), .kartu-grid > *:nth-child(4) { animation-delay: 0.15s; }
+.grid-pusat > *:nth-child(5), .grid-pusat-rapat > *:nth-child(5), .kartu-grid > *:nth-child(5) { animation-delay: 0.2s; }
+.grid-pusat > *:nth-child(6), .grid-pusat-rapat > *:nth-child(6), .kartu-grid > *:nth-child(6) { animation-delay: 0.25s; }
+.grid-pusat > *:nth-child(7), .grid-pusat-rapat > *:nth-child(7), .kartu-grid > *:nth-child(7) { animation-delay: 0.3s; }
+.grid-pusat > *:nth-child(8), .grid-pusat-rapat > *:nth-child(8), .kartu-grid > *:nth-child(8) { animation-delay: 0.35s; }
+.grid-pusat > *:nth-child(9), .grid-pusat-rapat > *:nth-child(9), .kartu-grid > *:nth-child(9) { animation-delay: 0.4s; }
+.grid-pusat > *:nth-child(10), .grid-pusat-rapat > *:nth-child(10), .kartu-grid > *:nth-child(10) { animation-delay: 0.45s; }
+.grid-pusat > *:nth-child(11), .grid-pusat-rapat > *:nth-child(11), .kartu-grid > *:nth-child(11) { animation-delay: 0.5s; }
+.grid-pusat > *:nth-child(12), .grid-pusat-rapat > *:nth-child(12), .kartu-grid > *:nth-child(12) { animation-delay: 0.55s; }
+/* efek terangkat hanya untuk kartu, tidak untuk panel form */
+.kolom-kartu > .card-hover, .kolom-kartu-rapat > .card-hover, .kartu-grid > .card-hover {
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s ease, border-color 0.25s ease, background-color 0.2s ease;
+}
+.kolom-kartu > .card-hover:hover, .kolom-kartu-rapat > .card-hover:hover, .kartu-grid > .card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 14px 28px -10px rgba(15, 23, 42, 0.14);
+}
+.dark .kolom-kartu > .card-hover:hover, .dark .kolom-kartu-rapat > .card-hover:hover, .dark .kartu-grid > .card-hover:hover {
+  box-shadow: 0 14px 28px -10px rgba(0, 0, 0, 0.55);
+}
+/* transisi tombol dan tautan ditambah transform supaya efek tekan terasa mulus */
+button, a {
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease, transform 0.15s ease;
+}
+button:active:not(:disabled) { transform: scale(0.96); }
+/* konten tab dashboard beranimasi setiap kali tab diganti */
+.anim-tab { animation: appFadeUp 0.28s ease; }
+/* filterSlide versi murah: tanpa max-height supaya tidak memicu layout tiap frame */
+@keyframes filterSlide {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.anim-filter { animation: filterSlide 0.28s ease; }
+html { scroll-behavior: smooth; }
+* { -webkit-tap-highlight-color: transparent; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

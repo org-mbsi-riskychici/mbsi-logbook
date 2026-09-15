@@ -676,7 +676,7 @@ async function submitHadir(e) {
 ) : null}
 
 {tab === 'logbook' ? (
-        <section className="mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
+        <section className="anim-tab mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
           <div className={'card-hover bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editLogId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
             <ModeIndicator edit={!!editLogId} onCancel={cancelEditLog} />
             <h2 className="mt-3 text-2xl font-black text-slate-900">{editLogId ? 'Ubah logbook harian' : 'Tambah logbook harian'}</h2>
@@ -803,7 +803,7 @@ async function submitHadir(e) {
               <SortSelect value={sort} onChange={setSort} />
             </FilterBar>
             <p className="text-sm text-slate-500">Total {filteredLogs.length} logbook{logTotalPages > 1 ? ' • Halaman ' + logPageAman + ' dari ' + logTotalPages : ''}</p>
-            <div className="grid gap-5 md:grid-cols-2">
+            <div className="grid gap-5 md:grid-cols-2 kartu-grid">
               {paginatedLogs.map(function (l) {
                 return <LogbookCard key={l.id} log={l} isOwner
                   onDetail={function () { setDetail({ type: 'log', data: l }) }}
@@ -818,7 +818,7 @@ async function submitHadir(e) {
       ) : null}
 
       {tab === 'galeri' ? (
-        <section className="mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
+        <section className="anim-tab mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
           <div className={'card-hover bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editGalId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
             <ModeIndicator edit={!!editGalId} onCancel={cancelEditGal} />
             <h2 className="mt-3 text-2xl font-black text-slate-900">{editGalId ? 'Ubah media galeri' : 'Tambah media galeri'}</h2>
@@ -915,7 +915,7 @@ async function submitHadir(e) {
               <SortSelect value={sort} onChange={setSort} />
             </FilterBar>
             <p className="text-sm text-slate-500">Total {filteredGaleri.length} media{galTotalPages > 1 ? ' • Halaman ' + galPageAman + ' dari ' + galTotalPages : ''}</p>
-            <div className="grid gap-5 md:grid-cols-2">
+            <div className="grid gap-5 md:grid-cols-2 kartu-grid">
               {paginatedGaleri.map(function (g) {
                 return <GalleryCard key={g.id} item={g} isOwner
                   onDetail={function () { setDetail({ type: 'gal', data: g }) }}
@@ -930,7 +930,7 @@ async function submitHadir(e) {
       ) : null}
 
       {tab === 'absen' ? (
-        <section className="mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
+        <section className="anim-tab mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
           <div className={'card-hover bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editHadirId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
             <ModeIndicator edit={!!editHadirId} onCancel={cancelEditHadir} />
             <h2 className="mt-3 text-2xl font-black text-slate-900">{editHadirId ? 'Ubah daftar hadir' : 'Isi daftar hadir'}</h2>
@@ -976,7 +976,7 @@ async function submitHadir(e) {
               <SortSelect value={sort} onChange={setHadirFilterOpen && setSort ? setSort : setSort} />
             </FilterBar>
             <p className="text-sm text-slate-500">Total {filteredHadir.length} catatan{hadirTotalPages > 1 ? ' • Halaman ' + hadirPageAman + ' dari ' + hadirTotalPages : ''}</p>
-            <div className="grid gap-5 md:grid-cols-2">
+            <div className="grid gap-5 md:grid-cols-2 kartu-grid">
             {paginatedHadir.map(function (h) {
               return <AttendanceCard key={h.id} row={h} isOwner
                 onDetail={function () { setDetail({ type: 'hadir', data: h }) }}
