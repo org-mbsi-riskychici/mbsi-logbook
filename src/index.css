@@ -605,3 +605,8 @@ main { padding-bottom: 2.5rem !important; }
 .lightbox-tutup { pointer-events: none; }
 .lightbox-tutup.anim-overlay { animation: overlayFadeOut 0.2s ease-in forwards; }
 .lightbox-tutup .lightbox-isi { animation: lightboxOut 0.2s ease-in forwards; }
+
+/* sentuh-responsif-v1: matikan deteksi double-tap zoom supaya ketukan langsung menjadi klik tanpa jeda di browser tablet */
+* { touch-action: manipulation; }
+/* umpan balik tekan lebih sigap di layar sentuh: efek mengecil terjadi hampir instan, saat dilepas tetap mulus */
+button:active:not(:disabled), a:active, .clickable:active { transition-duration: 0.06s; }
