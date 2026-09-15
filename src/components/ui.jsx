@@ -598,42 +598,44 @@ export function Pagination(props) {
 
 const ToastContext = createContext(null)
  export function ToastProvider(props) {
-   const [toasts, setToasts] = useState([])
-   function tutupToast(id) {
-     setToasts(function (prev) { return prev.filter(function (t) { return t.id !== id }) })
-   }
-   function tambahToast(tipe, pesan) {
-     const id = Date.now() + Math.random()
-     setToasts(function (prev) { return prev.concat([{ id: id, tipe: tipe, pesan: pesan }]) })
-     setTimeout(function () {
-       setToasts(function (prev) { return prev.filter(function (t) { return t.id !== id }) })
-     }, 4000)
-   }
-   function toastSukses(pesan) { tambahToast('sukses', pesan) }
-   function toastGagal(pesan) { tambahToast('gagal', pesan) }
-   return (
-     <ToastContext.Provider value={{ sukses: toastSukses, gagal: toastGagal }}>
-       {props.children}
-       <div className="fixed top-5 right-5 z-[100] flex w-full max-w-sm flex-col gap-3 pointer-events-none">
-         {toasts.map(function (t) {
-           const sukses = t.tipe === 'sukses'
-           return (
-             <div key={t.id} className={'anim-toast pointer-events-auto flex items-start gap-3 rounded-2xl border p-4 shadow-lg ' + (sukses ? 'toast-sukses' : 'toast-gagal')}>
-               <span className={'mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full ' + (sukses ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white')}>
-                 <SizedIcon name={sukses ? 'check' : 'close'} size={12} />
-               </span>
-               <p className={'flex-1 text-sm font-semibold toast-teks'}>{t.pesan}</p>
-               <button type="button" onClick={function () { tutupToast(t.id) }} className="toast-tutup shrink-0 text-slate-400 hover:text-slate-600">
-                 <SizedIcon name="close" size={14} />
-               </button>
-             </div>
-           )
-         })}
-       </div>
-     </ToastContext.Provider>
-   )
- }
- export function useToast() {
+  const [toasts, setToasts] = useState([])
+  function tutupToast(id) {
+    setToasts(function (prev) { return prev.map(function (t) { return t.id === id ? Object.assign({}, t, { tutup: true }) : t }) })
+    setTimeout(function () {
+      setToasts(function (prev) { return prev.filter(function (t) { return t.id !== id }) })
+    }, 240)
+  }
+  function tambahToast(tipe, pesan) {
+    const id = Date.now() + Math.random()
+    setToasts(function (prev) { return prev.concat([{ id: id, tipe: tipe, pesan: pesan, tutup: false }]) })
+    setTimeout(function () { tutupToast(id) }, 4000)
+  }
+  function toastSukses(pesan) { tambahToast('sukses', pesan) }
+  function toastGagal(pesan) { tambahToast('gagal', pesan) }
+  return (
+    <ToastContext.Provider value={{ sukses: toastSukses, gagal: toastGagal }}>
+      {props.children}
+      <div className="toast-wadah fixed z-[100] flex flex-col gap-2 pointer-events-none">
+        {toasts.map(function (t) {
+          const sukses = t.tipe === 'sukses'
+          return (
+            <div key={t.id} className={'toast-kartu pointer-events-auto flex items-center gap-3 ' + (sukses ? 'toast-sukses' : 'toast-gagal') + (t.tutup ? ' toast-keluar' : '')}>
+              <span className={'toast-ikon ' + (sukses ? 'toast-ikon-sukses' : 'toast-ikon-gagal')}>
+                <SizedIcon name={sukses ? 'check' : 'close'} size={15} />
+              </span>
+              <p className="toast-teks flex-1 text-sm font-semibold">{t.pesan}</p>
+              <button type="button" onClick={function () { tutupToast(t.id) }} title="Tutup notifikasi"
+                className="toast-tutup grid h-7 w-7 shrink-0 place-items-center rounded-lg">
+                <SizedIcon name="close" size={13} />
+              </button>
+            </div>
+          )
+        })}
+      </div>
+    </ToastContext.Provider>
+  )
+}
+export function useToast() {
    return useContext(ToastContext)
  }
 
