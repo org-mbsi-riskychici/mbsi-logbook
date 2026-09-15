@@ -84,11 +84,11 @@ export default function Layout() {
         <Outlet />
       </main>
 
-      <footer className="mt-auto border-t border-slate-200 bg-white">
-        <div className="max-w-7xl mx-auto px-4 py-4 text-center text-xs text-slate-500">
-          &copy; {new Date().getFullYear()} Tim Magang BSI
-        </div>
-      </footer>
+      <footer className="footer-ramping border-t border-slate-200 bg-white">
+<div className="mx-auto max-w-7xl px-4 py-4 text-center">
+<p className="text-xs text-slate-500">© 2026 Tim Magang BSI</p>
+</div>
+</footer>
     </div>
   )
 }

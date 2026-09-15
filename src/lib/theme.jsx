@@ -15,7 +15,11 @@ export function ThemeProvider(props) {
   }, [dark])
 
   return (
-    <ThemeContext.Provider value={{ dark: dark, toggle: function () { setDark(function (d) { return !d }) } }}>
+    <ThemeContext.Provider value={{ dark: dark, toggle: function () {
+const ganti = function () { setDark(function (d) { return !d }) }
+if (document.startViewTransition && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) document.startViewTransition(ganti)
+else ganti()
+} }}>
       {props.children}
     </ThemeContext.Provider>
   )

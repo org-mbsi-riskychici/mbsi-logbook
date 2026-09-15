@@ -490,3 +490,21 @@ to { opacity: 1; transform: translateX(0) scale(1); }
 @keyframes skeletonSweep {
   100% { transform: translateX(100%); }
 }
+
+/* transisi-tema-v3: crossfade snapshot di kompositor, bebas lukis ulang elemen */
+::view-transition-old(root), ::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-old(root) { z-index: 1; }
+::view-transition-new(root) { z-index: 2; }
+@keyframes vtTema {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+::view-transition-new(root) { animation: vtTema 0.4s ease; }
+/* selama fallback transisi warna berjalan, matikan blur mahal supaya tidak patah */
+.theme-transition [class*="backdrop-blur"] { backdrop-filter: none !important; }
+
+/* footer-ramping: ruang bawah halaman dirapatkan supaya footer slim terasa pas */
+main { padding-bottom: 2.5rem !important; }
