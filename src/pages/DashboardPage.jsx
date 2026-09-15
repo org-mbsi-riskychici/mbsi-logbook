@@ -996,15 +996,13 @@ async function submitHadir(e) {
         {detail && detail.type === 'hadir' ? <AttendanceDetail row={detail.data} /> : null}
       </Modal>
 
-      {pendingDelete ? (
-        <ConfirmModal
-          open={true}
-          title={confirmInfo().title}
-          message={confirmInfo().message}
-          onCancel={function () { setPendingDelete(null) }}
-          onConfirm={executeDelete}
-        />
-      ) : null}
+      <ConfirmModal
+open={!!pendingDelete}
+title={pendingDelete && confirmInfo() ? confirmInfo().title : ''}
+message={pendingDelete && confirmInfo() ? confirmInfo().message : ''}
+onCancel={function () { setPendingDelete(null) }}
+onConfirm={executeDelete}
+/>
     </div>
   )
 }

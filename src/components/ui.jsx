@@ -64,10 +64,28 @@ export function AttendanceBadge(props) {
 }
 
 export function Modal(props) {
-  useBodyScrollLock(props.open)
-  if (!props.open) return null
+  const [tampil, setTampil] = useState(props.open)
+  const [tutup, setTutup] = useState(false)
+  const isiSimpan = useRef(null)
+  if (props.open) isiSimpan.current = props.children
+  useBodyScrollLock(!!props.open)
+  useEffect(function () {
+    if (props.open) {
+      setTampil(true)
+      setTutup(false)
+      return undefined
+    }
+    if (!tampil) return undefined
+    setTutup(true)
+    const t = setTimeout(function () {
+      setTampil(false)
+      setTutup(false)
+    }, 200)
+    return function () { clearTimeout(t) }
+  }, [props.open])
+  if (!tampil) return null
   return (
-    <div className="anim-overlay fixed inset-0 z-[60] overflow-y-auto overscroll-contain bg-slate-900/60 p-4" onClick={props.onClose}>
+    <div className={'anim-overlay fixed inset-0 z-[60] overflow-y-auto overscroll-contain bg-slate-900/60 p-4' + (tutup ? ' modal-tutup' : '')} onClick={props.onClose}>
       <div className="min-h-full flex items-center justify-center py-8">
         <div className="anim-modal w-full max-w-3xl rounded-[2rem] bg-white shadow-2xl" onClick={function (e) { e.stopPropagation() }}>
           <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
@@ -76,7 +94,7 @@ export function Modal(props) {
               <SizedIcon name="close" size={16} />
             </button>
           </div>
-          <div className="p-6">{props.children}</div>
+          <div className="p-6">{props.open ? props.children : isiSimpan.current}</div>
         </div>
       </div>
     </div>
@@ -107,35 +125,44 @@ export function AutoTextArea(props) {
 }
 
 export function ConfirmModal(props) {
-  useBodyScrollLock(props.open)
-  if (!props.open) return null
-  return (
-    <div className="anim-overlay fixed inset-0 z-[70] overflow-y-auto overscroll-contain bg-slate-900/60 p-4" onClick={props.onCancel}>
-      <div className="min-h-full flex items-center justify-center py-8">
-        <div className="anim-modal w-full max-w-md rounded-[2rem] bg-white shadow-2xl" onClick={function (e) { e.stopPropagation() }}>
-          <div className="p-6 space-y-4">
-            <div className="mx-auto h-14 w-14 rounded-2xl bg-red-100 text-red-600 grid place-items-center">
-              <SizedIcon name="trash" size={24} />
-            </div>
-            <div className="text-center">
-              <h3 className="text-xl font-black text-slate-900">{props.title || 'Hapus data ini?'}</h3>
-              <p className="mt-2 text-sm text-slate-500">{props.message}</p>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <button type="button" onClick={props.onCancel}
-                className="rounded-2xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100">
-                Batal
-              </button>
-              <button type="button" onClick={props.onConfirm}
-                className="rounded-2xl bg-red-500 px-4 py-3 text-sm font-bold text-white hover:bg-red-600">
-                {props.confirmLabel || 'Ya, Hapus'}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
+const [tampil, setTampil] = useState(props.open)
+const propsSimpan = useRef(null)
+if (props.open) propsSimpan.current = props
+const p = props.open ? props : (propsSimpan.current || props)
+const tutup = tampil && !props.open
+useBodyScrollLock(!!props.open)
+useEffect(function () {
+if (props.open) { setTampil(true); return undefined }
+if (!tampil) return undefined
+const t = setTimeout(function () { setTampil(false) }, 200)
+return function () { clearTimeout(t) }
+}, [props.open, tampil])
+if (!tampil) return null
+return (
+<div className={'anim-overlay fixed inset-0 z-[70] overflow-y-auto overscroll-contain bg-slate-900/60 p-4' + (tutup ? ' modal-tutup' : '')} onClick={p.onCancel}>
+<div className="min-h-full flex items-center justify-center py-8">
+<div className="anim-modal w-full max-w-md rounded-[2rem] bg-white shadow-2xl" onClick={function (e) { e.stopPropagation() }}>
+<div className="p-6 space-y-4">
+<div className="mx-auto h-14 w-14 rounded-2xl bg-red-100 text-red-600 grid place-items-center">
+<SizedIcon name="trash" size={24} />
+</div>
+<div className="text-center">
+<h3 className="text-xl font-black text-slate-900">{p.title || 'Hapus data ini?'}</h3>
+<p className="mt-2 text-sm text-slate-500">{p.message}</p>
+</div>
+<div className="grid grid-cols-2 gap-3">
+<button type="button" onClick={p.onCancel} className="rounded-2xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100">
+Batal
+</button>
+<button type="button" onClick={p.onConfirm} className="rounded-2xl bg-red-500 px-4 py-3 text-sm font-bold text-white hover:bg-red-600">
+{p.confirmLabel || 'Ya, Hapus'}
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+)
 }
 
 

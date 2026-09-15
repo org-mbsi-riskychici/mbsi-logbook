@@ -373,3 +373,17 @@ html { scroll-behavior: smooth; }
     scroll-behavior: auto !important;
   }
 }
+
+/* modal-tutup: animasi keluar saat detail ditutup, memakai struktur anak supaya tidak bergantung nama kelas */
+@keyframes modalPopOut {
+  from { opacity: 1; transform: scale(1) translateY(0); }
+  to { opacity: 0; transform: scale(0.94) translateY(12px); }
+}
+@keyframes overlayFadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+.modal-tutup { pointer-events: none; }
+.modal-tutup.anim-overlay { animation: overlayFadeOut 0.2s ease-in forwards; }
+.modal-tutup .anim-modal { animation: modalPopOut 0.2s ease-in forwards; }
+.modal-tutup .anim-overlay { animation: overlayFadeOut 0.2s ease-in forwards; }
