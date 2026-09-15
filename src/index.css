@@ -462,3 +462,31 @@ to { opacity: 1; transform: translateX(0) scale(1); }
 .anim-ganti-bulan { animation: gantiBulan 0.32s cubic-bezier(0.22, 1, 0.36, 1); }
 .anim-ganti-rentang { animation: gantiRentang 0.32s cubic-bezier(0.22, 1, 0.36, 1); }
 .hantu-cabang { pointer-events: none; }
+
+/* transisi-tema: pergantian mode pelan dan mulus, hanya aktif sesaat saat mode diganti supaya interaksi biasa tetap ringan */
+.theme-transition, .theme-transition *, .theme-transition *::before, .theme-transition *::after {
+  transition: background-color 0.35s cubic-bezier(0.4, 0, 0.2, 1), color 0.35s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.35s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  transition-delay: 0s !important;
+}
+
+/* skeleton-sesi: bar berkilau untuk tampilan memuat sesi dashboard */
+.skeleton-bar {
+  position: relative;
+  overflow: hidden;
+  background: #e2e8f0;
+}
+.dark .skeleton-bar { background: #1e293b; }
+.skeleton-bar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  animation: skeletonSweep 1.4s ease-in-out infinite;
+}
+.dark .skeleton-bar::after {
+  background: linear-gradient(90deg, transparent, rgba(148, 163, 184, 0.18), transparent);
+}
+@keyframes skeletonSweep {
+  100% { transform: translateX(100%); }
+}

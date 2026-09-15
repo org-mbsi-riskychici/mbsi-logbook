@@ -127,3 +127,66 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pasang)
   else pasang()
 })()
+
+/* ===== transisi-halaman-v1: picu ulang animasi saat pindah rute dan pindah halaman pagination ===== */
+;(function () {
+  if (typeof document === 'undefined') return
+  function ulangAnimasi(el) {
+    if (!el) return
+    el.style.animation = 'none'
+    void el.offsetWidth
+    el.style.animation = ''
+  }
+  function pasang() {
+    document.addEventListener('click', function (e) {
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+      const t = e.target
+      if (!t || !t.closest) return
+      const link = t.closest('a[href]')
+      if (link) {
+        const href = link.getAttribute('href') || ''
+        const eksternal = link.target === '_blank' || href.indexOf('http') === 0 || href.indexOf('#') === 0
+        if (!eksternal) {
+          requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+              ulangAnimasi(document.querySelector('main.anim-page') || document.querySelector('.anim-page'))
+            })
+          })
+        }
+        return
+      }
+      const pag = t.closest('.mt-8.flex.flex-wrap.items-center.justify-center.gap-2')
+      if (pag && t.closest('button')) {
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            const grid = document.querySelectorAll('.grid-pusat, .grid-pusat-rapat, .kartu-grid')
+            for (let i = 0; i < grid.length; i++) {
+              const anak = grid[i].children
+              for (let j = 0; j < anak.length; j++) ulangAnimasi(anak[j])
+            }
+          })
+        })
+      }
+    }, true)
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pasang)
+  else pasang()
+})()
+
+/* ===== transisi-tema: aktifkan transisi pelan hanya pada momen pergantian mode ===== */
+;(function () {
+  if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  const akar = document.documentElement
+  let gelap = akar.classList.contains('dark')
+  let timer = null
+  const obs = new MutationObserver(function () {
+    const sekarang = akar.classList.contains('dark')
+    if (sekarang === gelap) return
+    gelap = sekarang
+    akar.classList.add('theme-transition')
+    if (timer) clearTimeout(timer)
+    timer = setTimeout(function () { akar.classList.remove('theme-transition') }, 400)
+  })
+  obs.observe(akar, { attributes: true, attributeFilter: ['class'] })
+})()

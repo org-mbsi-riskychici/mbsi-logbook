@@ -1,3 +1,4 @@
+import { SkeletonDashboard } from './components/Skeleton.jsx'
 import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { ThemeProvider } from './lib/theme.jsx'
@@ -22,7 +23,7 @@ function ScrollToTop() {
 }
 function RequireAuth(props) {
   const { mahasiswa, loading } = useAuth()
-  if (loading) return <div className="p-10 text-center text-slate-500">Memuat sesi...</div>
+  if (loading) return <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:py-8"><SkeletonDashboard /></div>
   if (!mahasiswa) return <Navigate to="/login" replace />
   return props.children
 }

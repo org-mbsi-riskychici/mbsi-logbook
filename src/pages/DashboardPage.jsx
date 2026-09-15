@@ -123,7 +123,33 @@ export default function DashboardPage() {
    }, [logFilter, galFilter, hadirFilter, sort])
 
   if (loading || !mahasiswa) {
-    return <div className="p-10 text-center text-slate-500">Memuat sesi...</div>
+    return <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:py-8">
+<div className="space-y-6">
+<div className="flex items-center gap-4 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+<div className="skeleton h-14 w-14 rounded-2xl"></div>
+<div className="flex-1 space-y-2">
+<div className="skeleton h-4 w-44 rounded-full"></div>
+<div className="skeleton h-3 w-28 rounded-full"></div>
+</div>
+<div className="skeleton h-10 w-28 rounded-2xl"></div>
+</div>
+<div className="grid items-start gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+<div className="space-y-4 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+<div className="skeleton h-5 w-36 rounded-full"></div>
+<div className="skeleton h-10 w-full rounded-2xl"></div>
+<div className="skeleton h-10 w-full rounded-2xl"></div>
+<div className="skeleton h-20 w-full rounded-2xl"></div>
+<div className="skeleton h-11 w-44 rounded-2xl"></div>
+</div>
+<div className="grid gap-5 md:grid-cols-2">
+<div className="skeleton h-64 rounded-3xl"></div>
+<div className="skeleton h-64 rounded-3xl"></div>
+<div className="skeleton h-64 rounded-3xl"></div>
+<div className="skeleton h-64 rounded-3xl"></div>
+</div>
+</div>
+</div>
+</div>
   }
 
   function getItemMode(i) { return itemMode[i] || 'foto' }
@@ -634,7 +660,7 @@ async function submitHadir(e) {
 </div></section>
 
       {tab === 'profil' ? (
-<section className="mt-8 grid gap-6 lg:grid-cols-[0.85fr_1.15fr] items-start">
+<section className="anim-tab mt-8 grid gap-6 lg:grid-cols-[0.85fr_1.15fr] items-start">
 <div className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 shadow-sm flex flex-col items-center text-center">
 <Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="2xl" />
 <h2 className="mt-4 text-xl font-black text-slate-900">{mahasiswa.nama}</h2>

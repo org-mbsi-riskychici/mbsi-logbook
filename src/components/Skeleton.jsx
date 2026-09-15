@@ -96,3 +96,36 @@ export function SkeletonChartRow() {
     </div>
   )
 }
+
+export function SkeletonDashboard() {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-4 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="skeleton-bar h-14 w-14 rounded-2xl"></div>
+        <div className="flex-1 space-y-2">
+          <div className="skeleton-bar h-4 w-44 rounded-full"></div>
+          <div className="skeleton-bar h-3 w-28 rounded-full"></div>
+        </div>
+        <div className="skeleton-bar h-10 w-28 rounded-2xl"></div>
+      </div>
+      <div className="grid items-start gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+        <div className="space-y-4 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="skeleton-bar h-5 w-36 rounded-full"></div>
+          <div className="skeleton-bar h-10 w-full rounded-2xl"></div>
+          <div className="skeleton-bar h-10 w-full rounded-2xl"></div>
+          <div className="skeleton-bar h-20 w-full rounded-2xl"></div>
+          <div className="skeleton-bar h-11 w-44 rounded-2xl"></div>
+        </div>
+        <div className="space-y-5">
+          <div className="skeleton-bar h-6 w-32 rounded-full"></div>
+          <div className="grid gap-5 md:grid-cols-2">
+            <SkeletonLogbookCard />
+            <SkeletonLogbookCard />
+            <SkeletonLogbookCard />
+            <SkeletonLogbookCard />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
