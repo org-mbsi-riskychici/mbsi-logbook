@@ -610,3 +610,13 @@ main { padding-bottom: 2.5rem !important; }
 * { touch-action: manipulation; }
 /* umpan balik tekan lebih sigap di layar sentuh: efek mengecil terjadi hampir instan, saat dilepas tetap mulus */
 button:active:not(:disabled), a:active, .clickable:active { transition-duration: 0.06s; }
+
+/* klik-halus-v1: kartu clickable menekan dan melepas pakai kurva mulus, hentakan saat kartu galeri diketuk hilang */
+.clickable {
+  transition: transform 0.24s cubic-bezier(0.32, 0.72, 0, 1), box-shadow 0.24s ease, opacity 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.clickable:active {
+  transform: scale(0.985);
+  transition-duration: 0.09s;
+}
