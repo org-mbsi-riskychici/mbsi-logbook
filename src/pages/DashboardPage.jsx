@@ -640,6 +640,15 @@ async function submitHadir(e) {
 
   const editGalDerived = editGalId ? ((galeri.find(function (g) { return g.id === editGalId }) || {}).logbook_item_id || null) : null
 
+    function gantiTab(tabBaru) {
+    if (tabBaru !== tab) {
+      cancelEditLog()
+      cancelEditGal()
+      cancelEditHadir()
+      setTab(tabBaru)
+    }
+  }
+
   const tabCls = function (t) {
     return 'px-5 py-3 rounded-2xl text-sm font-bold ' + (tab === t ? 'bg-bsi-800 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200')
   }
@@ -650,7 +659,7 @@ async function submitHadir(e) {
         <div className="flex flex-wrap items-center justify-between gap-6">
           <div>
             <div className="flex flex-wrap items-center gap-6">
-<Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl"  onClick={function () { setTab('profil') }} title="Kelola foto profil" />
+<Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl"  onClick={function () { gantiTab('profil') }} title="Kelola foto profil" />
 <div className="min-w-0 flex-1">
             <h1 className="text-2xl lg:text-3xl font-black text-slate-900">{mahasiswa.nama}</h1>
             <p className="text-sm text-slate-500">NIM {mahasiswa.nim}</p>
@@ -659,10 +668,10 @@ async function submitHadir(e) {
         </div>
         </div>
 <div className="mt-8 flex flex-wrap gap-2">
-          <button onClick={function () { setTab('logbook') }} className={tabCls('logbook')}>Logbook</button>
-          <button onClick={function () { setTab('galeri') }} className={tabCls('galeri')}>Galeri</button>
-          <button onClick={function () { setTab('absen') }} className={tabCls('absen')}>Daftar Hadir</button>
-<button onClick={function () { setTab('profil') }} className={tabCls('profil')}>Profil</button>
+          <button onClick={function () { gantiTab('logbook') }} className={tabCls('logbook')}>Logbook</button>
+          <button onClick={function () { gantiTab('galeri') }} className={tabCls('galeri')}>Galeri</button>
+          <button onClick={function () { gantiTab('absen') }} className={tabCls('absen')}>Daftar Hadir</button>
+<button onClick={function () { gantiTab('profil') }} className={tabCls('profil')}>Profil</button>
         </div>
       
 </div></section>
