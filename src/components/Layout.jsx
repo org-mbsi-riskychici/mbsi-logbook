@@ -49,7 +49,7 @@ export default function Layout() {
               <div className="h-10 w-10 rounded-2xl bg-gradient-to-tr from-bsi-800 to-gold-500 text-white grid place-items-center font-black">BSI</div>
               <div>
                 <p className="font-bold leading-none text-slate-900">Logbook Magang</p>
-                <p className="text-xs text-slate-500 mt-1">Bank Syariah Indonesia</p>
+                <p className="text-xs text-slate-600 mt-1">Bank Syariah Indonesia</p>
               </div>
             </Link>
             <nav className="hidden xl:flex items-center gap-1">
@@ -95,7 +95,7 @@ export default function Layout() {
 
       <footer className="footer-ramping border-t border-slate-200 bg-white">
 <div className="mx-auto max-w-7xl px-4 py-4 text-center">
-<p className="text-xs text-slate-500">© 2026 Tim Magang BSI</p>
+<p className="text-xs text-slate-600">© 2026 Tim Magang BSI</p>
 </div>
 </footer>
     </div>

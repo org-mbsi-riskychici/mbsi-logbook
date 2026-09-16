@@ -55,10 +55,10 @@ export default function DospemPage() {
                 )
               })
             : [
-                <div key="mahasiswa" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/70">Total mahasiswa</p><p className="mt-1 text-2xl sm:text-3xl font-black">{people.length}</p></div>,
-                <div key="logbook" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/70">Logbook publik</p><p className="mt-1 text-2xl sm:text-3xl font-black">{logs.length}</p></div>,
-                <div key="galeri" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/70">Media galeri</p><p className="mt-1 text-2xl sm:text-3xl font-black">{galCount}</p></div>,
-                <div key="hadir" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/70">Catatan hadir</p><p className="mt-1 text-2xl sm:text-3xl font-black">{hadirCount}</p></div>
+                <div key="mahasiswa" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Total mahasiswa</p><p className="mt-1 text-2xl sm:text-3xl font-black">{people.length}</p></div>,
+                <div key="logbook" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Logbook publik</p><p className="mt-1 text-2xl sm:text-3xl font-black">{logs.length}</p></div>,
+                <div key="galeri" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Media galeri</p><p className="mt-1 text-2xl sm:text-3xl font-black">{galCount}</p></div>,
+                <div key="hadir" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Catatan hadir</p><p className="mt-1 text-2xl sm:text-3xl font-black">{hadirCount}</p></div>
               ]}
         </div>
         <div className="mt-6 flex flex-wrap gap-2 sm:mt-8 sm:gap-3">
@@ -70,7 +70,7 @@ export default function DospemPage() {
 
       <section className="mt-10">
 <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Profil tim magang</h2>
-<p className="mt-2 max-w-3xl text-sm text-slate-500 sm:text-base">Seluruh mahasiswa magang beserta kontribusi logbook, media galeri, dan catatan kehadiran masing-masing.</p>
+<p className="mt-2 max-w-3xl text-sm text-slate-600 sm:text-base">Seluruh mahasiswa magang beserta kontribusi logbook, media galeri, dan catatan kehadiran masing-masing.</p>
 <div className="grid-pusat-rapat mt-6">
 {loading
 ? [0, 1, 2].map(function (i) { return <div key={i} className="kolom-kartu-rapat"><SkeletonPersonCard /></div> })
@@ -85,29 +85,29 @@ return (
 <Avatar src={p.foto_profil || null} nama={p.nama} size="lg" />
 <div className="min-w-0 flex-1">
 <p className="truncate text-lg font-black text-slate-900">{p.nama}</p>
-<p className="truncate text-xs text-slate-500">NIM {p.nim}</p>
+<p className="truncate text-xs text-slate-600">NIM {p.nim}</p>
 {p.prodi ? <span className="mt-1.5 inline-flex px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold">{p.prodi}</span> : null}
 </div>
 </div>
 <div className="mt-4 grid grid-cols-2 gap-3">
 <div className="rounded-2xl bg-slate-50 p-3">
-<p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Logbook</p>
+<p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">Logbook</p>
 <p className="mt-0.5 text-xl font-black text-bsi-800">{totalLog}</p>
 </div>
 <div className="rounded-2xl bg-slate-50 p-3">
-<p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Media</p>
+<p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">Media</p>
 <p className="mt-0.5 text-xl font-black text-bsi-800">{totalGal}</p>
 </div>
 </div>
 <div className="mt-3 pt-3 border-t border-slate-100">
-<p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Rekap Kehadiran</p>
+<p className="text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">Rekap Kehadiran</p>
 <div className="grid grid-cols-3 gap-2">
 <div className="rounded-xl bg-emerald-50 p-2 text-center">
-<p className="text-[10px] font-bold text-emerald-600 uppercase">Masuk</p>
+<p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase">Masuk</p>
 <p className="text-base font-black text-emerald-700">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Masuk' }).length}</p>
 </div>
 <div className="rounded-xl bg-amber-50 p-2 text-center">
-<p className="text-[10px] font-bold text-amber-600 uppercase">Izin</p>
+<p className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase">Izin</p>
 <p className="text-base font-black text-amber-700">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Izin' }).length}</p>
 </div>
 <div className="rounded-xl bg-red-50 p-2 text-center">

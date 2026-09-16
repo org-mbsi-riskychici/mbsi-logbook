@@ -24,10 +24,10 @@ export const cardCls = 'card-hover bg-white rounded-3xl border border-slate-200 
 export function StatCard(props) {
   const rapat = props.rapat
   const clsWadah = rapat ? ' p-3 sm:p-6' : ' p-4 sm:p-6'
-  const clsLabel = (rapat ? 'text-[11px] leading-snug sm:text-sm' : 'text-xs sm:text-sm') + ' text-slate-500'
-  const clsLabelRapat = 'text-[11px] leading-snug font-semibold text-slate-500 sm:hidden'
+  const clsLabel = (rapat ? 'text-[11px] leading-snug sm:text-sm' : 'text-xs sm:text-sm') + ' text-slate-600'
+  const clsLabelRapat = 'text-[11px] leading-snug font-semibold text-slate-600 sm:hidden'
   const clsValue = (rapat ? 'mt-1 text-xl sm:text-3xl' : 'mt-2 text-2xl sm:text-3xl') + ' font-black text-bsi-900'
-  const clsSub = (rapat ? 'hidden sm:block ' : '') + 'mt-1 text-[11px] leading-snug sm:text-xs text-slate-500'
+  const clsSub = (rapat ? 'hidden sm:block ' : '') + 'mt-1 text-[11px] leading-snug sm:text-xs text-slate-600'
   return (
     <div className={cardCls + clsWadah}>
       {props.labelRapat ? <p className={clsLabelRapat}>{props.labelRapat}</p> : null}
@@ -44,7 +44,7 @@ export function EmptyState(props) {
         <SizedIcon name={props.icon || 'file'} size={24} />
       </div>
       <h3 className="mt-4 text-lg font-bold text-slate-800">{props.title}</h3>
-      <p className="mt-2 text-sm text-slate-500 max-w-md mx-auto">{props.desc}</p>
+      <p className="mt-2 text-sm text-slate-600 max-w-md mx-auto">{props.desc}</p>
     </div>
   )
 }
@@ -98,7 +98,7 @@ export function Modal(props) {
         <div className="anim-modal w-full max-w-3xl rounded-[2rem] bg-white shadow-2xl max-h-[88vh] overflow-y-auto overscroll-contain" onClick={function (e) { e.stopPropagation() }}>
           <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
             <p className="font-bold text-slate-900">{props.title || 'Detail'}</p>
-            <button onClick={props.onClose} className="h-9 w-9 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 grid place-items-center">
+            <button onClick={props.onClose} aria-label="Tutup detail" className="h-9 w-9 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 grid place-items-center">
               <SizedIcon name="close" size={16} />
             </button>
           </div>
@@ -156,7 +156,7 @@ return (
 </div>
 <div className="text-center">
 <h3 className="text-xl font-black text-slate-900">{p.title || 'Hapus data ini?'}</h3>
-<p className="mt-2 text-sm text-slate-500">{p.message}</p>
+<p className="mt-2 text-sm text-slate-600">{p.message}</p>
 </div>
 <div className="grid grid-cols-2 gap-3">
 <button type="button" onClick={p.onCancel} className="rounded-2xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100">
@@ -196,7 +196,7 @@ export function MediaDrive(props) {
       src={driveThumbUrl(props.driveId)}
       alt={props.alt || 'Video Google Drive'}
       onClick={props.onClick || undefined}
-      onError={function () { setGagal(true) }}
+      onError={function () { setGagal(true) }} loading="lazy" decoding="async"
       className={(props.className || 'absolute inset-0 h-full w-full object-cover') + (props.onClick ? ' cursor-zoom-in' : '')}
     />
   )
@@ -524,13 +524,13 @@ export function Avatar(props) {
   if (bisaKlik) {
     return (
       <button type="button" onClick={props.onClick} title={props.title} style={gaya}>
-        {props.src ? <img src={props.src} alt={nama || 'Foto profil'} style={gayaFoto} /> : <span style={gayaTeks}>{inisial}</span>}
+        {props.src ? <img src={props.src} alt={nama || 'Foto profil'} style={gayaFoto} loading="lazy" decoding="async" /> : <span style={gayaTeks}>{inisial}</span>}
       </button>
     )
   }
   return (
     <span style={gaya}>
-      {props.src ? <img src={props.src} alt={nama || 'Foto profil'} style={gayaFoto} /> : <span style={gayaTeks}>{inisial}</span>}
+      {props.src ? <img src={props.src} alt={nama || 'Foto profil'} style={gayaFoto} loading="lazy" decoding="async" /> : <span style={gayaTeks}>{inisial}</span>}
     </span>
   )
 }
@@ -572,7 +572,7 @@ export function Pagination(props) {
       ) : null}
       {halaman.map(function (h, idx) {
         if (h === '...') {
-          return <span key={'lompat' + idx} className="px-1 text-sm font-bold text-slate-400">...</span>
+          return <span key={'lompat' + idx} className="px-1 text-sm font-bold text-slate-600">...</span>
         }
         const aktif = h === page
         return (

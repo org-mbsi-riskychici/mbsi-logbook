@@ -44,7 +44,7 @@ export function TimeFilter(props) {
 </div>
         : <div key="rentang" className="anim-ganti-rentang flex flex-wrap items-center gap-2">
             <FilterDate value={f.dari} onChange={function (v) { set(Object.assign({}, f, { dari: v })) }} />
-            <span className="text-slate-400 text-sm">sampai</span>
+            <span className="text-slate-600 text-sm">sampai</span>
             <FilterDate value={f.sampai} onChange={function (v) { set(Object.assign({}, f, { sampai: v })) }} />
           </div>}
     </div>
@@ -71,12 +71,12 @@ export function FilterBar(props) {
           {props.activeCount > 0 ? (
             <span className="inline-flex items-center justify-center h-6 min-w-6 px-2 rounded-full bg-bsi-800 text-white text-xs font-bold">{props.activeCount}</span>
           ) : null}
-          <span className={'transition-transform duration-200 text-slate-400 ' + (props.open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
+          <span className={'transition-transform duration-200 text-slate-600 ' + (props.open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
         </button>
-        <div className="hidden xl:block text-sm text-slate-500">
+        <div className="hidden xl:block text-sm text-slate-600">
           {props.activeCount > 0
             ? <span className="inline-flex items-center gap-2"><span className="text-bsi-700">{ICONS.funnel}</span><span><strong className="text-slate-900">{props.activeCount}</strong> filter aktif</span></span>
-            : <span className="inline-flex items-center gap-2"><span className="text-slate-400">{ICONS.funnel}</span><span>Belum ada filter aktif</span></span>}
+            : <span className="inline-flex items-center gap-2"><span className="text-slate-600">{ICONS.funnel}</span><span>Belum ada filter aktif</span></span>}
         </div>
       </div>
             <div className={'filter-wrap' + (props.open ? ' filter-wrap-buka' : '')}>

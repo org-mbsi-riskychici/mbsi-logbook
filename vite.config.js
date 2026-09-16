@@ -224,6 +224,19 @@ function pluginApiYoutube(env) {
 export default defineConfig(function ({ mode }) {
   const env = loadEnv(mode, process.cwd(), '')
   return {
-    plugins: [react(), pluginApiR2(env), pluginApiYoutube(env)]
+    plugins: [react(), pluginApiR2(env), pluginApiYoutube(env)],
+    build: {
+      chunkSizeWarningLimit: 1000,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+            'vendor-supabase': ['@supabase/supabase-js'],
+            'vendor-aws': ['@aws-sdk/client-s3', '@aws-sdk/s3-request-presigner'],
+            'vendor-media': ['heic2any']
+          }
+        }
+      }
+    }
   }
 })

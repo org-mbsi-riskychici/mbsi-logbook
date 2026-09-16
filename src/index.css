@@ -690,3 +690,13 @@ button:active:not(:disabled), a:active, .clickable:active { transition-duration:
 @media (min-width: 640px) {
   .stats-profil-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+
+/* performa-mobile-v1: header padat tanpa blur di layar sempit supaya scroll dan paint murah di ponsel */
+@media (max-width: 639px) {
+  header.sticky {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background-color: rgba(255, 255, 255, 0.97) !important;
+  }
+  .dark header.sticky { background-color: rgba(2, 6, 23, 0.97) !important; }
+}

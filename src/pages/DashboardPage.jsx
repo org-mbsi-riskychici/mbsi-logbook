@@ -30,7 +30,7 @@ const PER_PAGE_DASH = 6
 function ModeIndicator(props) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className={'inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold ' + (props.edit ? 'bg-gold-500/15 text-gold-600' : 'bg-bsi-100 text-bsi-900')}>
+      <span className={'inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold ' + (props.edit ? 'bg-gold-500/15 text-amber-700 dark:text-amber-400' : 'bg-bsi-100 text-bsi-900')}>
         <span className={'h-2 w-2 rounded-full ' + (props.edit ? 'bg-gold-500' : 'bg-bsi-500')}></span>
         {props.edit ? 'Mode Edit' : 'Mode Tambah'}
       </span>
@@ -678,8 +678,8 @@ async function submitHadir(e) {
 <div className="avatar-kepala-dash"><Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl" onClick={function () { gantiTab('profil') }} title="Kelola foto profil" /></div>
 <div className="min-w-0 flex-1">
             <h1 className="truncate text-lg sm:text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">{mahasiswa.nama}</h1>
-            <p className="text-sm text-slate-500">NIM {mahasiswa.nim}</p>
-{mahasiswa.prodi ? <p className="truncate text-sm text-slate-500">{mahasiswa.prodi}</p> : null}
+            <p className="text-sm text-slate-600">NIM {mahasiswa.nim}</p>
+{mahasiswa.prodi ? <p className="truncate text-sm text-slate-600">{mahasiswa.prodi}</p> : null}
           </div>
         </div>
         </div>
@@ -697,7 +697,7 @@ async function submitHadir(e) {
 <div className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 shadow-sm flex flex-col items-center text-center">
 <div className="avatar-profil-tab"><Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="2xl" /></div>
 <h2 className="mt-4 text-xl font-black text-slate-900">{mahasiswa.nama}</h2>
-<p className="mt-1 text-sm text-slate-500">NIM {mahasiswa.nim}</p>
+<p className="mt-1 text-sm text-slate-600">NIM {mahasiswa.nim}</p>
 <div className="mt-5 flex flex-wrap justify-center gap-2">
 <button type="button" onClick={function () { setShowUploadFoto(!showUploadFoto) }} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition">{mahasiswa.foto_profil ? 'Ganti Foto' : 'Upload Foto'}</button>
 {mahasiswa.foto_profil ? <button type="button" onClick={hapusFotoProfilKu} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-red-50 text-red-700 hover:bg-red-100 transition">Hapus Foto</button> : null}
@@ -707,8 +707,8 @@ async function submitHadir(e) {
 <div className="flex flex-wrap items-start gap-4">
 {fotoPreview ? <img src={fotoPreview} alt="Pratinjau foto profil" className="h-20 w-20 rounded-[28%] object-cover shadow-lg" /> : null}
 <div className="min-w-0 flex-1">
-<input type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/heif" onChange={pilihFotoProfil} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-800 hover:file:bg-emerald-100" />
-<p className="mt-2 text-xs text-slate-500">Format JPG, PNG, WebP, atau HEIC iPhone. Otomatis dikonversi ke WebP ringan. Maksimal 5 MB.</p>
+<input type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/heif" onChange={pilihFotoProfil} aria-label="Pilih foto profil" className="block w-full text-sm text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-800 hover:file:bg-emerald-100" />
+<p className="mt-2 text-xs text-slate-600">Format JPG, PNG, WebP, atau HEIC iPhone. Otomatis dikonversi ke WebP ringan. Maksimal 5 MB.</p>
 </div>
 </div>
 <div className="mt-4 flex gap-2">
@@ -721,9 +721,9 @@ async function submitHadir(e) {
 <div className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 shadow-sm">
 <h2 className="text-lg font-black text-slate-900">Ringkasan aktivitas magang</h2>
 <div className="stats-profil-grid mt-4 grid grid-cols-3 gap-2">
-<div className="rounded-xl bg-slate-50 p-2 text-center"><p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Logbook</p><p className="text-base font-black text-bsi-800">{typeof logs !== 'undefined' ? logs.length : 0}</p></div>
-<div className="rounded-xl bg-slate-50 p-2 text-center"><p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Media</p><p className="text-base font-black text-bsi-800">{typeof galeri !== 'undefined' ? galeri.length : 0}</p></div>
-<div className="rounded-xl bg-slate-50 p-2 text-center"><p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Kehadiran</p><p className="text-base font-black text-bsi-800">{typeof hadir !== 'undefined' ? hadir.length : 0}</p></div>
+<div className="rounded-xl bg-slate-50 p-2 text-center"><p className="text-[10px] font-bold text-slate-600 uppercase tracking-wide">Logbook</p><p className="text-base font-black text-bsi-800">{typeof logs !== 'undefined' ? logs.length : 0}</p></div>
+<div className="rounded-xl bg-slate-50 p-2 text-center"><p className="text-[10px] font-bold text-slate-600 uppercase tracking-wide">Media</p><p className="text-base font-black text-bsi-800">{typeof galeri !== 'undefined' ? galeri.length : 0}</p></div>
+<div className="rounded-xl bg-slate-50 p-2 text-center"><p className="text-[10px] font-bold text-slate-600 uppercase tracking-wide">Kehadiran</p><p className="text-base font-black text-bsi-800">{typeof hadir !== 'undefined' ? hadir.length : 0}</p></div>
 </div>
 <div className="mt-6 space-y-2 border-t border-slate-100 pt-4 text-sm text-slate-600">
 <p>Foto profil tampil otomatis di kartu kamu pada halaman publik, logbook, galeri, dan daftar hadir.</p>
@@ -776,7 +776,7 @@ async function submitHadir(e) {
               </div>
               <div>
                 <label className={labelCls}>Ringkasan hari ini <span className="text-red-500">*</span></label>
-                <input required className={inputCls} value={form.judul} onChange={function (e) { setForm(Object.assign({}, form, { judul: e.target.value })) }} placeholder="Contoh: Kegiatan harian di divisi Back Office" />
+                <input required className={inputCls} value={form.judul} onChange={function (e) { setForm(Object.assign({}, form, { judul: e.target.value })) }} aria-label="Ringkasan hari ini" placeholder="Contoh: Kegiatan harian di divisi Back Office" />
               </div>
 
               <div className="space-y-3">
@@ -791,14 +791,14 @@ async function submitHadir(e) {
                         <span className="text-xs font-bold text-bsi-800">Kegiatan {i + 1}</span>
                         {items.length > 1 ? <button type="button" onClick={function () { setItems(function (p) { return p.filter(function (x, idx) { return idx !== i }) }) }} className="text-xs text-red-600 hover:underline">Hapus</button> : null}
                       </div>
-                      <input className={inputCls} value={it.judul} onChange={function (e) { patchItem(i, { judul: e.target.value }) }} placeholder="Judul kegiatan" />
-                      <AutoTextArea className={inputCls} value={it.deskripsi} onChange={function (e) { patchItem(i, { deskripsi: e.target.value }) }} placeholder="Deskripsi singkat kegiatan" />
-                      <input className={inputCls} value={it.hasil} onChange={function (e) { patchItem(i, { hasil: e.target.value }) }} placeholder="Hasil (opsional)" />
+                      <input className={inputCls} value={it.judul} onChange={function (e) { patchItem(i, { judul: e.target.value }) }} aria-label="Judul kegiatan" placeholder="Judul kegiatan" />
+                      <AutoTextArea className={inputCls} value={it.deskripsi} onChange={function (e) { patchItem(i, { deskripsi: e.target.value }) }} aria-label="Deskripsi kegiatan" placeholder="Deskripsi singkat kegiatan" />
+                      <input className={inputCls} value={it.hasil} onChange={function (e) { patchItem(i, { hasil: e.target.value }) }} aria-label="Hasil kegiatan" placeholder="Hasil (opsional)" />
                       {it.previewLoading ? (
                         <div className="rounded-2xl border border-slate-200 bg-slate-100 aspect-video grid place-items-center">
                           <div className="flex flex-col items-center gap-3">
                             <div className="h-9 w-9 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div>
-                            <p className="text-xs font-semibold text-slate-500">Mengonversi pratinjau</p>
+                            <p className="text-xs font-semibold text-slate-600">Mengonversi pratinjau</p>
                           </div>
                         </div>
                       ) : null}
@@ -819,14 +819,14 @@ async function submitHadir(e) {
                       </div>
                       {it.mode === 'video' ? (
                         <div className="space-y-2">
-                          <p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuotaLoading ? <span className="inline-block w-3 h-3 ml-1 border-2 border-slate-400 border-t-transparent rounded-full animate-spin align-middle"></span> : <>{ytQuota.remaining} dari {ytQuota.limit}</>}</p>
+                          <p className="text-xs font-semibold text-slate-600">Sisa kuota upload video hari ini: {ytQuotaLoading ? <span className="inline-block w-3 h-3 ml-1 border-2 border-slate-400 border-t-transparent rounded-full animate-spin align-middle"></span> : <>{ytQuota.remaining} dari {ytQuota.limit}</>}</p>
                           <div className={ytQuota.remaining <= 0 && !it.file ? 'opacity-50 pointer-events-none' : ''}>
                             <FileInput accept="video/*" fileName={it.file ? it.file.name : ''} label="Klik untuk pilih video" hint="Video maks 50 MB. Format MP4, MOV, WebM, atau MKV."
                               onChange={function (e) { onItemFile(i, e.target.files[0]) }} />
                           </div>
                           {ytQuota.remaining <= 0 ? <p className="text-xs text-red-600">Kuota habis. Gunakan link video di bawah.</p> : null}
-                          <input className={inputCls} value={it.ytLink} onChange={function (e) { patchItem(i, { ytLink: e.target.value }) }} placeholder="Link video YouTube untuk tampilan (opsional)" />
-                          <input className={inputCls} value={it.driveLink} onChange={function (e) { patchItem(i, { driveLink: e.target.value }) }} placeholder="Link Google Drive untuk unduhan (opsional)" />
+                          <input className={inputCls} value={it.ytLink} onChange={function (e) { patchItem(i, { ytLink: e.target.value }) }} aria-label="Link video YouTube" placeholder="Link video YouTube untuk tampilan (opsional)" />
+                          <input className={inputCls} value={it.driveLink} onChange={function (e) { patchItem(i, { driveLink: e.target.value }) }} aria-label="Link Google Drive" placeholder="Link Google Drive untuk unduhan (opsional)" />
                         </div>
                       ) : (
                         <FileInput accept="image/*" fileName={it.file ? it.file.name : ''} label="Klik untuk pilih foto" hint="Foto JPG, PNG, atau HEIC otomatis dikonversi ke WebP."
@@ -842,9 +842,9 @@ async function submitHadir(e) {
               </div>
 
               <div className="grid gap-4 md:grid-cols-3">
-                <div><label className={labelCls}>Kendala</label><AutoTextArea className={inputCls} value={form.kendala} onChange={function (e) { setForm(Object.assign({}, form, { kendala: e.target.value })) }} placeholder="Opsional" /></div>
-                <div><label className={labelCls}>Solusi</label><AutoTextArea className={inputCls} value={form.solusi} onChange={function (e) { setForm(Object.assign({}, form, { solusi: e.target.value })) }} placeholder="Opsional" /></div>
-                <div><label className={labelCls}>Pembelajaran</label><AutoTextArea className={inputCls} value={form.pembelajaran} onChange={function (e) { setForm(Object.assign({}, form, { pembelajaran: e.target.value })) }} placeholder="Opsional" /></div>
+                <div><label className={labelCls}>Kendala</label><AutoTextArea className={inputCls} value={form.kendala} onChange={function (e) { setForm(Object.assign({}, form, { kendala: e.target.value })) }} aria-label="Kendala" placeholder="Opsional" /></div>
+                <div><label className={labelCls}>Solusi</label><AutoTextArea className={inputCls} value={form.solusi} onChange={function (e) { setForm(Object.assign({}, form, { solusi: e.target.value })) }} aria-label="Solusi" placeholder="Opsional" /></div>
+                <div><label className={labelCls}>Pembelajaran</label><AutoTextArea className={inputCls} value={form.pembelajaran} onChange={function (e) { setForm(Object.assign({}, form, { pembelajaran: e.target.value })) }} aria-label="Pembelajaran" placeholder="Opsional" /></div>
               </div>
 
               <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks={infoProses || 'Menyimpan'} /> : (editLogId ? 'Simpan perubahan' : 'Simpan logbook')}</button>
@@ -862,7 +862,7 @@ async function submitHadir(e) {
               <TimeFilter filter={logFilter} set={setLogFilter} />
               <SortSelect value={sort} onChange={setSort} />
             </FilterBar>
-            <p className="text-sm text-slate-500">Total {filteredLogs.length} logbook{logTotalPages > 1 ? ' • Halaman ' + logPageAman + ' dari ' + logTotalPages : ''}</p>
+            <p className="text-sm text-slate-600">Total {filteredLogs.length} logbook{logTotalPages > 1 ? ' • Halaman ' + logPageAman + ' dari ' + logTotalPages : ''}</p>
             <div className="grid gap-5 md:grid-cols-2 kartu-grid">
               {paginatedLogs.map(function (l) {
                 return <LogbookCard key={l.id} log={l} isOwner
@@ -892,7 +892,7 @@ async function submitHadir(e) {
                 <div className="mt-1.5">
                   {galMode === 'video' ? (
                     <div className="space-y-2">
-                      <p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuotaLoading ? <span className="inline-block w-3 h-3 ml-1 border-2 border-slate-400 border-t-transparent rounded-full animate-spin align-middle"></span> : <>{ytQuota.remaining} dari {ytQuota.limit}</>}</p>
+                      <p className="text-xs font-semibold text-slate-600">Sisa kuota upload video hari ini: {ytQuotaLoading ? <span className="inline-block w-3 h-3 ml-1 border-2 border-slate-400 border-t-transparent rounded-full animate-spin align-middle"></span> : <>{ytQuota.remaining} dari {ytQuota.limit}</>}</p>
                       <div className={ytQuota.remaining <= 0 && !galForm.file ? 'opacity-50 pointer-events-none' : ''}>
                         <FileInput accept="video/*" fileName={galForm.file ? galForm.file.name : ''} label="Klik untuk pilih video" hint="Video maks 50 MB. Format MP4, MOV, WebM, atau MKV."
                           onChange={function (e) {
@@ -902,8 +902,8 @@ async function submitHadir(e) {
                           }} />
                       </div>
                       {ytQuota.remaining <= 0 ? <p className="text-xs text-red-600">Kuota habis. Gunakan link video di bawah.</p> : null}
-                      <input className={inputCls} value={galYtLink} onChange={function (e) { setGalYtLink(e.target.value) }} placeholder="Link video YouTube untuk tampilan (opsional)" />
-                       <input className={inputCls} value={galDriveLink} onChange={function (e) { setGalDriveLink(e.target.value) }} placeholder="Link Google Drive untuk unduhan (opsional)" />
+                      <input className={inputCls} value={galYtLink} onChange={function (e) { setGalYtLink(e.target.value) }} aria-label="Link video YouTube" placeholder="Link video YouTube untuk tampilan (opsional)" />
+                       <input className={inputCls} value={galDriveLink} onChange={function (e) { setGalDriveLink(e.target.value) }} aria-label="Link Google Drive" placeholder="Link Google Drive untuk unduhan (opsional)" />
                     </div>
                   ) : (
                     <FileInput accept="image/*" fileName={galForm.file ? galForm.file.name : ''} label="Klik untuk pilih foto" hint="Foto JPG, PNG, atau HEIC otomatis dikonversi ke WebP."
@@ -926,7 +926,7 @@ async function submitHadir(e) {
                 <div className="rounded-2xl border border-slate-200 bg-slate-100 aspect-video grid place-items-center">
                   <div className="flex flex-col items-center gap-3">
                     <div className="h-9 w-9 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div>
-                    <p className="text-xs font-semibold text-slate-500">Mengonversi pratinjau</p>
+                    <p className="text-xs font-semibold text-slate-600">Mengonversi pratinjau</p>
                   </div>
                 </div>
               ) : null}
@@ -942,7 +942,7 @@ async function submitHadir(e) {
                 </div>
               ) : null}
               <div className="grid gap-4 sm:grid-cols-2">
-                <div><label className={labelCls}>Judul (opsional)</label><input className={inputCls} value={galForm.judul} onChange={function (e) { setGalForm(Object.assign({}, galForm, { judul: e.target.value })) }} placeholder="Kosongkan untuk judul otomatis" /></div>
+                <div><label className={labelCls}>Judul (opsional)</label><input className={inputCls} value={galForm.judul} onChange={function (e) { setGalForm(Object.assign({}, galForm, { judul: e.target.value })) }} aria-label="Judul media" placeholder="Kosongkan untuk judul otomatis" /></div>
                 <div>
                   <label className={labelCls}>Tanggal (opsional)</label>
                   <div className="mt-1.5">
@@ -957,9 +957,9 @@ async function submitHadir(e) {
                     onChange={function (v) { setGalForm(Object.assign({}, galForm, { kegiatan: v })) }}
                     options={GALERI_KEGIATAN.map(function (k) { return { value: k, label: k } })} />
                 </div>
-                {editGalDerived ? <p className="mt-1 text-xs text-slate-400">Media ini berasal dari logbook. Perubahan judul, deskripsi, kegiatan, dan tanggal hanya memengaruhi galeri dan tidak akan ditimpa saat logbook disimpan.</p> : null}
+                {editGalDerived ? <p className="mt-1 text-xs text-slate-600">Media ini berasal dari logbook. Perubahan judul, deskripsi, kegiatan, dan tanggal hanya memengaruhi galeri dan tidak akan ditimpa saat logbook disimpan.</p> : null}
               </div>
-              <div><label className={labelCls}>Deskripsi (opsional)</label><AutoTextArea className={inputCls} value={galForm.deskripsi} onChange={function (e) { setGalForm(Object.assign({}, galForm, { deskripsi: e.target.value })) }} placeholder="Tambahkan keterangan media." /></div>
+              <div><label className={labelCls}>Deskripsi (opsional)</label><AutoTextArea className={inputCls} value={galForm.deskripsi} onChange={function (e) { setGalForm(Object.assign({}, galForm, { deskripsi: e.target.value })) }} aria-label="Deskripsi media" placeholder="Tambahkan keterangan media." /></div>
               <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks={infoProses || 'Menyimpan'} /> : (editGalId ? 'Simpan perubahan media' : 'Unggah media')}</button>
             </form>
           </div>
@@ -975,7 +975,7 @@ async function submitHadir(e) {
               <TimeFilter filter={galFilter} set={setGalFilter} />
               <SortSelect value={sort} onChange={setSort} />
             </FilterBar>
-            <p className="text-sm text-slate-500">Total {filteredGaleri.length} media{galTotalPages > 1 ? ' • Halaman ' + galPageAman + ' dari ' + galTotalPages : ''}</p>
+            <p className="text-sm text-slate-600">Total {filteredGaleri.length} media{galTotalPages > 1 ? ' • Halaman ' + galPageAman + ' dari ' + galTotalPages : ''}</p>
             <div className="grid gap-5 md:grid-cols-2 kartu-grid">
               {paginatedGaleri.map(function (g) {
                 return <GalleryCard key={g.id} item={g} isOwner
@@ -1018,10 +1018,10 @@ async function submitHadir(e) {
                   className={inputCls + (hadirForm.status === 'Masuk' ? ' opacity-60 cursor-not-allowed' : '')}
                   value={hadirForm.alasan}
                   onChange={function (e) { setHadirForm(Object.assign({}, hadirForm, { alasan: e.target.value })) }}
-                  placeholder={hadirForm.status === 'Masuk' ? 'Status Masuk tidak memerlukan alasan' : 'Contoh: Keperluan keluarga, sakit.'}
+                  aria-label="Alasan atau keterangan" placeholder={hadirForm.status === 'Masuk' ? 'Status Masuk tidak memerlukan alasan' : 'Contoh: Keperluan keluarga, sakit.'}
                   disabled={hadirForm.status === 'Masuk'}
                 />
-                {hadirForm.status === 'Masuk' ? <p className="mt-1 text-xs text-slate-400">Field ini hanya terisi untuk status Izin atau Bolos.</p> : null}
+                {hadirForm.status === 'Masuk' ? <p className="mt-1 text-xs text-slate-600">Field ini hanya terisi untuk status Izin atau Bolos.</p> : null}
               </div>
               <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks="Menyimpan" /> : (editHadirId ? 'Simpan perubahan' : 'Simpan daftar hadir')}</button>
             </form>
@@ -1036,7 +1036,7 @@ async function submitHadir(e) {
               <TimeFilter filter={hadirFilter} set={setHadirFilter} />
               <SortSelect value={sort} onChange={setHadirFilterOpen && setSort ? setSort : setSort} />
             </FilterBar>
-            <p className="text-sm text-slate-500">Total {filteredHadir.length} catatan{hadirTotalPages > 1 ? ' • Halaman ' + hadirPageAman + ' dari ' + hadirTotalPages : ''}</p>
+            <p className="text-sm text-slate-600">Total {filteredHadir.length} catatan{hadirTotalPages > 1 ? ' • Halaman ' + hadirPageAman + ' dari ' + hadirTotalPages : ''}</p>
             <div className="grid gap-5 md:grid-cols-2 kartu-grid">
             {paginatedHadir.map(function (h) {
               return <AttendanceCard key={h.id} row={h} isOwner

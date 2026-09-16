@@ -69,7 +69,7 @@ export default function AttendancePage() {
   return (
     <div>
       <section className="rounded-[2rem] bg-white border border-slate-200 p-5 sm:p-5 sm:p-8 lg:p-10 shadow-sm">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Daftar hadir</p>
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-400">Daftar hadir</p>
         <h1 className="mt-2 text-2xl sm:text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Monitoring kehadiran tim magang</h1>
         <div className="mt-5 grid grid-cols-2 gap-2.5 sm:mt-8 sm:gap-4 xl:grid-cols-4">
           {loading
@@ -113,9 +113,9 @@ export default function AttendancePage() {
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
                         <p className="font-bold text-slate-900">{p.nama}</p>
-                        <p className="text-xs text-slate-500">NIM {p.nim}</p>
+                        <p className="text-xs text-slate-600">NIM {p.nim}</p>
                       </div>
-                      <div className="text-xs text-slate-500">Masuk: {p.Masuk} | Izin: {p.Izin} | Bolos: {p.Bolos}</div>
+                      <div className="text-xs text-slate-600">Masuk: {p.Masuk} | Izin: {p.Izin} | Bolos: {p.Bolos}</div>
                     </div>
                     <div className="mt-4 flex h-4 w-full overflow-hidden rounded-full bg-slate-100">
                       <div className="bg-emerald-500 transition-all duration-500" style={{ width: (p.Masuk / maxTotal) * 100 + '%' }} />
@@ -145,7 +145,7 @@ export default function AttendancePage() {
         </div>
       </section>
       {!loading && totalData > 0 ? (
-        <div className="mt-6 text-center text-sm text-slate-500">
+        <div className="mt-6 text-center text-sm text-slate-600">
           Total {totalData} catatan{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}
         </div>
       ) : null}

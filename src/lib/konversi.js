@@ -1,4 +1,3 @@
-import heic2any from 'heic2any'
 const MAKS_SISI_FULL = 2560
 const KUALITAS_FULL = 0.92
 const MAKS_SISI_THUMB = 1200
@@ -111,7 +110,9 @@ export async function siapkanFotoProfil(file, maksSisi, kualitas) {
   let kerja = file
   const tipe = String(file.type || '').toLowerCase()
   if (tipe.indexOf('heic') !== -1 || tipe.indexOf('heif') !== -1) {
-    const blob = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.92 })
+    const mod = await import('heic2any')
+    const heicFn = mod.default || mod
+    const blob = await heicFn({ blob: file, toType: 'image/jpeg', quality: 0.92 })
     kerja = new File([Array.isArray(blob) ? blob[0] : blob], (file.name || 'foto').replace(/\.(heic|heif)$/i, '.jpg'), { type: 'image/jpeg' })
   }
   const muat = await muatGambarProfil(kerja)

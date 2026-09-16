@@ -1,0 +1,18 @@
+# Logbook Magang BSI
+Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia.
+Aplikasi single page berbasis React dengan data tersimpan di Supabase dan media di Cloudflare R2, YouTube, serta Google Drive.
+
+## Halaman publik
+- / : beranda, ringkasan statistik dan logbook terbaru tim
+- /logbook : daftar logbook publik lengkap dengan filter mahasiswa, kategori, dan tanggal
+- /galeri : galeri foto dan video kegiatan magang
+- /absen : daftar hadir tim beserta grafik kehadiran per mahasiswa
+- /dospem : ringkasan kegiatan untuk dosen pembimbing dan kaprodi tanpa login
+
+## Area intern
+- /login : masuk mahasiswa menggunakan NIM dan kode akses
+- /dashboard : pengelolaan logbook, galeri, daftar hadir, dan foto profil, memerlukan sesi login
+
+## Catatan teknis
+- Seluruh konten dimuat lewat JavaScript, tersedia blok noscript berisi tautan halaman utama.
+- robots.txt mengizinkan perayap umum dan agen AI.

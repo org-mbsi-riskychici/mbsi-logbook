@@ -250,7 +250,7 @@ export default function PemutarVideo(props) {
         <div className="absolute inset-0 z-30 grid place-items-center bg-black/90">
           <div className="flex flex-col items-center gap-2 px-6 text-center">
             <p className="text-sm font-semibold text-slate-200">Video tidak dapat dimuat</p>
-            <p className="text-xs text-slate-400">Periksa koneksi atau ketersediaan video di saluran.</p>
+            <p className="text-xs text-slate-300">Periksa koneksi atau ketersediaan video di saluran.</p>
           </div>
         </div>
       ) : null}

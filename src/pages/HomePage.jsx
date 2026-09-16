@@ -65,7 +65,7 @@ export default function HomePage() {
       <section className="mt-10">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Kegiatan terbaru</p>
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-400">Kegiatan terbaru</p>
             <h2 className="mt-2 text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Logbook terbaru tim</h2>
           </div>
           <Link to="/logbook" className="text-sm font-semibold text-bsi-800 hover:text-bsi-950">Lihat semua logbook</Link>

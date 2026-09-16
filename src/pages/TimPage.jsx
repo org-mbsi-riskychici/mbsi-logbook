@@ -24,7 +24,7 @@ export default function TimPage() {
   return (
     <div>
       <section className="card-hover rounded-[2rem] bg-white border border-slate-200 p-5 sm:p-8 lg:p-10 shadow-sm">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Profil Mahasiswa</p>
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-400">Profil Mahasiswa</p>
         <h1 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Mahasiswa magang Bank BSI</h1>
       </section>
       <section className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
@@ -40,13 +40,13 @@ export default function TimPage() {
                     <div className="h-14 w-14 rounded-3xl bg-bsi-800 text-white grid place-items-center text-xl font-black">{typeof p !== 'undefined' && p && p.foto_profil ? <img src={p.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : typeof m !== 'undefined' && m && m.foto_profil ? <img src={m.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : initials}</div>
                     <div>
                       <p className="text-lg font-bold text-slate-900">{p.nama}</p>
-                      <p className="text-sm text-slate-500">NIM {p.nim}</p>
+                      <p className="text-sm text-slate-600">NIM {p.nim}</p>
                       {p.prodi ? <span className="mt-1 inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-bsi-100 text-bsi-900">{p.prodi}</span> : null}
                     </div>
                   </div>
                   <div className="mt-5 grid grid-cols-2 gap-3">
-                    <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Logbook publik</p><p className="mt-1 text-xl sm:text-2xl font-black text-bsi-900">{totalLog}</p></div>
-                    <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Media galeri</p><p className="mt-1 text-xl sm:text-2xl font-black text-bsi-900">{totalGal}</p></div>
+                    <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-600">Logbook publik</p><p className="mt-1 text-xl sm:text-2xl font-black text-bsi-900">{totalLog}</p></div>
+                    <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-600">Media galeri</p><p className="mt-1 text-xl sm:text-2xl font-black text-bsi-900">{totalGal}</p></div>
                   </div>
                 </div>
               )

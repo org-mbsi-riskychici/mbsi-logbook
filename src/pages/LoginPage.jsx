@@ -69,7 +69,7 @@ export default function LoginPage() {
         <form onSubmit={submit} className="mt-6 space-y-5">
           <div>
             <label className={labelCls}>NIM <span className="text-red-500">*</span></label>
-            <input className={inputCls} value={nim} onChange={function (e) { setNim(e.target.value) }} placeholder="Contoh: 20260001" required />
+            <input className={inputCls} value={nim} onChange={function (e) { setNim(e.target.value) }} aria-label="NIM" placeholder="Contoh: 20260001" required />
           </div>
           <div>
             <label className={labelCls}>Kode akses <span className="text-red-500">*</span></label>
@@ -79,14 +79,14 @@ export default function LoginPage() {
                 className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 pr-12 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
                 value={kode}
                 onChange={function (e) { setKode(e.target.value) }}
-                placeholder="Masukkan kode akses"
+                aria-label="Kode akses" placeholder="Masukkan kode akses"
                 required
               />
               <button
                 type="button"
                 onClick={function () { setLihatKode(function (v) { return !v }) }}
                 title={lihatKode ? 'Sembunyikan kode akses' : 'Lihat kode akses'}
-                className="absolute right-2 top-0 bottom-0 my-auto grid h-9 w-9 place-items-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                className="absolute right-2 top-0 bottom-0 my-auto grid h-9 w-9 place-items-center rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-600"
               >
                 <EyeToggle open={lihatKode} size={18} />
               </button>

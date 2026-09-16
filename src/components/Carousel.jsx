@@ -109,7 +109,7 @@ export default function Carousel(props) {
             return (
               <button
                 key={i}
-                onClick={function () { setIdx(i) }}
+                onClick={function () { setIdx(i) }} aria-label={'Ke slide ' + (i + 1)}
                 className={'carousel-dot h-2 w-2 rounded-full transition-all ' + (i === idx ? 'bg-white' : 'bg-white/40')}
               />
             )

@@ -24,7 +24,7 @@ export function drivePreviewUrl(id) {
 }
 
 export function driveThumbUrl(id) {
-  return 'https://drive.google.com/thumbnail?id=' + id + '&sz=w1280'
+  return 'https://drive.google.com/thumbnail?id=' + id + '&sz=w1000'
 }
 
 export function driveDownloadUrl(id) {

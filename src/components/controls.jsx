@@ -55,11 +55,11 @@ export function CustomSelect(props) {
         onClick={function () { setOpen(function (o) { return !o }) }}
         className={(props.buttonCls || defaultBtn) + ' text-left'}
       >
-        {props.icon ? <span className="shrink-0 text-slate-400">{props.icon}</span> : null}
-        <span className={'flex-1 truncate ' + (current ? 'text-slate-800' : 'text-slate-400')}>
+        {props.icon ? <span className="shrink-0 text-slate-600">{props.icon}</span> : null}
+        <span className={'flex-1 truncate ' + (current ? 'text-slate-800' : 'text-slate-600')}>
           {current ? current.label : (props.placeholder || 'Pilih')}
         </span>
-        <span className={'shrink-0 text-slate-400 transition-transform duration-200 ' + (open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
+        <span className={'shrink-0 text-slate-600 transition-transform duration-200 ' + (open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
       </button>
       <SelubungPanel open={open}>
 <div className="anim-modal absolute z-30 mt-2 max-h-64 w-full overflow-y-auto rounded-2xl border border-slate-200 bg-white py-1 shadow-xl">
@@ -146,26 +146,26 @@ export function CustomDateInput(props) {
   return (
     <div ref={boxRef} className={'relative ' + (props.className || '')}>
       <button type="button" onClick={toggle} className={(props.buttonCls || defaultBtn) + ' text-left'}>
-        <span className="shrink-0 text-slate-400">{ICONS.calendar}</span>
-        <span className={'flex-1 truncate ' + (props.value ? 'text-slate-800' : 'text-slate-400')}>
+        <span className="shrink-0 text-slate-600">{ICONS.calendar}</span>
+        <span className={'flex-1 truncate ' + (props.value ? 'text-slate-800' : 'text-slate-600')}>
           {label || (mode === 'month' ? 'Pilih bulan' : 'Pilih tanggal')}
         </span>
-        <span className={'shrink-0 text-slate-400 transition-transform duration-200 ' + (open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
+        <span className={'shrink-0 text-slate-600 transition-transform duration-200 ' + (open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
       </button>
       <SelubungPanel open={open}>
 <div className="anim-modal absolute z-30 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
           <div className="flex items-center justify-between">
-            <button type="button" onClick={function () { shift(-1) }} className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-100">&#8249;</button>
+            <button type="button" onClick={function () { shift(-1) }} className="grid h-8 w-8 place-items-center rounded-lg text-slate-600 hover:bg-slate-100">&#8249;</button>
             <p className="text-sm font-bold text-slate-800">
               {mode === 'month' ? String(view.y) : BULAN_NAMA[view.m] + ' ' + view.y}
             </p>
-            <button type="button" onClick={function () { shift(1) }} className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-100">&#8250;</button>
+            <button type="button" onClick={function () { shift(1) }} className="grid h-8 w-8 place-items-center rounded-lg text-slate-600 hover:bg-slate-100">&#8250;</button>
           </div>
 
           {mode === 'date' ? (
             <div className="mt-3 grid grid-cols-7 gap-1 text-center">
               {HARI_NAMA.map(function (h) {
-                return <span key={h} className="py-1 text-[11px] font-semibold text-slate-400">{h}</span>
+                return <span key={h} className="py-1 text-[11px] font-semibold text-slate-600">{h}</span>
               })}
               {cells.map(function (d, i) {
                 if (d === null) return <span key={'kosong' + i} />
@@ -203,7 +203,7 @@ export function CustomDateInput(props) {
           )}
 
           <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
-            <button type="button" onClick={function () { props.onChange(''); setOpen(false) }} className="text-sm font-semibold text-slate-500 hover:text-red-600">Hapus</button>
+            <button type="button" onClick={function () { props.onChange(''); setOpen(false) }} className="text-sm font-semibold text-slate-600 hover:text-red-600">Hapus</button>
             <button type="button" onClick={pickToday} className="text-sm font-semibold text-bsi-700 hover:text-bsi-900">Hari ini</button>
           </div>
         </div>
@@ -233,10 +233,10 @@ export function FileInput(props) {
       >
         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-bsi-100 text-bsi-800">{ICONS.image}</span>
         <span className="min-w-0 flex-1">
-          <span className={'block truncate text-sm font-semibold ' + (props.fileName ? 'text-slate-800' : 'text-slate-500')}>
+          <span className={'block truncate text-sm font-semibold ' + (props.fileName ? 'text-slate-800' : 'text-slate-600')}>
             {props.fileName || props.label || 'Klik untuk pilih foto atau video'}
           </span>
-          <span className="block text-xs text-slate-400">{props.hint || 'Foto JPG, PNG, atau HEIC otomatis dikonversi. Video maks 50 MB.'}</span>
+          <span className="block text-xs text-slate-600">{props.hint || 'Foto JPG, PNG, atau HEIC otomatis dikonversi. Video maks 50 MB.'}</span>
         </span>
         {props.fileName ? <span className="shrink-0 text-xs font-semibold text-bsi-700">Ganti</span> : null}
       </button>
