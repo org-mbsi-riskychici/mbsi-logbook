@@ -89,7 +89,7 @@ export function LogbookDetail(props) {
       </div>
       <div>
         <p className="text-sm text-slate-500">{formatTanggal(log.tanggal)}</p>
-        <h2 className="mt-1 text-2xl font-black text-slate-900">{log.judul}</h2>
+        <h2 className="mt-1 text-xl sm:text-2xl font-black text-slate-900">{log.judul}</h2>
       </div>
       <div>
         <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Rincian kegiatan</p>
@@ -195,7 +195,7 @@ export function GalleryDetail(props) {
         <span className="text-sm text-slate-500">{formatTanggal(item.tanggal)}</span>
       </div>
       <div>
-        <h2 className="text-2xl font-black text-slate-900">{item.judul}</h2>
+        <h2 className="text-xl sm:text-2xl font-black text-slate-900">{item.judul}</h2>
         <p className="mt-3 text-slate-600 leading-relaxed">{item.deskripsi || 'Tidak ada deskripsi.'}</p>
       </div>
       <div className="border-t border-slate-100 pt-4"><PersonChip mahasiswa={item.mahasiswa} /></div>
@@ -233,7 +233,7 @@ export function AttendanceDetail(props) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm text-slate-500">{formatTanggal(row.tanggal)}</p>
-          <h2 className="mt-1 text-2xl font-black text-slate-900">Detail daftar hadir</h2>
+          <h2 className="mt-1 text-xl sm:text-2xl font-black text-slate-900">Detail daftar hadir</h2>
         </div>
         <AttendanceBadge status={row.status} />
       </div>

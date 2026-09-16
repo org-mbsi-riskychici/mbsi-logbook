@@ -83,6 +83,14 @@ supabase/
   schema.sql
 .env.example
 .gitignore
+apply-fix-dashboard-mobile.cjs
+apply-fix-nama-satu-baris.cjs
+apply-fix-pesan-login.cjs
+apply-fix-proporsional-mobile-v2.cjs
+apply-fix-proporsional-mobile.cjs
+apply-fix-ringkasan-mobile.cjs
+apply-fix-toast-modern.cjs
+apply-fix-tombol-mobile.cjs
 index.html
 package.json
 postcss.config.js
@@ -205,304 +213,6 @@ export default async function handler(req, res) {
   }) || items[0]
   if (!cocok) return res.status(404).json({ error: 'Video tidak ditemukan di channel' })
   return res.status(200).json({ videoId: cocok.id && cocok.id.videoId })
-}
-```
-
-## File: src/components/PemutarVideo.jsx
-```javascript
-import { useEffect, useRef, useState } from 'react'
-
-let janjiApi = null
-function muatApiYouTube() {
-  if (janjiApi) return janjiApi
-  janjiApi = new Promise(function (resolve) {
-    if (window.YT && window.YT.Player) { resolve(window.YT); return }
-    const lama = window.onYouTubeIframeAPIReady
-    window.onYouTubeIframeAPIReady = function () {
-      if (lama) lama()
-      resolve(window.YT)
-    }
-    const tag = document.createElement('script')
-    tag.src = 'https://www.youtube.com/iframe_api'
-    tag.async = true
-    document.head.appendChild(tag)
-  })
-  return janjiApi
-}
-
-function formatWaktu(detik) {
-  const d = isFinite(detik) && detik > 0 ? detik : 0
-  const m = Math.floor(d / 60)
-  const s = Math.floor(d % 60)
-  return m + ':' + (s < 10 ? '0' : '') + s
-}
-
-function paksaKualitas(p) {
-  try { if (p && typeof p.setPlaybackQualityRange === 'function') p.setPlaybackQualityRange('720', '1080') } catch (e) {}
-}
-function matikanSubtitel(p) {
-  try { if (p && typeof p.unloadModule === 'function') p.unloadModule('captions') } catch (e) {}
-  try { if (p && typeof p.setOption === 'function') p.setOption('captions', 'track', {}) } catch (e) {}
-}
-
-function IkonPlay({ className }) { return <svg viewBox="0 0 24 24" fill="currentColor" className={className || 'h-5 w-5'}><path d="M8 5v14l11-7z" /></svg> }
-function IkonPause({ className }) { return <svg viewBox="0 0 24 24" fill="currentColor" className={className || 'h-5 w-5'}><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg> }
-function IkonSuara() {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
-      <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
-    </svg>
-  )
-}
-function IkonBisu() {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
-      <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
-    </svg>
-  )
-}
-function IkonPenuh() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg> }
-function IkonKecil() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" /></svg> }
-function IkonUlang() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></svg> }
-
-export default function PemutarVideo(props) {
-  const youtubeId = props.youtubeId
-  const [dimulai, setDimulai] = useState(false)
-  const [memutar, setMemutar] = useState(false)
-  const [buffer, setBuffer] = useState(false)
-  const [selesai, setSelesai] = useState(false)
-  const [gagal, setGagal] = useState(false)
-  const [waktu, setWaktu] = useState(0)
-  const [durasi, setDurasi] = useState(0)
-  const [volume, setVolume] = useState(100)
-  const [bisu, setBisu] = useState(false)
-  const [penuh, setPenuh] = useState(false)
-  const [sembunyi, setSembunyi] = useState(false)
-  const [thumbPakaiHq, setThumbPakaiHq] = useState(false)
-  const kotakRef = useRef(null)
-  const wadahRef = useRef(null)
-  const playerRef = useRef(null)
-  const timerSembunyi = useRef(null)
-
-  useEffect(function () {
-    const iv = setInterval(function () {
-      const p = playerRef.current
-      if (p && p.getCurrentTime) {
-        setWaktu(p.getCurrentTime() || 0)
-        const d = p.getDuration ? p.getDuration() : 0
-        if (d) setDurasi(d)
-      }
-    }, 250)
-    return function () { clearInterval(iv) }
-  }, [])
-
-  useEffect(function () {
-    function saatPenuh() { setPenuh(Boolean(document.fullscreenElement)) }
-    document.addEventListener('fullscreenchange', saatPenuh)
-    return function () {
-      document.removeEventListener('fullscreenchange', saatPenuh)
-      if (timerSembunyi.current) clearTimeout(timerSembunyi.current)
-      if (playerRef.current && playerRef.current.destroy) {
-        try { playerRef.current.destroy() } catch (e) {}
-        playerRef.current = null
-      }
-    }
-  }, [])
-
-  function sedangMain() {
-    const p = playerRef.current
-    return Boolean(p && p.getPlayerState && window.YT && p.getPlayerState() === window.YT.PlayerState.PLAYING)
-  }
-
-  function resetTimerSembunyi() {
-    if (!dimulai) return
-    if (timerSembunyi.current) clearTimeout(timerSembunyi.current)
-    setSembunyi(false)
-    if (sedangMain()) {
-      timerSembunyi.current = setTimeout(function () { setSembunyi(true) }, 2500)
-    }
-  }
-
-  async function mulai() {
-    setDimulai(true)
-    setGagal(false)
-    try {
-      const YT = await muatApiYouTube()
-      if (!wadahRef.current) return
-      playerRef.current = new YT.Player(wadahRef.current, {
-        videoId: youtubeId,
-        playerVars: {
-          autoplay: 1, controls: 0, modestbranding: 1, rel: 0, fs: 0,
-          disablekb: 1, iv_load_policy: 3, playsinline: 1, autohide: 1,
-          showinfo: 0, cc_load_policy: 0, origin: window.location.origin
-        },
-        events: {
-          onReady: function (e) {
-            setDurasi(e.target.getDuration() || 0)
-            paksaKualitas(e.target)
-            matikanSubtitel(e.target)
-            e.target.playVideo()
-          },
-          onStateChange: function (e) {
-            const S = window.YT.PlayerState
-            if (e.data === S.PLAYING) {
-              setMemutar(true); setBuffer(false); setSelesai(false)
-              paksaKualitas(e.target); matikanSubtitel(e.target)
-              resetTimerSembunyi()
-            } else if (e.data === S.PAUSED) {
-              setMemutar(false); setBuffer(false); setSembunyi(false)
-            } else if (e.data === S.BUFFERING) {
-              setBuffer(true)
-            } else if (e.data === S.ENDED) {
-              setMemutar(false); setSelesai(true); setSembunyi(false)
-            }
-          },
-          onError: function () { setGagal(true); setBuffer(false); setMemutar(false) }
-        }
-      })
-    } catch (e) {
-      setGagal(true)
-    }
-  }
-
-  function jungkir() {
-    const p = playerRef.current
-    if (!p) return
-    if (sedangMain()) p.pauseVideo()
-    else p.playVideo()
-  }
-
-  function geser(ev) {
-    const p = playerRef.current
-    if (!p || !durasi) return
-    const nilai = Number(ev.target.value)
-    p.seekTo((nilai / 100) * durasi, true)
-    setWaktu((nilai / 100) * durasi)
-  }
-
-  function aturVolume(ev) {
-    const p = playerRef.current
-    const nilai = Number(ev.target.value)
-    setVolume(nilai)
-    if (!p) return
-    p.setVolume(nilai)
-    if (nilai === 0) { p.mute(); setBisu(true) }
-    else if (bisu) { p.unMute(); setBisu(false) }
-  }
-
-  function aturBisu() {
-    const p = playerRef.current
-    if (!p) return
-    if (bisu) { p.unMute(); p.setVolume(volume || 100); setBisu(false) }
-    else { p.mute(); setBisu(true) }
-  }
-
-  function aturPenuh() {
-    const el = kotakRef.current
-    if (!el) return
-    if (document.fullscreenElement) document.exitFullscreen()
-    else if (el.requestFullscreen) el.requestFullscreen()
-  }
-
-  const thumb = thumbPakaiHq
-    ? 'https://i.ytimg.com/vi/' + youtubeId + '/hqdefault.jpg'
-    : 'https://img.youtube.com/vi/' + youtubeId + '/maxresdefault.jpg'
-  const persen = durasi ? Math.min(100, (waktu / durasi) * 100) : 0
-  const kontrolSembunyi = dimulai && !gagal && sembunyi
-
-  return (
-    <div
-      ref={kotakRef}
-      className={'pemutar-referensi group relative overflow-hidden rounded-2xl bg-black shadow-xl ' + (props.className || 'aspect-video w-full')}
-      style={{ cursor: kontrolSembunyi ? 'none' : 'default' }}
-      onMouseMove={resetTimerSembunyi}
-      onMouseLeave={function () { if (sedangMain()) { if (timerSembunyi.current) clearTimeout(timerSembunyi.current); setSembunyi(true) } }}
-    >
-      {/* Wadah player: setelah diisi YouTube, iframe diposisikan CSS dengan margin crop 70px */}
-      <div ref={wadahRef} className="h-full w-full" />
-
-      {/* Perisai penangkap klik */}
-      {dimulai && !selesai && !gagal ? (
-        <button type="button" aria-label="Putar atau jeda video" onClick={jungkir}
-          className="absolute inset-0 z-10 h-full w-full bg-transparent" style={{ cursor: kontrolSembunyi ? 'none' : 'default' }} />
-      ) : null}
-
-      {/* Ikon putar besar milik kita saat dijeda, menutup ikon bawaan YouTube */}
-      {dimulai && !memutar && !buffer && !selesai && !gagal ? (
-        <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center">
-          <span className="grid h-20 w-20 place-items-center rounded-full bg-black/60 text-white backdrop-blur-sm">
-            <IkonPlay className="ml-1 h-8 w-8" />
-          </span>
-        </div>
-      ) : null}
-
-      {/* Poster awal dengan tombol putar minimalis */}
-      {!dimulai ? (
-        <div className="absolute inset-0 z-20">
-          <img src={thumb} alt={props.title || 'Pratinjau video'} onError={function () { setThumbPakaiHq(true) }}
-            className="absolute inset-0 h-full w-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
-          <div className="absolute inset-0 grid place-items-center">
-            <button type="button" onClick={mulai} title="Putar video"
-              className="grid h-12 w-12 place-items-center rounded-full border border-white/20 bg-black/50 text-white backdrop-blur-md transition hover:scale-110 hover:border-bsi-500 hover:bg-bsi-600">
-              <IkonPlay className="ml-0.5 h-5 w-5" />
-            </button>
-          </div>
-          {props.title ? <p className="absolute bottom-3 left-4 right-4 truncate text-sm font-semibold text-white drop-shadow-md">{props.title}</p> : null}
-        </div>
-      ) : null}
-
-      {/* Layar akhir dengan putar ulang */}
-      {selesai ? (
-        <div className="absolute inset-0 z-20 grid place-items-center bg-black/85 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-3">
-            <button type="button" title="Putar ulang"
-              onClick={function () { const p = playerRef.current; if (p) { p.seekTo(0, true); p.playVideo() } setSelesai(false) }}
-              className="grid h-14 w-14 place-items-center rounded-full bg-gold-500 text-slate-900 shadow-lg transition hover:scale-105">
-              <IkonUlang />
-            </button>
-            <p className="text-xs font-semibold text-slate-200">Putar ulang</p>
-          </div>
-        </div>
-      ) : null}
-
-      {/* Layar gagal */}
-      {gagal ? (
-        <div className="absolute inset-0 z-30 grid place-items-center bg-black/90">
-          <div className="flex flex-col items-center gap-2 px-6 text-center">
-            <p className="text-sm font-semibold text-slate-200">Video tidak dapat dimuat</p>
-            <p className="text-xs text-slate-400">Periksa koneksi atau ketersediaan video di saluran.</p>
-          </div>
-        </div>
-      ) : null}
-
-      {/* Panel kontrol overlay di atas video */}
-      {dimulai && !gagal ? (
-        <div className={'absolute inset-x-0 bottom-0 z-30 flex items-center gap-3 bg-gradient-to-t from-black/90 via-black/60 to-transparent px-4 pb-3 pt-10 transition-opacity duration-300 ' + (kontrolSembunyi ? 'pointer-events-none opacity-0' : 'opacity-100')}>
-          <button type="button" onClick={jungkir} title={memutar ? 'Jeda' : 'Putar'}
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-bsi-700 text-white transition hover:bg-bsi-600">
-            {memutar ? <IkonPause className="h-4 w-4" /> : <IkonPlay className="ml-0.5 h-4 w-4" />}
-          </button>
-          <input type="range" min="0" max="100" step="0.1" value={persen} onChange={geser} title="Geser durasi"
-            className="pemutar-progress h-1.5 w-full cursor-pointer appearance-none rounded-full outline-none"
-            style={{ background: 'linear-gradient(to right, #166534 0%, #166534 ' + persen + '%, rgba(255,255,255,0.25) ' + persen + '%, rgba(255,255,255,0.25) 100%)' }} />
-          <span className="min-w-[84px] shrink-0 text-center text-[11px] font-semibold tabular-nums text-slate-200">{formatWaktu(waktu)} / {formatWaktu(durasi)}</span>
-          <button type="button" onClick={aturBisu} title={bisu ? 'Nyalakan suara' : 'Bisukan'}
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/10 text-white transition hover:bg-white/20">
-            {bisu ? <IkonBisu /> : <IkonSuara />}
-          </button>
-          <input type="range" min="0" max="100" value={bisu ? 0 : volume} onChange={aturVolume} title="Volume"
-            className="pemutar-volume h-1 w-16 shrink-0 cursor-pointer appearance-none rounded-full outline-none"
-            style={{ background: 'linear-gradient(to right, #eab308 0%, #eab308 ' + (bisu ? 0 : volume) + '%, rgba(255,255,255,0.25) ' + (bisu ? 0 : volume) + '%, rgba(255,255,255,0.25) 100%)' }} />
-          {buffer ? <span className="inline-block h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-gold-500 border-t-transparent" /> : null}
-          <button type="button" onClick={aturPenuh} title={penuh ? 'Keluar layar penuh' : 'Layar penuh'}
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/10 text-white transition hover:bg-white/20">
-            {penuh ? <IkonKecil /> : <IkonPenuh />}
-          </button>
-        </div>
-      ) : null}
-    </div>
-  )
 }
 ```
 
@@ -727,6 +437,1108 @@ R2_ACCESS_KEY_ID=
 R2_SECRET_ACCESS_KEY=
 R2_BUCKET_NAME=mbsi-media
 R2_PUBLIC_BASE_URL=
+```
+
+## File: apply-fix-dashboard-mobile.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+function ada(rel) { return fs.existsSync(path.join(root, rel)) }
+
+console.log('Mulai merapikan dashboard mobile: avatar proporsional, tombol tambah kegiatan ramping, teks pilih file sesuai konteks...')
+console.log('')
+
+/* ===== 1. index.css: avatar header dashboard mengecil proporsional di layar sempit ===== */
+const FILE_CSS = 'src/index.css'
+if (!ada(FILE_CSS)) {
+  console.log('[GAGAL] index.css tidak ditemukan')
+  process.exit(1)
+}
+let css = baca(FILE_CSS)
+const CSS_BLOK = `/* kepala-dash-responsif: avatar header dashboard mengecil proporsional di layar sempit, desktop tetap 96px */
+@media (max-width: 639px) {
+  .avatar-kepala-dash > button, .avatar-kepala-dash > span {
+    width: 56px !important;
+    height: 56px !important;
+    border-radius: 16px !important;
+  }
+  .avatar-kepala-dash img { border-radius: 16px !important; }
+  .avatar-kepala-dash > button > span, .avatar-kepala-dash > span > span {
+    font-size: 20px !important;
+  }
+}
+`
+if (css.includes('kepala-dash-responsif')) {
+  console.log('[SUDAH ADA] CSS kepala-dash-responsif di index.css')
+} else {
+  simpan(FILE_CSS, css.trimEnd() + '\n\n' + CSS_BLOK)
+  console.log('[BERHASIL] CSS avatar responsif ditambahkan di index.css')
+}
+
+/* ===== 2. controls.jsx: FileInput menerima label kustom ===== */
+const FILE_C = 'src/components/controls.jsx'
+if (!ada(FILE_C)) {
+  console.log('[GAGAL] controls.jsx tidak ditemukan')
+  process.exit(1)
+}
+let c = baca(FILE_C)
+const TEKS_LAMA = "{props.fileName || 'Klik untuk pilih foto atau video'}"
+const TEKS_BARU = "{props.fileName || props.label || 'Klik untuk pilih foto atau video'}"
+if (c.includes('props.label ||')) {
+  console.log('[SUDAH ADA] Dukungan label kustom pada FileInput')
+} else if (c.includes(TEKS_LAMA)) {
+  c = c.replace(TEKS_LAMA, TEKS_BARU)
+  simpan(FILE_C, c)
+  console.log('[BERHASIL] FileInput kini menerima prop label untuk teks konteks foto atau video')
+} else {
+  console.log('[TIDAK KETEMU] Pola teks default FileInput di controls.jsx')
+}
+
+/* ===== 3. DashboardPage.jsx: bungkus avatar, rapikan tombol tambah kegiatan, teks file sesuai mode ===== */
+const FILE_D = 'src/pages/DashboardPage.jsx'
+if (!ada(FILE_D)) {
+  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
+  process.exit(1)
+}
+let d = baca(FILE_D)
+let berubahD = false
+
+/* 3a. Bungkus avatar header dengan kelas responsif */
+const reAvatar = /<Avatar src=\{mahasiswa\.foto_profil \|\| null\} nama=\{mahasiswa\.nama\} size="xl"\s+onClick=\{function \(\) \{ gantiTab\('profil'\) \}\} title="Kelola foto profil" \/>/
+if (d.includes('avatar-kepala-dash')) {
+  console.log('[SUDAH ADA] Pembungkus avatar-kepala-dash')
+} else if (reAvatar.test(d)) {
+  d = d.replace(reAvatar, '<div className="avatar-kepala-dash"><Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl" onClick={function () { gantiTab(\'profil\') }} title="Kelola foto profil" /></div>')
+  berubahD = true
+  console.log('[BERHASIL] Avatar header dashboard dibungkus kelas responsif')
+} else {
+  console.log('[TIDAK KETEMU] Pola Avatar header dashboard')
+}
+
+/* 3b. Baris tombol tambah kegiatan: flex wrap plus tombol satu baris */
+const reTambah = /([ \t]*)<div className="flex items-center justify-between">\n[ \t]*<p className="text-sm font-semibold text-slate-700">Rincian kegiatan hari ini <span className="text-red-500">\*<\/span><\/p>\n[ \t]*<button type="button" onClick=\{function \(\) \{ setItems\(function \(p\) \{ return p\.concat\(\[newItem\(\)\]\) \}\) \}\} className=\{btnSmall \+ ' bg-bsi-100 text-bsi-900 hover:bg-bsi-200'\}>\+ Tambah kegiatan<\/button>\n[ \t]*<\/div>/
+if (d.includes('whitespace-nowrap shrink-0 bg-bsi-100')) {
+  console.log('[SUDAH ADA] Tombol tambah kegiatan versi ramping')
+} else if (reTambah.test(d)) {
+  d = d.replace(reTambah, function (match, ind) {
+    const BLOK = `<div className="flex flex-wrap items-center justify-between gap-2">
+<p className="text-sm font-semibold text-slate-700">Rincian kegiatan hari ini <span className="text-red-500">*</span></p>
+<button type="button" onClick={function () { setItems(function (p) { return p.concat([newItem()]) }) }} className={btnSmall + ' whitespace-nowrap shrink-0 bg-bsi-100 text-bsi-900 hover:bg-bsi-200'}>+ Tambah kegiatan</button>
+</div>`
+    return BLOK.split('\n').map(function (l) { return l.length ? ind + l : l }).join('\n')
+  })
+  berubahD = true
+  console.log('[BERHASIL] Baris tambah kegiatan memakai flex wrap dan tombol satu baris')
+} else {
+  console.log('[TIDAK KETEMU] Pola baris tombol tambah kegiatan')
+}
+
+/* 3c. Teks FileInput sesuai konteks foto atau video */
+const pasanganFile = [
+  ['accept="video/*" fileName={it.file ? it.file.name : \'\' }', null],
+]
+const gantiFile = [
+  {
+    lama: 'accept="video/*" fileName={it.file ? it.file.name : \'\'}',
+    baru: 'accept="video/*" fileName={it.file ? it.file.name : \'\'} label="Klik untuk pilih video" hint="Video maks 50 MB. Format MP4, MOV, WebM, atau MKV."'
+  },
+  {
+    lama: 'accept="image/*" fileName={it.file ? it.file.name : \'\'}',
+    baru: 'accept="image/*" fileName={it.file ? it.file.name : \'\'} label="Klik untuk pilih foto" hint="Foto JPG, PNG, atau HEIC otomatis dikonversi ke WebP ringan."'
+  },
+  {
+    lama: 'accept="video/*" fileName={galForm.file ? galForm.file.name : \'\'}',
+    baru: 'accept="video/*" fileName={galForm.file ? galForm.file.name : \'\'} label="Klik untuk pilih video" hint="Video maks 50 MB. Format MP4, MOV, WebM, atau MKV."'
+  },
+  {
+    lama: 'accept="image/*" fileName={galForm.file ? galForm.file.name : \'\'}',
+    baru: 'accept="image/*" fileName={galForm.file ? galForm.file.name : \'\'} label="Klik untuk pilih foto" hint="Foto JPG, PNG, atau HEIC otomatis dikonversi ke WebP ringan."'
+  }
+]
+let jumlahFile = 0
+for (let i = 0; i < gantiFile.length; i++) {
+  if (d.includes(gantiFile[i].baru)) { jumlahFile++; continue }
+  if (d.includes(gantiFile[i].lama)) {
+    d = d.replace(gantiFile[i].lama, gantiFile[i].baru)
+    jumlahFile++
+    berubahD = true
+  }
+}
+console.log(jumlahFile === 4 ? '[BERHASIL] Empat FileInput memakai teks sesuai konteks foto atau video' : '[INFO] FileInput menyesuaikan: ' + jumlahFile + ' dari 4 lokasi')
+
+if (berubahD) simpan(FILE_D, d)
+
+/* ===== 4. Verifikasi ===== */
+console.log('')
+console.log('Verifikasi:')
+const c2 = baca(FILE_CSS)
+const k2 = baca(FILE_C)
+const d2 = baca(FILE_D)
+console.log((c2.includes('kepala-dash-responsif') ? '[OK] ' : '[BELUM] ') + 'CSS avatar responsif tersedia')
+console.log((d2.includes('avatar-kepala-dash') ? '[OK] ' : '[BELUM] ') + 'Avatar header dashboard dibungkus kelas responsif')
+console.log((d2.includes('whitespace-nowrap shrink-0 bg-bsi-100') ? '[OK] ' : '[BELUM] ') + 'Tombol tambah kegiatan satu baris dan tidak melebar')
+console.log((k2.includes('props.label ||') ? '[OK] ' : '[BELUM] ') + 'FileInput mendukung label kustom')
+console.log((d2.split('label="Klik untuk pilih video"').length - 1 === 2 ? '[OK] ' : '[BELUM] ') + 'Dua pemilih video memakai teks video')
+console.log((d2.split('label="Klik untuk pilih foto"').length - 1 === 2 ? '[OK] ' : '[BELUM] ') + 'Dua pemilih foto memakai teks foto')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Penyesuaian yang diterapkan:')
+console.log('1. Avatar header dashboard dibungkus kelas avatar-kepala-dash. Di bawah 640 piksel ukurannya dipangkas dari 96 menjadi 56 piksel dengan radius 16 piksel dan ukuran inisial yang ikut mengecil, sehingga kepala kartu tidak lagi didominasi foto besar. Di 640 piksel ke atas tidak ada aturan yang aktif, jadi tampilan desktop tetap 96 piksel seperti semula.')
+console.log('2. Baris label Rincian kegiatan hari ini dan tombol tambah kegiatan kini memakai flex wrap dengan gap, dan tombolnya diberi whitespace-nowrap plus shrink-0. Hasilnya di layar sempit tombol turun sendiri ke baris kedua sebagai pill satu baris yang ramping, bukan blok hijau tinggi dengan teks terlipat seperti lampiran.')
+console.log('3. FileInput menerima prop label, dan keempat pemakainya kini berbicara sesuai konteks: mode video menyapa Klik untuk pilih video dengan hint format video dan batas 50 MB, mode foto menyapa Klik untuk pilih foto dengan hint konversi JPG PNG HEIC ke WebP. Tidak ada lagi teks campur foto atau video pada konteks tunggal.')
+console.log('4. Nama file yang sudah dipilih tetap menang atas label, sehingga setelah user memilih file yang tampil adalah nama filenya seperti sebelumnya.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka dashboard di ponsel: foto profil di kartu header kini seukuran avatar besar yang proporsional berdampingan dengan nama, tidak mendominasi sepertiga kartu.')
+console.log('2. Gulir ke form logbook: tombol + Tambah kegiatan tampil sebagai pill satu baris di bawah label, tidak lagi melebar dan bertingkat dua baris.')
+console.log('3. Pada kegiatan mode Foto: kotak putus putus berbunyi Klik untuk pilih foto dengan hint konversi WebP.')
+console.log('4. Ganti kegiatan ke mode Video: kotak berubah berbunyi Klik untuk pilih video dengan hint batas 50 MB.')
+console.log('5. Ulangi pada form galeri untuk kedua mode: teks ikut berubah sesuai jenis media.')
+console.log('6. Buka dashboard di desktop: avatar header tetap besar 96 piksel dan seluruh tata letak tidak berubah.')
+```
+
+## File: apply-fix-nama-satu-baris.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+function ada(rel) { return fs.existsSync(path.join(root, rel)) }
+
+console.log('Mulai membuat nama header dashboard satu baris dan proporsional dengan foto profil...')
+console.log('')
+
+/* ===== 1. DashboardPage.jsx: truncate pada nama dan prodi, gap mobile dirapatkan ===== */
+const FILE_D = 'src/pages/DashboardPage.jsx'
+if (!ada(FILE_D)) {
+  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
+  process.exit(1)
+}
+let d = baca(FILE_D)
+let berubahD = false
+
+const H1_LAMA = '<h1 className="text-2xl lg:text-3xl font-black text-slate-900">{mahasiswa.nama}</h1>'
+const H1_BARU = '<h1 className="truncate text-lg sm:text-2xl lg:text-3xl font-black text-slate-900">{mahasiswa.nama}</h1>'
+if (d.includes(H1_BARU)) {
+  console.log('[SUDAH ADA] Nama header memakai truncate dan ukuran responsif')
+} else if (d.includes(H1_LAMA)) {
+  d = d.replace(H1_LAMA, H1_BARU)
+  berubahD = true
+  console.log('[BERHASIL] Nama header dikunci satu baris dengan truncate dan ukuran mobile lebih kecil')
+} else {
+  console.log('[TIDAK KETEMU] Pola h1 nama di header dashboard')
+}
+
+const GAP_LAMA = '<div className="flex flex-wrap items-center gap-6">'
+const GAP_BARU = '<div className="flex flex-wrap items-center gap-4 sm:gap-6">'
+if (d.includes(GAP_BARU)) {
+  console.log('[SUDAH ADA] Gap avatar dan teks responsif')
+} else if (d.includes(GAP_LAMA)) {
+  d = d.replace(GAP_LAMA, GAP_BARU)
+  berubahD = true
+  console.log('[BERHASIL] Jarak avatar dan teks dirapatkan menjadi 16px di layar sempit')
+} else {
+  console.log('[TIDAK KETEMU] Pola wadah flex avatar dan teks di header')
+}
+
+const PRODI_LAMA = '{mahasiswa.prodi ? <p className="text-sm text-slate-500">{mahasiswa.prodi}</p> : null}'
+const PRODI_BARU = '{mahasiswa.prodi ? <p className="truncate text-sm text-slate-500">{mahasiswa.prodi}</p> : null}'
+if (d.includes(PRODI_BARU)) {
+  console.log('[SUDAH ADA] Baris prodi memakai truncate')
+} else if (d.includes(PRODI_LAMA)) {
+  d = d.replace(PRODI_LAMA, PRODI_BARU)
+  berubahD = true
+  console.log('[BERHASIL] Baris prodi dikunci satu baris dengan truncate')
+} else {
+  console.log('[TIDAK KETEMU] Pola baris prodi di header dashboard')
+}
+
+if (berubahD) simpan(FILE_D, d)
+
+/* ===== 2. index.css: ukuran mobile nama diperkecil dan semua baris teks dikunci satu baris ===== */
+const FILE_CSS = 'src/index.css'
+if (!ada(FILE_CSS)) {
+  console.log('[GAGAL] index.css tidak ditemukan')
+  process.exit(1)
+}
+let css = baca(FILE_CSS)
+let berubahC = false
+
+const H1_CSS_LAMA = '.avatar-kepala-dash ~ div h1 { font-size: 1.25rem !important; line-height: 1.75rem !important; }'
+const H1_CSS_BARU = '.avatar-kepala-dash ~ div h1 { font-size: 1.125rem !important; line-height: 1.625rem !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }'
+const P_CSS_LAMA = '.avatar-kepala-dash ~ div p { font-size: 0.75rem !important; }'
+const P_CSS_BARU = '.avatar-kepala-dash ~ div p { font-size: 0.75rem !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }'
+
+if (css.includes(H1_CSS_BARU)) {
+  console.log('[SUDAH ADA] Aturan nama satu baris di index.css')
+} else if (css.includes(H1_CSS_LAMA)) {
+  css = css.replace(H1_CSS_LAMA, H1_CSS_BARU)
+  berubahC = true
+  console.log('[BERHASIL] Aturan nama mobile diperkecil menjadi 18px dan dikunci satu baris')
+} else {
+  css = css.trimEnd() + '\n\n/* nama-satu-baris-v1: teks header dashboard satu baris proporsional di layar sempit */\n@media (max-width: 639px) {\n  ' + H1_CSS_BARU + '\n  ' + P_CSS_BARU + '\n}\n'
+  berubahC = true
+  console.log('[BERHASIL] Blok nama-satu-baris-v1 ditambahkan (aturan lama tidak ditemukan)')
+}
+
+if (css.includes(P_CSS_BARU)) {
+  console.log('[SUDAH ADA] Aturan NIM dan prodi satu baris')
+} else if (css.includes(P_CSS_LAMA)) {
+  css = css.replace(P_CSS_LAMA, P_CSS_BARU)
+  berubahC = true
+  console.log('[BERHASIL] Baris NIM dan prodi dikunci satu baris dengan ellipsis')
+} else {
+  console.log('[INFO] Aturan p lama tidak ditemukan, lewati (sudah tercakup blok baru bila dipasang)')
+}
+
+if (berubahC) simpan(FILE_CSS, css)
+
+/* ===== 3. Verifikasi ===== */
+console.log('')
+console.log('Verifikasi:')
+const d2 = baca(FILE_D)
+const c2 = baca(FILE_CSS)
+console.log((d2.includes(H1_BARU) ? '[OK] ' : '[BELUM] ') + 'Nama header memakai truncate dan ukuran responsif')
+console.log((d2.includes(GAP_BARU) ? '[OK] ' : '[BELUM] ') + 'Jarak avatar dan teks responsif di mobile')
+console.log((d2.includes(PRODI_BARU) ? '[OK] ' : '[BELUM] ') + 'Baris prodi memakai truncate')
+console.log((c2.includes(H1_CSS_BARU) ? '[OK] ' : '[BELUM] ') + 'CSS nama satu baris 18px terpasang')
+console.log((c2.includes(P_CSS_BARU) ? '[OK] ' : '[BELUM] ') + 'CSS NIM dan prodi satu baris terpasang')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Penyebab dan cara kerja perbaikan:')
+console.log('1. Nama melipat dua baris karena h1 tidak punya aturan pemenggalan, sehingga berapa pun panjang nama akan membungkus, dan ukuran 20px sisa aturan sebelumnya masih terlalu besar untuk ruang di samping foto 56px.')
+console.log('2. Kini h1 memakai kelas truncate yaitu gabungan white-space nowrap, overflow hidden, dan text-overflow ellipsis, jadi nama selalu satu baris; nama yang sangat panjang berakhir dengan titik tiga yang rapi, dan nama lengkapnya tetap bisa dibaca utuh di tab Profil.')
+console.log('3. Ukuran huruf nama di mobile diturunkan menjadi 18px lewat kelas text-lg dan aturan CSS 1.125rem, sehingga satu baris nama plus baris NIM dan prodi membentuk blok teks setinggi kurang lebih 56px, persis menyamai tinggi foto profil di sampingnya.')
+console.log('4. Jarak antara foto dan blok teks dirapatkan dari 24px menjadi 16px khusus di bawah 640px, memberi ruang ekstra bagi nama agar tidak cepat terpotong ellipsis.')
+console.log('5. Baris NIM dan prodi ikut dikunci satu baris dengan ellipsis supaya tinggi blok teks terkendali dan header terlihat ringkas sejajar dengan foto.')
+console.log('6. Wadah teks sudah punya min-w-0 flex-1 sejak awal, jadi truncate bekerja benar di dalam flex dan tidak memaksa kartu melebar keluar layar.')
+console.log('7. Di 640px ke atas seluruh ukuran kembali ke text-2xl dan gap-6, dan di 1024px ke atas kembali ke text-3xl, sehingga tampilan tablet dan desktop identik seperti sebelumnya.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka dashboard di ponsel: nama tampil satu baris sejajar dengan foto 56px, diikuti NIM dan prodi masing masing satu baris.')
+console.log('2. Uji dengan akun bernama sangat panjang: nama terpotong rapi dengan titik tiga di ujung, tidak lagi turun ke baris kedua.')
+console.log('3. Buka tab Profil: nama lengkap tetap terbaca utuh tanpa pemotongan karena halaman profil tidak memakai truncate.')
+console.log('4. Lebarkan jendela ke tablet dan desktop: nama kembali besar dua ukuran di atasnya dan tata letak header tidak berubah.')
+console.log('5. Aktifkan mode gelap: warna teks menyesuaikan seperti biasa karena hanya kelas ukuran dan pemenggalan yang berubah.')
+```
+
+## File: apply-fix-pesan-login.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+
+console.log('Mulai mengganti pesan gagal login menjadi keterangan yang mudah dipahami...')
+console.log('')
+
+const FILE_L = 'src/pages/LoginPage.jsx'
+if (!fs.existsSync(path.join(root, FILE_L))) {
+  console.log('[GAGAL] LoginPage.jsx tidak ditemukan')
+  process.exit(1)
+}
+let l = baca(FILE_L)
+let berubah = false
+
+if (l.includes('function pesanErrorLogin(')) {
+  console.log('[SUDAH ADA] Pemeta pesan gagal login di LoginPage.jsx')
+} else {
+  /* ===== 1. Impor SizedIcon untuk ikon silang pada kotak error ===== */
+  const IMPOR_LAMA = "import { EyeToggle } from '../components/icons.jsx'"
+  const IMPOR_BARU = "import { EyeToggle, SizedIcon } from '../components/icons.jsx'"
+  if (l.includes(IMPOR_BARU)) {
+    console.log('[SUDAH ADA] Impor SizedIcon di LoginPage.jsx')
+  } else if (l.includes(IMPOR_LAMA)) {
+    l = l.replace(IMPOR_LAMA, IMPOR_BARU)
+    berubah = true
+    console.log('[BERHASIL] Impor SizedIcon ditambahkan di LoginPage.jsx')
+  } else {
+    console.log('[TIDAK KETEMU] Pola impor icons di LoginPage.jsx')
+  }
+
+  /* ===== 2. Fungsi pemeta pesan error Supabase menjadi bahasa manusia ===== */
+  const FUNGSI = `function pesanErrorLogin(err) {
+  const pesan = String((err && err.message) || '')
+  const rendah = pesan.toLowerCase()
+  if (rendah.indexOf('invalid login credentials') !== -1) {
+    return 'NIM atau kode akses yang kamu masukkan tidak cocok dengan data kami. Periksa kembali penulisannya, pastikan tidak ada spasi berlebih, lalu coba lagi.'
+  }
+  if (rendah.indexOf('not confirmed') !== -1) {
+    return 'Akun untuk NIM ini belum diaktifkan. Hubungi admin tim magang untuk mengaktifkan akunmu terlebih dahulu.'
+  }
+  if (rendah.indexOf('too many requests') !== -1 || rendah.indexOf('try again after') !== -1 || rendah.indexOf('rate limit') !== -1) {
+    return 'Terlalu banyak percobaan masuk dalam waktu singkat demi keamanan. Tunggu sekitar satu menit, lalu coba lagi.'
+  }
+  if (rendah.indexOf('fetch') !== -1 || rendah.indexOf('network') !== -1 || rendah.indexOf('failed to load') !== -1 || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+    return 'Tidak bisa terhubung ke server. Periksa koneksi internetmu, lalu coba lagi.'
+  }
+  if (rendah.indexOf('email') !== -1 && rendah.indexOf('format') !== -1) {
+    return 'Format NIM tidak terbaca. Masukkan NIM berupa angka tanpa spasi, contoh: 24070041.'
+  }
+  if (pesan) return 'Gagal masuk: ' + pesan + '. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
+  return 'Terjadi kesalahan tidak terduga saat masuk. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
+}
+`
+  const ANCHOR_FN = 'export default function LoginPage() {'
+  if (l.includes(ANCHOR_FN)) {
+    l = l.replace(ANCHOR_FN, FUNGSI + ANCHOR_FN)
+    berubah = true
+    console.log('[BERHASIL] Fungsi pesanErrorLogin dipasang di LoginPage.jsx')
+  } else {
+    console.log('[TIDAK KETEMU] Anchor export default function LoginPage')
+  }
+
+  /* ===== 3. Catch submit memakai pemeta pesan ===== */
+  if (l.includes('setError(pesanErrorLogin(err))')) {
+    console.log('[SUDAH ADA] Catch submit memakai pesanErrorLogin')
+  } else if (l.includes('setError(err.message)')) {
+    l = l.replace('setError(err.message)', 'setError(pesanErrorLogin(err))')
+    berubah = true
+    console.log('[BERHASIL] Catch submit kini memakai pesanErrorLogin')
+  } else {
+    console.log('[TIDAK KETEMU] Pola setError(err.message) di submit')
+  }
+
+  /* ===== 4. Kotak error berstruktur: ikon, judul, penjelasan ===== */
+  const reKotak = /([ \t]*)\{error \? <p className="mt-3 rounded-2xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">\{error\}<\/p> : null\}/
+  if (l.includes('<p className="font-bold">Gagal masuk</p>')) {
+    console.log('[SUDAH ADA] Kotak error berstruktur di LoginPage.jsx')
+  } else if (reKotak.test(l)) {
+    l = l.replace(reKotak, function (match, ind) {
+      const BLOK = `{error ? (
+  <div className="mt-3 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+    <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-red-100 text-red-600">
+      <SizedIcon name="close" size={12} />
+    </span>
+    <div className="min-w-0">
+      <p className="font-bold">Gagal masuk</p>
+      <p className="mt-1 leading-relaxed">{error}</p>
+    </div>
+  </div>
+) : null}`
+      return BLOK.split('\n').map(function (baris) { return baris.length ? ind + baris : baris }).join('\n')
+    })
+    berubah = true
+    console.log('[BERHASIL] Kotak error diganti menjadi versi berstruktur dengan judul dan penjelasan')
+  } else {
+    console.log('[TIDAK KETEMU] Pola kotak error lama di LoginPage.jsx')
+  }
+}
+
+if (berubah) simpan(FILE_L, l)
+
+/* ===== Verifikasi ===== */
+console.log('')
+console.log('Verifikasi:')
+const l2 = baca(FILE_L)
+console.log((l2.includes("import { EyeToggle, SizedIcon }") ? '[OK] ' : '[BELUM] ') + 'Impor SizedIcon tersedia')
+console.log((l2.includes('function pesanErrorLogin(') ? '[OK] ' : '[BELUM] ') + 'Fungsi pemeta pesan tersedia')
+console.log((l2.includes('setError(pesanErrorLogin(err))') ? '[OK] ' : '[BELUM] ') + 'Catch submit memakai pemeta pesan')
+console.log((l2.includes('<p className="font-bold">Gagal masuk</p>') ? '[OK] ' : '[BELUM] ') + 'Kotak error berstruktur judul dan penjelasan')
+console.log((!l2.includes('{error ? <p className="mt-3 rounded-2xl bg-red-50') ? '[OK] ' : '[BELUM] ') + 'Kotak error lama sudah diganti')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Yang berubah bagi user:')
+console.log('1. Salah NIM atau kode: muncul judul Gagal masuk plus kalimat NIM atau kode akses yang kamu masukkan tidak cocok dengan data kami, lengkap dengan arahan memeriksa penulisan dan spasi, bukan lagi Invalid login credentials.')
+console.log('2. Akun belum diaktifkan: user diberitahu menghubungi admin tim magang, bukan pesan konfirmasi email yang membingungkan.')
+console.log('3. Percobaan beruntun: user diminta menunggu sekitar satu menit, sesuai perilaku pembatasan percobaan dari server.')
+console.log('4. Putus jaringan: user diarahkan memeriksa koneksi internet, bukan pesan fetch gagal yang teknis.')
+console.log('5. Kotak error kini punya ikon silang dalam lingkaran, judul tebal, dan penjelasan berbaris longgar, sehingga langsung terbaca sebagai panduan bukan kode error.')
+console.log('6. Mode gelap tetap rapi karena seluruh kelas warna kotak (bg-red-50, bg-red-100, text-red-700) sudah punya pengganti gelap di index.css.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka halaman login, isi NIM benar tetapi kode akses salah: kotak merah menampilkan judul Gagal masuk dan penjelasan NIM atau kode akses tidak cocok.')
+console.log('2. Matikan wifi atau data lalu coba masuk: muncul pesan periksa koneksi internet.')
+console.log('3. Coba masuk salah berulang kali dengan cepat: muncul pesan tunggu sekitar satu menit.')
+console.log('4. Uji di mode gelap: kotak error tetap kontras dan terbaca.')
+console.log('5. Masuk dengan data benar: tetap langsung menuju dashboard tanpa perubahan perilaku.')
+```
+
+## File: apply-fix-proporsional-mobile-v2.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+function ada(rel) { return fs.existsSync(path.join(root, rel)) }
+
+console.log('Mulai perbaikan lanjutan: avatar profil, grid statistik, pembungkus iframe, dan kontrol pemutar video di layar sempit...')
+console.log('')
+
+/* ===== 1. DashboardPage.jsx: bungkus avatar 2xl dan beri kelas grid statistik ===== */
+const FILE_D = 'src/pages/DashboardPage.jsx'
+if (!ada(FILE_D)) {
+  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
+  process.exit(1)
+}
+let d = baca(FILE_D)
+let berubahD = false
+
+const reAvatar = /<Avatar src=\{mahasiswa\.foto_profil\s*\|\|\s*null\} nama=\{mahasiswa\.nama\} size="2xl"\s*\/>/
+if (d.includes('avatar-profil-tab')) {
+  console.log('[SUDAH ADA] Pembungkus avatar-profil-tab')
+} else if (reAvatar.test(d)) {
+  d = d.replace(reAvatar, '<div className="avatar-profil-tab"><Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="2xl" /></div>')
+  berubahD = true
+  console.log('[BERHASIL] Avatar 2xl di tab profil dibungkus kelas responsif')
+} else {
+  console.log('[TIDAK KETEMU] Pola Avatar size 2xl di tab profil')
+}
+
+const reStats = /<div className="mt-4 grid grid-cols-3 gap-4">/
+if (d.includes('stats-profil-grid')) {
+  console.log('[SUDAH ADA] Kelas stats-profil-grid pada grid statistik')
+} else if (reStats.test(d)) {
+  d = d.replace(reStats, '<div className="stats-profil-grid mt-4 grid grid-cols-3 gap-4">')
+  berubahD = true
+  console.log('[BERHASIL] Grid statistik profil diberi kelas responsif')
+} else {
+  console.log('[TIDAK KETEMU] Pola grid statistik profil')
+}
+
+if (berubahD) simpan(FILE_D, d)
+
+/* ===== 2. cards.jsx: bungkus iframe Drive dengan wadah rasio aspek ===== */
+const FILE_C = 'src/components/cards.jsx'
+if (!ada(FILE_C)) {
+  console.log('[GAGAL] cards.jsx tidak ditemukan')
+  process.exit(1)
+}
+let c = baca(FILE_C)
+let berubahC = false
+
+const reIframeLog = /<iframe key=\{it\.media_path\} src=\{drivePreviewUrl\(it\.media_path\)\} title=\{it\.judul\} allow="autoplay; encrypted-media; fullscreen" allowFullScreen className="aspect-video w-full rounded-2xl border-0 bg-black mb-3"\s*\/>/
+if (c.includes('iframe-video-wrap mb-3')) {
+  console.log('[SUDAH ADA] Pembungkus iframe di LogbookDetail')
+} else if (reIframeLog.test(c)) {
+  c = c.replace(reIframeLog, '<div className="iframe-video-wrap mb-3"><iframe key={it.media_path} src={drivePreviewUrl(it.media_path)} title={it.judul} allow="autoplay; encrypted-media; fullscreen" allowFullScreen className="aspect-video w-full rounded-2xl border-0 bg-black" /></div>')
+  berubahC = true
+  console.log('[BERHASIL] Iframe Drive di LogbookDetail dibungkus wadah rasio aspek')
+} else {
+  console.log('[TIDAK KETEMU] Pola iframe Drive di LogbookDetail')
+}
+
+const reIframeGal = /<iframe src=\{drivePreviewUrl\(item\.media_path\)\} title=\{item\.judul\} allow="autoplay; encrypted-media; fullscreen" allowFullScreen className="aspect-video w-full rounded-2xl border-0 bg-black"\s*\/>/
+if (c.includes('<div className="iframe-video-wrap"><iframe src={drivePreviewUrl(item.media_path)')) {
+  console.log('[SUDAH ADA] Pembungkus iframe di GalleryDetail')
+} else if (reIframeGal.test(c)) {
+  c = c.replace(reIframeGal, '<div className="iframe-video-wrap"><iframe src={drivePreviewUrl(item.media_path)} title={item.judul} allow="autoplay; encrypted-media; fullscreen" allowFullScreen className="aspect-video w-full rounded-2xl border-0 bg-black" /></div>')
+  berubahC = true
+  console.log('[BERHASIL] Iframe Drive di GalleryDetail dibungkus wadah rasio aspek')
+} else {
+  console.log('[TIDAK KETEMU] Pola iframe Drive di GalleryDetail')
+}
+
+if (berubahC) simpan(FILE_C, c)
+
+/* ===== 3. PemutarVideo.jsx: bar kontrol responsif supaya tidak terpotong di layar sempit ===== */
+const FILE_P = 'src/components/PemutarVideo.jsx'
+if (!ada(FILE_P)) {
+  console.log('[GAGAL] PemutarVideo.jsx tidak ditemukan')
+  process.exit(1)
+}
+let p = baca(FILE_P)
+let berubahP = false
+
+const BAR_LAMA = 'flex items-center gap-3 bg-gradient-to-t from-black/90 via-black/60 to-transparent px-4 pb-3 pt-10'
+const BAR_BARU = 'flex items-center gap-2 sm:gap-3 bg-gradient-to-t from-black/90 via-black/60 to-transparent px-3 sm:px-4 pb-3 pt-10'
+if (p.includes(BAR_BARU)) {
+  console.log('[SUDAH ADA] Bar kontrol versi responsif')
+} else if (p.includes(BAR_LAMA)) {
+  p = p.replace(BAR_LAMA, BAR_BARU)
+  berubahP = true
+  console.log('[BERHASIL] Bar kontrol diper rapat di layar sempit')
+} else {
+  console.log('[TIDAK KETEMU] Pola bar kontrol PemutarVideo')
+}
+
+const WAKTU_LAMA = 'className="min-w-[84px] shrink-0 text-center text-[11px] font-semibold tabular-nums text-slate-200"'
+const WAKTU_BARU = 'className="min-w-[64px] sm:min-w-[84px] shrink-0 text-center text-[10px] sm:text-[11px] font-semibold tabular-nums text-slate-200"'
+if (p.includes(WAKTU_BARU)) {
+  console.log('[SUDAH ADA] Tampilan waktu versi ramping')
+} else if (p.includes(WAKTU_LAMA)) {
+  p = p.replace(WAKTU_LAMA, WAKTU_BARU)
+  berubahP = true
+  console.log('[BERHASIL] Tampilan waktu diperkecil di layar sempit')
+} else {
+  console.log('[TIDAK KETEMU] Pola tampilan waktu PemutarVideo')
+}
+
+const VOL_LAMA = 'className="pemutar-volume h-1 w-16 shrink-0 cursor-pointer appearance-none rounded-full outline-none"'
+const VOL_BARU = 'className="pemutar-volume hidden sm:block h-1 w-16 shrink-0 cursor-pointer appearance-none rounded-full outline-none"'
+if (p.includes(VOL_BARU)) {
+    console.log('[SUDAH ADA] Slider volume disembunyikan di layar sempit')
+} else if (p.includes(VOL_LAMA)) {
+  p = p.replace(VOL_LAMA, VOL_BARU)
+  berubahP = true
+  console.log('[BERHASIL] Slider volume disembunyikan di bawah 640px supaya kontrol tidak terpotong')
+} else {
+  console.log('[TIDAK KETEMU] Pola slider volume PemutarVideo')
+}
+
+if (berubahP) simpan(FILE_P, p)
+
+/* ===== 4. Verifikasi ===== */
+console.log('')
+console.log('Verifikasi:')
+const d2 = baca(FILE_D)
+const c2 = baca(FILE_C)
+const p2 = baca(FILE_P)
+console.log((d2.includes('avatar-profil-tab') ? '[OK] ' : '[BELUM] ') + 'Avatar tab profil dibungkus kelas responsif')
+console.log((d2.includes('stats-profil-grid') ? '[OK] ' : '[BELUM] ') + 'Grid statistik profil diberi kelas responsif')
+console.log((c2.includes('iframe-video-wrap mb-3') ? '[OK] ' : '[BELUM] ') + 'Iframe Drive LogbookDetail dibungkus wadah rasio aspek')
+console.log((c2.includes('<div className="iframe-video-wrap"><iframe src={drivePreviewUrl(item.media_path)') ? '[OK] ' : '[BELUM] ') + 'Iframe Drive GalleryDetail dibungkus wadah rasio aspek')
+console.log((p2.includes(BAR_BARU) ? '[OK] ' : '[BELUM] ') + 'Bar kontrol pemutar video responsif')
+console.log((p2.includes(VOL_BARU) ? '[OK] ' : '[BELUM] ') + 'Slider volume disembunyikan di layar sempit')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Kenapa script v1 gagal dan apa yang v2 perbaiki:')
+console.log('1. Regex avatar v1 menulis foto_profil tanpa spasi sebelum pipa ganda, padahal file aslimu memakai spasi di kedua sisi. v2 memakai pola longgar sehingga cocok berapapun spasinya.')
+console.log('2. Grid statistik v1 dicari dengan gap-3 padahal markup aslimu gap-4, jadi pengganti kelas tidak pernah menempel. v2 memakai pola yang benar.')
+console.log('3. Pola iframe v1 menebak urutan atribut yang tidak pernah ada di cards.jsx. v2 membaca bentuk asli iframe Drive lengkap dengan atribut key, allow, dan kelasnya, lalu membungkusnya wadah iframe-video-wrap supaya CSS rasio aspek yang sudah terpasang di v1 akhirnya hidup.')
+console.log('4. Penyebab asli kontrol berantakan pada lampiran gambar 2 bukanlah iframe Drive melainkan bar kontrol PemutarVideo: jumlah lebar minimum tombol putar, tampilan waktu 84px, tombol bisu, slider volume 64px, dan tombol layar penuh melebihi lebar modal di ponsel, sehingga slider volume terdorong keluar tepi dan progress bar menyusut menjadi titik.')
+console.log('5. Kini di bawah 640px slider volume disembunyikan (tombol bisu tetap ada), tampilan waktu menyusut menjadi 64px dengan huruf lebih kecil, dan jarak antar kontrol serta padding bar dirapatkan, sehingga progress bar mendapat ruang lega dan seluruh kontrol utuh di dalam bingkai video.')
+console.log('6. Di 640px ke atas semua kontrol kembali lengkap persis seperti sebelumnya, jadi pengalaman desktop tidak berubah.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka dashboard di ponsel lalu masuk tab Profil: foto profil kini 96px dengan nama dan NIM yang seimbang, tidak lagi mendominasi kartu.')
+console.log('2. Lihat kotak Ringkasan aktivitas magang: Logbook dan Media berdampingan di baris pertama, Kehadiran melebar penuh di baris kedua, angka tidak terdesak.')
+console.log('3. Buka detail logbook berisi video YouTube di ponsel: bar kontrol menampilkan putar, progress bar panjang, waktu, bisu, dan layar penuh tanpa ada yang terpotong keluar bingkai.')
+console.log('4. Buka detail yang sama di desktop: slider volume kuning kembali muncul dan seluruh kontrol tampil lengkap seperti semula.')
+console.log('5. Buka detail logbook atau galeri berisi video Google Drive: video tetap berasio 16 per 9 di semua lebar layar.')
+```
+
+## File: apply-fix-proporsional-mobile.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+function ada(rel) { return fs.existsSync(path.join(root, rel)) }
+
+console.log('Mulai memperbaiki proporsi teks dashboard, iframe video, avatar profil, dan kotak statistik...')
+console.log('')
+
+/* ===== 1. index.css: teks header dashboard mengecil proporsional, iframe video responsif, avatar profil mengecil ===== */
+const FILE_CSS = 'src/index.css'
+if (!ada(FILE_CSS)) {
+  console.log('[GAGAL] index.css tidak ditemukan')
+  process.exit(1)
+}
+let css = baca(FILE_CSS)
+const CSS_BLOK = `/* proporsional-mobile-v1: teks header dashboard, avatar profil, dan iframe video menyesuaikan layar sempit */
+@media (max-width: 639px) {
+  .avatar-kepala-dash ~ div h1 { font-size: 1.25rem !important; line-height: 1.75rem !important; }
+  .avatar-kepala-dash ~ div p { font-size: 0.75rem !important; }
+  .avatar-kepala-dash ~ div .inline-flex { font-size: 0.625rem !important; padding: 0.25rem 0.5rem !important; }
+  
+  .avatar-profil-tab > button, .avatar-profil-tab > span {
+    width: 96px !important;
+    height: 96px !important;
+    border-radius: 24px !important;
+  }
+  .avatar-profil-tab img { border-radius: 24px !important; }
+  .avatar-profil-tab ~ h2 { font-size: 1.25rem !important; margin-top: 0.75rem !important; }
+  .avatar-profil-tab ~ p { font-size: 0.875rem !important; }
+  
+  .stats-profil-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 0.5rem !important; }
+  .stats-profil-grid > div:last-child { grid-column: span 2 / span 2; }
+  
+  .iframe-video-wrap { position: relative !important; padding-bottom: 56.25% !important; height: 0 !important; overflow: hidden !important; border-radius: 1rem !important; }
+  .iframe-video-wrap iframe { position: absolute !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; border: 0 !important; }
+}
+@media (min-width: 640px) {
+  .stats-profil-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+`
+if (css.includes('proporsional-mobile-v1')) {
+  console.log('[SUDAH ADA] CSS proporsional-mobile-v1 di index.css')
+} else {
+  simpan(FILE_CSS, css.trimEnd() + '\n\n' + CSS_BLOK)
+  console.log('[BERHASIL] CSS proporsional mobile ditambahkan di index.css')
+}
+
+/* ===== 2. DashboardPage.jsx: bungkus avatar profil tab dan grid stats ===== */
+const FILE_D = 'src/pages/DashboardPage.jsx'
+if (!ada(FILE_D)) {
+  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
+  process.exit(1)
+}
+let d = baca(FILE_D)
+let berubahD = false
+
+/* 2a. Bungkus avatar tab profil dengan kelas responsif */
+const reAvatarProfil = /<Avatar src=\{mahasiswa\.foto_profil\|\| null\} nama=\{mahasiswa\.nama\} size="2xl" \/>/
+if (d.includes('avatar-profil-tab')) {
+  console.log('[SUDAH ADA] Pembungkus avatar-profil-tab')
+} else if (reAvatarProfil.test(d)) {
+  d = d.replace(reAvatarProfil, '<div className="avatar-profil-tab"><Avatar src={mahasiswa.foto_profil|| null} nama={mahasiswa.nama} size="2xl" /></div>')
+  berubahD = true
+  console.log('[BERHASIL] Avatar tab profil dibungkus kelas responsif')
+} else {
+  console.log('[TIDAK KETEMU] Pola Avatar size 2xl di tab profil')
+}
+
+/* 2b. Grid statistik profil dengan kelas responsif */
+const reStatsGrid = /<div className="mt-4 grid grid-cols-3 gap-3">/
+if (d.includes('stats-profil-grid')) {
+  console.log('[SUDAH ADA] Kelas stats-profil-grid pada grid statistik')
+} else if (reStatsGrid.test(d)) {
+  d = d.replace(reStatsGrid, '<div className="stats-profil-grid mt-4 grid grid-cols-3 gap-3">')
+  berubahD = true
+  console.log('[BERHASIL] Grid statistik profil diberi kelas responsif')
+} else {
+  console.log('[TIDAK KETEMU] Pola grid statistik profil')
+}
+
+if (berubahD) simpan(FILE_D, d)
+
+/* ===== 3. cards.jsx: iframe video dibungkus dengan rasio aspek 16:9 ===== */
+const FILE_CARDS = 'src/components/cards.jsx'
+if (!ada(FILE_CARDS)) {
+  console.log('[GAGAL] cards.jsx tidak ditemukan')
+  process.exit(1)
+}
+let c = baca(FILE_CARDS)
+let berubahC = false
+
+const reIframe = /<iframe src=\{drivePreviewUrl\(it\.media_path\)\} className="w-full aspect-video rounded-2xl" allow="autoplay; encrypted-media" allowFullScreen title="Pratinjau video" \/>/
+if (c.includes('iframe-video-wrap')) {
+  console.log('[SUDAH ADA] Pembungkus iframe-video-wrap')
+} else if (reIframe.test(c)) {
+  c = c.replace(reIframe, '<div className="iframe-video-wrap"><iframe src={drivePreviewUrl(it.media_path)} allow="autoplay; encrypted-media" allowFullScreen title="Pratinjau video" /></div>')
+  berubahC = true
+  console.log('[BERHASIL] Iframe video dibungkus dengan rasio aspek responsif')
+} else {
+  console.log('[TIDAK KETEMU] Pola iframe video di cards.jsx')
+}
+
+if (berubahC) simpan(FILE_CARDS, c)
+
+/* ===== 4. Verifikasi ===== */
+console.log('')
+console.log('Verifikasi:')
+const c2 = baca(FILE_CSS)
+const d2 = baca(FILE_D)
+const k2 = baca(FILE_CARDS)
+console.log((c2.includes('proporsional-mobile-v1') ? '[OK] ' : '[BELUM] ') + 'CSS proporsional mobile tersedia')
+console.log((c2.includes('.avatar-kepala-dash ~ div h1') ? '[OK] ' : '[BELUM] ') + 'Aturan teks nama header dashboard responsif')
+console.log((c2.includes('.avatar-profil-tab > button') ? '[OK] ' : '[BELUM] ') + 'Aturan avatar tab profil responsif')
+console.log((c2.includes('.stats-profil-grid') ? '[OK] ' : '[BELUM] ') + 'Aturan grid statistik profil responsif')
+console.log((c2.includes('.iframe-video-wrap') ? '[OK] ' : '[BELUM] ') + 'Aturan iframe video responsif')
+console.log((d2.includes('avatar-profil-tab') ? '[OK] ' : '[BELUM] ') + 'Avatar tab profil dibungkus kelas responsif')
+console.log((d2.includes('stats-profil-grid') ? '[OK] ' : '[BELUM] ') + 'Grid statistik profil diberi kelas responsif')
+console.log((k2.includes('iframe-video-wrap') ? '[OK] ' : '[BELUM] ') + 'Iframe video dibungkus dengan rasio aspek')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Perbaikan yang diterapkan:')
+console.log('1. Header dashboard: teks nama (h1) kini mengecil dari text-2xl menjadi text-xl (20px) di bawah 640px, teks NIM (p) dari text-sm menjadi text-xs (12px), dan badge prodi dari text-[11px] menjadi text-[10px] dengan padding lebih kecil. Hasilnya avatar 56px yang sudah dipasang sebelumnya kini seimbang dengan teks di sampingnya.')
+console.log('2. Iframe video: dibungkus div dengan padding-bottom 56.25% (rasio 16:9) sehingga iframe selalu mempertahankan proporsi di lebar apa pun. Kontrol video tidak lagi terpotong atau berantakan karena iframe mengisi wadah secara absolut dengan tinggi yang dihitung otomatis dari lebar.')
+console.log('3. Tab profil: avatar 2xl (128px) dikecilkan menjadi 96px dengan radius 24px di mobile, teks nama dari text-xl menjadi text-xl (tetap) dengan margin atas lebih kecil, dan teks NIM dari text-sm menjadi text-sm (tetap). Hasilnya kartu profil tidak lagi didominasi foto raksasa.')
+console.log('4. Kotak statistik profil: grid 3 kolom di desktop berubah menjadi 2 kolom di mobile, dengan kotak ketiga (Kehadiran) melebar penuh di baris kedua. Ini membuat angka dan label tidak terdesak di layar sempit, dan tata letak tetap rapi.')
+console.log('5. Semua aturan responsif hanya aktif di bawah 640px lewat media query, jadi tampilan desktop tidak berubah sama sekali.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka dashboard di ponsel: header kartu menampilkan avatar 56px dengan nama dan NIM yang proporsional, tidak ada teks yang mendominasi.')
+console.log('2. Klik logbook dengan video Drive: video tampil dengan rasio 16:9 yang benar, kontrol play dan fullscreen tidak terpotong.')
+console.log('3. Buka tab Profil: avatar 96px dengan nama dan NIM yang seimbang, tidak terlalu besar.')
+console.log('4. Lihat kotak statistik Logbook, Media, Kehadiran: dua kotak di baris pertama (Logbook dan Media) dan satu kotak melebar di baris kedua (Kehadiran), semua terbaca jelas.')
+console.log('5. Buka di tablet atau desktop: avatar kembali 128px, grid statistik kembali 3 kolom, teks header kembali ukuran normal, iframe tetap 16:9.')
+```
+
+## File: apply-fix-ringkasan-mobile.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+function ada(rel) { return fs.existsSync(path.join(root, rel)) }
+
+console.log('Mulai menyesuaikan Ringkasan aktivitas magang agar sama dengan pola Rekap Kehadiran...')
+console.log('')
+
+/* ===== 1. DashboardPage.jsx: Ubah struktur HTML dan urutan teks ===== */
+const FILE_D = 'src/pages/DashboardPage.jsx'
+if (!ada(FILE_D)) {
+  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
+  process.exit(1)
+}
+let d = baca(FILE_D)
+let berubahD = false
+
+// Ubah grid gap dari gap-4 menjadi gap-2 agar lebih rapat seperti rekap kehadiran
+if (d.includes('stats-profil-grid mt-4 grid grid-cols-3 gap-4')) {
+  d = d.replace('stats-profil-grid mt-4 grid grid-cols-3 gap-4', 'stats-profil-grid mt-4 grid grid-cols-3 gap-2')
+  berubahD = true
+}
+
+// Ubah isi kotak ringkasan menjadi urutan label (kecil) di atas dan angka di bawah
+const polaLogbook = /<div className="rounded-2xl bg-slate-50 p-4 text-center"><p className="text-2xl font-black text-bsi-800">\{typeof logs !== 'undefined' \? logs\.length : 0\}<\/p><p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Logbook<\/p><\/div>/
+const baruLogbook = '<div className="rounded-xl bg-slate-50 p-2 text-center"><p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Logbook</p><p className="text-base font-black text-bsi-800">{typeof logs !== \'undefined\' ? logs.length : 0}</p></div>'
+
+const polaGaleri = /<div className="rounded-2xl bg-slate-50 p-4 text-center"><p className="text-2xl font-black text-bsi-800">\{typeof galeri !== 'undefined' \? galeri\.length : 0\}<\/p><p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Media Galeri<\/p><\/div>/
+const baruGaleri = '<div className="rounded-xl bg-slate-50 p-2 text-center"><p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Media</p><p className="text-base font-black text-bsi-800">{typeof galeri !== \'undefined\' ? galeri.length : 0}</p></div>'
+
+const polaHadir = /<div className="rounded-2xl bg-slate-50 p-4 text-center"><p className="text-2xl font-black text-bsi-800">\{typeof hadir !== 'undefined' \? hadir\.length : 0\}<\/p><p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Kehadiran<\/p><\/div>/
+const baruHadir = '<div className="rounded-xl bg-slate-50 p-2 text-center"><p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Kehadiran</p><p className="text-base font-black text-bsi-800">{typeof hadir !== \'undefined\' ? hadir.length : 0}</p></div>'
+
+if (polaLogbook.test(d)) { d = d.replace(polaLogbook, baruLogbook); berubahD = true }
+if (polaGaleri.test(d)) { d = d.replace(polaGaleri, baruGaleri); berubahD = true }
+if (polaHadir.test(d)) { d = d.replace(polaHadir, baruHadir); berubahD = true }
+
+if (berubahD) {
+  simpan(FILE_D, d)
+  console.log('[BERHASIL] DashboardPage.jsx telah diperbarui dengan layout baru.')
+}
+
+/* ===== 2. index.css: Hapus override grid 2 kolom di mobile ===== */
+const FILE_CSS = 'src/index.css'
+if (ada(FILE_CSS)) {
+  let css = baca(FILE_CSS)
+  let berubahC = false
+  
+  const cssLama1 = '.stats-profil-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 0.5rem !important; }'
+  const cssLama2 = '.stats-profil-grid > div:last-child { grid-column: span 2 / span 2; }'
+  
+  if (css.includes(cssLama1)) {
+    css = css.replace(cssLama1, '.stats-profil-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 0.5rem !important; }')
+    berubahC = true
+  }
+  if (css.includes(cssLama2)) {
+    css = css.replace(cssLama2, '/* dihapus agar kolom ketiga tidak memanjang sendiri */')
+    berubahC = true
+  }
+  
+  if (berubahC) {
+    simpan(FILE_CSS, css)
+    console.log('[BERHASIL] index.css diperbarui, grid dipaksa menjadi 3 kolom konsisten di mobile.')
+  }
+}
+
+console.log('')
+console.log('Selesai. Silakan refresh browser.')
+```
+
+## File: apply-fix-toast-modern.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+function ada(rel) { return fs.existsSync(path.join(root, rel)) }
+
+console.log('Mulai memperbaiki posisi, animasi, dan tampilan toast menjadi gaya modern...')
+console.log('')
+
+/* ===== 1. ui.jsx: ToastProvider dua fase (masuk lalu keluar) plus struktur baru ===== */
+const FILE_U = 'src/components/ui.jsx'
+if (!ada(FILE_U)) {
+  console.log('[GAGAL] ui.jsx tidak ditemukan')
+  process.exit(1)
+}
+let u = baca(FILE_U)
+const PROVIDER_BARU = `export function ToastProvider(props) {
+  const [toasts, setToasts] = useState([])
+  function tutupToast(id) {
+    setToasts(function (prev) { return prev.map(function (t) { return t.id === id ? Object.assign({}, t, { tutup: true }) : t }) })
+    setTimeout(function () {
+      setToasts(function (prev) { return prev.filter(function (t) { return t.id !== id }) })
+    }, 240)
+  }
+  function tambahToast(tipe, pesan) {
+    const id = Date.now() + Math.random()
+    setToasts(function (prev) { return prev.concat([{ id: id, tipe: tipe, pesan: pesan, tutup: false }]) })
+    setTimeout(function () { tutupToast(id) }, 4000)
+  }
+  function toastSukses(pesan) { tambahToast('sukses', pesan) }
+  function toastGagal(pesan) { tambahToast('gagal', pesan) }
+  return (
+    <ToastContext.Provider value={{ sukses: toastSukses, gagal: toastGagal }}>
+      {props.children}
+      <div className="toast-wadah fixed z-[100] flex flex-col gap-2 pointer-events-none">
+        {toasts.map(function (t) {
+          const sukses = t.tipe === 'sukses'
+          return (
+            <div key={t.id} className={'toast-kartu pointer-events-auto flex items-center gap-3 ' + (sukses ? 'toast-sukses' : 'toast-gagal') + (t.tutup ? ' toast-keluar' : '')}>
+              <span className={'toast-ikon ' + (sukses ? 'toast-ikon-sukses' : 'toast-ikon-gagal')}>
+                <SizedIcon name={sukses ? 'check' : 'close'} size={15} />
+              </span>
+              <p className="toast-teks flex-1 text-sm font-semibold">{t.pesan}</p>
+              <button type="button" onClick={function () { tutupToast(t.id) }} title="Tutup notifikasi"
+                className="toast-tutup grid h-7 w-7 shrink-0 place-items-center rounded-lg">
+                <SizedIcon name="close" size={13} />
+              </button>
+            </div>
+          )
+        })}
+      </div>
+    </ToastContext.Provider>
+  )
+}
+`
+const mulaiProvider = u.indexOf('export function ToastProvider(props) {')
+const mulaiUseToast = u.indexOf('export function useToast() {')
+if (mulaiProvider === -1 || mulaiUseToast === -1 || mulaiUseToast < mulaiProvider) {
+  console.log('[TIDAK KETEMU] Blok ToastProvider di ui.jsx')
+} else if (u.includes('toast-wadah fixed z-[100]')) {
+  console.log('[SUDAH ADA] ToastProvider versi modern di ui.jsx')
+} else {
+  u = u.slice(0, mulaiProvider) + PROVIDER_BARU + u.slice(mulaiUseToast)
+  simpan(FILE_U, u)
+  console.log('[BERHASIL] ToastProvider diganti menjadi versi dua fase dengan struktur modern')
+}
+
+/* ===== 2. index.css: ganti blok toast lama dengan toast-modern-v1 ===== */
+const FILE_CSS = 'src/index.css'
+if (!ada(FILE_CSS)) {
+  console.log('[GAGAL] index.css tidak ditemukan')
+  process.exit(1)
+}
+let css = baca(FILE_CSS)
+const CSS_BARU = `/* toast-modern-v1: kartu glass blur, ikon kotak berwarna lembut, posisi responsif, animasi masuk dan keluar */
+.toast-wadah {
+  top: 1rem;
+  left: 1rem;
+  right: 1rem;
+}
+@media (min-width: 640px) {
+  .toast-wadah {
+    left: auto;
+    right: 1.25rem;
+    top: 1.25rem;
+    width: 100%;
+    max-width: 24rem;
+  }
+}
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(-14px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes toastOut {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(-10px) scale(0.97); }
+}
+.toast-kartu {
+  border-radius: 1rem;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 12px 32px -8px rgba(15, 23, 42, 0.18), 0 2px 8px rgba(15, 23, 42, 0.06);
+  padding: 0.75rem 0.875rem;
+  animation: toastIn 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.toast-keluar {
+  animation: toastOut 0.22s ease-in forwards;
+}
+.toast-ikon {
+  display: grid;
+  place-items: center;
+  height: 2rem;
+  width: 2rem;
+  flex-shrink: 0;
+  border-radius: 0.625rem;
+}
+.toast-ikon-sukses { background: rgba(16, 185, 129, 0.12); color: #059669; }
+.toast-ikon-gagal { background: rgba(239, 68, 68, 0.12); color: #dc2626; }
+.toast-sukses { border-color: rgba(16, 185, 129, 0.28); }
+.toast-gagal { border-color: rgba(239, 68, 68, 0.28); }
+.toast-teks { color: #1e293b; }
+.toast-tutup { color: #94a3b8; transition: background-color 0.15s ease, color 0.15s ease; }
+.toast-tutup:hover { background: rgba(15, 23, 42, 0.06); color: #475569; }
+.dark .toast-kartu {
+  background: rgba(15, 23, 42, 0.92);
+  border-color: rgba(51, 65, 85, 0.7);
+  box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+.dark .toast-ikon-sukses { background: rgba(16, 185, 129, 0.16); color: #34d399; }
+.dark .toast-ikon-gagal { background: rgba(239, 68, 68, 0.16); color: #f87171; }
+.dark .toast-sukses { border-color: rgba(52, 211, 153, 0.35); }
+.dark .toast-gagal { border-color: rgba(248, 113, 113, 0.35); }
+.dark .toast-teks { color: #f1f5f9; }
+.dark .toast-tutup { color: #64748b; }
+.dark .toast-tutup:hover { background: rgba(255, 255, 255, 0.08); color: #cbd5e1; }
+`
+if (css.includes('toast-modern-v1')) {
+  console.log('[SUDAH ADA] CSS toast-modern-v1 di index.css')
+} else {
+  const mulaiToast = css.indexOf('/* toast-opaque:')
+  const akhirToast = css.indexOf('/* animasi-halus-v1')
+  if (mulaiToast !== -1 && akhirToast !== -1 && akhirToast > mulaiToast) {
+    css = css.slice(0, mulaiToast) + CSS_BARU + css.slice(akhirToast)
+    simpan(FILE_CSS, css)
+    console.log('[BERHASIL] Blok toast lama diganti menjadi toast-modern-v1')
+  } else {
+    simpan(FILE_CSS, css.trimEnd() + '\n\n' + CSS_BARU)
+    console.log('[BERHASIL] CSS toast-modern-v1 ditambahkan (blok lama tidak ditemukan)')
+  }
+}
+
+/* ===== 3. Verifikasi ===== */
+console.log('')
+console.log('Verifikasi:')
+const u2 = baca(FILE_U)
+const c2 = baca(FILE_CSS)
+console.log((u2.includes('toast-wadah fixed z-[100]') ? '[OK] ' : '[BELUM] ') + 'Wadah toast memakai kelas posisi responsif')
+console.log((u2.includes('function tutupToast(id)') && u2.includes('setTimeout(function () { tutupToast(id) }, 4000)') ? '[OK] ' : '[BELUM] ') + 'Auto hide melewati fase animasi keluar')
+console.log((u2.includes('toast-ikon-sukses') ? '[OK] ' : '[BELUM] ') + 'Ikon kotak berwarna lembut terpasang')
+console.log((!u2.includes('anim-toast pointer-events-auto') ? '[OK] ' : '[BELUM] ') + 'Struktur toast lama sudah diganti')
+console.log((c2.includes('toast-modern-v1') ? '[OK] ' : '[BELUM] ') + 'CSS toast-modern-v1 tersedia')
+console.log((c2.includes('@keyframes toastOut') ? '[OK] ' : '[BELUM] ') + 'Keyframes animasi keluar tersedia')
+console.log((c2.includes('.toast-wadah {\n  top: 1rem;\n  left: 1rem;\n  right: 1rem;\n}') ? '[OK] ' : '[BELUM] ') + 'Posisi mobile memakai inset kiri kanan sehingga tidak terpotong')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Penyebab masalah dan cara kerja perbaikan:')
+console.log('1. Toast terpotong di mobile karena wadah lama memakai lebar penuh dengan batas max-w-sm plus offset kanan 20px, sehingga di layar sempit tepi kirinya terdorong keluar viewport. Kini di bawah 640px wadah memakai inset kiri dan kanan 16px, jadi toast selalu utuh di tengah layar dengan margin simetris.')
+console.log('2. Animasi keluar tidak ada karena toast langsung dibuang dari array setelah 4 detik. Kini penutupan berjalan dua fase: toast ditandai tutup, memainkan animasi toastOut 220 milidetik berupa memudar sambil naik tipis dan mengecil, baru kemudian dilepas dari DOM. Tombol tutup manual memakai jalur yang sama.')
+console.log('3. Animasi masuk diganti menjadi meluncur dari atas dengan kurva pegas cubic-bezier(0.22, 1, 0.36, 1), terasa seperti notifikasi sistem modern, bukan geser samping datar.')
+console.log('4. Tampilan baru bergaya glass: kartu semi transparan dengan backdrop blur 12px, sudut 16px, bayangan berlapis lembut, dan border tipis yang warnanya mengikuti tipe notifikasi.')
+console.log('5. Ikon lingkaran solid diganti kotak 32px bersudut 10px dengan latar tint 12 persen dan ikon berwarna emerald atau merah, jauh lebih ringan secara visual dan mengikuti bahasa desain notifikasi modern.')
+console.log('6. Tombol tutup kini kotak 28px dengan efek hover berupa latar lembut, bukan sekadar ikon melayang, sehingga area sentuh lebih jelas di ponsel.')
+console.log('7. Mode gelap memakai kartu slate gelap semi transparan dengan tint ikon lebih terang, kontras teks tetap terjaga di kedua mode.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Hapus atau simpan data di dashboard lewat ponsel: toast muncul utuh di tengah layar dengan margin kiri kanan sama, tidak ada bagian yang terpotong.')
+console.log('2. Perhatikan masuknya: toast meluncur turun dari atas dengan pegas lembut lalu berhenti rapi.')
+console.log('3. Tunggu 4 detik atau ketuk tombol tutup: toast memudar sambil naik tipis dan mengecil sebelum hilang, tidak lenyap sekonyongkonyong.')
+console.log('4. Picu toast sukses dan gagal beruntun: keduanya menumpuk rapi dengan jarak 8px dan warna border serta ikon masing masing.')
+console.log('5. Buka di desktop lebar 640px ke atas: toast kembali berlabuh di kanan atas dengan lebar maksimal 384px seperti kolom notifikasi aplikasi modern.')
+console.log('6. Aktifkan mode gelap: kartu menjadi slate gelap kaca dengan ikon tint terang, tetap terbaca jelas.')
+```
+
+## File: apply-fix-tombol-mobile.cjs
+```javascript
+const fs = require('fs')
+const path = require('path')
+const root = process.cwd()
+
+function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
+function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
+function ada(rel) { return fs.existsSync(path.join(root, rel)) }
+
+console.log('Mulai mengecilkan tombol-tombol agar proporsional di layar mobile...')
+console.log('')
+
+/* ===== 1. DashboardPage.jsx: tombol tab navigasi ===== */
+const FILE_D = 'src/pages/DashboardPage.jsx'
+if (!ada(FILE_D)) {
+  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
+  process.exit(1)
+}
+let d = baca(FILE_D)
+let berubahD = false
+
+const TAB_LAMA = "return 'px-5 py-3 rounded-2xl text-sm font-bold ' + (tab === t ? 'bg-bsi-800 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200')"
+const TAB_BARU = "return 'px-4 py-2.5 rounded-xl text-xs sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm font-bold ' + (tab === t ? 'bg-bsi-800 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200')"
+if (d.includes(TAB_BARU)) {
+  console.log('[SUDAH ADA] Tombol tab versi mobile')
+} else if (d.includes(TAB_LAMA)) {
+  d = d.replace(TAB_LAMA, TAB_BARU)
+  berubahD = true
+  console.log('[BERHASIL] Tombol tab navigasi mengecil di mobile dan tetap besar di desktop')
+} else {
+  console.log('[TIDAK KETEMU] Pola tabCls di DashboardPage.jsx')
+}
+
+/* ===== 2. DashboardPage.jsx: empat tombol kelola foto profil ===== */
+const FOTO_LAMA = 'px-4 py-2 rounded-xl text-sm font-bold '
+const FOTO_BARU = 'px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold '
+if (d.includes(FOTO_BARU)) {
+  console.log('[SUDAH ADA] Tombol kelola foto versi mobile')
+} else if (d.includes(FOTO_LAMA)) {
+  const jumlah = d.split(FOTO_LAMA).length - 1
+  d = d.split(FOTO_LAMA).join(FOTO_BARU)
+  berubahD = true
+  console.log('[BERHASIL] ' + jumlah + ' tombol kelola foto profil dirapatkan untuk mobile')
+} else {
+  console.log('[TIDAK KETEMU] Pola tombol kelola foto profil')
+}
+
+if (berubahD) simpan(FILE_D, d)
+
+/* ===== 3. ui.jsx: btnPrimary dan btnSmall responsif ===== */
+const FILE_U = 'src/components/ui.jsx'
+if (!ada(FILE_U)) {
+  console.log('[GAGAL] ui.jsx tidak ditemukan')
+  process.exit(1)
+}
+let u = baca(FILE_U)
+let berubahU = false
+
+const PRIM_LAMA = "export const btnPrimary = 'w-full rounded-2xl bg-bsi-800 px-6 py-4 text-white font-bold hover:bg-bsi-900'"
+const PRIM_BARU = "export const btnPrimary = 'w-full rounded-xl bg-bsi-800 px-5 py-3 text-sm sm:rounded-2xl sm:px-6 sm:py-4 sm:text-base text-white font-bold hover:bg-bsi-900'"
+if (u.includes(PRIM_BARU)) {
+  console.log('[SUDAH ADA] btnPrimary versi mobile')
+} else if (u.includes(PRIM_LAMA)) {
+  u = u.replace(PRIM_LAMA, PRIM_BARU)
+  berubahU = true
+  console.log('[BERHASIL] btnPrimary (tombol simpan) lebih ramping di mobile')
+} else {
+  console.log('[TIDAK KETEMU] Pola btnPrimary di ui.jsx')
+}
+
+const SMALL_LAMA = "export const btnSmall = 'px-4 py-2 rounded-xl text-sm font-semibold'"
+const SMALL_BARU = "export const btnSmall = 'px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-semibold'"
+if (u.includes(SMALL_BARU)) {
+  console.log('[SUDAH ADA] btnSmall versi mobile')
+} else if (u.includes(SMALL_LAMA)) {
+  u = u.replace(SMALL_LAMA, SMALL_BARU)
+  berubahU = true
+  console.log('[BERHASIL] btnSmall (Detail, Edit, Hapus, Tambah kegiatan) lebih ramping di mobile')
+} else {
+  console.log('[TIDAK KETEMU] Pola btnSmall di ui.jsx')
+}
+
+if (berubahU) simpan(FILE_U, u)
+
+/* ===== 4. Verifikasi ===== */
+console.log('')
+console.log('Verifikasi:')
+const d2 = baca(FILE_D)
+const u2 = baca(FILE_U)
+console.log((d2.includes(TAB_BARU) ? '[OK] ' : '[BELUM] ') + 'Tombol tab navigasi responsif')
+console.log((d2.split(FOTO_BARU).length - 1 >= 4 ? '[OK] ' : '[BELUM] ') + 'Empat tombol kelola foto profil responsif (' + (d2.split(FOTO_BARU).length - 1) + ' lokasi)')
+console.log((u2.includes(PRIM_BARU) ? '[OK] ' : '[BELUM] ') + 'btnPrimary responsif')
+console.log((u2.includes(SMALL_BARU) ? '[OK] ' : '[BELUM] ') + 'btnSmall responsif')
+console.log('')
+console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
+console.log('')
+console.log('Penyesuaian yang diterapkan:')
+console.log('1. Tombol tab Logbook, Galeri, Daftar Hadir, dan Profil kini memakai padding 16x10 piksel, sudut 12 piksel, dan huruf 12 piksel di bawah 640px, sehingga baris tab tidak lagi mendominasi kartu header. Di 640px ke atas kembali ke padding 20x12, sudut 16, dan huruf 14 seperti semula.')
+console.log('2. Tombol simpan utama (btnPrimary) di semua form termasuk halaman login menjadi py-3 dengan huruf 14 piksel dan sudut 12 piksel di mobile, lalu kembali py-4 huruf 16 sudut 16 di layar lebar, jadi tidak lagi setebbal balok di ponsel.')
+console.log('3. Tombol aksi kecil (btnSmall) yaitu Detail, Edit, Hapus, dan tambah kegiatan menjadi px-3.5 py-2 huruf 12 sudut 8 di mobile, membuat deretan aksi di kartu dan baris rincian kegiatan terasa ringan dan tidak berdesakan.')
+console.log('4. Empat tombol kelola foto profil (Ganti atau Upload Foto, Hapus Foto, Simpan Foto, Batal) mengikuti ukuran kecil yang sama di mobile sehingga panel profil tidak penuh oleh tombol.')
+console.log('5. Seluruh perubahan memakai pola kelas responsif Tailwind sm:, jadi tidak ada JavaScript maupun media query tambahan yang perlu dipelihara, dan tampilan desktop benar benar tidak berubah.')
+console.log('6. Tinggi sentuh minimum di mobile tetap sekitar 32 sampai 36 piksel, masih nyaman untuk jari meski visualnya jauh lebih ramping.')
+console.log('')
+console.log('Langkah uji:')
+console.log('1. Buka dashboard di ponsel: baris tab kini berupa pill ramping satu atau dua baris yang seimbang dengan kartu header, tidak lagi setinggi sebelumnya.')
+console.log('2. Gulir ke form logbook: tombol Simpan logbook dan tombol tambah kegiatan terlihat lebih halus, dan tombol Detail Edit Hapus pada kartu tidak lagi bongsor.')
+console.log('3. Buka tab Profil: tombol Ganti Foto dan Hapus Foto proporsional dengan kartu profil yang sudah dikecilkan sebelumnya.')
+console.log('4. Buka halaman login di ponsel: tombol Masuk ke dashboard ikut ramping dan serasi dengan form.')
+console.log('5. Lebarkan jendela ke 640px ke atas: seluruh tombol kembali ke ukuran desktop semula tanpa perubahan apa pun.')
 ```
 
 ## File: postcss.config.js
@@ -2067,6 +2879,304 @@ export default async function handler(req, res) {
 }
 ```
 
+## File: src/components/PemutarVideo.jsx
+```javascript
+import { useEffect, useRef, useState } from 'react'
+
+let janjiApi = null
+function muatApiYouTube() {
+  if (janjiApi) return janjiApi
+  janjiApi = new Promise(function (resolve) {
+    if (window.YT && window.YT.Player) { resolve(window.YT); return }
+    const lama = window.onYouTubeIframeAPIReady
+    window.onYouTubeIframeAPIReady = function () {
+      if (lama) lama()
+      resolve(window.YT)
+    }
+    const tag = document.createElement('script')
+    tag.src = 'https://www.youtube.com/iframe_api'
+    tag.async = true
+    document.head.appendChild(tag)
+  })
+  return janjiApi
+}
+
+function formatWaktu(detik) {
+  const d = isFinite(detik) && detik > 0 ? detik : 0
+  const m = Math.floor(d / 60)
+  const s = Math.floor(d % 60)
+  return m + ':' + (s < 10 ? '0' : '') + s
+}
+
+function paksaKualitas(p) {
+  try { if (p && typeof p.setPlaybackQualityRange === 'function') p.setPlaybackQualityRange('720', '1080') } catch (e) {}
+}
+function matikanSubtitel(p) {
+  try { if (p && typeof p.unloadModule === 'function') p.unloadModule('captions') } catch (e) {}
+  try { if (p && typeof p.setOption === 'function') p.setOption('captions', 'track', {}) } catch (e) {}
+}
+
+function IkonPlay({ className }) { return <svg viewBox="0 0 24 24" fill="currentColor" className={className || 'h-5 w-5'}><path d="M8 5v14l11-7z" /></svg> }
+function IkonPause({ className }) { return <svg viewBox="0 0 24 24" fill="currentColor" className={className || 'h-5 w-5'}><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg> }
+function IkonSuara() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+      <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
+    </svg>
+  )
+}
+function IkonBisu() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+      <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
+    </svg>
+  )
+}
+function IkonPenuh() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg> }
+function IkonKecil() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" /></svg> }
+function IkonUlang() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></svg> }
+
+export default function PemutarVideo(props) {
+  const youtubeId = props.youtubeId
+  const [dimulai, setDimulai] = useState(false)
+  const [memutar, setMemutar] = useState(false)
+  const [buffer, setBuffer] = useState(false)
+  const [selesai, setSelesai] = useState(false)
+  const [gagal, setGagal] = useState(false)
+  const [waktu, setWaktu] = useState(0)
+  const [durasi, setDurasi] = useState(0)
+  const [volume, setVolume] = useState(100)
+  const [bisu, setBisu] = useState(false)
+  const [penuh, setPenuh] = useState(false)
+  const [sembunyi, setSembunyi] = useState(false)
+  const [thumbPakaiHq, setThumbPakaiHq] = useState(false)
+  const kotakRef = useRef(null)
+  const wadahRef = useRef(null)
+  const playerRef = useRef(null)
+  const timerSembunyi = useRef(null)
+
+  useEffect(function () {
+    const iv = setInterval(function () {
+      const p = playerRef.current
+      if (p && p.getCurrentTime) {
+        setWaktu(p.getCurrentTime() || 0)
+        const d = p.getDuration ? p.getDuration() : 0
+        if (d) setDurasi(d)
+      }
+    }, 250)
+    return function () { clearInterval(iv) }
+  }, [])
+
+  useEffect(function () {
+    function saatPenuh() { setPenuh(Boolean(document.fullscreenElement)) }
+    document.addEventListener('fullscreenchange', saatPenuh)
+    return function () {
+      document.removeEventListener('fullscreenchange', saatPenuh)
+      if (timerSembunyi.current) clearTimeout(timerSembunyi.current)
+      if (playerRef.current && playerRef.current.destroy) {
+        try { playerRef.current.destroy() } catch (e) {}
+        playerRef.current = null
+      }
+    }
+  }, [])
+
+  function sedangMain() {
+    const p = playerRef.current
+    return Boolean(p && p.getPlayerState && window.YT && p.getPlayerState() === window.YT.PlayerState.PLAYING)
+  }
+
+  function resetTimerSembunyi() {
+    if (!dimulai) return
+    if (timerSembunyi.current) clearTimeout(timerSembunyi.current)
+    setSembunyi(false)
+    if (sedangMain()) {
+      timerSembunyi.current = setTimeout(function () { setSembunyi(true) }, 2500)
+    }
+  }
+
+  async function mulai() {
+    setDimulai(true)
+    setGagal(false)
+    try {
+      const YT = await muatApiYouTube()
+      if (!wadahRef.current) return
+      playerRef.current = new YT.Player(wadahRef.current, {
+        videoId: youtubeId,
+        playerVars: {
+          autoplay: 1, controls: 0, modestbranding: 1, rel: 0, fs: 0,
+          disablekb: 1, iv_load_policy: 3, playsinline: 1, autohide: 1,
+          showinfo: 0, cc_load_policy: 0, origin: window.location.origin
+        },
+        events: {
+          onReady: function (e) {
+            setDurasi(e.target.getDuration() || 0)
+            paksaKualitas(e.target)
+            matikanSubtitel(e.target)
+            e.target.playVideo()
+          },
+          onStateChange: function (e) {
+            const S = window.YT.PlayerState
+            if (e.data === S.PLAYING) {
+              setMemutar(true); setBuffer(false); setSelesai(false)
+              paksaKualitas(e.target); matikanSubtitel(e.target)
+              resetTimerSembunyi()
+            } else if (e.data === S.PAUSED) {
+              setMemutar(false); setBuffer(false); setSembunyi(false)
+            } else if (e.data === S.BUFFERING) {
+              setBuffer(true)
+            } else if (e.data === S.ENDED) {
+              setMemutar(false); setSelesai(true); setSembunyi(false)
+            }
+          },
+          onError: function () { setGagal(true); setBuffer(false); setMemutar(false) }
+        }
+      })
+    } catch (e) {
+      setGagal(true)
+    }
+  }
+
+  function jungkir() {
+    const p = playerRef.current
+    if (!p) return
+    if (sedangMain()) p.pauseVideo()
+    else p.playVideo()
+  }
+
+  function geser(ev) {
+    const p = playerRef.current
+    if (!p || !durasi) return
+    const nilai = Number(ev.target.value)
+    p.seekTo((nilai / 100) * durasi, true)
+    setWaktu((nilai / 100) * durasi)
+  }
+
+  function aturVolume(ev) {
+    const p = playerRef.current
+    const nilai = Number(ev.target.value)
+    setVolume(nilai)
+    if (!p) return
+    p.setVolume(nilai)
+    if (nilai === 0) { p.mute(); setBisu(true) }
+    else if (bisu) { p.unMute(); setBisu(false) }
+  }
+
+  function aturBisu() {
+    const p = playerRef.current
+    if (!p) return
+    if (bisu) { p.unMute(); p.setVolume(volume || 100); setBisu(false) }
+    else { p.mute(); setBisu(true) }
+  }
+
+  function aturPenuh() {
+    const el = kotakRef.current
+    if (!el) return
+    if (document.fullscreenElement) document.exitFullscreen()
+    else if (el.requestFullscreen) el.requestFullscreen()
+  }
+
+  const thumb = thumbPakaiHq
+    ? 'https://i.ytimg.com/vi/' + youtubeId + '/hqdefault.jpg'
+    : 'https://img.youtube.com/vi/' + youtubeId + '/maxresdefault.jpg'
+  const persen = durasi ? Math.min(100, (waktu / durasi) * 100) : 0
+  const kontrolSembunyi = dimulai && !gagal && sembunyi
+
+  return (
+    <div
+      ref={kotakRef}
+      className={'pemutar-referensi group relative overflow-hidden rounded-2xl bg-black shadow-xl ' + (props.className || 'aspect-video w-full')}
+      style={{ cursor: kontrolSembunyi ? 'none' : 'default' }}
+      onMouseMove={resetTimerSembunyi}
+      onMouseLeave={function () { if (sedangMain()) { if (timerSembunyi.current) clearTimeout(timerSembunyi.current); setSembunyi(true) } }}
+    >
+      {/* Wadah player: setelah diisi YouTube, iframe diposisikan CSS dengan margin crop 70px */}
+      <div ref={wadahRef} className="h-full w-full" />
+
+      {/* Perisai penangkap klik */}
+      {dimulai && !selesai && !gagal ? (
+        <button type="button" aria-label="Putar atau jeda video" onClick={jungkir}
+          className="absolute inset-0 z-10 h-full w-full bg-transparent" style={{ cursor: kontrolSembunyi ? 'none' : 'default' }} />
+      ) : null}
+
+      {/* Ikon putar besar milik kita saat dijeda, menutup ikon bawaan YouTube */}
+      {dimulai && !memutar && !buffer && !selesai && !gagal ? (
+        <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center">
+          <span className="grid h-20 w-20 place-items-center rounded-full bg-black/60 text-white backdrop-blur-sm">
+            <IkonPlay className="ml-1 h-8 w-8" />
+          </span>
+        </div>
+      ) : null}
+
+      {/* Poster awal dengan tombol putar minimalis */}
+      {!dimulai ? (
+        <div className="absolute inset-0 z-20">
+          <img src={thumb} alt={props.title || 'Pratinjau video'} onError={function () { setThumbPakaiHq(true) }}
+            className="absolute inset-0 h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+          <div className="absolute inset-0 grid place-items-center">
+            <button type="button" onClick={mulai} title="Putar video"
+              className="grid h-12 w-12 place-items-center rounded-full border border-white/20 bg-black/50 text-white backdrop-blur-md transition hover:scale-110 hover:border-bsi-500 hover:bg-bsi-600">
+              <IkonPlay className="ml-0.5 h-5 w-5" />
+            </button>
+          </div>
+          {props.title ? <p className="absolute bottom-3 left-4 right-4 truncate text-sm font-semibold text-white drop-shadow-md">{props.title}</p> : null}
+        </div>
+      ) : null}
+
+      {/* Layar akhir dengan putar ulang */}
+      {selesai ? (
+        <div className="absolute inset-0 z-20 grid place-items-center bg-black/85 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-3">
+            <button type="button" title="Putar ulang"
+              onClick={function () { const p = playerRef.current; if (p) { p.seekTo(0, true); p.playVideo() } setSelesai(false) }}
+              className="grid h-14 w-14 place-items-center rounded-full bg-gold-500 text-slate-900 shadow-lg transition hover:scale-105">
+              <IkonUlang />
+            </button>
+            <p className="text-xs font-semibold text-slate-200">Putar ulang</p>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Layar gagal */}
+      {gagal ? (
+        <div className="absolute inset-0 z-30 grid place-items-center bg-black/90">
+          <div className="flex flex-col items-center gap-2 px-6 text-center">
+            <p className="text-sm font-semibold text-slate-200">Video tidak dapat dimuat</p>
+            <p className="text-xs text-slate-400">Periksa koneksi atau ketersediaan video di saluran.</p>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Panel kontrol overlay di atas video */}
+      {dimulai && !gagal ? (
+        <div className={'absolute inset-x-0 bottom-0 z-30 flex items-center gap-2 sm:gap-3 bg-gradient-to-t from-black/90 via-black/60 to-transparent px-3 sm:px-4 pb-3 pt-10 transition-opacity duration-300 ' + (kontrolSembunyi ? 'pointer-events-none opacity-0' : 'opacity-100')}>
+          <button type="button" onClick={jungkir} title={memutar ? 'Jeda' : 'Putar'}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-bsi-700 text-white transition hover:bg-bsi-600">
+            {memutar ? <IkonPause className="h-4 w-4" /> : <IkonPlay className="ml-0.5 h-4 w-4" />}
+          </button>
+          <input type="range" min="0" max="100" step="0.1" value={persen} onChange={geser} title="Geser durasi"
+            className="pemutar-progress h-1.5 w-full cursor-pointer appearance-none rounded-full outline-none"
+            style={{ background: 'linear-gradient(to right, #166534 0%, #166534 ' + persen + '%, rgba(255,255,255,0.25) ' + persen + '%, rgba(255,255,255,0.25) 100%)' }} />
+          <span className="min-w-[64px] sm:min-w-[84px] shrink-0 text-center text-[10px] sm:text-[11px] font-semibold tabular-nums text-slate-200">{formatWaktu(waktu)} / {formatWaktu(durasi)}</span>
+          <button type="button" onClick={aturBisu} title={bisu ? 'Nyalakan suara' : 'Bisukan'}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/10 text-white transition hover:bg-white/20">
+            {bisu ? <IkonBisu /> : <IkonSuara />}
+          </button>
+          <input type="range" min="0" max="100" value={bisu ? 0 : volume} onChange={aturVolume} title="Volume"
+            className="pemutar-volume hidden sm:block h-1 w-16 shrink-0 cursor-pointer appearance-none rounded-full outline-none"
+            style={{ background: 'linear-gradient(to right, #eab308 0%, #eab308 ' + (bisu ? 0 : volume) + '%, rgba(255,255,255,0.25) ' + (bisu ? 0 : volume) + '%, rgba(255,255,255,0.25) 100%)' }} />
+          {buffer ? <span className="inline-block h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-gold-500 border-t-transparent" /> : null}
+          <button type="button" onClick={aturPenuh} title={penuh ? 'Keluar layar penuh' : 'Layar penuh'}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/10 text-white transition hover:bg-white/20">
+            {penuh ? <IkonKecil /> : <IkonPenuh />}
+          </button>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+```
+
 ## File: src/lib/auth.js
 ```javascript
 import { useEffect, useState } from 'react'
@@ -2299,255 +3409,6 @@ dist
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
-```
-
-## File: src/components/controls.jsx
-```javascript
-import { SelubungPanel } from './ui.jsx'
-import { useEffect, useRef, useState } from 'react'
-import { ICONS } from './icons.jsx'
-
-const BULAN_NAMA = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
-const BULAN_PENDEK = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
-const HARI_NAMA = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
-
-const defaultBtn = 'flex w-full items-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-bsi-500'
-
-function pad(n) {
-  return (n < 10 ? '0' : '') + n
-}
-
-function parseValue(value, mode) {
-  if (!value) return null
-  const p = String(value).split('-')
-  if (mode === 'month') {
-    if (p.length < 2) return null
-    const y = parseInt(p[0], 10)
-    const m = parseInt(p[1], 10) - 1
-    if (isNaN(y) || isNaN(m) || m < 0 || m > 11) return null
-    return { y: y, m: m }
-  }
-  if (p.length < 3) return null
-  const y = parseInt(p[0], 10)
-  const m = parseInt(p[1], 10) - 1
-  const d = parseInt(p[2], 10)
-  if (isNaN(y) || isNaN(m) || isNaN(d)) return null
-  return { y: y, m: m, d: d }
-}
-
-function useOutside(ref, open, setOpen) {
-  useEffect(function () {
-    if (!open) return undefined
-    function handler(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return function () { document.removeEventListener('mousedown', handler) }
-  }, [open])
-}
-
-export function CustomSelect(props) {
-  const [open, setOpen] = useState(false)
-  const boxRef = useRef(null)
-  useOutside(boxRef, open, setOpen)
-  const options = props.options || []
-  const current = options.find(function (o) { return o.value === props.value }) || null
-
-  return (
-    <div ref={boxRef} className={'relative ' + (props.className || '')}>
-      <button
-        type="button"
-        onClick={function () { setOpen(function (o) { return !o }) }}
-        className={(props.buttonCls || defaultBtn) + ' text-left'}
-      >
-        {props.icon ? <span className="shrink-0 text-slate-400">{props.icon}</span> : null}
-        <span className={'flex-1 truncate ' + (current ? 'text-slate-800' : 'text-slate-400')}>
-          {current ? current.label : (props.placeholder || 'Pilih')}
-        </span>
-        <span className={'shrink-0 text-slate-400 transition-transform duration-200 ' + (open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
-      </button>
-      <SelubungPanel open={open}>
-<div className="anim-modal absolute z-30 mt-2 max-h-64 w-full overflow-y-auto rounded-2xl border border-slate-200 bg-white py-1 shadow-xl">
-          {options.map(function (o) {
-            const active = o.value === props.value
-            return (
-              <button
-                type="button"
-                key={String(o.value)}
-                onClick={function () { props.onChange(o.value); setOpen(false) }}
-                className={'flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left text-sm ' + (active ? 'bg-bsi-800 text-white' : 'text-slate-700 hover:bg-slate-100')}
-              >
-                <span className="truncate">{o.label}</span>
-                {active ? <span className="shrink-0">{ICONS.check}</span> : null}
-              </button>
-            )
-          })}
-        </div>
-</SelubungPanel>
-    </div>
-  )
-}
-
-export function CustomDateInput(props) {
-  const mode = props.mode || 'date'
-  const [open, setOpen] = useState(false)
-  const [view, setView] = useState(function () {
-    const p = parseValue(props.value, mode)
-    const t = new Date()
-    return p ? { y: p.y, m: p.m } : { y: t.getFullYear(), m: t.getMonth() }
-  })
-  const boxRef = useRef(null)
-  useOutside(boxRef, open, setOpen)
-
-  const sel = parseValue(props.value, mode)
-  const today = new Date()
-
-  function toggle() {
-    if (!open) {
-      const p = parseValue(props.value, mode)
-      if (p) setView({ y: p.y, m: p.m })
-    }
-    setOpen(function (o) { return !o })
-  }
-
-  function shift(delta) {
-    setView(function (v) {
-      if (mode === 'month') return { y: v.y + delta, m: v.m }
-      let m = v.m + delta
-      let y = v.y
-      if (m < 0) { m = 11; y -= 1 }
-      if (m > 11) { m = 0; y += 1 }
-      return { y: y, m: m }
-    })
-  }
-
-  function pickDay(d) {
-    props.onChange(view.y + '-' + pad(view.m + 1) + '-' + pad(d))
-    setOpen(false)
-  }
-
-  function pickMonth(m) {
-    props.onChange(view.y + '-' + pad(m + 1))
-    setOpen(false)
-  }
-
-  function pickToday() {
-    const t = new Date()
-    if (mode === 'month') props.onChange(t.getFullYear() + '-' + pad(t.getMonth() + 1))
-    else props.onChange(t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate()))
-    setOpen(false)
-  }
-
-  const label = sel
-    ? (mode === 'month' ? BULAN_NAMA[sel.m] + ' ' + sel.y : sel.d + ' ' + BULAN_PENDEK[sel.m] + ' ' + sel.y)
-    : ''
-
-  const firstDay = new Date(view.y, view.m, 1).getDay()
-  const daysCount = new Date(view.y, view.m + 1, 0).getDate()
-  const cells = []
-  for (let i = 0; i < firstDay; i++) cells.push(null)
-  for (let d = 1; d <= daysCount; d++) cells.push(d)
-
-  return (
-    <div ref={boxRef} className={'relative ' + (props.className || '')}>
-      <button type="button" onClick={toggle} className={(props.buttonCls || defaultBtn) + ' text-left'}>
-        <span className="shrink-0 text-slate-400">{ICONS.calendar}</span>
-        <span className={'flex-1 truncate ' + (props.value ? 'text-slate-800' : 'text-slate-400')}>
-          {label || (mode === 'month' ? 'Pilih bulan' : 'Pilih tanggal')}
-        </span>
-        <span className={'shrink-0 text-slate-400 transition-transform duration-200 ' + (open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
-      </button>
-      <SelubungPanel open={open}>
-<div className="anim-modal absolute z-30 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
-          <div className="flex items-center justify-between">
-            <button type="button" onClick={function () { shift(-1) }} className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-100">&#8249;</button>
-            <p className="text-sm font-bold text-slate-800">
-              {mode === 'month' ? String(view.y) : BULAN_NAMA[view.m] + ' ' + view.y}
-            </p>
-            <button type="button" onClick={function () { shift(1) }} className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-100">&#8250;</button>
-          </div>
-
-          {mode === 'date' ? (
-            <div className="mt-3 grid grid-cols-7 gap-1 text-center">
-              {HARI_NAMA.map(function (h) {
-                return <span key={h} className="py-1 text-[11px] font-semibold text-slate-400">{h}</span>
-              })}
-              {cells.map(function (d, i) {
-                if (d === null) return <span key={'kosong' + i} />
-                const isSel = sel && sel.y === view.y && sel.m === view.m && sel.d === d
-                const isToday = today.getFullYear() === view.y && today.getMonth() === view.m && today.getDate() === d
-                return (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={function () { pickDay(d) }}
-                    className={'mx-auto grid h-8 w-8 place-items-center rounded-lg text-sm ' + (isSel ? 'bg-bsi-800 font-semibold text-white' : isToday ? 'font-bold text-bsi-700 ring-1 ring-bsi-500' : 'text-slate-700 hover:bg-slate-100')}
-                  >
-                    {d}
-                  </button>
-                )
-              })}
-            </div>
-          ) : (
-            <div className="mt-3 grid grid-cols-3 gap-2">
-              {BULAN_NAMA.map(function (nama, m) {
-                const isSel = sel && sel.y === view.y && sel.m === m
-                const isNow = today.getFullYear() === view.y && today.getMonth() === m
-                return (
-                  <button
-                    key={nama}
-                    type="button"
-                    onClick={function () { pickMonth(m) }}
-                    className={'rounded-lg px-2 py-2 text-xs font-semibold ' + (isSel ? 'bg-bsi-800 text-white' : isNow ? 'text-bsi-700 ring-1 ring-bsi-500' : 'text-slate-700 hover:bg-slate-100')}
-                  >
-                    {nama}
-                  </button>
-                )
-              })}
-            </div>
-          )}
-
-          <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
-            <button type="button" onClick={function () { props.onChange(''); setOpen(false) }} className="text-sm font-semibold text-slate-500 hover:text-red-600">Hapus</button>
-            <button type="button" onClick={pickToday} className="text-sm font-semibold text-bsi-700 hover:text-bsi-900">Hari ini</button>
-          </div>
-        </div>
-</SelubungPanel>
-    </div>
-  )
-}
-
-export function FileInput(props) {
-  const inputRef = useRef(null)
-  return (
-    <div className={props.className || ''}>
-      <input
-        ref={inputRef}
-        type="file"
-        accept={props.accept || 'image/*,video/*'}
-        className="hidden"
-        onChange={function (e) {
-          if (props.onChange) props.onChange(e)
-          e.target.value = ''
-        }}
-      />
-      <button
-        type="button"
-        onClick={function () { inputRef.current.click() }}
-        className="flex w-full items-center gap-3 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-4 py-4 text-left transition hover:border-bsi-500 hover:bg-slate-100"
-      >
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-bsi-100 text-bsi-800">{ICONS.image}</span>
-        <span className="min-w-0 flex-1">
-          <span className={'block truncate text-sm font-semibold ' + (props.fileName ? 'text-slate-800' : 'text-slate-500')}>
-            {props.fileName || 'Klik untuk pilih foto atau video'}
-          </span>
-          <span className="block text-xs text-slate-400">{props.hint || 'Foto JPG, PNG, atau HEIC otomatis dikonversi. Video maks 50 MB.'}</span>
-        </span>
-        {props.fileName ? <span className="shrink-0 text-xs font-semibold text-bsi-700">Ganti</span> : null}
-      </button>
-    </div>
-  )
-}
 ```
 
 ## File: src/components/Skeleton.jsx
@@ -2931,6 +3792,255 @@ Buat user Auth dengan pola email NIM@mbsi.local dan isi tabel mahasiswa beserta 
 
 ## Deploy
 Push ke GitHub, import di Vercel, salin isi .env.local ke Environment Variables Vercel.
+```
+
+## File: src/components/controls.jsx
+```javascript
+import { SelubungPanel } from './ui.jsx'
+import { useEffect, useRef, useState } from 'react'
+import { ICONS } from './icons.jsx'
+
+const BULAN_NAMA = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
+const BULAN_PENDEK = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
+const HARI_NAMA = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
+
+const defaultBtn = 'flex w-full items-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-bsi-500'
+
+function pad(n) {
+  return (n < 10 ? '0' : '') + n
+}
+
+function parseValue(value, mode) {
+  if (!value) return null
+  const p = String(value).split('-')
+  if (mode === 'month') {
+    if (p.length < 2) return null
+    const y = parseInt(p[0], 10)
+    const m = parseInt(p[1], 10) - 1
+    if (isNaN(y) || isNaN(m) || m < 0 || m > 11) return null
+    return { y: y, m: m }
+  }
+  if (p.length < 3) return null
+  const y = parseInt(p[0], 10)
+  const m = parseInt(p[1], 10) - 1
+  const d = parseInt(p[2], 10)
+  if (isNaN(y) || isNaN(m) || isNaN(d)) return null
+  return { y: y, m: m, d: d }
+}
+
+function useOutside(ref, open, setOpen) {
+  useEffect(function () {
+    if (!open) return undefined
+    function handler(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return function () { document.removeEventListener('mousedown', handler) }
+  }, [open])
+}
+
+export function CustomSelect(props) {
+  const [open, setOpen] = useState(false)
+  const boxRef = useRef(null)
+  useOutside(boxRef, open, setOpen)
+  const options = props.options || []
+  const current = options.find(function (o) { return o.value === props.value }) || null
+
+  return (
+    <div ref={boxRef} className={'relative ' + (props.className || '')}>
+      <button
+        type="button"
+        onClick={function () { setOpen(function (o) { return !o }) }}
+        className={(props.buttonCls || defaultBtn) + ' text-left'}
+      >
+        {props.icon ? <span className="shrink-0 text-slate-400">{props.icon}</span> : null}
+        <span className={'flex-1 truncate ' + (current ? 'text-slate-800' : 'text-slate-400')}>
+          {current ? current.label : (props.placeholder || 'Pilih')}
+        </span>
+        <span className={'shrink-0 text-slate-400 transition-transform duration-200 ' + (open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
+      </button>
+      <SelubungPanel open={open}>
+<div className="anim-modal absolute z-30 mt-2 max-h-64 w-full overflow-y-auto rounded-2xl border border-slate-200 bg-white py-1 shadow-xl">
+          {options.map(function (o) {
+            const active = o.value === props.value
+            return (
+              <button
+                type="button"
+                key={String(o.value)}
+                onClick={function () { props.onChange(o.value); setOpen(false) }}
+                className={'flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left text-sm ' + (active ? 'bg-bsi-800 text-white' : 'text-slate-700 hover:bg-slate-100')}
+              >
+                <span className="truncate">{o.label}</span>
+                {active ? <span className="shrink-0">{ICONS.check}</span> : null}
+              </button>
+            )
+          })}
+        </div>
+</SelubungPanel>
+    </div>
+  )
+}
+
+export function CustomDateInput(props) {
+  const mode = props.mode || 'date'
+  const [open, setOpen] = useState(false)
+  const [view, setView] = useState(function () {
+    const p = parseValue(props.value, mode)
+    const t = new Date()
+    return p ? { y: p.y, m: p.m } : { y: t.getFullYear(), m: t.getMonth() }
+  })
+  const boxRef = useRef(null)
+  useOutside(boxRef, open, setOpen)
+
+  const sel = parseValue(props.value, mode)
+  const today = new Date()
+
+  function toggle() {
+    if (!open) {
+      const p = parseValue(props.value, mode)
+      if (p) setView({ y: p.y, m: p.m })
+    }
+    setOpen(function (o) { return !o })
+  }
+
+  function shift(delta) {
+    setView(function (v) {
+      if (mode === 'month') return { y: v.y + delta, m: v.m }
+      let m = v.m + delta
+      let y = v.y
+      if (m < 0) { m = 11; y -= 1 }
+      if (m > 11) { m = 0; y += 1 }
+      return { y: y, m: m }
+    })
+  }
+
+  function pickDay(d) {
+    props.onChange(view.y + '-' + pad(view.m + 1) + '-' + pad(d))
+    setOpen(false)
+  }
+
+  function pickMonth(m) {
+    props.onChange(view.y + '-' + pad(m + 1))
+    setOpen(false)
+  }
+
+  function pickToday() {
+    const t = new Date()
+    if (mode === 'month') props.onChange(t.getFullYear() + '-' + pad(t.getMonth() + 1))
+    else props.onChange(t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate()))
+    setOpen(false)
+  }
+
+  const label = sel
+    ? (mode === 'month' ? BULAN_NAMA[sel.m] + ' ' + sel.y : sel.d + ' ' + BULAN_PENDEK[sel.m] + ' ' + sel.y)
+    : ''
+
+  const firstDay = new Date(view.y, view.m, 1).getDay()
+  const daysCount = new Date(view.y, view.m + 1, 0).getDate()
+  const cells = []
+  for (let i = 0; i < firstDay; i++) cells.push(null)
+  for (let d = 1; d <= daysCount; d++) cells.push(d)
+
+  return (
+    <div ref={boxRef} className={'relative ' + (props.className || '')}>
+      <button type="button" onClick={toggle} className={(props.buttonCls || defaultBtn) + ' text-left'}>
+        <span className="shrink-0 text-slate-400">{ICONS.calendar}</span>
+        <span className={'flex-1 truncate ' + (props.value ? 'text-slate-800' : 'text-slate-400')}>
+          {label || (mode === 'month' ? 'Pilih bulan' : 'Pilih tanggal')}
+        </span>
+        <span className={'shrink-0 text-slate-400 transition-transform duration-200 ' + (open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
+      </button>
+      <SelubungPanel open={open}>
+<div className="anim-modal absolute z-30 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
+          <div className="flex items-center justify-between">
+            <button type="button" onClick={function () { shift(-1) }} className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-100">&#8249;</button>
+            <p className="text-sm font-bold text-slate-800">
+              {mode === 'month' ? String(view.y) : BULAN_NAMA[view.m] + ' ' + view.y}
+            </p>
+            <button type="button" onClick={function () { shift(1) }} className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-100">&#8250;</button>
+          </div>
+
+          {mode === 'date' ? (
+            <div className="mt-3 grid grid-cols-7 gap-1 text-center">
+              {HARI_NAMA.map(function (h) {
+                return <span key={h} className="py-1 text-[11px] font-semibold text-slate-400">{h}</span>
+              })}
+              {cells.map(function (d, i) {
+                if (d === null) return <span key={'kosong' + i} />
+                const isSel = sel && sel.y === view.y && sel.m === view.m && sel.d === d
+                const isToday = today.getFullYear() === view.y && today.getMonth() === view.m && today.getDate() === d
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={function () { pickDay(d) }}
+                    className={'mx-auto grid h-8 w-8 place-items-center rounded-lg text-sm ' + (isSel ? 'bg-bsi-800 font-semibold text-white' : isToday ? 'font-bold text-bsi-700 ring-1 ring-bsi-500' : 'text-slate-700 hover:bg-slate-100')}
+                  >
+                    {d}
+                  </button>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {BULAN_NAMA.map(function (nama, m) {
+                const isSel = sel && sel.y === view.y && sel.m === m
+                const isNow = today.getFullYear() === view.y && today.getMonth() === m
+                return (
+                  <button
+                    key={nama}
+                    type="button"
+                    onClick={function () { pickMonth(m) }}
+                    className={'rounded-lg px-2 py-2 text-xs font-semibold ' + (isSel ? 'bg-bsi-800 text-white' : isNow ? 'text-bsi-700 ring-1 ring-bsi-500' : 'text-slate-700 hover:bg-slate-100')}
+                  >
+                    {nama}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
+            <button type="button" onClick={function () { props.onChange(''); setOpen(false) }} className="text-sm font-semibold text-slate-500 hover:text-red-600">Hapus</button>
+            <button type="button" onClick={pickToday} className="text-sm font-semibold text-bsi-700 hover:text-bsi-900">Hari ini</button>
+          </div>
+        </div>
+</SelubungPanel>
+    </div>
+  )
+}
+
+export function FileInput(props) {
+  const inputRef = useRef(null)
+  return (
+    <div className={props.className || ''}>
+      <input
+        ref={inputRef}
+        type="file"
+        accept={props.accept || 'image/*,video/*'}
+        className="hidden"
+        onChange={function (e) {
+          if (props.onChange) props.onChange(e)
+          e.target.value = ''
+        }}
+      />
+      <button
+        type="button"
+        onClick={function () { inputRef.current.click() }}
+        className="flex w-full items-center gap-3 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-4 py-4 text-left transition hover:border-bsi-500 hover:bg-slate-100"
+      >
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-bsi-100 text-bsi-800">{ICONS.image}</span>
+        <span className="min-w-0 flex-1">
+          <span className={'block truncate text-sm font-semibold ' + (props.fileName ? 'text-slate-800' : 'text-slate-500')}>
+            {props.fileName || props.label || 'Klik untuk pilih foto atau video'}
+          </span>
+          <span className="block text-xs text-slate-400">{props.hint || 'Foto JPG, PNG, atau HEIC otomatis dikonversi. Video maks 50 MB.'}</span>
+        </span>
+        {props.fileName ? <span className="shrink-0 text-xs font-semibold text-bsi-700">Ganti</span> : null}
+      </button>
+    </div>
+  )
+}
 ```
 
 ## File: src/lib/format.js
@@ -3383,79 +4493,6 @@ export async function deleteMedia(key) {
 }
 ```
 
-## File: src/pages/LoginPage.jsx
-```javascript
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { loginWithNim } from '../lib/auth.js'
-import { inputCls, labelCls, btnPrimary } from '../components/ui.jsx'
-import { EyeToggle } from '../components/icons.jsx'
-
-export default function LoginPage() {
-  const navigate = useNavigate()
-  const [nim, setNim] = useState('')
-  const [kode, setKode] = useState('')
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [lihatKode, setLihatKode] = useState(false)
-
-  async function submit(e) {
-    e.preventDefault()
-    setBusy(true)
-    setError('')
-    try {
-  await loginWithNim(nim, kode)
-  navigate('/dashboard')
-} catch (err) {
-  setError(err.message)
-}
-    setBusy(false)
-  }
-
-  return (
-    <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr] items-start">
-      <div className="card-hover rounded-[2rem] bg-bsi-900 text-white p-8 lg:p-10">
-        <span className="inline-flex px-4 py-2 rounded-full bg-white/10 text-xs font-semibold uppercase tracking-wide">Area Intern</span>
-        <h1 className="mt-6 text-3xl lg:text-4xl font-black leading-tight">Masuk untuk mengisi logbook, galeri, dan daftar hadir</h1>
-        <p className="mt-4 text-white/80 leading-relaxed">Halaman ini hanya digunakan oleh mahasiswa magang. Dosen pembimbing dan kaprodi tidak perlu login untuk melihat halaman publik.</p>
-      </div>
-      <div className="card-hover bg-white rounded-[2rem] border border-slate-200 shadow-sm p-8 lg:p-10">
-        <h2 className="text-2xl font-black text-slate-900">Login mahasiswa magang</h2>
-        {error ? <p className="mt-3 rounded-2xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</p> : null}
-        <form onSubmit={submit} className="mt-6 space-y-5">
-          <div>
-            <label className={labelCls}>NIM <span className="text-red-500">*</span></label>
-            <input className={inputCls} value={nim} onChange={function (e) { setNim(e.target.value) }} placeholder="Contoh: 20260001" required />
-          </div>
-          <div>
-            <label className={labelCls}>Kode akses <span className="text-red-500">*</span></label>
-            <div className="relative mt-1.5">
-              <input
-                type={lihatKode ? 'text' : 'password'}
-                className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 pr-12 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
-                value={kode}
-                onChange={function (e) { setKode(e.target.value) }}
-                placeholder="Masukkan kode akses"
-                required
-              />
-              <button
-                type="button"
-                onClick={function () { setLihatKode(function (v) { return !v }) }}
-                title={lihatKode ? 'Sembunyikan kode akses' : 'Lihat kode akses'}
-                className="absolute right-2 top-0 bottom-0 my-auto grid h-9 w-9 place-items-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-              >
-                <EyeToggle open={lihatKode} size={18} />
-              </button>
-            </div>
-          </div>
-          <button type="submit" disabled={busy} className={btnPrimary}>{busy ? 'Memproses...' : 'Masuk ke dashboard'}</button>
-        </form>
-      </div>
-    </section>
-  )
-}
-```
-
 ## File: src/components/Carousel.jsx
 ```javascript
 import { useEffect, useRef, useState } from 'react'
@@ -3701,6 +4738,110 @@ export function countActiveFilters(o) {
     if (o[k]) c++
   }
   return c
+}
+```
+
+## File: src/pages/LoginPage.jsx
+```javascript
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { loginWithNim } from '../lib/auth.js'
+import { inputCls, labelCls, btnPrimary } from '../components/ui.jsx'
+import { EyeToggle, SizedIcon } from '../components/icons.jsx'
+
+function pesanErrorLogin(err) {
+  const pesan = String((err && err.message) || '')
+  const rendah = pesan.toLowerCase()
+  if (rendah.indexOf('invalid login credentials') !== -1) {
+    return 'NIM atau kode akses yang kamu masukkan tidak cocok dengan data kami. Periksa kembali penulisannya, pastikan tidak ada spasi berlebih, lalu coba lagi.'
+  }
+  if (rendah.indexOf('not confirmed') !== -1) {
+    return 'Akun untuk NIM ini belum diaktifkan. Hubungi admin tim magang untuk mengaktifkan akunmu terlebih dahulu.'
+  }
+  if (rendah.indexOf('too many requests') !== -1 || rendah.indexOf('try again after') !== -1 || rendah.indexOf('rate limit') !== -1) {
+    return 'Terlalu banyak percobaan masuk dalam waktu singkat demi keamanan. Tunggu sekitar satu menit, lalu coba lagi.'
+  }
+  if (rendah.indexOf('fetch') !== -1 || rendah.indexOf('network') !== -1 || rendah.indexOf('failed to load') !== -1 || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+    return 'Tidak bisa terhubung ke server. Periksa koneksi internetmu, lalu coba lagi.'
+  }
+  if (rendah.indexOf('email') !== -1 && rendah.indexOf('format') !== -1) {
+    return 'Format NIM tidak terbaca. Masukkan NIM berupa angka tanpa spasi, contoh: 24070041.'
+  }
+  if (pesan) return 'Gagal masuk: ' + pesan + '. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
+  return 'Terjadi kesalahan tidak terduga saat masuk. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
+}
+export default function LoginPage() {
+  const navigate = useNavigate()
+  const [nim, setNim] = useState('')
+  const [kode, setKode] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [lihatKode, setLihatKode] = useState(false)
+
+  async function submit(e) {
+    e.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+  await loginWithNim(nim, kode)
+  navigate('/dashboard')
+} catch (err) {
+  setError(pesanErrorLogin(err))
+}
+    setBusy(false)
+  }
+
+  return (
+    <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr] items-start">
+      <div className="card-hover rounded-[2rem] bg-bsi-900 text-white p-8 lg:p-10">
+        <span className="inline-flex px-4 py-2 rounded-full bg-white/10 text-xs font-semibold uppercase tracking-wide">Area Intern</span>
+        <h1 className="mt-6 text-3xl lg:text-4xl font-black leading-tight">Masuk untuk mengisi logbook, galeri, dan daftar hadir</h1>
+        <p className="mt-4 text-white/80 leading-relaxed">Halaman ini hanya digunakan oleh mahasiswa magang. Dosen pembimbing dan kaprodi tidak perlu login untuk melihat halaman publik.</p>
+      </div>
+      <div className="card-hover bg-white rounded-[2rem] border border-slate-200 shadow-sm p-8 lg:p-10">
+        <h2 className="text-2xl font-black text-slate-900">Login mahasiswa magang</h2>
+        {error ? (
+          <div className="mt-3 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-red-100 text-red-600">
+              <SizedIcon name="close" size={12} />
+            </span>
+            <div className="min-w-0">
+              <p className="font-bold">Gagal masuk</p>
+              <p className="mt-1 leading-relaxed">{error}</p>
+            </div>
+          </div>
+        ) : null}
+        <form onSubmit={submit} className="mt-6 space-y-5">
+          <div>
+            <label className={labelCls}>NIM <span className="text-red-500">*</span></label>
+            <input className={inputCls} value={nim} onChange={function (e) { setNim(e.target.value) }} placeholder="Contoh: 20260001" required />
+          </div>
+          <div>
+            <label className={labelCls}>Kode akses <span className="text-red-500">*</span></label>
+            <div className="relative mt-1.5">
+              <input
+                type={lihatKode ? 'text' : 'password'}
+                className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 pr-12 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+                value={kode}
+                onChange={function (e) { setKode(e.target.value) }}
+                placeholder="Masukkan kode akses"
+                required
+              />
+              <button
+                type="button"
+                onClick={function () { setLihatKode(function (v) { return !v }) }}
+                title={lihatKode ? 'Sembunyikan kode akses' : 'Lihat kode akses'}
+                className="absolute right-2 top-0 bottom-0 my-auto grid h-9 w-9 place-items-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              >
+                <EyeToggle open={lihatKode} size={18} />
+              </button>
+            </div>
+          </div>
+          <button type="submit" disabled={busy} className={btnPrimary}>{busy ? 'Memproses...' : 'Masuk ke dashboard'}</button>
+        </form>
+      </div>
+    </section>
+  )
 }
 ```
 
@@ -5104,7 +6245,7 @@ export function LogbookDetail(props) {
                       it.media_source === 'youtube' ? (
                         <PemutarVideo key={it.youtube_id} youtubeId={it.youtube_id} title={it.judul} className="aspect-video w-full rounded-2xl mb-3" />
                       ) : it.media_source === 'drive' ? (
-                        <iframe key={it.media_path} src={drivePreviewUrl(it.media_path)} title={it.judul} allow="autoplay; encrypted-media; fullscreen" allowFullScreen className="aspect-video w-full rounded-2xl border-0 bg-black mb-3" />
+                        <div className="iframe-video-wrap mb-3"><iframe key={it.media_path} src={drivePreviewUrl(it.media_path)} title={it.judul} allow="autoplay; encrypted-media; fullscreen" allowFullScreen className="aspect-video w-full rounded-2xl border-0 bg-black" /></div>
                       ) : (
                         <ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3" />
                       )
@@ -5183,7 +6324,7 @@ export function GalleryDetail(props) {
       {item.media_source === 'youtube' ? (
         <PemutarVideo key={item.youtube_id} youtubeId={item.youtube_id} title={item.judul} className="aspect-video w-full rounded-2xl" />
       ) : item.media_source === 'drive' ? (
-        <iframe src={drivePreviewUrl(item.media_path)} title={item.judul} allow="autoplay; encrypted-media; fullscreen" allowFullScreen className="aspect-video w-full rounded-2xl border-0 bg-black" />
+        <div className="iframe-video-wrap"><iframe src={drivePreviewUrl(item.media_path)} title={item.judul} allow="autoplay; encrypted-media; fullscreen" allowFullScreen className="aspect-video w-full rounded-2xl border-0 bg-black" /></div>
       ) : (
         <ZoomableMedia src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} title={item.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900" />
       )}
@@ -5268,8 +6409,8 @@ function useBodyScrollLock(active) {
 
 export const inputCls = 'mt-1.5 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-bsi-500'
 export const labelCls = 'text-sm font-semibold text-slate-700'
-export const btnPrimary = 'w-full rounded-2xl bg-bsi-800 px-6 py-4 text-white font-bold hover:bg-bsi-900'
-export const btnSmall = 'px-4 py-2 rounded-xl text-sm font-semibold'
+export const btnPrimary = 'w-full rounded-xl bg-bsi-800 px-5 py-3 text-sm sm:rounded-2xl sm:px-6 sm:py-4 sm:text-base text-white font-bold hover:bg-bsi-900'
+export const btnSmall = 'px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-semibold'
 export const cardCls = 'card-hover bg-white rounded-3xl border border-slate-200 shadow-sm'
 
 export function StatCard(props) {
@@ -5849,42 +6990,44 @@ export function Pagination(props) {
 
 const ToastContext = createContext(null)
  export function ToastProvider(props) {
-   const [toasts, setToasts] = useState([])
-   function tutupToast(id) {
-     setToasts(function (prev) { return prev.filter(function (t) { return t.id !== id }) })
-   }
-   function tambahToast(tipe, pesan) {
-     const id = Date.now() + Math.random()
-     setToasts(function (prev) { return prev.concat([{ id: id, tipe: tipe, pesan: pesan }]) })
-     setTimeout(function () {
-       setToasts(function (prev) { return prev.filter(function (t) { return t.id !== id }) })
-     }, 4000)
-   }
-   function toastSukses(pesan) { tambahToast('sukses', pesan) }
-   function toastGagal(pesan) { tambahToast('gagal', pesan) }
-   return (
-     <ToastContext.Provider value={{ sukses: toastSukses, gagal: toastGagal }}>
-       {props.children}
-       <div className="fixed top-5 right-5 z-[100] flex w-full max-w-sm flex-col gap-3 pointer-events-none">
-         {toasts.map(function (t) {
-           const sukses = t.tipe === 'sukses'
-           return (
-             <div key={t.id} className={'anim-toast pointer-events-auto flex items-start gap-3 rounded-2xl border p-4 shadow-lg ' + (sukses ? 'toast-sukses' : 'toast-gagal')}>
-               <span className={'mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full ' + (sukses ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white')}>
-                 <SizedIcon name={sukses ? 'check' : 'close'} size={12} />
-               </span>
-               <p className={'flex-1 text-sm font-semibold toast-teks'}>{t.pesan}</p>
-               <button type="button" onClick={function () { tutupToast(t.id) }} className="toast-tutup shrink-0 text-slate-400 hover:text-slate-600">
-                 <SizedIcon name="close" size={14} />
-               </button>
-             </div>
-           )
-         })}
-       </div>
-     </ToastContext.Provider>
-   )
- }
- export function useToast() {
+  const [toasts, setToasts] = useState([])
+  function tutupToast(id) {
+    setToasts(function (prev) { return prev.map(function (t) { return t.id === id ? Object.assign({}, t, { tutup: true }) : t }) })
+    setTimeout(function () {
+      setToasts(function (prev) { return prev.filter(function (t) { return t.id !== id }) })
+    }, 240)
+  }
+  function tambahToast(tipe, pesan) {
+    const id = Date.now() + Math.random()
+    setToasts(function (prev) { return prev.concat([{ id: id, tipe: tipe, pesan: pesan, tutup: false }]) })
+    setTimeout(function () { tutupToast(id) }, 4000)
+  }
+  function toastSukses(pesan) { tambahToast('sukses', pesan) }
+  function toastGagal(pesan) { tambahToast('gagal', pesan) }
+  return (
+    <ToastContext.Provider value={{ sukses: toastSukses, gagal: toastGagal }}>
+      {props.children}
+      <div className="toast-wadah fixed z-[100] flex flex-col gap-2 pointer-events-none">
+        {toasts.map(function (t) {
+          const sukses = t.tipe === 'sukses'
+          return (
+            <div key={t.id} className={'toast-kartu pointer-events-auto flex items-center gap-3 ' + (sukses ? 'toast-sukses' : 'toast-gagal') + (t.tutup ? ' toast-keluar' : '')}>
+              <span className={'toast-ikon ' + (sukses ? 'toast-ikon-sukses' : 'toast-ikon-gagal')}>
+                <SizedIcon name={sukses ? 'check' : 'close'} size={15} />
+              </span>
+              <p className="toast-teks flex-1 text-sm font-semibold">{t.pesan}</p>
+              <button type="button" onClick={function () { tutupToast(t.id) }} title="Tutup notifikasi"
+                className="toast-tutup grid h-7 w-7 shrink-0 place-items-center rounded-lg">
+                <SizedIcon name="close" size={13} />
+              </button>
+            </div>
+          )
+        })}
+      </div>
+    </ToastContext.Provider>
+  )
+}
+export function useToast() {
    return useContext(ToastContext)
  }
 
@@ -6190,40 +7333,69 @@ textarea {
   .kolom-kartu-rapat { width: calc(33.3333% - 0.66667rem); }
 }
 
-/* toast-opaque: latar solid bergradasi lembut, tanpa backdrop-filter agar ringan di device low end */
-@keyframes anim-toast {
-  from { opacity: 0; transform: translateX(14px) scale(0.98); }
-  to { opacity: 1; transform: translateX(0) scale(1); }
+/* toast-modern-v1: kartu glass blur, ikon kotak berwarna lembut, posisi responsif, animasi masuk dan keluar */
+.toast-wadah {
+  top: 1rem;
+  left: 1rem;
+  right: 1rem;
 }
-.anim-toast { animation: anim-toast 0.22s ease-out; opacity: 1; }
-.toast-sukses {
-  background: linear-gradient(180deg, #ffffff 0%, #ecfdf5 100%);
-  border-color: #a7f3d0;
-  box-shadow: 0 10px 30px rgba(6, 95, 70, 0.16);
+@media (min-width: 640px) {
+  .toast-wadah {
+    left: auto;
+    right: 1.25rem;
+    top: 1.25rem;
+    width: 100%;
+    max-width: 24rem;
+  }
 }
-.toast-gagal {
-  background: linear-gradient(180deg, #ffffff 0%, #fef2f2 100%);
-  border-color: #fecaca;
-  box-shadow: 0 10px 30px rgba(153, 27, 27, 0.16);
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(-14px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
-.toast-sukses .toast-teks { color: #065f46; }
-.toast-gagal .toast-teks { color: #991b1b; }
-.toast-tutup:hover { color: #334155; }
-.dark .toast-sukses {
-  background: linear-gradient(180deg, #065f46 0%, #064e3b 100%);
-  border-color: rgba(52, 211, 153, 0.45);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+@keyframes toastOut {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(-10px) scale(0.97); }
 }
-.dark .toast-gagal {
-  background: linear-gradient(180deg, #991b1b 0%, #7f1d1d 100%);
-  border-color: rgba(248, 113, 113, 0.45);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+.toast-kartu {
+  border-radius: 1rem;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 12px 32px -8px rgba(15, 23, 42, 0.18), 0 2px 8px rgba(15, 23, 42, 0.06);
+  padding: 0.75rem 0.875rem;
+  animation: toastIn 0.32s cubic-bezier(0.22, 1, 0.36, 1);
 }
-.dark .toast-sukses .toast-teks { color: #d1fae5 !important; }
-.dark .toast-gagal .toast-teks { color: #fee2e2 !important; }
-.dark .toast-tutup { color: #cbd5e1 !important; }
-.dark .toast-tutup:hover { color: #ffffff !important; }
-
+.toast-keluar {
+  animation: toastOut 0.22s ease-in forwards;
+}
+.toast-ikon {
+  display: grid;
+  place-items: center;
+  height: 2rem;
+  width: 2rem;
+  flex-shrink: 0;
+  border-radius: 0.625rem;
+}
+.toast-ikon-sukses { background: rgba(16, 185, 129, 0.12); color: #059669; }
+.toast-ikon-gagal { background: rgba(239, 68, 68, 0.12); color: #dc2626; }
+.toast-sukses { border-color: rgba(16, 185, 129, 0.28); }
+.toast-gagal { border-color: rgba(239, 68, 68, 0.28); }
+.toast-teks { color: #1e293b; }
+.toast-tutup { color: #94a3b8; transition: background-color 0.15s ease, color 0.15s ease; }
+.toast-tutup:hover { background: rgba(15, 23, 42, 0.06); color: #475569; }
+.dark .toast-kartu {
+  background: rgba(15, 23, 42, 0.92);
+  border-color: rgba(51, 65, 85, 0.7);
+  box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+.dark .toast-ikon-sukses { background: rgba(16, 185, 129, 0.16); color: #34d399; }
+.dark .toast-ikon-gagal { background: rgba(239, 68, 68, 0.16); color: #f87171; }
+.dark .toast-sukses { border-color: rgba(52, 211, 153, 0.35); }
+.dark .toast-gagal { border-color: rgba(248, 113, 113, 0.35); }
+.dark .toast-teks { color: #f1f5f9; }
+.dark .toast-tutup { color: #64748b; }
+.dark .toast-tutup:hover { background: rgba(255, 255, 255, 0.08); color: #cbd5e1; }
 /* animasi-halus-v1: seluruh animasi tambahan hanya memakai transform dan opacity agar ringan di device low end */
 @keyframes cardFadeIn {
   from { opacity: 0; transform: translateY(14px) scale(0.98); }
@@ -6529,6 +7701,44 @@ button:active:not(:disabled), a:active, .clickable:active { transition-duration:
 
 /* rentang-tablet-v1: jaring pengaman agar isi panel filter tidak bisa menonjol keluar lebar baris saat cabang waktu muncul */
 .filter-isi { overflow-x: clip; }
+
+/* kepala-dash-responsif: avatar header dashboard mengecil proporsional di layar sempit, desktop tetap 96px */
+@media (max-width: 639px) {
+  .avatar-kepala-dash > button, .avatar-kepala-dash > span {
+    width: 56px !important;
+    height: 56px !important;
+    border-radius: 16px !important;
+  }
+  .avatar-kepala-dash img { border-radius: 16px !important; }
+  .avatar-kepala-dash > button > span, .avatar-kepala-dash > span > span {
+    font-size: 20px !important;
+  }
+}
+
+/* proporsional-mobile-v1: teks header dashboard, avatar profil, dan iframe video menyesuaikan layar sempit */
+@media (max-width: 639px) {
+  .avatar-kepala-dash ~ div h1 { font-size: 1.125rem !important; line-height: 1.625rem !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }
+  .avatar-kepala-dash ~ div p { font-size: 0.75rem !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }
+  .avatar-kepala-dash ~ div .inline-flex { font-size: 0.625rem !important; padding: 0.25rem 0.5rem !important; }
+  
+  .avatar-profil-tab > button, .avatar-profil-tab > span {
+    width: 96px !important;
+    height: 96px !important;
+    border-radius: 24px !important;
+  }
+  .avatar-profil-tab img { border-radius: 24px !important; }
+  .avatar-profil-tab ~ h2 { font-size: 1.25rem !important; margin-top: 0.75rem !important; }
+  .avatar-profil-tab ~ p { font-size: 0.875rem !important; }
+  
+  .stats-profil-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 0.5rem !important; }
+  /* dihapus agar kolom ketiga tidak memanjang sendiri */
+  
+  .iframe-video-wrap { position: relative !important; padding-bottom: 56.25% !important; height: 0 !important; overflow: hidden !important; border-radius: 1rem !important; }
+  .iframe-video-wrap iframe { position: absolute !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; border: 0 !important; }
+}
+@media (min-width: 640px) {
+  .stats-profil-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 ```
 
 ## File: src/pages/DashboardPage.jsx
@@ -7201,7 +8411,7 @@ async function submitHadir(e) {
   }
 
   const tabCls = function (t) {
-    return 'px-5 py-3 rounded-2xl text-sm font-bold ' + (tab === t ? 'bg-bsi-800 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200')
+    return 'px-4 py-2.5 rounded-xl text-xs sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm font-bold ' + (tab === t ? 'bg-bsi-800 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200')
   }
 
   return (
@@ -7209,12 +8419,12 @@ async function submitHadir(e) {
       <section className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-6">
           <div>
-            <div className="flex flex-wrap items-center gap-6">
-<Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl"  onClick={function () { gantiTab('profil') }} title="Kelola foto profil" />
+            <div className="flex flex-wrap items-center gap-4 sm:gap-6">
+<div className="avatar-kepala-dash"><Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl" onClick={function () { gantiTab('profil') }} title="Kelola foto profil" /></div>
 <div className="min-w-0 flex-1">
-            <h1 className="text-2xl lg:text-3xl font-black text-slate-900">{mahasiswa.nama}</h1>
+            <h1 className="truncate text-lg sm:text-2xl lg:text-3xl font-black text-slate-900">{mahasiswa.nama}</h1>
             <p className="text-sm text-slate-500">NIM {mahasiswa.nim}</p>
-{mahasiswa.prodi ? <p className="text-sm text-slate-500">{mahasiswa.prodi}</p> : null}
+{mahasiswa.prodi ? <p className="truncate text-sm text-slate-500">{mahasiswa.prodi}</p> : null}
           </div>
         </div>
         </div>
@@ -7230,12 +8440,12 @@ async function submitHadir(e) {
       {tab === 'profil' ? (
 <section className="anim-tab mt-8 grid gap-6 lg:grid-cols-[0.85fr_1.15fr] items-start">
 <div className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 shadow-sm flex flex-col items-center text-center">
-<Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="2xl" />
+<div className="avatar-profil-tab"><Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="2xl" /></div>
 <h2 className="mt-4 text-xl font-black text-slate-900">{mahasiswa.nama}</h2>
 <p className="mt-1 text-sm text-slate-500">NIM {mahasiswa.nim}</p>
 <div className="mt-5 flex flex-wrap justify-center gap-2">
-<button type="button" onClick={function () { setShowUploadFoto(!showUploadFoto) }} className="px-4 py-2 rounded-xl text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition">{mahasiswa.foto_profil ? 'Ganti Foto' : 'Upload Foto'}</button>
-{mahasiswa.foto_profil ? <button type="button" onClick={hapusFotoProfilKu} className="px-4 py-2 rounded-xl text-sm font-bold bg-red-50 text-red-700 hover:bg-red-100 transition">Hapus Foto</button> : null}
+<button type="button" onClick={function () { setShowUploadFoto(!showUploadFoto) }} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition">{mahasiswa.foto_profil ? 'Ganti Foto' : 'Upload Foto'}</button>
+{mahasiswa.foto_profil ? <button type="button" onClick={hapusFotoProfilKu} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-red-50 text-red-700 hover:bg-red-100 transition">Hapus Foto</button> : null}
 </div>
 {showUploadFoto ? (
 <div className="mt-5 w-full border-t border-slate-200 pt-5 text-left">
@@ -7247,18 +8457,18 @@ async function submitHadir(e) {
 </div>
 </div>
 <div className="mt-4 flex gap-2">
-<button type="button" onClick={simpanFotoProfil} disabled={uploadingFoto || !fotoFile} className="px-4 py-2 rounded-xl text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition disabled:opacity-50">{uploadingFoto ? 'Mengunggah...' : 'Simpan Foto'}</button>
-<button type="button" onClick={function () { setShowUploadFoto(false); setFotoPreview(null); setFotoFile(null) }} className="px-4 py-2 rounded-xl text-sm font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition">Batal</button>
+<button type="button" onClick={simpanFotoProfil} disabled={uploadingFoto || !fotoFile} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition disabled:opacity-50">{uploadingFoto ? 'Mengunggah...' : 'Simpan Foto'}</button>
+<button type="button" onClick={function () { setShowUploadFoto(false); setFotoPreview(null); setFotoFile(null) }} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition">Batal</button>
 </div>
 </div>
 ) : null}
 </div>
 <div className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 shadow-sm">
 <h2 className="text-lg font-black text-slate-900">Ringkasan aktivitas magang</h2>
-<div className="mt-4 grid grid-cols-3 gap-4">
-<div className="rounded-2xl bg-slate-50 p-4 text-center"><p className="text-2xl font-black text-bsi-800">{typeof logs !== 'undefined' ? logs.length : 0}</p><p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Logbook</p></div>
-<div className="rounded-2xl bg-slate-50 p-4 text-center"><p className="text-2xl font-black text-bsi-800">{typeof galeri !== 'undefined' ? galeri.length : 0}</p><p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Media Galeri</p></div>
-<div className="rounded-2xl bg-slate-50 p-4 text-center"><p className="text-2xl font-black text-bsi-800">{typeof hadir !== 'undefined' ? hadir.length : 0}</p><p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Kehadiran</p></div>
+<div className="stats-profil-grid mt-4 grid grid-cols-3 gap-2">
+<div className="rounded-xl bg-slate-50 p-2 text-center"><p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Logbook</p><p className="text-base font-black text-bsi-800">{typeof logs !== 'undefined' ? logs.length : 0}</p></div>
+<div className="rounded-xl bg-slate-50 p-2 text-center"><p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Media</p><p className="text-base font-black text-bsi-800">{typeof galeri !== 'undefined' ? galeri.length : 0}</p></div>
+<div className="rounded-xl bg-slate-50 p-2 text-center"><p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Kehadiran</p><p className="text-base font-black text-bsi-800">{typeof hadir !== 'undefined' ? hadir.length : 0}</p></div>
 </div>
 <div className="mt-6 space-y-2 border-t border-slate-100 pt-4 text-sm text-slate-600">
 <p>Foto profil tampil otomatis di kartu kamu pada halaman publik, logbook, galeri, dan daftar hadir.</p>
@@ -7315,9 +8525,9 @@ async function submitHadir(e) {
               </div>
 
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-slate-700">Rincian kegiatan hari ini <span className="text-red-500">*</span></p>
-                  <button type="button" onClick={function () { setItems(function (p) { return p.concat([newItem()]) }) }} className={btnSmall + ' bg-bsi-100 text-bsi-900 hover:bg-bsi-200'}>+ Tambah kegiatan</button>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-slate-700">Rincian kegiatan hari ini <span className="text-red-500">*</span></p>
+                <button type="button" onClick={function () { setItems(function (p) { return p.concat([newItem()]) }) }} className={btnSmall + ' whitespace-nowrap shrink-0 bg-bsi-100 text-bsi-900 hover:bg-bsi-200'}>+ Tambah kegiatan</button>
                 </div>
                 {items.map(function (it, i) {
                   return (
@@ -7356,7 +8566,7 @@ async function submitHadir(e) {
                         <div className="space-y-2">
                           <p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuotaLoading ? <span className="inline-block w-3 h-3 ml-1 border-2 border-slate-400 border-t-transparent rounded-full animate-spin align-middle"></span> : <>{ytQuota.remaining} dari {ytQuota.limit}</>}</p>
                           <div className={ytQuota.remaining <= 0 && !it.file ? 'opacity-50 pointer-events-none' : ''}>
-                            <FileInput accept="video/*" fileName={it.file ? it.file.name : ''}
+                            <FileInput accept="video/*" fileName={it.file ? it.file.name : ''} label="Klik untuk pilih video" hint="Video maks 50 MB. Format MP4, MOV, WebM, atau MKV."
                               onChange={function (e) { onItemFile(i, e.target.files[0]) }} />
                           </div>
                           {ytQuota.remaining <= 0 ? <p className="text-xs text-red-600">Kuota habis. Gunakan link video di bawah.</p> : null}
@@ -7364,7 +8574,7 @@ async function submitHadir(e) {
                           <input className={inputCls} value={it.driveLink} onChange={function (e) { patchItem(i, { driveLink: e.target.value }) }} placeholder="Link Google Drive untuk unduhan (opsional)" />
                         </div>
                       ) : (
-                        <FileInput accept="image/*" fileName={it.file ? it.file.name : ''}
+                        <FileInput accept="image/*" fileName={it.file ? it.file.name : ''} label="Klik untuk pilih foto" hint="Foto JPG, PNG, atau HEIC otomatis dikonversi ke WebP ringan."
                           onChange={function (e) { onItemFile(i, e.target.files[0]) }} />
                       )}
                       <label className={'flex items-start gap-3 rounded-2xl border p-3 cursor-pointer w-full ' + (it.preview ? (it.show ? 'border-gold-500 bg-gold-500/5' : 'border-slate-200') : 'border-slate-200 bg-slate-50 opacity-50 cursor-not-allowed')}>
@@ -7429,7 +8639,7 @@ async function submitHadir(e) {
                     <div className="space-y-2">
                       <p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuotaLoading ? <span className="inline-block w-3 h-3 ml-1 border-2 border-slate-400 border-t-transparent rounded-full animate-spin align-middle"></span> : <>{ytQuota.remaining} dari {ytQuota.limit}</>}</p>
                       <div className={ytQuota.remaining <= 0 && !galForm.file ? 'opacity-50 pointer-events-none' : ''}>
-                        <FileInput accept="video/*" fileName={galForm.file ? galForm.file.name : ''}
+                        <FileInput accept="video/*" fileName={galForm.file ? galForm.file.name : ''} label="Klik untuk pilih video" hint="Video maks 50 MB. Format MP4, MOV, WebM, atau MKV."
                           onChange={function (e) {
                             const f = e.target.files[0]
                             if (!f) return
@@ -7441,7 +8651,7 @@ async function submitHadir(e) {
                        <input className={inputCls} value={galDriveLink} onChange={function (e) { setGalDriveLink(e.target.value) }} placeholder="Link Google Drive untuk unduhan (opsional)" />
                     </div>
                   ) : (
-                    <FileInput accept="image/*" fileName={galForm.file ? galForm.file.name : ''}
+                    <FileInput accept="image/*" fileName={galForm.file ? galForm.file.name : ''} label="Klik untuk pilih foto" hint="Foto JPG, PNG, atau HEIC otomatis dikonversi ke WebP ringan."
                       onChange={async function (e) {
                         const f = e.target.files[0]
                         if (!f) return

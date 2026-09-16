@@ -124,14 +124,13 @@ export function SkeletonDashboard() {
 
 export function SkeletonStatCard() {
   return (
-    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
-      <div className="skeleton h-4 w-28"></div>
-      <div className="skeleton h-9 w-16 mt-3"></div>
-      <div className="skeleton h-3 w-36 mt-2"></div>
+    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-3 sm:p-6">
+      <div className="skeleton h-3 w-3/4 sm:h-4 sm:w-28"></div>
+      <div className="skeleton h-6 w-1/2 mt-1 sm:h-9 sm:w-16 sm:mt-3"></div>
+      <div className="skeleton h-3 w-36 mt-2 hidden sm:block"></div>
     </div>
   )
 }
-
 export function SkeletonChartRow() {
   return (
     <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5">

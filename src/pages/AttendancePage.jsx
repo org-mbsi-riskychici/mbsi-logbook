@@ -68,10 +68,10 @@ export default function AttendancePage() {
 
   return (
     <div>
-      <section className="rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
+      <section className="rounded-[2rem] bg-white border border-slate-200 p-5 sm:p-5 sm:p-8 lg:p-10 shadow-sm">
         <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Daftar hadir</p>
-        <h1 className="mt-2 text-3xl lg:text-4xl font-black text-slate-900">Monitoring kehadiran tim magang</h1>
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <h1 className="mt-2 text-2xl sm:text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Monitoring kehadiran tim magang</h1>
+        <div className="mt-5 grid grid-cols-2 gap-2.5 sm:mt-8 sm:gap-4 xl:grid-cols-4">
           {loading
             ? [0, 1, 2, 3].map(function (i) { return <SkeletonStatCard key={i} /> })
             : [
@@ -95,9 +95,9 @@ export default function AttendancePage() {
         </FilterBar>
       </section>
 
-      <section className="mt-8 card-hover rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
+      <section className="mt-8 card-hover rounded-[2rem] bg-white border border-slate-200 p-5 sm:p-5 sm:p-8 lg:p-10 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <h2 className="text-2xl font-black text-slate-900">Grafik kehadiran per mahasiswa</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-slate-900">Grafik kehadiran per mahasiswa</h2>
           <div className="flex flex-wrap gap-3 text-xs font-semibold">
             <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-emerald-500" />Masuk</span>
             <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-amber-500" />Izin</span>
@@ -129,7 +129,7 @@ export default function AttendancePage() {
       </section>
 
       <section className="mt-8">
-        <h2 className="text-2xl lg:text-3xl font-black text-slate-900">Daftar kehadiran sesuai filter</h2>
+        <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Daftar kehadiran sesuai filter</h2>
         <div className="grid-pusat-rapat mt-6">
           {loading
             ? [0, 1, 2].map(function (i) { return <div key={i} className="kolom-kartu-rapat"><SkeletonAttendanceCard /></div> })

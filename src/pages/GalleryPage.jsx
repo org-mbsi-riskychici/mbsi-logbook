@@ -54,10 +54,10 @@ export default function GalleryPage() {
 
   return (
     <div>
-      <section className="rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
+      <section className="rounded-[2rem] bg-white border border-slate-200 p-5 sm:p-8 lg:p-10 shadow-sm">
         <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Galeri dokumentasi</p>
-        <h1 className="mt-2 text-3xl lg:text-4xl font-black text-slate-900">Foto dan video kegiatan magang</h1>
-        <p className="mt-3 text-slate-600 max-w-2xl">Setiap kartu mewakili satu kegiatan. Klik media untuk melihat detail.</p>
+        <h1 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Foto dan video kegiatan magang</h1>
+        <p className="mt-2 text-sm text-slate-600 max-w-2xl sm:mt-3 sm:text-base">Setiap kartu mewakili satu kegiatan. Klik media untuk melihat detail.</p>
       </section>
 
       <section className="mt-6">

@@ -22,15 +22,21 @@ export const btnSmall = 'px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:round
 export const cardCls = 'card-hover bg-white rounded-3xl border border-slate-200 shadow-sm'
 
 export function StatCard(props) {
+  const rapat = props.rapat
+  const clsWadah = rapat ? ' p-3 sm:p-6' : ' p-4 sm:p-6'
+  const clsLabel = (rapat ? 'text-[11px] leading-snug sm:text-sm' : 'text-xs sm:text-sm') + ' text-slate-500'
+  const clsLabelRapat = 'text-[11px] leading-snug font-semibold text-slate-500 sm:hidden'
+  const clsValue = (rapat ? 'mt-1 text-xl sm:text-3xl' : 'mt-2 text-2xl sm:text-3xl') + ' font-black text-bsi-900'
+  const clsSub = (rapat ? 'hidden sm:block ' : '') + 'mt-1 text-[11px] leading-snug sm:text-xs text-slate-500'
   return (
-    <div className={cardCls + ' p-6'}>
-      <p className="text-sm text-slate-500">{props.label}</p>
-      <p className="mt-2 text-3xl font-black text-bsi-900">{props.value}</p>
-      {props.sub ? <p className="mt-1 text-xs text-slate-500">{props.sub}</p> : null}
+    <div className={cardCls + clsWadah}>
+      {props.labelRapat ? <p className={clsLabelRapat}>{props.labelRapat}</p> : null}
+      <p className={clsLabel + (props.labelRapat ? ' hidden sm:block' : '')}>{props.label}</p>
+      <p className={clsValue}>{props.value}</p>
+      {props.sub ? <p className={clsSub}>{props.sub}</p> : null}
     </div>
   )
 }
-
 export function EmptyState(props) {
   return (
     <div className={cardCls + ' border-dashed p-10 text-center'}>
