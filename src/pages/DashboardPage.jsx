@@ -672,7 +672,7 @@ async function submitHadir(e) {
   return (
     <div>
       <section className="card-hover rounded-[2rem] bg-white border border-slate-200 p-5 sm:p-8 lg:p-10 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-6">
+        <div className="flex flex-wrap items-center justify-between gap-4 sm:gap-6">
           <div>
             <div className="flex flex-wrap items-center gap-4 sm:gap-6">
 <div className="avatar-kepala-dash"><Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl" onClick={function () { gantiTab('profil') }} title="Kelola foto profil" /></div>
@@ -683,7 +683,7 @@ async function submitHadir(e) {
           </div>
         </div>
         </div>
-<div className="mt-8 flex flex-wrap gap-2">
+<div className="flex flex-wrap gap-2 sm:mt-8">
           <button onClick={function () { gantiTab('logbook') }} className={tabCls('logbook')}>Logbook</button>
           <button onClick={function () { gantiTab('galeri') }} className={tabCls('galeri')}>Galeri</button>
           <button onClick={function () { gantiTab('absen') }} className={tabCls('absen')}>Daftar Hadir</button>
@@ -829,7 +829,7 @@ async function submitHadir(e) {
                           <input className={inputCls} value={it.driveLink} onChange={function (e) { patchItem(i, { driveLink: e.target.value }) }} placeholder="Link Google Drive untuk unduhan (opsional)" />
                         </div>
                       ) : (
-                        <FileInput accept="image/*" fileName={it.file ? it.file.name : ''} label="Klik untuk pilih foto" hint="Foto JPG, PNG, atau HEIC otomatis dikonversi ke WebP ringan."
+                        <FileInput accept="image/*" fileName={it.file ? it.file.name : ''} label="Klik untuk pilih foto" hint="Foto JPG, PNG, atau HEIC otomatis dikonversi ke WebP."
                           onChange={function (e) { onItemFile(i, e.target.files[0]) }} />
                       )}
                       <label className={'flex items-start gap-3 rounded-2xl border p-3 cursor-pointer w-full ' + (it.preview ? (it.show ? 'border-gold-500 bg-gold-500/5' : 'border-slate-200') : 'border-slate-200 bg-slate-50 opacity-50 cursor-not-allowed')}>
@@ -906,7 +906,7 @@ async function submitHadir(e) {
                        <input className={inputCls} value={galDriveLink} onChange={function (e) { setGalDriveLink(e.target.value) }} placeholder="Link Google Drive untuk unduhan (opsional)" />
                     </div>
                   ) : (
-                    <FileInput accept="image/*" fileName={galForm.file ? galForm.file.name : ''} label="Klik untuk pilih foto" hint="Foto JPG, PNG, atau HEIC otomatis dikonversi ke WebP ringan."
+                    <FileInput accept="image/*" fileName={galForm.file ? galForm.file.name : ''} label="Klik untuk pilih foto" hint="Foto JPG, PNG, atau HEIC otomatis dikonversi ke WebP."
                       onChange={async function (e) {
                         const f = e.target.files[0]
                         if (!f) return

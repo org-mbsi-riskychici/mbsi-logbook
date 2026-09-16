@@ -46,8 +46,8 @@ export default function HomePage() {
               <Link to="/galeri" className="px-4 py-2.5 rounded-xl bg-white/10 text-white text-sm font-bold hover:bg-white/20 sm:px-6 sm:py-3 sm:rounded-2xl sm:text-base">Lihat Galeri</Link>
               <Link to="/absen" className="px-4 py-2.5 rounded-xl bg-white/10 text-white text-sm font-bold hover:bg-white/20 sm:px-6 sm:py-3 sm:rounded-2xl sm:text-base">Daftar Hadir</Link>
               {mahasiswa
-                ? <Link to="/dashboard" className="px-4 py-2.5 rounded-xl bg-white text-bsi-900 text-sm font-bold hover:bg-slate-100 sm:px-6 sm:py-3 sm:rounded-2xl sm:text-base">Buka Dashboard</Link>
-                : <Link to="/login" className="px-4 py-2.5 rounded-xl bg-white text-bsi-900 text-sm font-bold hover:bg-slate-100 sm:px-6 sm:py-3 sm:rounded-2xl sm:text-base">Masuk Intern</Link>}
+                ? <Link to="/dashboard" className="px-4 py-2.5 rounded-xl bg-[#ffffff] text-[#135033] text-sm font-bold hover:bg-[#f1f5f9] sm:px-6 sm:py-3 sm:rounded-2xl sm:text-base">Buka Dashboard</Link>
+                : <Link to="/login" className="px-4 py-2.5 rounded-xl bg-[#ffffff] text-[#135033] text-sm font-bold hover:bg-[#f1f5f9] sm:px-6 sm:py-3 sm:rounded-2xl sm:text-base">Masuk Intern</Link>}
             </div>
           </div>
         </div>

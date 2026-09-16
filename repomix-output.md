@@ -83,14 +83,6 @@ supabase/
   schema.sql
 .env.example
 .gitignore
-apply-fix-dashboard-mobile.cjs
-apply-fix-nama-satu-baris.cjs
-apply-fix-pesan-login.cjs
-apply-fix-proporsional-mobile-v2.cjs
-apply-fix-proporsional-mobile.cjs
-apply-fix-ringkasan-mobile.cjs
-apply-fix-toast-modern.cjs
-apply-fix-tombol-mobile.cjs
 index.html
 package.json
 postcss.config.js
@@ -437,1108 +429,6 @@ R2_ACCESS_KEY_ID=
 R2_SECRET_ACCESS_KEY=
 R2_BUCKET_NAME=mbsi-media
 R2_PUBLIC_BASE_URL=
-```
-
-## File: apply-fix-dashboard-mobile.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-function ada(rel) { return fs.existsSync(path.join(root, rel)) }
-
-console.log('Mulai merapikan dashboard mobile: avatar proporsional, tombol tambah kegiatan ramping, teks pilih file sesuai konteks...')
-console.log('')
-
-/* ===== 1. index.css: avatar header dashboard mengecil proporsional di layar sempit ===== */
-const FILE_CSS = 'src/index.css'
-if (!ada(FILE_CSS)) {
-  console.log('[GAGAL] index.css tidak ditemukan')
-  process.exit(1)
-}
-let css = baca(FILE_CSS)
-const CSS_BLOK = `/* kepala-dash-responsif: avatar header dashboard mengecil proporsional di layar sempit, desktop tetap 96px */
-@media (max-width: 639px) {
-  .avatar-kepala-dash > button, .avatar-kepala-dash > span {
-    width: 56px !important;
-    height: 56px !important;
-    border-radius: 16px !important;
-  }
-  .avatar-kepala-dash img { border-radius: 16px !important; }
-  .avatar-kepala-dash > button > span, .avatar-kepala-dash > span > span {
-    font-size: 20px !important;
-  }
-}
-`
-if (css.includes('kepala-dash-responsif')) {
-  console.log('[SUDAH ADA] CSS kepala-dash-responsif di index.css')
-} else {
-  simpan(FILE_CSS, css.trimEnd() + '\n\n' + CSS_BLOK)
-  console.log('[BERHASIL] CSS avatar responsif ditambahkan di index.css')
-}
-
-/* ===== 2. controls.jsx: FileInput menerima label kustom ===== */
-const FILE_C = 'src/components/controls.jsx'
-if (!ada(FILE_C)) {
-  console.log('[GAGAL] controls.jsx tidak ditemukan')
-  process.exit(1)
-}
-let c = baca(FILE_C)
-const TEKS_LAMA = "{props.fileName || 'Klik untuk pilih foto atau video'}"
-const TEKS_BARU = "{props.fileName || props.label || 'Klik untuk pilih foto atau video'}"
-if (c.includes('props.label ||')) {
-  console.log('[SUDAH ADA] Dukungan label kustom pada FileInput')
-} else if (c.includes(TEKS_LAMA)) {
-  c = c.replace(TEKS_LAMA, TEKS_BARU)
-  simpan(FILE_C, c)
-  console.log('[BERHASIL] FileInput kini menerima prop label untuk teks konteks foto atau video')
-} else {
-  console.log('[TIDAK KETEMU] Pola teks default FileInput di controls.jsx')
-}
-
-/* ===== 3. DashboardPage.jsx: bungkus avatar, rapikan tombol tambah kegiatan, teks file sesuai mode ===== */
-const FILE_D = 'src/pages/DashboardPage.jsx'
-if (!ada(FILE_D)) {
-  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
-  process.exit(1)
-}
-let d = baca(FILE_D)
-let berubahD = false
-
-/* 3a. Bungkus avatar header dengan kelas responsif */
-const reAvatar = /<Avatar src=\{mahasiswa\.foto_profil \|\| null\} nama=\{mahasiswa\.nama\} size="xl"\s+onClick=\{function \(\) \{ gantiTab\('profil'\) \}\} title="Kelola foto profil" \/>/
-if (d.includes('avatar-kepala-dash')) {
-  console.log('[SUDAH ADA] Pembungkus avatar-kepala-dash')
-} else if (reAvatar.test(d)) {
-  d = d.replace(reAvatar, '<div className="avatar-kepala-dash"><Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl" onClick={function () { gantiTab(\'profil\') }} title="Kelola foto profil" /></div>')
-  berubahD = true
-  console.log('[BERHASIL] Avatar header dashboard dibungkus kelas responsif')
-} else {
-  console.log('[TIDAK KETEMU] Pola Avatar header dashboard')
-}
-
-/* 3b. Baris tombol tambah kegiatan: flex wrap plus tombol satu baris */
-const reTambah = /([ \t]*)<div className="flex items-center justify-between">\n[ \t]*<p className="text-sm font-semibold text-slate-700">Rincian kegiatan hari ini <span className="text-red-500">\*<\/span><\/p>\n[ \t]*<button type="button" onClick=\{function \(\) \{ setItems\(function \(p\) \{ return p\.concat\(\[newItem\(\)\]\) \}\) \}\} className=\{btnSmall \+ ' bg-bsi-100 text-bsi-900 hover:bg-bsi-200'\}>\+ Tambah kegiatan<\/button>\n[ \t]*<\/div>/
-if (d.includes('whitespace-nowrap shrink-0 bg-bsi-100')) {
-  console.log('[SUDAH ADA] Tombol tambah kegiatan versi ramping')
-} else if (reTambah.test(d)) {
-  d = d.replace(reTambah, function (match, ind) {
-    const BLOK = `<div className="flex flex-wrap items-center justify-between gap-2">
-<p className="text-sm font-semibold text-slate-700">Rincian kegiatan hari ini <span className="text-red-500">*</span></p>
-<button type="button" onClick={function () { setItems(function (p) { return p.concat([newItem()]) }) }} className={btnSmall + ' whitespace-nowrap shrink-0 bg-bsi-100 text-bsi-900 hover:bg-bsi-200'}>+ Tambah kegiatan</button>
-</div>`
-    return BLOK.split('\n').map(function (l) { return l.length ? ind + l : l }).join('\n')
-  })
-  berubahD = true
-  console.log('[BERHASIL] Baris tambah kegiatan memakai flex wrap dan tombol satu baris')
-} else {
-  console.log('[TIDAK KETEMU] Pola baris tombol tambah kegiatan')
-}
-
-/* 3c. Teks FileInput sesuai konteks foto atau video */
-const pasanganFile = [
-  ['accept="video/*" fileName={it.file ? it.file.name : \'\' }', null],
-]
-const gantiFile = [
-  {
-    lama: 'accept="video/*" fileName={it.file ? it.file.name : \'\'}',
-    baru: 'accept="video/*" fileName={it.file ? it.file.name : \'\'} label="Klik untuk pilih video" hint="Video maks 50 MB. Format MP4, MOV, WebM, atau MKV."'
-  },
-  {
-    lama: 'accept="image/*" fileName={it.file ? it.file.name : \'\'}',
-    baru: 'accept="image/*" fileName={it.file ? it.file.name : \'\'} label="Klik untuk pilih foto" hint="Foto JPG, PNG, atau HEIC otomatis dikonversi ke WebP ringan."'
-  },
-  {
-    lama: 'accept="video/*" fileName={galForm.file ? galForm.file.name : \'\'}',
-    baru: 'accept="video/*" fileName={galForm.file ? galForm.file.name : \'\'} label="Klik untuk pilih video" hint="Video maks 50 MB. Format MP4, MOV, WebM, atau MKV."'
-  },
-  {
-    lama: 'accept="image/*" fileName={galForm.file ? galForm.file.name : \'\'}',
-    baru: 'accept="image/*" fileName={galForm.file ? galForm.file.name : \'\'} label="Klik untuk pilih foto" hint="Foto JPG, PNG, atau HEIC otomatis dikonversi ke WebP ringan."'
-  }
-]
-let jumlahFile = 0
-for (let i = 0; i < gantiFile.length; i++) {
-  if (d.includes(gantiFile[i].baru)) { jumlahFile++; continue }
-  if (d.includes(gantiFile[i].lama)) {
-    d = d.replace(gantiFile[i].lama, gantiFile[i].baru)
-    jumlahFile++
-    berubahD = true
-  }
-}
-console.log(jumlahFile === 4 ? '[BERHASIL] Empat FileInput memakai teks sesuai konteks foto atau video' : '[INFO] FileInput menyesuaikan: ' + jumlahFile + ' dari 4 lokasi')
-
-if (berubahD) simpan(FILE_D, d)
-
-/* ===== 4. Verifikasi ===== */
-console.log('')
-console.log('Verifikasi:')
-const c2 = baca(FILE_CSS)
-const k2 = baca(FILE_C)
-const d2 = baca(FILE_D)
-console.log((c2.includes('kepala-dash-responsif') ? '[OK] ' : '[BELUM] ') + 'CSS avatar responsif tersedia')
-console.log((d2.includes('avatar-kepala-dash') ? '[OK] ' : '[BELUM] ') + 'Avatar header dashboard dibungkus kelas responsif')
-console.log((d2.includes('whitespace-nowrap shrink-0 bg-bsi-100') ? '[OK] ' : '[BELUM] ') + 'Tombol tambah kegiatan satu baris dan tidak melebar')
-console.log((k2.includes('props.label ||') ? '[OK] ' : '[BELUM] ') + 'FileInput mendukung label kustom')
-console.log((d2.split('label="Klik untuk pilih video"').length - 1 === 2 ? '[OK] ' : '[BELUM] ') + 'Dua pemilih video memakai teks video')
-console.log((d2.split('label="Klik untuk pilih foto"').length - 1 === 2 ? '[OK] ' : '[BELUM] ') + 'Dua pemilih foto memakai teks foto')
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Penyesuaian yang diterapkan:')
-console.log('1. Avatar header dashboard dibungkus kelas avatar-kepala-dash. Di bawah 640 piksel ukurannya dipangkas dari 96 menjadi 56 piksel dengan radius 16 piksel dan ukuran inisial yang ikut mengecil, sehingga kepala kartu tidak lagi didominasi foto besar. Di 640 piksel ke atas tidak ada aturan yang aktif, jadi tampilan desktop tetap 96 piksel seperti semula.')
-console.log('2. Baris label Rincian kegiatan hari ini dan tombol tambah kegiatan kini memakai flex wrap dengan gap, dan tombolnya diberi whitespace-nowrap plus shrink-0. Hasilnya di layar sempit tombol turun sendiri ke baris kedua sebagai pill satu baris yang ramping, bukan blok hijau tinggi dengan teks terlipat seperti lampiran.')
-console.log('3. FileInput menerima prop label, dan keempat pemakainya kini berbicara sesuai konteks: mode video menyapa Klik untuk pilih video dengan hint format video dan batas 50 MB, mode foto menyapa Klik untuk pilih foto dengan hint konversi JPG PNG HEIC ke WebP. Tidak ada lagi teks campur foto atau video pada konteks tunggal.')
-console.log('4. Nama file yang sudah dipilih tetap menang atas label, sehingga setelah user memilih file yang tampil adalah nama filenya seperti sebelumnya.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Buka dashboard di ponsel: foto profil di kartu header kini seukuran avatar besar yang proporsional berdampingan dengan nama, tidak mendominasi sepertiga kartu.')
-console.log('2. Gulir ke form logbook: tombol + Tambah kegiatan tampil sebagai pill satu baris di bawah label, tidak lagi melebar dan bertingkat dua baris.')
-console.log('3. Pada kegiatan mode Foto: kotak putus putus berbunyi Klik untuk pilih foto dengan hint konversi WebP.')
-console.log('4. Ganti kegiatan ke mode Video: kotak berubah berbunyi Klik untuk pilih video dengan hint batas 50 MB.')
-console.log('5. Ulangi pada form galeri untuk kedua mode: teks ikut berubah sesuai jenis media.')
-console.log('6. Buka dashboard di desktop: avatar header tetap besar 96 piksel dan seluruh tata letak tidak berubah.')
-```
-
-## File: apply-fix-nama-satu-baris.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-function ada(rel) { return fs.existsSync(path.join(root, rel)) }
-
-console.log('Mulai membuat nama header dashboard satu baris dan proporsional dengan foto profil...')
-console.log('')
-
-/* ===== 1. DashboardPage.jsx: truncate pada nama dan prodi, gap mobile dirapatkan ===== */
-const FILE_D = 'src/pages/DashboardPage.jsx'
-if (!ada(FILE_D)) {
-  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
-  process.exit(1)
-}
-let d = baca(FILE_D)
-let berubahD = false
-
-const H1_LAMA = '<h1 className="text-2xl lg:text-3xl font-black text-slate-900">{mahasiswa.nama}</h1>'
-const H1_BARU = '<h1 className="truncate text-lg sm:text-2xl lg:text-3xl font-black text-slate-900">{mahasiswa.nama}</h1>'
-if (d.includes(H1_BARU)) {
-  console.log('[SUDAH ADA] Nama header memakai truncate dan ukuran responsif')
-} else if (d.includes(H1_LAMA)) {
-  d = d.replace(H1_LAMA, H1_BARU)
-  berubahD = true
-  console.log('[BERHASIL] Nama header dikunci satu baris dengan truncate dan ukuran mobile lebih kecil')
-} else {
-  console.log('[TIDAK KETEMU] Pola h1 nama di header dashboard')
-}
-
-const GAP_LAMA = '<div className="flex flex-wrap items-center gap-6">'
-const GAP_BARU = '<div className="flex flex-wrap items-center gap-4 sm:gap-6">'
-if (d.includes(GAP_BARU)) {
-  console.log('[SUDAH ADA] Gap avatar dan teks responsif')
-} else if (d.includes(GAP_LAMA)) {
-  d = d.replace(GAP_LAMA, GAP_BARU)
-  berubahD = true
-  console.log('[BERHASIL] Jarak avatar dan teks dirapatkan menjadi 16px di layar sempit')
-} else {
-  console.log('[TIDAK KETEMU] Pola wadah flex avatar dan teks di header')
-}
-
-const PRODI_LAMA = '{mahasiswa.prodi ? <p className="text-sm text-slate-500">{mahasiswa.prodi}</p> : null}'
-const PRODI_BARU = '{mahasiswa.prodi ? <p className="truncate text-sm text-slate-500">{mahasiswa.prodi}</p> : null}'
-if (d.includes(PRODI_BARU)) {
-  console.log('[SUDAH ADA] Baris prodi memakai truncate')
-} else if (d.includes(PRODI_LAMA)) {
-  d = d.replace(PRODI_LAMA, PRODI_BARU)
-  berubahD = true
-  console.log('[BERHASIL] Baris prodi dikunci satu baris dengan truncate')
-} else {
-  console.log('[TIDAK KETEMU] Pola baris prodi di header dashboard')
-}
-
-if (berubahD) simpan(FILE_D, d)
-
-/* ===== 2. index.css: ukuran mobile nama diperkecil dan semua baris teks dikunci satu baris ===== */
-const FILE_CSS = 'src/index.css'
-if (!ada(FILE_CSS)) {
-  console.log('[GAGAL] index.css tidak ditemukan')
-  process.exit(1)
-}
-let css = baca(FILE_CSS)
-let berubahC = false
-
-const H1_CSS_LAMA = '.avatar-kepala-dash ~ div h1 { font-size: 1.25rem !important; line-height: 1.75rem !important; }'
-const H1_CSS_BARU = '.avatar-kepala-dash ~ div h1 { font-size: 1.125rem !important; line-height: 1.625rem !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }'
-const P_CSS_LAMA = '.avatar-kepala-dash ~ div p { font-size: 0.75rem !important; }'
-const P_CSS_BARU = '.avatar-kepala-dash ~ div p { font-size: 0.75rem !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }'
-
-if (css.includes(H1_CSS_BARU)) {
-  console.log('[SUDAH ADA] Aturan nama satu baris di index.css')
-} else if (css.includes(H1_CSS_LAMA)) {
-  css = css.replace(H1_CSS_LAMA, H1_CSS_BARU)
-  berubahC = true
-  console.log('[BERHASIL] Aturan nama mobile diperkecil menjadi 18px dan dikunci satu baris')
-} else {
-  css = css.trimEnd() + '\n\n/* nama-satu-baris-v1: teks header dashboard satu baris proporsional di layar sempit */\n@media (max-width: 639px) {\n  ' + H1_CSS_BARU + '\n  ' + P_CSS_BARU + '\n}\n'
-  berubahC = true
-  console.log('[BERHASIL] Blok nama-satu-baris-v1 ditambahkan (aturan lama tidak ditemukan)')
-}
-
-if (css.includes(P_CSS_BARU)) {
-  console.log('[SUDAH ADA] Aturan NIM dan prodi satu baris')
-} else if (css.includes(P_CSS_LAMA)) {
-  css = css.replace(P_CSS_LAMA, P_CSS_BARU)
-  berubahC = true
-  console.log('[BERHASIL] Baris NIM dan prodi dikunci satu baris dengan ellipsis')
-} else {
-  console.log('[INFO] Aturan p lama tidak ditemukan, lewati (sudah tercakup blok baru bila dipasang)')
-}
-
-if (berubahC) simpan(FILE_CSS, css)
-
-/* ===== 3. Verifikasi ===== */
-console.log('')
-console.log('Verifikasi:')
-const d2 = baca(FILE_D)
-const c2 = baca(FILE_CSS)
-console.log((d2.includes(H1_BARU) ? '[OK] ' : '[BELUM] ') + 'Nama header memakai truncate dan ukuran responsif')
-console.log((d2.includes(GAP_BARU) ? '[OK] ' : '[BELUM] ') + 'Jarak avatar dan teks responsif di mobile')
-console.log((d2.includes(PRODI_BARU) ? '[OK] ' : '[BELUM] ') + 'Baris prodi memakai truncate')
-console.log((c2.includes(H1_CSS_BARU) ? '[OK] ' : '[BELUM] ') + 'CSS nama satu baris 18px terpasang')
-console.log((c2.includes(P_CSS_BARU) ? '[OK] ' : '[BELUM] ') + 'CSS NIM dan prodi satu baris terpasang')
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Penyebab dan cara kerja perbaikan:')
-console.log('1. Nama melipat dua baris karena h1 tidak punya aturan pemenggalan, sehingga berapa pun panjang nama akan membungkus, dan ukuran 20px sisa aturan sebelumnya masih terlalu besar untuk ruang di samping foto 56px.')
-console.log('2. Kini h1 memakai kelas truncate yaitu gabungan white-space nowrap, overflow hidden, dan text-overflow ellipsis, jadi nama selalu satu baris; nama yang sangat panjang berakhir dengan titik tiga yang rapi, dan nama lengkapnya tetap bisa dibaca utuh di tab Profil.')
-console.log('3. Ukuran huruf nama di mobile diturunkan menjadi 18px lewat kelas text-lg dan aturan CSS 1.125rem, sehingga satu baris nama plus baris NIM dan prodi membentuk blok teks setinggi kurang lebih 56px, persis menyamai tinggi foto profil di sampingnya.')
-console.log('4. Jarak antara foto dan blok teks dirapatkan dari 24px menjadi 16px khusus di bawah 640px, memberi ruang ekstra bagi nama agar tidak cepat terpotong ellipsis.')
-console.log('5. Baris NIM dan prodi ikut dikunci satu baris dengan ellipsis supaya tinggi blok teks terkendali dan header terlihat ringkas sejajar dengan foto.')
-console.log('6. Wadah teks sudah punya min-w-0 flex-1 sejak awal, jadi truncate bekerja benar di dalam flex dan tidak memaksa kartu melebar keluar layar.')
-console.log('7. Di 640px ke atas seluruh ukuran kembali ke text-2xl dan gap-6, dan di 1024px ke atas kembali ke text-3xl, sehingga tampilan tablet dan desktop identik seperti sebelumnya.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Buka dashboard di ponsel: nama tampil satu baris sejajar dengan foto 56px, diikuti NIM dan prodi masing masing satu baris.')
-console.log('2. Uji dengan akun bernama sangat panjang: nama terpotong rapi dengan titik tiga di ujung, tidak lagi turun ke baris kedua.')
-console.log('3. Buka tab Profil: nama lengkap tetap terbaca utuh tanpa pemotongan karena halaman profil tidak memakai truncate.')
-console.log('4. Lebarkan jendela ke tablet dan desktop: nama kembali besar dua ukuran di atasnya dan tata letak header tidak berubah.')
-console.log('5. Aktifkan mode gelap: warna teks menyesuaikan seperti biasa karena hanya kelas ukuran dan pemenggalan yang berubah.')
-```
-
-## File: apply-fix-pesan-login.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-
-console.log('Mulai mengganti pesan gagal login menjadi keterangan yang mudah dipahami...')
-console.log('')
-
-const FILE_L = 'src/pages/LoginPage.jsx'
-if (!fs.existsSync(path.join(root, FILE_L))) {
-  console.log('[GAGAL] LoginPage.jsx tidak ditemukan')
-  process.exit(1)
-}
-let l = baca(FILE_L)
-let berubah = false
-
-if (l.includes('function pesanErrorLogin(')) {
-  console.log('[SUDAH ADA] Pemeta pesan gagal login di LoginPage.jsx')
-} else {
-  /* ===== 1. Impor SizedIcon untuk ikon silang pada kotak error ===== */
-  const IMPOR_LAMA = "import { EyeToggle } from '../components/icons.jsx'"
-  const IMPOR_BARU = "import { EyeToggle, SizedIcon } from '../components/icons.jsx'"
-  if (l.includes(IMPOR_BARU)) {
-    console.log('[SUDAH ADA] Impor SizedIcon di LoginPage.jsx')
-  } else if (l.includes(IMPOR_LAMA)) {
-    l = l.replace(IMPOR_LAMA, IMPOR_BARU)
-    berubah = true
-    console.log('[BERHASIL] Impor SizedIcon ditambahkan di LoginPage.jsx')
-  } else {
-    console.log('[TIDAK KETEMU] Pola impor icons di LoginPage.jsx')
-  }
-
-  /* ===== 2. Fungsi pemeta pesan error Supabase menjadi bahasa manusia ===== */
-  const FUNGSI = `function pesanErrorLogin(err) {
-  const pesan = String((err && err.message) || '')
-  const rendah = pesan.toLowerCase()
-  if (rendah.indexOf('invalid login credentials') !== -1) {
-    return 'NIM atau kode akses yang kamu masukkan tidak cocok dengan data kami. Periksa kembali penulisannya, pastikan tidak ada spasi berlebih, lalu coba lagi.'
-  }
-  if (rendah.indexOf('not confirmed') !== -1) {
-    return 'Akun untuk NIM ini belum diaktifkan. Hubungi admin tim magang untuk mengaktifkan akunmu terlebih dahulu.'
-  }
-  if (rendah.indexOf('too many requests') !== -1 || rendah.indexOf('try again after') !== -1 || rendah.indexOf('rate limit') !== -1) {
-    return 'Terlalu banyak percobaan masuk dalam waktu singkat demi keamanan. Tunggu sekitar satu menit, lalu coba lagi.'
-  }
-  if (rendah.indexOf('fetch') !== -1 || rendah.indexOf('network') !== -1 || rendah.indexOf('failed to load') !== -1 || (typeof navigator !== 'undefined' && !navigator.onLine)) {
-    return 'Tidak bisa terhubung ke server. Periksa koneksi internetmu, lalu coba lagi.'
-  }
-  if (rendah.indexOf('email') !== -1 && rendah.indexOf('format') !== -1) {
-    return 'Format NIM tidak terbaca. Masukkan NIM berupa angka tanpa spasi, contoh: 24070041.'
-  }
-  if (pesan) return 'Gagal masuk: ' + pesan + '. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
-  return 'Terjadi kesalahan tidak terduga saat masuk. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
-}
-`
-  const ANCHOR_FN = 'export default function LoginPage() {'
-  if (l.includes(ANCHOR_FN)) {
-    l = l.replace(ANCHOR_FN, FUNGSI + ANCHOR_FN)
-    berubah = true
-    console.log('[BERHASIL] Fungsi pesanErrorLogin dipasang di LoginPage.jsx')
-  } else {
-    console.log('[TIDAK KETEMU] Anchor export default function LoginPage')
-  }
-
-  /* ===== 3. Catch submit memakai pemeta pesan ===== */
-  if (l.includes('setError(pesanErrorLogin(err))')) {
-    console.log('[SUDAH ADA] Catch submit memakai pesanErrorLogin')
-  } else if (l.includes('setError(err.message)')) {
-    l = l.replace('setError(err.message)', 'setError(pesanErrorLogin(err))')
-    berubah = true
-    console.log('[BERHASIL] Catch submit kini memakai pesanErrorLogin')
-  } else {
-    console.log('[TIDAK KETEMU] Pola setError(err.message) di submit')
-  }
-
-  /* ===== 4. Kotak error berstruktur: ikon, judul, penjelasan ===== */
-  const reKotak = /([ \t]*)\{error \? <p className="mt-3 rounded-2xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">\{error\}<\/p> : null\}/
-  if (l.includes('<p className="font-bold">Gagal masuk</p>')) {
-    console.log('[SUDAH ADA] Kotak error berstruktur di LoginPage.jsx')
-  } else if (reKotak.test(l)) {
-    l = l.replace(reKotak, function (match, ind) {
-      const BLOK = `{error ? (
-  <div className="mt-3 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-    <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-red-100 text-red-600">
-      <SizedIcon name="close" size={12} />
-    </span>
-    <div className="min-w-0">
-      <p className="font-bold">Gagal masuk</p>
-      <p className="mt-1 leading-relaxed">{error}</p>
-    </div>
-  </div>
-) : null}`
-      return BLOK.split('\n').map(function (baris) { return baris.length ? ind + baris : baris }).join('\n')
-    })
-    berubah = true
-    console.log('[BERHASIL] Kotak error diganti menjadi versi berstruktur dengan judul dan penjelasan')
-  } else {
-    console.log('[TIDAK KETEMU] Pola kotak error lama di LoginPage.jsx')
-  }
-}
-
-if (berubah) simpan(FILE_L, l)
-
-/* ===== Verifikasi ===== */
-console.log('')
-console.log('Verifikasi:')
-const l2 = baca(FILE_L)
-console.log((l2.includes("import { EyeToggle, SizedIcon }") ? '[OK] ' : '[BELUM] ') + 'Impor SizedIcon tersedia')
-console.log((l2.includes('function pesanErrorLogin(') ? '[OK] ' : '[BELUM] ') + 'Fungsi pemeta pesan tersedia')
-console.log((l2.includes('setError(pesanErrorLogin(err))') ? '[OK] ' : '[BELUM] ') + 'Catch submit memakai pemeta pesan')
-console.log((l2.includes('<p className="font-bold">Gagal masuk</p>') ? '[OK] ' : '[BELUM] ') + 'Kotak error berstruktur judul dan penjelasan')
-console.log((!l2.includes('{error ? <p className="mt-3 rounded-2xl bg-red-50') ? '[OK] ' : '[BELUM] ') + 'Kotak error lama sudah diganti')
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Yang berubah bagi user:')
-console.log('1. Salah NIM atau kode: muncul judul Gagal masuk plus kalimat NIM atau kode akses yang kamu masukkan tidak cocok dengan data kami, lengkap dengan arahan memeriksa penulisan dan spasi, bukan lagi Invalid login credentials.')
-console.log('2. Akun belum diaktifkan: user diberitahu menghubungi admin tim magang, bukan pesan konfirmasi email yang membingungkan.')
-console.log('3. Percobaan beruntun: user diminta menunggu sekitar satu menit, sesuai perilaku pembatasan percobaan dari server.')
-console.log('4. Putus jaringan: user diarahkan memeriksa koneksi internet, bukan pesan fetch gagal yang teknis.')
-console.log('5. Kotak error kini punya ikon silang dalam lingkaran, judul tebal, dan penjelasan berbaris longgar, sehingga langsung terbaca sebagai panduan bukan kode error.')
-console.log('6. Mode gelap tetap rapi karena seluruh kelas warna kotak (bg-red-50, bg-red-100, text-red-700) sudah punya pengganti gelap di index.css.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Buka halaman login, isi NIM benar tetapi kode akses salah: kotak merah menampilkan judul Gagal masuk dan penjelasan NIM atau kode akses tidak cocok.')
-console.log('2. Matikan wifi atau data lalu coba masuk: muncul pesan periksa koneksi internet.')
-console.log('3. Coba masuk salah berulang kali dengan cepat: muncul pesan tunggu sekitar satu menit.')
-console.log('4. Uji di mode gelap: kotak error tetap kontras dan terbaca.')
-console.log('5. Masuk dengan data benar: tetap langsung menuju dashboard tanpa perubahan perilaku.')
-```
-
-## File: apply-fix-proporsional-mobile-v2.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-function ada(rel) { return fs.existsSync(path.join(root, rel)) }
-
-console.log('Mulai perbaikan lanjutan: avatar profil, grid statistik, pembungkus iframe, dan kontrol pemutar video di layar sempit...')
-console.log('')
-
-/* ===== 1. DashboardPage.jsx: bungkus avatar 2xl dan beri kelas grid statistik ===== */
-const FILE_D = 'src/pages/DashboardPage.jsx'
-if (!ada(FILE_D)) {
-  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
-  process.exit(1)
-}
-let d = baca(FILE_D)
-let berubahD = false
-
-const reAvatar = /<Avatar src=\{mahasiswa\.foto_profil\s*\|\|\s*null\} nama=\{mahasiswa\.nama\} size="2xl"\s*\/>/
-if (d.includes('avatar-profil-tab')) {
-  console.log('[SUDAH ADA] Pembungkus avatar-profil-tab')
-} else if (reAvatar.test(d)) {
-  d = d.replace(reAvatar, '<div className="avatar-profil-tab"><Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="2xl" /></div>')
-  berubahD = true
-  console.log('[BERHASIL] Avatar 2xl di tab profil dibungkus kelas responsif')
-} else {
-  console.log('[TIDAK KETEMU] Pola Avatar size 2xl di tab profil')
-}
-
-const reStats = /<div className="mt-4 grid grid-cols-3 gap-4">/
-if (d.includes('stats-profil-grid')) {
-  console.log('[SUDAH ADA] Kelas stats-profil-grid pada grid statistik')
-} else if (reStats.test(d)) {
-  d = d.replace(reStats, '<div className="stats-profil-grid mt-4 grid grid-cols-3 gap-4">')
-  berubahD = true
-  console.log('[BERHASIL] Grid statistik profil diberi kelas responsif')
-} else {
-  console.log('[TIDAK KETEMU] Pola grid statistik profil')
-}
-
-if (berubahD) simpan(FILE_D, d)
-
-/* ===== 2. cards.jsx: bungkus iframe Drive dengan wadah rasio aspek ===== */
-const FILE_C = 'src/components/cards.jsx'
-if (!ada(FILE_C)) {
-  console.log('[GAGAL] cards.jsx tidak ditemukan')
-  process.exit(1)
-}
-let c = baca(FILE_C)
-let berubahC = false
-
-const reIframeLog = /<iframe key=\{it\.media_path\} src=\{drivePreviewUrl\(it\.media_path\)\} title=\{it\.judul\} allow="autoplay; encrypted-media; fullscreen" allowFullScreen className="aspect-video w-full rounded-2xl border-0 bg-black mb-3"\s*\/>/
-if (c.includes('iframe-video-wrap mb-3')) {
-  console.log('[SUDAH ADA] Pembungkus iframe di LogbookDetail')
-} else if (reIframeLog.test(c)) {
-  c = c.replace(reIframeLog, '<div className="iframe-video-wrap mb-3"><iframe key={it.media_path} src={drivePreviewUrl(it.media_path)} title={it.judul} allow="autoplay; encrypted-media; fullscreen" allowFullScreen className="aspect-video w-full rounded-2xl border-0 bg-black" /></div>')
-  berubahC = true
-  console.log('[BERHASIL] Iframe Drive di LogbookDetail dibungkus wadah rasio aspek')
-} else {
-  console.log('[TIDAK KETEMU] Pola iframe Drive di LogbookDetail')
-}
-
-const reIframeGal = /<iframe src=\{drivePreviewUrl\(item\.media_path\)\} title=\{item\.judul\} allow="autoplay; encrypted-media; fullscreen" allowFullScreen className="aspect-video w-full rounded-2xl border-0 bg-black"\s*\/>/
-if (c.includes('<div className="iframe-video-wrap"><iframe src={drivePreviewUrl(item.media_path)')) {
-  console.log('[SUDAH ADA] Pembungkus iframe di GalleryDetail')
-} else if (reIframeGal.test(c)) {
-  c = c.replace(reIframeGal, '<div className="iframe-video-wrap"><iframe src={drivePreviewUrl(item.media_path)} title={item.judul} allow="autoplay; encrypted-media; fullscreen" allowFullScreen className="aspect-video w-full rounded-2xl border-0 bg-black" /></div>')
-  berubahC = true
-  console.log('[BERHASIL] Iframe Drive di GalleryDetail dibungkus wadah rasio aspek')
-} else {
-  console.log('[TIDAK KETEMU] Pola iframe Drive di GalleryDetail')
-}
-
-if (berubahC) simpan(FILE_C, c)
-
-/* ===== 3. PemutarVideo.jsx: bar kontrol responsif supaya tidak terpotong di layar sempit ===== */
-const FILE_P = 'src/components/PemutarVideo.jsx'
-if (!ada(FILE_P)) {
-  console.log('[GAGAL] PemutarVideo.jsx tidak ditemukan')
-  process.exit(1)
-}
-let p = baca(FILE_P)
-let berubahP = false
-
-const BAR_LAMA = 'flex items-center gap-3 bg-gradient-to-t from-black/90 via-black/60 to-transparent px-4 pb-3 pt-10'
-const BAR_BARU = 'flex items-center gap-2 sm:gap-3 bg-gradient-to-t from-black/90 via-black/60 to-transparent px-3 sm:px-4 pb-3 pt-10'
-if (p.includes(BAR_BARU)) {
-  console.log('[SUDAH ADA] Bar kontrol versi responsif')
-} else if (p.includes(BAR_LAMA)) {
-  p = p.replace(BAR_LAMA, BAR_BARU)
-  berubahP = true
-  console.log('[BERHASIL] Bar kontrol diper rapat di layar sempit')
-} else {
-  console.log('[TIDAK KETEMU] Pola bar kontrol PemutarVideo')
-}
-
-const WAKTU_LAMA = 'className="min-w-[84px] shrink-0 text-center text-[11px] font-semibold tabular-nums text-slate-200"'
-const WAKTU_BARU = 'className="min-w-[64px] sm:min-w-[84px] shrink-0 text-center text-[10px] sm:text-[11px] font-semibold tabular-nums text-slate-200"'
-if (p.includes(WAKTU_BARU)) {
-  console.log('[SUDAH ADA] Tampilan waktu versi ramping')
-} else if (p.includes(WAKTU_LAMA)) {
-  p = p.replace(WAKTU_LAMA, WAKTU_BARU)
-  berubahP = true
-  console.log('[BERHASIL] Tampilan waktu diperkecil di layar sempit')
-} else {
-  console.log('[TIDAK KETEMU] Pola tampilan waktu PemutarVideo')
-}
-
-const VOL_LAMA = 'className="pemutar-volume h-1 w-16 shrink-0 cursor-pointer appearance-none rounded-full outline-none"'
-const VOL_BARU = 'className="pemutar-volume hidden sm:block h-1 w-16 shrink-0 cursor-pointer appearance-none rounded-full outline-none"'
-if (p.includes(VOL_BARU)) {
-    console.log('[SUDAH ADA] Slider volume disembunyikan di layar sempit')
-} else if (p.includes(VOL_LAMA)) {
-  p = p.replace(VOL_LAMA, VOL_BARU)
-  berubahP = true
-  console.log('[BERHASIL] Slider volume disembunyikan di bawah 640px supaya kontrol tidak terpotong')
-} else {
-  console.log('[TIDAK KETEMU] Pola slider volume PemutarVideo')
-}
-
-if (berubahP) simpan(FILE_P, p)
-
-/* ===== 4. Verifikasi ===== */
-console.log('')
-console.log('Verifikasi:')
-const d2 = baca(FILE_D)
-const c2 = baca(FILE_C)
-const p2 = baca(FILE_P)
-console.log((d2.includes('avatar-profil-tab') ? '[OK] ' : '[BELUM] ') + 'Avatar tab profil dibungkus kelas responsif')
-console.log((d2.includes('stats-profil-grid') ? '[OK] ' : '[BELUM] ') + 'Grid statistik profil diberi kelas responsif')
-console.log((c2.includes('iframe-video-wrap mb-3') ? '[OK] ' : '[BELUM] ') + 'Iframe Drive LogbookDetail dibungkus wadah rasio aspek')
-console.log((c2.includes('<div className="iframe-video-wrap"><iframe src={drivePreviewUrl(item.media_path)') ? '[OK] ' : '[BELUM] ') + 'Iframe Drive GalleryDetail dibungkus wadah rasio aspek')
-console.log((p2.includes(BAR_BARU) ? '[OK] ' : '[BELUM] ') + 'Bar kontrol pemutar video responsif')
-console.log((p2.includes(VOL_BARU) ? '[OK] ' : '[BELUM] ') + 'Slider volume disembunyikan di layar sempit')
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Kenapa script v1 gagal dan apa yang v2 perbaiki:')
-console.log('1. Regex avatar v1 menulis foto_profil tanpa spasi sebelum pipa ganda, padahal file aslimu memakai spasi di kedua sisi. v2 memakai pola longgar sehingga cocok berapapun spasinya.')
-console.log('2. Grid statistik v1 dicari dengan gap-3 padahal markup aslimu gap-4, jadi pengganti kelas tidak pernah menempel. v2 memakai pola yang benar.')
-console.log('3. Pola iframe v1 menebak urutan atribut yang tidak pernah ada di cards.jsx. v2 membaca bentuk asli iframe Drive lengkap dengan atribut key, allow, dan kelasnya, lalu membungkusnya wadah iframe-video-wrap supaya CSS rasio aspek yang sudah terpasang di v1 akhirnya hidup.')
-console.log('4. Penyebab asli kontrol berantakan pada lampiran gambar 2 bukanlah iframe Drive melainkan bar kontrol PemutarVideo: jumlah lebar minimum tombol putar, tampilan waktu 84px, tombol bisu, slider volume 64px, dan tombol layar penuh melebihi lebar modal di ponsel, sehingga slider volume terdorong keluar tepi dan progress bar menyusut menjadi titik.')
-console.log('5. Kini di bawah 640px slider volume disembunyikan (tombol bisu tetap ada), tampilan waktu menyusut menjadi 64px dengan huruf lebih kecil, dan jarak antar kontrol serta padding bar dirapatkan, sehingga progress bar mendapat ruang lega dan seluruh kontrol utuh di dalam bingkai video.')
-console.log('6. Di 640px ke atas semua kontrol kembali lengkap persis seperti sebelumnya, jadi pengalaman desktop tidak berubah.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Buka dashboard di ponsel lalu masuk tab Profil: foto profil kini 96px dengan nama dan NIM yang seimbang, tidak lagi mendominasi kartu.')
-console.log('2. Lihat kotak Ringkasan aktivitas magang: Logbook dan Media berdampingan di baris pertama, Kehadiran melebar penuh di baris kedua, angka tidak terdesak.')
-console.log('3. Buka detail logbook berisi video YouTube di ponsel: bar kontrol menampilkan putar, progress bar panjang, waktu, bisu, dan layar penuh tanpa ada yang terpotong keluar bingkai.')
-console.log('4. Buka detail yang sama di desktop: slider volume kuning kembali muncul dan seluruh kontrol tampil lengkap seperti semula.')
-console.log('5. Buka detail logbook atau galeri berisi video Google Drive: video tetap berasio 16 per 9 di semua lebar layar.')
-```
-
-## File: apply-fix-proporsional-mobile.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-function ada(rel) { return fs.existsSync(path.join(root, rel)) }
-
-console.log('Mulai memperbaiki proporsi teks dashboard, iframe video, avatar profil, dan kotak statistik...')
-console.log('')
-
-/* ===== 1. index.css: teks header dashboard mengecil proporsional, iframe video responsif, avatar profil mengecil ===== */
-const FILE_CSS = 'src/index.css'
-if (!ada(FILE_CSS)) {
-  console.log('[GAGAL] index.css tidak ditemukan')
-  process.exit(1)
-}
-let css = baca(FILE_CSS)
-const CSS_BLOK = `/* proporsional-mobile-v1: teks header dashboard, avatar profil, dan iframe video menyesuaikan layar sempit */
-@media (max-width: 639px) {
-  .avatar-kepala-dash ~ div h1 { font-size: 1.25rem !important; line-height: 1.75rem !important; }
-  .avatar-kepala-dash ~ div p { font-size: 0.75rem !important; }
-  .avatar-kepala-dash ~ div .inline-flex { font-size: 0.625rem !important; padding: 0.25rem 0.5rem !important; }
-  
-  .avatar-profil-tab > button, .avatar-profil-tab > span {
-    width: 96px !important;
-    height: 96px !important;
-    border-radius: 24px !important;
-  }
-  .avatar-profil-tab img { border-radius: 24px !important; }
-  .avatar-profil-tab ~ h2 { font-size: 1.25rem !important; margin-top: 0.75rem !important; }
-  .avatar-profil-tab ~ p { font-size: 0.875rem !important; }
-  
-  .stats-profil-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 0.5rem !important; }
-  .stats-profil-grid > div:last-child { grid-column: span 2 / span 2; }
-  
-  .iframe-video-wrap { position: relative !important; padding-bottom: 56.25% !important; height: 0 !important; overflow: hidden !important; border-radius: 1rem !important; }
-  .iframe-video-wrap iframe { position: absolute !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; border: 0 !important; }
-}
-@media (min-width: 640px) {
-  .stats-profil-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
-`
-if (css.includes('proporsional-mobile-v1')) {
-  console.log('[SUDAH ADA] CSS proporsional-mobile-v1 di index.css')
-} else {
-  simpan(FILE_CSS, css.trimEnd() + '\n\n' + CSS_BLOK)
-  console.log('[BERHASIL] CSS proporsional mobile ditambahkan di index.css')
-}
-
-/* ===== 2. DashboardPage.jsx: bungkus avatar profil tab dan grid stats ===== */
-const FILE_D = 'src/pages/DashboardPage.jsx'
-if (!ada(FILE_D)) {
-  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
-  process.exit(1)
-}
-let d = baca(FILE_D)
-let berubahD = false
-
-/* 2a. Bungkus avatar tab profil dengan kelas responsif */
-const reAvatarProfil = /<Avatar src=\{mahasiswa\.foto_profil\|\| null\} nama=\{mahasiswa\.nama\} size="2xl" \/>/
-if (d.includes('avatar-profil-tab')) {
-  console.log('[SUDAH ADA] Pembungkus avatar-profil-tab')
-} else if (reAvatarProfil.test(d)) {
-  d = d.replace(reAvatarProfil, '<div className="avatar-profil-tab"><Avatar src={mahasiswa.foto_profil|| null} nama={mahasiswa.nama} size="2xl" /></div>')
-  berubahD = true
-  console.log('[BERHASIL] Avatar tab profil dibungkus kelas responsif')
-} else {
-  console.log('[TIDAK KETEMU] Pola Avatar size 2xl di tab profil')
-}
-
-/* 2b. Grid statistik profil dengan kelas responsif */
-const reStatsGrid = /<div className="mt-4 grid grid-cols-3 gap-3">/
-if (d.includes('stats-profil-grid')) {
-  console.log('[SUDAH ADA] Kelas stats-profil-grid pada grid statistik')
-} else if (reStatsGrid.test(d)) {
-  d = d.replace(reStatsGrid, '<div className="stats-profil-grid mt-4 grid grid-cols-3 gap-3">')
-  berubahD = true
-  console.log('[BERHASIL] Grid statistik profil diberi kelas responsif')
-} else {
-  console.log('[TIDAK KETEMU] Pola grid statistik profil')
-}
-
-if (berubahD) simpan(FILE_D, d)
-
-/* ===== 3. cards.jsx: iframe video dibungkus dengan rasio aspek 16:9 ===== */
-const FILE_CARDS = 'src/components/cards.jsx'
-if (!ada(FILE_CARDS)) {
-  console.log('[GAGAL] cards.jsx tidak ditemukan')
-  process.exit(1)
-}
-let c = baca(FILE_CARDS)
-let berubahC = false
-
-const reIframe = /<iframe src=\{drivePreviewUrl\(it\.media_path\)\} className="w-full aspect-video rounded-2xl" allow="autoplay; encrypted-media" allowFullScreen title="Pratinjau video" \/>/
-if (c.includes('iframe-video-wrap')) {
-  console.log('[SUDAH ADA] Pembungkus iframe-video-wrap')
-} else if (reIframe.test(c)) {
-  c = c.replace(reIframe, '<div className="iframe-video-wrap"><iframe src={drivePreviewUrl(it.media_path)} allow="autoplay; encrypted-media" allowFullScreen title="Pratinjau video" /></div>')
-  berubahC = true
-  console.log('[BERHASIL] Iframe video dibungkus dengan rasio aspek responsif')
-} else {
-  console.log('[TIDAK KETEMU] Pola iframe video di cards.jsx')
-}
-
-if (berubahC) simpan(FILE_CARDS, c)
-
-/* ===== 4. Verifikasi ===== */
-console.log('')
-console.log('Verifikasi:')
-const c2 = baca(FILE_CSS)
-const d2 = baca(FILE_D)
-const k2 = baca(FILE_CARDS)
-console.log((c2.includes('proporsional-mobile-v1') ? '[OK] ' : '[BELUM] ') + 'CSS proporsional mobile tersedia')
-console.log((c2.includes('.avatar-kepala-dash ~ div h1') ? '[OK] ' : '[BELUM] ') + 'Aturan teks nama header dashboard responsif')
-console.log((c2.includes('.avatar-profil-tab > button') ? '[OK] ' : '[BELUM] ') + 'Aturan avatar tab profil responsif')
-console.log((c2.includes('.stats-profil-grid') ? '[OK] ' : '[BELUM] ') + 'Aturan grid statistik profil responsif')
-console.log((c2.includes('.iframe-video-wrap') ? '[OK] ' : '[BELUM] ') + 'Aturan iframe video responsif')
-console.log((d2.includes('avatar-profil-tab') ? '[OK] ' : '[BELUM] ') + 'Avatar tab profil dibungkus kelas responsif')
-console.log((d2.includes('stats-profil-grid') ? '[OK] ' : '[BELUM] ') + 'Grid statistik profil diberi kelas responsif')
-console.log((k2.includes('iframe-video-wrap') ? '[OK] ' : '[BELUM] ') + 'Iframe video dibungkus dengan rasio aspek')
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Perbaikan yang diterapkan:')
-console.log('1. Header dashboard: teks nama (h1) kini mengecil dari text-2xl menjadi text-xl (20px) di bawah 640px, teks NIM (p) dari text-sm menjadi text-xs (12px), dan badge prodi dari text-[11px] menjadi text-[10px] dengan padding lebih kecil. Hasilnya avatar 56px yang sudah dipasang sebelumnya kini seimbang dengan teks di sampingnya.')
-console.log('2. Iframe video: dibungkus div dengan padding-bottom 56.25% (rasio 16:9) sehingga iframe selalu mempertahankan proporsi di lebar apa pun. Kontrol video tidak lagi terpotong atau berantakan karena iframe mengisi wadah secara absolut dengan tinggi yang dihitung otomatis dari lebar.')
-console.log('3. Tab profil: avatar 2xl (128px) dikecilkan menjadi 96px dengan radius 24px di mobile, teks nama dari text-xl menjadi text-xl (tetap) dengan margin atas lebih kecil, dan teks NIM dari text-sm menjadi text-sm (tetap). Hasilnya kartu profil tidak lagi didominasi foto raksasa.')
-console.log('4. Kotak statistik profil: grid 3 kolom di desktop berubah menjadi 2 kolom di mobile, dengan kotak ketiga (Kehadiran) melebar penuh di baris kedua. Ini membuat angka dan label tidak terdesak di layar sempit, dan tata letak tetap rapi.')
-console.log('5. Semua aturan responsif hanya aktif di bawah 640px lewat media query, jadi tampilan desktop tidak berubah sama sekali.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Buka dashboard di ponsel: header kartu menampilkan avatar 56px dengan nama dan NIM yang proporsional, tidak ada teks yang mendominasi.')
-console.log('2. Klik logbook dengan video Drive: video tampil dengan rasio 16:9 yang benar, kontrol play dan fullscreen tidak terpotong.')
-console.log('3. Buka tab Profil: avatar 96px dengan nama dan NIM yang seimbang, tidak terlalu besar.')
-console.log('4. Lihat kotak statistik Logbook, Media, Kehadiran: dua kotak di baris pertama (Logbook dan Media) dan satu kotak melebar di baris kedua (Kehadiran), semua terbaca jelas.')
-console.log('5. Buka di tablet atau desktop: avatar kembali 128px, grid statistik kembali 3 kolom, teks header kembali ukuran normal, iframe tetap 16:9.')
-```
-
-## File: apply-fix-ringkasan-mobile.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-function ada(rel) { return fs.existsSync(path.join(root, rel)) }
-
-console.log('Mulai menyesuaikan Ringkasan aktivitas magang agar sama dengan pola Rekap Kehadiran...')
-console.log('')
-
-/* ===== 1. DashboardPage.jsx: Ubah struktur HTML dan urutan teks ===== */
-const FILE_D = 'src/pages/DashboardPage.jsx'
-if (!ada(FILE_D)) {
-  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
-  process.exit(1)
-}
-let d = baca(FILE_D)
-let berubahD = false
-
-// Ubah grid gap dari gap-4 menjadi gap-2 agar lebih rapat seperti rekap kehadiran
-if (d.includes('stats-profil-grid mt-4 grid grid-cols-3 gap-4')) {
-  d = d.replace('stats-profil-grid mt-4 grid grid-cols-3 gap-4', 'stats-profil-grid mt-4 grid grid-cols-3 gap-2')
-  berubahD = true
-}
-
-// Ubah isi kotak ringkasan menjadi urutan label (kecil) di atas dan angka di bawah
-const polaLogbook = /<div className="rounded-2xl bg-slate-50 p-4 text-center"><p className="text-2xl font-black text-bsi-800">\{typeof logs !== 'undefined' \? logs\.length : 0\}<\/p><p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Logbook<\/p><\/div>/
-const baruLogbook = '<div className="rounded-xl bg-slate-50 p-2 text-center"><p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Logbook</p><p className="text-base font-black text-bsi-800">{typeof logs !== \'undefined\' ? logs.length : 0}</p></div>'
-
-const polaGaleri = /<div className="rounded-2xl bg-slate-50 p-4 text-center"><p className="text-2xl font-black text-bsi-800">\{typeof galeri !== 'undefined' \? galeri\.length : 0\}<\/p><p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Media Galeri<\/p><\/div>/
-const baruGaleri = '<div className="rounded-xl bg-slate-50 p-2 text-center"><p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Media</p><p className="text-base font-black text-bsi-800">{typeof galeri !== \'undefined\' ? galeri.length : 0}</p></div>'
-
-const polaHadir = /<div className="rounded-2xl bg-slate-50 p-4 text-center"><p className="text-2xl font-black text-bsi-800">\{typeof hadir !== 'undefined' \? hadir\.length : 0\}<\/p><p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Kehadiran<\/p><\/div>/
-const baruHadir = '<div className="rounded-xl bg-slate-50 p-2 text-center"><p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Kehadiran</p><p className="text-base font-black text-bsi-800">{typeof hadir !== \'undefined\' ? hadir.length : 0}</p></div>'
-
-if (polaLogbook.test(d)) { d = d.replace(polaLogbook, baruLogbook); berubahD = true }
-if (polaGaleri.test(d)) { d = d.replace(polaGaleri, baruGaleri); berubahD = true }
-if (polaHadir.test(d)) { d = d.replace(polaHadir, baruHadir); berubahD = true }
-
-if (berubahD) {
-  simpan(FILE_D, d)
-  console.log('[BERHASIL] DashboardPage.jsx telah diperbarui dengan layout baru.')
-}
-
-/* ===== 2. index.css: Hapus override grid 2 kolom di mobile ===== */
-const FILE_CSS = 'src/index.css'
-if (ada(FILE_CSS)) {
-  let css = baca(FILE_CSS)
-  let berubahC = false
-  
-  const cssLama1 = '.stats-profil-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 0.5rem !important; }'
-  const cssLama2 = '.stats-profil-grid > div:last-child { grid-column: span 2 / span 2; }'
-  
-  if (css.includes(cssLama1)) {
-    css = css.replace(cssLama1, '.stats-profil-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 0.5rem !important; }')
-    berubahC = true
-  }
-  if (css.includes(cssLama2)) {
-    css = css.replace(cssLama2, '/* dihapus agar kolom ketiga tidak memanjang sendiri */')
-    berubahC = true
-  }
-  
-  if (berubahC) {
-    simpan(FILE_CSS, css)
-    console.log('[BERHASIL] index.css diperbarui, grid dipaksa menjadi 3 kolom konsisten di mobile.')
-  }
-}
-
-console.log('')
-console.log('Selesai. Silakan refresh browser.')
-```
-
-## File: apply-fix-toast-modern.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-function ada(rel) { return fs.existsSync(path.join(root, rel)) }
-
-console.log('Mulai memperbaiki posisi, animasi, dan tampilan toast menjadi gaya modern...')
-console.log('')
-
-/* ===== 1. ui.jsx: ToastProvider dua fase (masuk lalu keluar) plus struktur baru ===== */
-const FILE_U = 'src/components/ui.jsx'
-if (!ada(FILE_U)) {
-  console.log('[GAGAL] ui.jsx tidak ditemukan')
-  process.exit(1)
-}
-let u = baca(FILE_U)
-const PROVIDER_BARU = `export function ToastProvider(props) {
-  const [toasts, setToasts] = useState([])
-  function tutupToast(id) {
-    setToasts(function (prev) { return prev.map(function (t) { return t.id === id ? Object.assign({}, t, { tutup: true }) : t }) })
-    setTimeout(function () {
-      setToasts(function (prev) { return prev.filter(function (t) { return t.id !== id }) })
-    }, 240)
-  }
-  function tambahToast(tipe, pesan) {
-    const id = Date.now() + Math.random()
-    setToasts(function (prev) { return prev.concat([{ id: id, tipe: tipe, pesan: pesan, tutup: false }]) })
-    setTimeout(function () { tutupToast(id) }, 4000)
-  }
-  function toastSukses(pesan) { tambahToast('sukses', pesan) }
-  function toastGagal(pesan) { tambahToast('gagal', pesan) }
-  return (
-    <ToastContext.Provider value={{ sukses: toastSukses, gagal: toastGagal }}>
-      {props.children}
-      <div className="toast-wadah fixed z-[100] flex flex-col gap-2 pointer-events-none">
-        {toasts.map(function (t) {
-          const sukses = t.tipe === 'sukses'
-          return (
-            <div key={t.id} className={'toast-kartu pointer-events-auto flex items-center gap-3 ' + (sukses ? 'toast-sukses' : 'toast-gagal') + (t.tutup ? ' toast-keluar' : '')}>
-              <span className={'toast-ikon ' + (sukses ? 'toast-ikon-sukses' : 'toast-ikon-gagal')}>
-                <SizedIcon name={sukses ? 'check' : 'close'} size={15} />
-              </span>
-              <p className="toast-teks flex-1 text-sm font-semibold">{t.pesan}</p>
-              <button type="button" onClick={function () { tutupToast(t.id) }} title="Tutup notifikasi"
-                className="toast-tutup grid h-7 w-7 shrink-0 place-items-center rounded-lg">
-                <SizedIcon name="close" size={13} />
-              </button>
-            </div>
-          )
-        })}
-      </div>
-    </ToastContext.Provider>
-  )
-}
-`
-const mulaiProvider = u.indexOf('export function ToastProvider(props) {')
-const mulaiUseToast = u.indexOf('export function useToast() {')
-if (mulaiProvider === -1 || mulaiUseToast === -1 || mulaiUseToast < mulaiProvider) {
-  console.log('[TIDAK KETEMU] Blok ToastProvider di ui.jsx')
-} else if (u.includes('toast-wadah fixed z-[100]')) {
-  console.log('[SUDAH ADA] ToastProvider versi modern di ui.jsx')
-} else {
-  u = u.slice(0, mulaiProvider) + PROVIDER_BARU + u.slice(mulaiUseToast)
-  simpan(FILE_U, u)
-  console.log('[BERHASIL] ToastProvider diganti menjadi versi dua fase dengan struktur modern')
-}
-
-/* ===== 2. index.css: ganti blok toast lama dengan toast-modern-v1 ===== */
-const FILE_CSS = 'src/index.css'
-if (!ada(FILE_CSS)) {
-  console.log('[GAGAL] index.css tidak ditemukan')
-  process.exit(1)
-}
-let css = baca(FILE_CSS)
-const CSS_BARU = `/* toast-modern-v1: kartu glass blur, ikon kotak berwarna lembut, posisi responsif, animasi masuk dan keluar */
-.toast-wadah {
-  top: 1rem;
-  left: 1rem;
-  right: 1rem;
-}
-@media (min-width: 640px) {
-  .toast-wadah {
-    left: auto;
-    right: 1.25rem;
-    top: 1.25rem;
-    width: 100%;
-    max-width: 24rem;
-  }
-}
-@keyframes toastIn {
-  from { opacity: 0; transform: translateY(-14px) scale(0.96); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-@keyframes toastOut {
-  from { opacity: 1; transform: translateY(0) scale(1); }
-  to { opacity: 0; transform: translateY(-10px) scale(0.97); }
-}
-.toast-kartu {
-  border-radius: 1rem;
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  box-shadow: 0 12px 32px -8px rgba(15, 23, 42, 0.18), 0 2px 8px rgba(15, 23, 42, 0.06);
-  padding: 0.75rem 0.875rem;
-  animation: toastIn 0.32s cubic-bezier(0.22, 1, 0.36, 1);
-}
-.toast-keluar {
-  animation: toastOut 0.22s ease-in forwards;
-}
-.toast-ikon {
-  display: grid;
-  place-items: center;
-  height: 2rem;
-  width: 2rem;
-  flex-shrink: 0;
-  border-radius: 0.625rem;
-}
-.toast-ikon-sukses { background: rgba(16, 185, 129, 0.12); color: #059669; }
-.toast-ikon-gagal { background: rgba(239, 68, 68, 0.12); color: #dc2626; }
-.toast-sukses { border-color: rgba(16, 185, 129, 0.28); }
-.toast-gagal { border-color: rgba(239, 68, 68, 0.28); }
-.toast-teks { color: #1e293b; }
-.toast-tutup { color: #94a3b8; transition: background-color 0.15s ease, color 0.15s ease; }
-.toast-tutup:hover { background: rgba(15, 23, 42, 0.06); color: #475569; }
-.dark .toast-kartu {
-  background: rgba(15, 23, 42, 0.92);
-  border-color: rgba(51, 65, 85, 0.7);
-  box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 0, 0, 0.4);
-}
-.dark .toast-ikon-sukses { background: rgba(16, 185, 129, 0.16); color: #34d399; }
-.dark .toast-ikon-gagal { background: rgba(239, 68, 68, 0.16); color: #f87171; }
-.dark .toast-sukses { border-color: rgba(52, 211, 153, 0.35); }
-.dark .toast-gagal { border-color: rgba(248, 113, 113, 0.35); }
-.dark .toast-teks { color: #f1f5f9; }
-.dark .toast-tutup { color: #64748b; }
-.dark .toast-tutup:hover { background: rgba(255, 255, 255, 0.08); color: #cbd5e1; }
-`
-if (css.includes('toast-modern-v1')) {
-  console.log('[SUDAH ADA] CSS toast-modern-v1 di index.css')
-} else {
-  const mulaiToast = css.indexOf('/* toast-opaque:')
-  const akhirToast = css.indexOf('/* animasi-halus-v1')
-  if (mulaiToast !== -1 && akhirToast !== -1 && akhirToast > mulaiToast) {
-    css = css.slice(0, mulaiToast) + CSS_BARU + css.slice(akhirToast)
-    simpan(FILE_CSS, css)
-    console.log('[BERHASIL] Blok toast lama diganti menjadi toast-modern-v1')
-  } else {
-    simpan(FILE_CSS, css.trimEnd() + '\n\n' + CSS_BARU)
-    console.log('[BERHASIL] CSS toast-modern-v1 ditambahkan (blok lama tidak ditemukan)')
-  }
-}
-
-/* ===== 3. Verifikasi ===== */
-console.log('')
-console.log('Verifikasi:')
-const u2 = baca(FILE_U)
-const c2 = baca(FILE_CSS)
-console.log((u2.includes('toast-wadah fixed z-[100]') ? '[OK] ' : '[BELUM] ') + 'Wadah toast memakai kelas posisi responsif')
-console.log((u2.includes('function tutupToast(id)') && u2.includes('setTimeout(function () { tutupToast(id) }, 4000)') ? '[OK] ' : '[BELUM] ') + 'Auto hide melewati fase animasi keluar')
-console.log((u2.includes('toast-ikon-sukses') ? '[OK] ' : '[BELUM] ') + 'Ikon kotak berwarna lembut terpasang')
-console.log((!u2.includes('anim-toast pointer-events-auto') ? '[OK] ' : '[BELUM] ') + 'Struktur toast lama sudah diganti')
-console.log((c2.includes('toast-modern-v1') ? '[OK] ' : '[BELUM] ') + 'CSS toast-modern-v1 tersedia')
-console.log((c2.includes('@keyframes toastOut') ? '[OK] ' : '[BELUM] ') + 'Keyframes animasi keluar tersedia')
-console.log((c2.includes('.toast-wadah {\n  top: 1rem;\n  left: 1rem;\n  right: 1rem;\n}') ? '[OK] ' : '[BELUM] ') + 'Posisi mobile memakai inset kiri kanan sehingga tidak terpotong')
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Penyebab masalah dan cara kerja perbaikan:')
-console.log('1. Toast terpotong di mobile karena wadah lama memakai lebar penuh dengan batas max-w-sm plus offset kanan 20px, sehingga di layar sempit tepi kirinya terdorong keluar viewport. Kini di bawah 640px wadah memakai inset kiri dan kanan 16px, jadi toast selalu utuh di tengah layar dengan margin simetris.')
-console.log('2. Animasi keluar tidak ada karena toast langsung dibuang dari array setelah 4 detik. Kini penutupan berjalan dua fase: toast ditandai tutup, memainkan animasi toastOut 220 milidetik berupa memudar sambil naik tipis dan mengecil, baru kemudian dilepas dari DOM. Tombol tutup manual memakai jalur yang sama.')
-console.log('3. Animasi masuk diganti menjadi meluncur dari atas dengan kurva pegas cubic-bezier(0.22, 1, 0.36, 1), terasa seperti notifikasi sistem modern, bukan geser samping datar.')
-console.log('4. Tampilan baru bergaya glass: kartu semi transparan dengan backdrop blur 12px, sudut 16px, bayangan berlapis lembut, dan border tipis yang warnanya mengikuti tipe notifikasi.')
-console.log('5. Ikon lingkaran solid diganti kotak 32px bersudut 10px dengan latar tint 12 persen dan ikon berwarna emerald atau merah, jauh lebih ringan secara visual dan mengikuti bahasa desain notifikasi modern.')
-console.log('6. Tombol tutup kini kotak 28px dengan efek hover berupa latar lembut, bukan sekadar ikon melayang, sehingga area sentuh lebih jelas di ponsel.')
-console.log('7. Mode gelap memakai kartu slate gelap semi transparan dengan tint ikon lebih terang, kontras teks tetap terjaga di kedua mode.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Hapus atau simpan data di dashboard lewat ponsel: toast muncul utuh di tengah layar dengan margin kiri kanan sama, tidak ada bagian yang terpotong.')
-console.log('2. Perhatikan masuknya: toast meluncur turun dari atas dengan pegas lembut lalu berhenti rapi.')
-console.log('3. Tunggu 4 detik atau ketuk tombol tutup: toast memudar sambil naik tipis dan mengecil sebelum hilang, tidak lenyap sekonyongkonyong.')
-console.log('4. Picu toast sukses dan gagal beruntun: keduanya menumpuk rapi dengan jarak 8px dan warna border serta ikon masing masing.')
-console.log('5. Buka di desktop lebar 640px ke atas: toast kembali berlabuh di kanan atas dengan lebar maksimal 384px seperti kolom notifikasi aplikasi modern.')
-console.log('6. Aktifkan mode gelap: kartu menjadi slate gelap kaca dengan ikon tint terang, tetap terbaca jelas.')
-```
-
-## File: apply-fix-tombol-mobile.cjs
-```javascript
-const fs = require('fs')
-const path = require('path')
-const root = process.cwd()
-
-function baca(rel) { return fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n') }
-function simpan(rel, isi) { fs.writeFileSync(path.join(root, rel), isi, 'utf8') }
-function ada(rel) { return fs.existsSync(path.join(root, rel)) }
-
-console.log('Mulai mengecilkan tombol-tombol agar proporsional di layar mobile...')
-console.log('')
-
-/* ===== 1. DashboardPage.jsx: tombol tab navigasi ===== */
-const FILE_D = 'src/pages/DashboardPage.jsx'
-if (!ada(FILE_D)) {
-  console.log('[GAGAL] DashboardPage.jsx tidak ditemukan')
-  process.exit(1)
-}
-let d = baca(FILE_D)
-let berubahD = false
-
-const TAB_LAMA = "return 'px-5 py-3 rounded-2xl text-sm font-bold ' + (tab === t ? 'bg-bsi-800 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200')"
-const TAB_BARU = "return 'px-4 py-2.5 rounded-xl text-xs sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm font-bold ' + (tab === t ? 'bg-bsi-800 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200')"
-if (d.includes(TAB_BARU)) {
-  console.log('[SUDAH ADA] Tombol tab versi mobile')
-} else if (d.includes(TAB_LAMA)) {
-  d = d.replace(TAB_LAMA, TAB_BARU)
-  berubahD = true
-  console.log('[BERHASIL] Tombol tab navigasi mengecil di mobile dan tetap besar di desktop')
-} else {
-  console.log('[TIDAK KETEMU] Pola tabCls di DashboardPage.jsx')
-}
-
-/* ===== 2. DashboardPage.jsx: empat tombol kelola foto profil ===== */
-const FOTO_LAMA = 'px-4 py-2 rounded-xl text-sm font-bold '
-const FOTO_BARU = 'px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold '
-if (d.includes(FOTO_BARU)) {
-  console.log('[SUDAH ADA] Tombol kelola foto versi mobile')
-} else if (d.includes(FOTO_LAMA)) {
-  const jumlah = d.split(FOTO_LAMA).length - 1
-  d = d.split(FOTO_LAMA).join(FOTO_BARU)
-  berubahD = true
-  console.log('[BERHASIL] ' + jumlah + ' tombol kelola foto profil dirapatkan untuk mobile')
-} else {
-  console.log('[TIDAK KETEMU] Pola tombol kelola foto profil')
-}
-
-if (berubahD) simpan(FILE_D, d)
-
-/* ===== 3. ui.jsx: btnPrimary dan btnSmall responsif ===== */
-const FILE_U = 'src/components/ui.jsx'
-if (!ada(FILE_U)) {
-  console.log('[GAGAL] ui.jsx tidak ditemukan')
-  process.exit(1)
-}
-let u = baca(FILE_U)
-let berubahU = false
-
-const PRIM_LAMA = "export const btnPrimary = 'w-full rounded-2xl bg-bsi-800 px-6 py-4 text-white font-bold hover:bg-bsi-900'"
-const PRIM_BARU = "export const btnPrimary = 'w-full rounded-xl bg-bsi-800 px-5 py-3 text-sm sm:rounded-2xl sm:px-6 sm:py-4 sm:text-base text-white font-bold hover:bg-bsi-900'"
-if (u.includes(PRIM_BARU)) {
-  console.log('[SUDAH ADA] btnPrimary versi mobile')
-} else if (u.includes(PRIM_LAMA)) {
-  u = u.replace(PRIM_LAMA, PRIM_BARU)
-  berubahU = true
-  console.log('[BERHASIL] btnPrimary (tombol simpan) lebih ramping di mobile')
-} else {
-  console.log('[TIDAK KETEMU] Pola btnPrimary di ui.jsx')
-}
-
-const SMALL_LAMA = "export const btnSmall = 'px-4 py-2 rounded-xl text-sm font-semibold'"
-const SMALL_BARU = "export const btnSmall = 'px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-semibold'"
-if (u.includes(SMALL_BARU)) {
-  console.log('[SUDAH ADA] btnSmall versi mobile')
-} else if (u.includes(SMALL_LAMA)) {
-  u = u.replace(SMALL_LAMA, SMALL_BARU)
-  berubahU = true
-  console.log('[BERHASIL] btnSmall (Detail, Edit, Hapus, Tambah kegiatan) lebih ramping di mobile')
-} else {
-  console.log('[TIDAK KETEMU] Pola btnSmall di ui.jsx')
-}
-
-if (berubahU) simpan(FILE_U, u)
-
-/* ===== 4. Verifikasi ===== */
-console.log('')
-console.log('Verifikasi:')
-const d2 = baca(FILE_D)
-const u2 = baca(FILE_U)
-console.log((d2.includes(TAB_BARU) ? '[OK] ' : '[BELUM] ') + 'Tombol tab navigasi responsif')
-console.log((d2.split(FOTO_BARU).length - 1 >= 4 ? '[OK] ' : '[BELUM] ') + 'Empat tombol kelola foto profil responsif (' + (d2.split(FOTO_BARU).length - 1) + ' lokasi)')
-console.log((u2.includes(PRIM_BARU) ? '[OK] ' : '[BELUM] ') + 'btnPrimary responsif')
-console.log((u2.includes(SMALL_BARU) ? '[OK] ' : '[BELUM] ') + 'btnSmall responsif')
-console.log('')
-console.log('Selesai. Hard refresh browser dengan Ctrl + Shift + R.')
-console.log('')
-console.log('Penyesuaian yang diterapkan:')
-console.log('1. Tombol tab Logbook, Galeri, Daftar Hadir, dan Profil kini memakai padding 16x10 piksel, sudut 12 piksel, dan huruf 12 piksel di bawah 640px, sehingga baris tab tidak lagi mendominasi kartu header. Di 640px ke atas kembali ke padding 20x12, sudut 16, dan huruf 14 seperti semula.')
-console.log('2. Tombol simpan utama (btnPrimary) di semua form termasuk halaman login menjadi py-3 dengan huruf 14 piksel dan sudut 12 piksel di mobile, lalu kembali py-4 huruf 16 sudut 16 di layar lebar, jadi tidak lagi setebbal balok di ponsel.')
-console.log('3. Tombol aksi kecil (btnSmall) yaitu Detail, Edit, Hapus, dan tambah kegiatan menjadi px-3.5 py-2 huruf 12 sudut 8 di mobile, membuat deretan aksi di kartu dan baris rincian kegiatan terasa ringan dan tidak berdesakan.')
-console.log('4. Empat tombol kelola foto profil (Ganti atau Upload Foto, Hapus Foto, Simpan Foto, Batal) mengikuti ukuran kecil yang sama di mobile sehingga panel profil tidak penuh oleh tombol.')
-console.log('5. Seluruh perubahan memakai pola kelas responsif Tailwind sm:, jadi tidak ada JavaScript maupun media query tambahan yang perlu dipelihara, dan tampilan desktop benar benar tidak berubah.')
-console.log('6. Tinggi sentuh minimum di mobile tetap sekitar 32 sampai 36 piksel, masih nyaman untuk jari meski visualnya jauh lebih ramping.')
-console.log('')
-console.log('Langkah uji:')
-console.log('1. Buka dashboard di ponsel: baris tab kini berupa pill ramping satu atau dua baris yang seimbang dengan kartu header, tidak lagi setinggi sebelumnya.')
-console.log('2. Gulir ke form logbook: tombol Simpan logbook dan tombol tambah kegiatan terlihat lebih halus, dan tombol Detail Edit Hapus pada kartu tidak lagi bongsor.')
-console.log('3. Buka tab Profil: tombol Ganti Foto dan Hapus Foto proporsional dengan kartu profil yang sudah dikecilkan sebelumnya.')
-console.log('4. Buka halaman login di ponsel: tombol Masuk ke dashboard ikut ramping dan serasi dengan form.')
-console.log('5. Lebarkan jendela ke 640px ke atas: seluruh tombol kembali ke ukuran desktop semula tanpa perubahan apa pun.')
 ```
 
 ## File: postcss.config.js
@@ -3411,158 +2301,6 @@ dist
 </html>
 ```
 
-## File: src/components/Skeleton.jsx
-```javascript
-export function SkeletonLogbookCard() {
-  return (
-    <div className="card-hover flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="skeleton aspect-video w-full rounded-2xl"></div>
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="skeleton h-6 w-24 rounded-full"></div>
-        <div className="skeleton h-6 w-20 rounded-full"></div>
-        <div className="skeleton ml-auto h-6 w-20 rounded-full"></div>
-      </div>
-      <div className="skeleton h-4 w-36 rounded-full"></div>
-      <div className="skeleton h-6 w-40 rounded-full"></div>
-      <div className="skeleton h-4 w-32 rounded-full"></div>
-      <div className="skeleton h-3 w-24 rounded-full"></div>
-      <div className="mt-auto flex items-center gap-3 border-t border-slate-100 pt-4">
-        <div className="skeleton h-10 w-10" style={{ borderRadius: 'radius' }}></div>
-        <div className="flex-1 space-y-2">
-          <div className="skeleton h-4 w-36 rounded-full"></div>
-          <div className="skeleton h-3 w-24 rounded-full"></div>
-        </div>
-        <div className="skeleton h-9 w-20 rounded-2xl"></div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonGalleryCard() {
-  return (
-    <div className="card-hover flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="skeleton aspect-video w-full rounded-2xl"></div>
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="skeleton h-6 w-24 rounded-full"></div>
-        <div className="skeleton ml-auto h-6 w-20 rounded-full"></div>
-      </div>
-      <div className="skeleton h-4 w-36 rounded-full"></div>
-      <div className="skeleton h-6 w-44 rounded-full"></div>
-      <div className="mt-auto flex items-center gap-3 border-t border-slate-100 pt-4">
-        <div className="skeleton h-10 w-10" style={{ borderRadius: 'radius' }}></div>
-        <div className="flex-1 space-y-2">
-          <div className="skeleton h-4 w-36 rounded-full"></div>
-          <div className="skeleton h-3 w-24 rounded-full"></div>
-        </div>
-        <div className="skeleton h-9 w-20 rounded-2xl"></div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonAttendanceCard() {
-  return (
-    <div className="card-hover flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="flex items-center justify-between">
-        <div className="skeleton h-6 w-20 rounded-full"></div>
-        <div className="skeleton h-4 w-32 rounded-full"></div>
-      </div>
-      <div className="skeleton h-5 w-28 rounded-full"></div>
-      <div className="skeleton h-4 w-full rounded-full"></div>
-      <div className="mt-auto flex items-center gap-3 border-t border-slate-100 pt-4">
-        <div className="skeleton h-10 w-10" style={{ borderRadius: 'radius' }}></div>
-        <div className="flex-1 space-y-2">
-          <div className="skeleton h-4 w-36 rounded-full"></div>
-          <div className="skeleton h-3 w-24 rounded-full"></div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonPersonCard() {
-  return (
-    <div className="card-hover flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex items-center gap-4">
-        <div className="skeleton h-14 w-14" style={{ borderRadius: 'radius' }}></div>
-        <div className="flex-1 space-y-2">
-          <div className="skeleton h-5 w-40 rounded-full"></div>
-          <div className="skeleton h-3 w-24 rounded-full"></div>
-          <div className="skeleton h-5 w-28 rounded-full"></div>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="skeleton h-16 rounded-2xl"></div>
-        <div className="skeleton h-16 rounded-2xl"></div>
-      </div>
-      <div className="grid grid-cols-3 gap-2">
-        <div className="skeleton h-12 rounded-xl"></div>
-        <div className="skeleton h-12 rounded-xl"></div>
-        <div className="skeleton h-12 rounded-xl"></div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonDashboard() {
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="skeleton h-14 w-14" style={{ borderRadius: 'radius' }}></div>
-        <div className="flex-1 space-y-2">
-          <div className="skeleton h-4 w-44 rounded-full"></div>
-          <div className="skeleton h-3 w-28 rounded-full"></div>
-        </div>
-        <div className="skeleton h-10 w-28 rounded-2xl"></div>
-      </div>
-      <div className="grid items-start gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-        <div className="space-y-4 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="skeleton h-5 w-36 rounded-full"></div>
-          <div className="skeleton h-10 w-full rounded-2xl"></div>
-          <div className="skeleton h-10 w-full rounded-2xl"></div>
-          <div className="skeleton h-20 w-full rounded-2xl"></div>
-          <div className="skeleton h-11 w-44 rounded-2xl"></div>
-        </div>
-        <div className="space-y-5">
-          <div className="skeleton h-6 w-32 rounded-full"></div>
-          <div className="grid gap-5 md:grid-cols-2">
-            <SkeletonLogbookCard />
-            <SkeletonLogbookCard />
-            <SkeletonLogbookCard />
-            <SkeletonLogbookCard />
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonStatCard() {
-  return (
-    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
-      <div className="skeleton h-4 w-28"></div>
-      <div className="skeleton h-9 w-16 mt-3"></div>
-      <div className="skeleton h-3 w-36 mt-2"></div>
-    </div>
-  )
-}
-
-export function SkeletonChartRow() {
-  return (
-    <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5">
-      <div className="flex items-center justify-between">
-        <div className="space-y-2">
-          <div className="skeleton h-4 w-32"></div>
-          <div className="skeleton h-3 w-24"></div>
-        </div>
-        <div className="skeleton h-4 w-40"></div>
-      </div>
-      <div className="skeleton h-4 w-full rounded-full mt-4"></div>
-    </div>
-  )
-}
-```
-
 ## File: src/lib/konversi.js
 ```javascript
 import heic2any from 'heic2any'
@@ -4038,6 +2776,157 @@ export function FileInput(props) {
         </span>
         {props.fileName ? <span className="shrink-0 text-xs font-semibold text-bsi-700">Ganti</span> : null}
       </button>
+    </div>
+  )
+}
+```
+
+## File: src/components/Skeleton.jsx
+```javascript
+export function SkeletonLogbookCard() {
+  return (
+    <div className="card-hover flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="skeleton aspect-video w-full rounded-2xl"></div>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="skeleton h-6 w-24 rounded-full"></div>
+        <div className="skeleton h-6 w-20 rounded-full"></div>
+        <div className="skeleton ml-auto h-6 w-20 rounded-full"></div>
+      </div>
+      <div className="skeleton h-4 w-36 rounded-full"></div>
+      <div className="skeleton h-6 w-40 rounded-full"></div>
+      <div className="skeleton h-4 w-32 rounded-full"></div>
+      <div className="skeleton h-3 w-24 rounded-full"></div>
+      <div className="mt-auto flex items-center gap-3 border-t border-slate-100 pt-4">
+        <div className="skeleton h-10 w-10" style={{ borderRadius: 'radius' }}></div>
+        <div className="flex-1 space-y-2">
+          <div className="skeleton h-4 w-36 rounded-full"></div>
+          <div className="skeleton h-3 w-24 rounded-full"></div>
+        </div>
+        <div className="skeleton h-9 w-20 rounded-2xl"></div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonGalleryCard() {
+  return (
+    <div className="card-hover flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="skeleton aspect-video w-full rounded-2xl"></div>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="skeleton h-6 w-24 rounded-full"></div>
+        <div className="skeleton ml-auto h-6 w-20 rounded-full"></div>
+      </div>
+      <div className="skeleton h-4 w-36 rounded-full"></div>
+      <div className="skeleton h-6 w-44 rounded-full"></div>
+      <div className="mt-auto flex items-center gap-3 border-t border-slate-100 pt-4">
+        <div className="skeleton h-10 w-10" style={{ borderRadius: 'radius' }}></div>
+        <div className="flex-1 space-y-2">
+          <div className="skeleton h-4 w-36 rounded-full"></div>
+          <div className="skeleton h-3 w-24 rounded-full"></div>
+        </div>
+        <div className="skeleton h-9 w-20 rounded-2xl"></div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonAttendanceCard() {
+  return (
+    <div className="card-hover flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="flex items-center justify-between">
+        <div className="skeleton h-6 w-20 rounded-full"></div>
+        <div className="skeleton h-4 w-32 rounded-full"></div>
+      </div>
+      <div className="skeleton h-5 w-28 rounded-full"></div>
+      <div className="skeleton h-4 w-full rounded-full"></div>
+      <div className="mt-auto flex items-center gap-3 border-t border-slate-100 pt-4">
+        <div className="skeleton h-10 w-10" style={{ borderRadius: 'radius' }}></div>
+        <div className="flex-1 space-y-2">
+          <div className="skeleton h-4 w-36 rounded-full"></div>
+          <div className="skeleton h-3 w-24 rounded-full"></div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonPersonCard() {
+  return (
+    <div className="card-hover flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-center gap-4">
+        <div className="skeleton h-14 w-14" style={{ borderRadius: 'radius' }}></div>
+        <div className="flex-1 space-y-2">
+          <div className="skeleton h-5 w-40 rounded-full"></div>
+          <div className="skeleton h-3 w-24 rounded-full"></div>
+          <div className="skeleton h-5 w-28 rounded-full"></div>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="skeleton h-16 rounded-2xl"></div>
+        <div className="skeleton h-16 rounded-2xl"></div>
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        <div className="skeleton h-12 rounded-xl"></div>
+        <div className="skeleton h-12 rounded-xl"></div>
+        <div className="skeleton h-12 rounded-xl"></div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonDashboard() {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-4 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="skeleton h-14 w-14" style={{ borderRadius: 'radius' }}></div>
+        <div className="flex-1 space-y-2">
+          <div className="skeleton h-4 w-44 rounded-full"></div>
+          <div className="skeleton h-3 w-28 rounded-full"></div>
+        </div>
+        <div className="skeleton h-10 w-28 rounded-2xl"></div>
+      </div>
+      <div className="grid items-start gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+        <div className="space-y-4 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="skeleton h-5 w-36 rounded-full"></div>
+          <div className="skeleton h-10 w-full rounded-2xl"></div>
+          <div className="skeleton h-10 w-full rounded-2xl"></div>
+          <div className="skeleton h-20 w-full rounded-2xl"></div>
+          <div className="skeleton h-11 w-44 rounded-2xl"></div>
+        </div>
+        <div className="space-y-5">
+          <div className="skeleton h-6 w-32 rounded-full"></div>
+          <div className="grid gap-5 md:grid-cols-2">
+            <SkeletonLogbookCard />
+            <SkeletonLogbookCard />
+            <SkeletonLogbookCard />
+            <SkeletonLogbookCard />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonStatCard() {
+  return (
+    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-3 sm:p-6">
+      <div className="skeleton h-3 w-3/4 sm:h-4 sm:w-28"></div>
+      <div className="skeleton h-6 w-1/2 mt-1 sm:h-9 sm:w-16 sm:mt-3"></div>
+      <div className="skeleton h-3 w-36 mt-2 hidden sm:block"></div>
+    </div>
+  )
+}
+export function SkeletonChartRow() {
+  return (
+    <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5">
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <div className="skeleton h-4 w-32"></div>
+          <div className="skeleton h-3 w-24"></div>
+        </div>
+        <div className="skeleton h-4 w-40"></div>
+      </div>
+      <div className="skeleton h-4 w-full rounded-full mt-4"></div>
     </div>
   )
 }
@@ -4741,6 +3630,113 @@ export function countActiveFilters(o) {
 }
 ```
 
+## File: src/components/Layout.jsx
+```javascript
+import { Outlet, Link, NavLink } from 'react-router-dom'
+import { useTheme } from '../lib/theme.jsx'
+import { useAuth, logoutMahasiswa } from '../lib/auth.js'
+import { SizedIcon } from './icons.jsx'
+import { useEffect, useState } from 'react'
+
+const LINKS = [
+  { to: '/', label: 'Beranda' },
+  { to: '/logbook', label: 'Logbook' },
+  { to: '/galeri', label: 'Galeri' },
+  { to: '/absen', label: 'Daftar Hadir' },
+  { to: '/dospem', label: 'Tim & Dospem' }
+]
+
+function MenuMobile(props) {
+  return (
+    <div className={'menu-mobile-wrap xl:hidden' + (props.open ? ' menu-mobile-buka' : '')}>
+      <div className="menu-mobile-dalam">
+        <div className="menu-mobile-isi border-t border-slate-200 bg-white px-4 py-4 space-y-2">
+          {props.children}
+        </div>
+      </div>
+    </div>
+  )
+}
+export default function Layout() {
+  const theme = useTheme()
+  const { mahasiswa } = useAuth()
+  const [open, setOpen] = useState(false)
+
+  const linkCls = function (active) {
+    return 'px-3 py-2 rounded-xl text-sm font-semibold ' + (active ? 'bg-bsi-900 text-white' : 'text-slate-600 hover:bg-slate-100')
+  }
+
+  const themeBtn = function (extra) {
+    return (
+      <button onClick={theme.toggle} className={'rounded-xl border border-slate-300 grid place-items-center hover:bg-slate-100 text-slate-700 ' + (extra || 'h-10 w-10')} title="Ganti tema">
+        <SizedIcon name={theme.dark ? 'sun' : 'moon'} size={18} />
+      </button>
+    )
+  }
+
+  return (
+    <div className="flex flex-col min-h-screen">
+      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="h-16 flex items-center justify-between gap-4">
+            <Link to="/" className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-2xl bg-gradient-to-tr from-bsi-800 to-gold-500 text-white grid place-items-center font-black">BSI</div>
+              <div>
+                <p className="font-bold leading-none text-slate-900">Logbook Magang</p>
+                <p className="text-xs text-slate-500 mt-1">Bank Syariah Indonesia</p>
+              </div>
+            </Link>
+            <nav className="hidden xl:flex items-center gap-1">
+              {LINKS.map(function (l) {
+                return <NavLink key={l.to} to={l.to} end={l.to === '/'} className={function (s) { return linkCls(s.isActive) }}>{l.label}</NavLink>
+              })}
+            </nav>
+            <div className="hidden xl:flex items-center gap-3">
+              {themeBtn()}
+              {mahasiswa ? (
+                <>
+                  <Link to="/dashboard" className="px-4 py-2 rounded-xl bg-bsi-800 text-white text-sm font-semibold hover:bg-bsi-900">Dashboard</Link>
+                  <Link to="/" onClick={function () { logoutMahasiswa() }} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-100">Keluar</Link>
+                </>
+              ) : (
+                <Link to="/login" className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-700">Masuk Intern</Link>
+              )}
+            </div>
+            <div className="flex xl:hidden items-center gap-2">
+              {themeBtn()}
+              <button onClick={function () { setOpen(function (o) { return !o }) }} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700">Menu</button>
+            </div>
+          </div>
+        </div>
+        <MenuMobile open={open}>
+            {LINKS.map(function (l) {
+              return <NavLink key={l.to} to={l.to} end={l.to === '/'} onClick={function () { setOpen(false) }} className={function (s) { return 'flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm ' + (s.isActive ? 'bg-bsi-100 text-bsi-900 font-bold ring-1 ring-bsi-200 dark:ring-bsi-500/40' : 'font-semibold text-slate-600 hover:bg-slate-100') }}>{function (s) { return <>{s.isActive ? <span className="h-2 w-2 shrink-0 rounded-full bg-current" /> : null}<span className="truncate">{l.label}</span></> }}</NavLink>
+            })}
+            {mahasiswa ? (
+              <>
+                <NavLink to="/dashboard" onClick={function () { setOpen(false) }} className={function (s) { return 'flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm font-semibold bg-bsi-800 text-white ' + (s.isActive ? 'ring-2 ring-gold-400' : '') }}>{function (s) { return <>{s.isActive ? <span className="h-2 w-2 shrink-0 rounded-full bg-gold-400" /> : null}<span className="truncate">Dashboard</span></> }}</NavLink>
+                <Link to="/" onClick={function () { setOpen(false); logoutMahasiswa() }} className="block px-4 py-3 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700">Keluar</Link>
+              </>
+            ) : (
+              <Link to="/login" onClick={function () { setOpen(false) }} className="block px-4 py-3 rounded-xl bg-slate-900 text-white text-sm font-semibold">Masuk Intern</Link>
+            )}
+        </MenuMobile>
+      </header>
+
+      <main className="anim-page max-w-7xl mx-auto px-4 py-8 lg:py-10 flex-1 w-full">
+        <Outlet />
+      </main>
+
+      <footer className="footer-ramping border-t border-slate-200 bg-white">
+<div className="mx-auto max-w-7xl px-4 py-4 text-center">
+<p className="text-xs text-slate-500">© 2026 Tim Magang BSI</p>
+</div>
+</footer>
+    </div>
+  )
+}
+```
+
 ## File: src/pages/LoginPage.jsx
 ```javascript
 import { useState } from 'react'
@@ -4793,13 +3789,13 @@ export default function LoginPage() {
 
   return (
     <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr] items-start">
-      <div className="card-hover rounded-[2rem] bg-bsi-900 text-white p-8 lg:p-10">
-        <span className="inline-flex px-4 py-2 rounded-full bg-white/10 text-xs font-semibold uppercase tracking-wide">Area Intern</span>
-        <h1 className="mt-6 text-3xl lg:text-4xl font-black leading-tight">Masuk untuk mengisi logbook, galeri, dan daftar hadir</h1>
-        <p className="mt-4 text-white/80 leading-relaxed">Halaman ini hanya digunakan oleh mahasiswa magang. Dosen pembimbing dan kaprodi tidak perlu login untuk melihat halaman publik.</p>
+      <div className="card-hover rounded-[2rem] bg-bsi-900 text-white p-5 sm:p-8 lg:p-10">
+        <span className="inline-flex px-3 py-1.5 rounded-full bg-white/10 text-[10px] font-semibold uppercase tracking-wide sm:px-4 sm:py-2 sm:text-xs">Area Intern</span>
+        <h1 className="mt-6 text-2xl sm:text-3xl lg:text-4xl font-black leading-tight">Masuk untuk mengisi logbook, galeri, dan daftar hadir</h1>
+        <p className="mt-3 text-sm leading-relaxed text-white/80 sm:mt-4 sm:text-base">Halaman ini hanya digunakan oleh mahasiswa magang. Dosen pembimbing dan kaprodi tidak perlu login untuk melihat halaman publik.</p>
       </div>
-      <div className="card-hover bg-white rounded-[2rem] border border-slate-200 shadow-sm p-8 lg:p-10">
-        <h2 className="text-2xl font-black text-slate-900">Login mahasiswa magang</h2>
+      <div className="card-hover bg-white rounded-[2rem] border border-slate-200 shadow-sm p-5 sm:p-8 lg:p-10">
+        <h2 className="text-xl sm:text-2xl font-black text-slate-900">Login mahasiswa magang</h2>
         {error ? (
           <div className="mt-3 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-red-100 text-red-600">
@@ -4872,9 +3868,9 @@ export default function TimPage() {
 
   return (
     <div>
-      <section className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
+      <section className="card-hover rounded-[2rem] bg-white border border-slate-200 p-5 sm:p-8 lg:p-10 shadow-sm">
         <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Profil Mahasiswa</p>
-        <h1 className="mt-2 text-3xl lg:text-4xl font-black text-slate-900">Mahasiswa magang Bank BSI</h1>
+        <h1 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Mahasiswa magang Bank BSI</h1>
       </section>
       <section className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
         {loading
@@ -4894,274 +3890,13 @@ export default function TimPage() {
                     </div>
                   </div>
                   <div className="mt-5 grid grid-cols-2 gap-3">
-                    <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Logbook publik</p><p className="mt-1 text-2xl font-black text-bsi-900">{totalLog}</p></div>
-                    <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Media galeri</p><p className="mt-1 text-2xl font-black text-bsi-900">{totalGal}</p></div>
+                    <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Logbook publik</p><p className="mt-1 text-xl sm:text-2xl font-black text-bsi-900">{totalLog}</p></div>
+                    <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Media galeri</p><p className="mt-1 text-xl sm:text-2xl font-black text-bsi-900">{totalGal}</p></div>
                   </div>
                 </div>
               )
             })}
       </section>
-    </div>
-  )
-}
-```
-
-## File: src/components/Layout.jsx
-```javascript
-import { Outlet, Link, NavLink } from 'react-router-dom'
-import { useTheme } from '../lib/theme.jsx'
-import { useAuth, logoutMahasiswa } from '../lib/auth.js'
-import { SizedIcon } from './icons.jsx'
-import { useEffect, useState } from 'react'
-
-const LINKS = [
-  { to: '/', label: 'Beranda' },
-  { to: '/logbook', label: 'Logbook' },
-  { to: '/galeri', label: 'Galeri' },
-  { to: '/absen', label: 'Daftar Hadir' },
-  { to: '/dospem', label: 'Tim & Dospem' }
-]
-
-function MenuMobile(props) {
-  return (
-    <div className={'menu-mobile-wrap xl:hidden' + (props.open ? ' menu-mobile-buka' : '')}>
-      <div className="menu-mobile-dalam">
-        <div className="menu-mobile-isi border-t border-slate-200 bg-white px-4 py-4 space-y-2">
-          {props.children}
-        </div>
-      </div>
-    </div>
-  )
-}
-export default function Layout() {
-  const theme = useTheme()
-  const { mahasiswa } = useAuth()
-  const [open, setOpen] = useState(false)
-
-  const linkCls = function (active) {
-    return 'px-3 py-2 rounded-xl text-sm font-semibold ' + (active ? 'bg-bsi-900 text-white' : 'text-slate-600 hover:bg-slate-100')
-  }
-
-  const themeBtn = function (extra) {
-    return (
-      <button onClick={theme.toggle} className={'rounded-xl border border-slate-300 grid place-items-center hover:bg-slate-100 text-slate-700 ' + (extra || 'h-10 w-10')} title="Ganti tema">
-        <SizedIcon name={theme.dark ? 'sun' : 'moon'} size={18} />
-      </button>
-    )
-  }
-
-  return (
-    <div className="flex flex-col min-h-screen">
-      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="h-16 flex items-center justify-between gap-4">
-            <Link to="/" className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-gradient-to-tr from-bsi-800 to-gold-500 text-white grid place-items-center font-black">BSI</div>
-              <div>
-                <p className="font-bold leading-none text-slate-900">Logbook Magang</p>
-                <p className="text-xs text-slate-500 mt-1">Bank Syariah Indonesia</p>
-              </div>
-            </Link>
-            <nav className="hidden xl:flex items-center gap-1">
-              {LINKS.map(function (l) {
-                return <NavLink key={l.to} to={l.to} className={function (s) { return linkCls(s.isActive) }}>{l.label}</NavLink>
-              })}
-            </nav>
-            <div className="hidden xl:flex items-center gap-3">
-              {themeBtn()}
-              {mahasiswa ? (
-                <>
-                  <Link to="/dashboard" className="px-4 py-2 rounded-xl bg-bsi-800 text-white text-sm font-semibold hover:bg-bsi-900">Dashboard</Link>
-                  <Link to="/" onClick={function () { logoutMahasiswa() }} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-100">Keluar</Link>
-                </>
-              ) : (
-                <Link to="/login" className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-700">Masuk Intern</Link>
-              )}
-            </div>
-            <div className="flex xl:hidden items-center gap-2">
-              {themeBtn()}
-              <button onClick={function () { setOpen(function (o) { return !o }) }} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700">Menu</button>
-            </div>
-          </div>
-        </div>
-        <MenuMobile open={open}>
-            {LINKS.map(function (l) {
-              return <Link key={l.to} to={l.to} onClick={function () { setOpen(false) }} className="block px-4 py-3 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100">{l.label}</Link>
-            })}
-            {mahasiswa ? (
-              <>
-                <Link to="/dashboard" onClick={function () { setOpen(false) }} className="block px-4 py-3 rounded-xl bg-bsi-800 text-white text-sm font-semibold">Dashboard</Link>
-                <Link to="/" onClick={function () { setOpen(false); logoutMahasiswa() }} className="block px-4 py-3 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700">Keluar</Link>
-              </>
-            ) : (
-              <Link to="/login" onClick={function () { setOpen(false) }} className="block px-4 py-3 rounded-xl bg-slate-900 text-white text-sm font-semibold">Masuk Intern</Link>
-            )}
-        </MenuMobile>
-      </header>
-
-      <main className="anim-page max-w-7xl mx-auto px-4 py-8 lg:py-10 flex-1 w-full">
-        <Outlet />
-      </main>
-
-      <footer className="footer-ramping border-t border-slate-200 bg-white">
-<div className="mx-auto max-w-7xl px-4 py-4 text-center">
-<p className="text-xs text-slate-500">© 2026 Tim Magang BSI</p>
-</div>
-</footer>
-    </div>
-  )
-}
-```
-
-## File: src/pages/DospemPage.jsx
-```javascript
-import { urutkanTanggal } from '../lib/format.js'
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { supabase } from '../lib/supabase.js'
-import { EmptyState, Modal , Avatar } from '../components/ui.jsx'
-import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
-import { SkeletonLogbookCard, SkeletonPersonCard } from '../components/Skeleton.jsx'
-
-export default function DospemPage() {
-  const [logs, setLogs] = useState([])
-  const [people, setPeople] = useState([])
-  const [galCount, setGalCount] = useState(0)
-  const [hadirCount, setHadirCount] = useState(0)
-  const [galRows, setGalRows] = useState([])
-  const [hadirRows, setHadirRows] = useState([])
-  const [detail, setDetail] = useState(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(function () {
-    async function load() {
-      const l = await supabase
-        .from('logbooks')
-        .select('*, mahasiswa(*), logbook_items(*)')
-        .eq('status', 'publik')
-        .order('tanggal', { ascending: false })
-        .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
-      const p = await supabase.from('mahasiswa').select('id, nama, nim, prodi, foto_profil').order('nama')
-      const g = await supabase.from('galeri').select('id, mahasiswa_id')
-      const h = await supabase.from('daftar_hadir').select('id, mahasiswa_id, status')
-      setLogs(l.data || [])
-      setPeople(p.data || [])
-      setGalCount((g.data || []).length)
-      setGalRows(g.data || [])
-      setHadirCount((h.data || []).length)
-      setHadirRows(h.data || [])
-      setLoading(false)
-    }
-    load()
-  }, [])
-
-  return (
-    <div>
-      <section className="card-hover rounded-[2rem] bg-bsi-900 text-white p-8 lg:p-12">
-        <span className="inline-flex px-4 py-2 rounded-full bg-white/10 text-xs font-semibold uppercase tracking-wide">Monitoring Dospem dan Kaprodi</span>
-        <h1 className="mt-6 text-3xl lg:text-5xl font-black max-w-3xl leading-tight">Ringkasan kegiatan magang tim di Bank BSI</h1>
-        <p className="mt-4 max-w-3xl text-white/80 leading-relaxed">Halaman ini dapat diakses tanpa login.</p>
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {loading
-            ? [0, 1, 2, 3].map(function (i) {
-                return (
-                  <div key={i} className="rounded-[1.5rem] bg-white/10 p-5">
-                    <div className="skeleton skeleton-on-dark h-4 w-24"></div>
-                    <div className="skeleton skeleton-on-dark h-9 w-14 mt-2"></div>
-                  </div>
-                )
-              })
-            : [
-                <div key="mahasiswa" className="card-hover rounded-[1.5rem] bg-white/10 p-5"><p className="text-sm text-white/70">Total mahasiswa</p><p className="mt-1 text-3xl font-black">{people.length}</p></div>,
-                <div key="logbook" className="card-hover rounded-[1.5rem] bg-white/10 p-5"><p className="text-sm text-white/70">Logbook publik</p><p className="mt-1 text-3xl font-black">{logs.length}</p></div>,
-                <div key="galeri" className="card-hover rounded-[1.5rem] bg-white/10 p-5"><p className="text-sm text-white/70">Media galeri</p><p className="mt-1 text-3xl font-black">{galCount}</p></div>,
-                <div key="hadir" className="card-hover rounded-[1.5rem] bg-white/10 p-5"><p className="text-sm text-white/70">Catatan hadir</p><p className="mt-1 text-3xl font-black">{hadirCount}</p></div>
-              ]}
-        </div>
-        <div className="mt-8 flex flex-wrap gap-3">
-          <Link to="/logbook" className="px-5 py-3 rounded-2xl bg-gold-500 text-slate-900 text-sm font-bold hover:bg-gold-400">Lihat logbook</Link>
-          <Link to="/galeri" className="px-5 py-3 rounded-2xl bg-white/10 text-white text-sm font-bold hover:bg-white/20">Lihat galeri</Link>
-          <Link to="/absen" className="px-5 py-3 rounded-2xl bg-white/10 text-white text-sm font-bold hover:bg-white/20">Lihat daftar hadir</Link>
-        </div>
-      </section>
-
-      <section className="mt-10">
-<h2 className="text-2xl lg:text-3xl font-black text-slate-900">Profil tim magang</h2>
-<p className="mt-2 max-w-3xl text-slate-500">Seluruh mahasiswa magang beserta kontribusi logbook, media galeri, dan catatan kehadiran masing-masing.</p>
-<div className="grid-pusat-rapat mt-6">
-{loading
-? [0, 1, 2].map(function (i) { return <div key={i} className="kolom-kartu-rapat"><SkeletonPersonCard /></div> })
-: people.map(function (p) {
-const totalLog = logs.filter(function (x) { return x.mahasiswa_id === p.id }).length
-const totalGal = galRows.filter(function (x) { return x.mahasiswa_id === p.id }).length
-const totalHadir = hadirRows.filter(function (x) { return x.mahasiswa_id === p.id }).length
-return (
-<div key={p.id} className="kolom-kartu-rapat">
-<div className="card-hover rounded-3xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col h-full">
-<div className="flex items-center gap-4">
-<Avatar src={p.foto_profil || null} nama={p.nama} size="lg" />
-<div className="min-w-0 flex-1">
-<p className="truncate text-lg font-black text-slate-900">{p.nama}</p>
-<p className="truncate text-xs text-slate-500">NIM {p.nim}</p>
-{p.prodi ? <span className="mt-1.5 inline-flex px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold">{p.prodi}</span> : null}
-</div>
-</div>
-<div className="mt-4 grid grid-cols-2 gap-3">
-<div className="rounded-2xl bg-slate-50 p-3">
-<p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Logbook</p>
-<p className="mt-0.5 text-xl font-black text-bsi-800">{totalLog}</p>
-</div>
-<div className="rounded-2xl bg-slate-50 p-3">
-<p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Media</p>
-<p className="mt-0.5 text-xl font-black text-bsi-800">{totalGal}</p>
-</div>
-</div>
-<div className="mt-3 pt-3 border-t border-slate-100">
-<p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Rekap Kehadiran</p>
-<div className="grid grid-cols-3 gap-2">
-<div className="rounded-xl bg-emerald-50 p-2 text-center">
-<p className="text-[10px] font-bold text-emerald-600 uppercase">Masuk</p>
-<p className="text-base font-black text-emerald-700">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Masuk' }).length}</p>
-</div>
-<div className="rounded-xl bg-amber-50 p-2 text-center">
-<p className="text-[10px] font-bold text-amber-600 uppercase">Izin</p>
-<p className="text-base font-black text-amber-700">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Izin' }).length}</p>
-</div>
-<div className="rounded-xl bg-red-50 p-2 text-center">
-<p className="text-[10px] font-bold text-red-600 uppercase">Bolos</p>
-<p className="text-base font-black text-red-700">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Bolos' }).length}</p>
-</div>
-</div>
-</div>
-</div>
- </div>
-)
-})}
-{!loading && !people.length ? <div className="w-full"><EmptyState title="Belum ada data mahasiswa" desc="Profil tim akan tampil setelah mahasiswa terdaftar." /></div> : null}
-</div>
-</section>
-
-      <section className="mt-10">
-        <h2 className="text-2xl lg:text-3xl font-black text-slate-900">Aktivitas yang sudah dipublikasikan</h2>
-        <div className="grid-pusat mt-6">
-          {loading
-            ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
-            : urutkanTanggal(logs, 'terbaru').slice(0, 6).map(function (l) {
-                return (
-                  <div key={l.id} className="kolom-kartu">
-                    <LogbookCard log={l} onDetail={function () { setDetail(l) }} />
-                  </div>
-                )
-              })}
-          {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum ada logbook publik" desc="Logbook akan tampil setelah mahasiswa mengatur status siap dilihat." /></div> : null}
-        </div>
-        <div className="mt-8 flex justify-center">
-          <Link to="/logbook" className="rounded-2xl bg-bsi-800 px-6 py-3 text-sm font-bold text-white hover:bg-bsi-900">Lihat semua logbook</Link>
-        </div>
-      </section>
-      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
-        {detail ? <LogbookDetail log={detail} /> : null}
-      </Modal>
     </div>
   )
 }
@@ -5659,6 +4394,160 @@ export function EyeToggle(props) {
 }
 ```
 
+## File: src/pages/DospemPage.jsx
+```javascript
+import { urutkanTanggal } from '../lib/format.js'
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { supabase } from '../lib/supabase.js'
+import { EmptyState, Modal , Avatar } from '../components/ui.jsx'
+import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
+import { SkeletonLogbookCard, SkeletonPersonCard } from '../components/Skeleton.jsx'
+
+export default function DospemPage() {
+  const [logs, setLogs] = useState([])
+  const [people, setPeople] = useState([])
+  const [galCount, setGalCount] = useState(0)
+  const [hadirCount, setHadirCount] = useState(0)
+  const [galRows, setGalRows] = useState([])
+  const [hadirRows, setHadirRows] = useState([])
+  const [detail, setDetail] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(function () {
+    async function load() {
+      const l = await supabase
+        .from('logbooks')
+        .select('*, mahasiswa(*), logbook_items(*)')
+        .eq('status', 'publik')
+        .order('tanggal', { ascending: false })
+        .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
+      const p = await supabase.from('mahasiswa').select('id, nama, nim, prodi, foto_profil').order('nama')
+      const g = await supabase.from('galeri').select('id, mahasiswa_id')
+      const h = await supabase.from('daftar_hadir').select('id, mahasiswa_id, status')
+      setLogs(l.data || [])
+      setPeople(p.data || [])
+      setGalCount((g.data || []).length)
+      setGalRows(g.data || [])
+      setHadirCount((h.data || []).length)
+      setHadirRows(h.data || [])
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  return (
+    <div>
+      <section className="card-hover rounded-[2rem] bg-bsi-900 text-white p-5 sm:p-5 sm:p-8 lg:p-12">
+        <span className="inline-flex px-3 py-1.5 rounded-full bg-white/10 text-[10px] font-semibold uppercase tracking-wide sm:px-4 sm:py-2 sm:text-xs">Monitoring Dospem dan Kaprodi</span>
+        <h1 className="mt-6 text-2xl sm:text-2xl sm:text-3xl lg:text-5xl font-black max-w-3xl leading-tight">Ringkasan kegiatan magang tim di Bank BSI</h1>
+        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-white/80 sm:mt-4 sm:text-base">Halaman ini dapat diakses tanpa login.</p>
+        <div className="mt-5 grid grid-cols-2 gap-2.5 sm:mt-8 sm:gap-4 xl:grid-cols-4">
+          {loading
+            ? [0, 1, 2, 3].map(function (i) {
+                return (
+                  <div key={i} className="rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5">
+                    <div className="skeleton skeleton-on-dark h-4 w-24"></div>
+                    <div className="skeleton skeleton-on-dark h-9 w-14 mt-2"></div>
+                  </div>
+                )
+              })
+            : [
+                <div key="mahasiswa" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/70">Total mahasiswa</p><p className="mt-1 text-2xl sm:text-3xl font-black">{people.length}</p></div>,
+                <div key="logbook" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/70">Logbook publik</p><p className="mt-1 text-2xl sm:text-3xl font-black">{logs.length}</p></div>,
+                <div key="galeri" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/70">Media galeri</p><p className="mt-1 text-2xl sm:text-3xl font-black">{galCount}</p></div>,
+                <div key="hadir" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/70">Catatan hadir</p><p className="mt-1 text-2xl sm:text-3xl font-black">{hadirCount}</p></div>
+              ]}
+        </div>
+        <div className="mt-6 flex flex-wrap gap-2 sm:mt-8 sm:gap-3">
+          <Link to="/logbook" className="px-4 py-2 rounded-xl bg-gold-500 text-slate-900 text-xs font-bold hover:bg-gold-400 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat logbook</Link>
+          <Link to="/galeri" className="px-4 py-2 rounded-xl bg-white/10 text-white text-xs font-bold hover:bg-white/20 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat galeri</Link>
+          <Link to="/absen" className="px-4 py-2 rounded-xl bg-white/10 text-white text-xs font-bold hover:bg-white/20 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat daftar hadir</Link>
+        </div>
+      </section>
+
+      <section className="mt-10">
+<h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Profil tim magang</h2>
+<p className="mt-2 max-w-3xl text-sm text-slate-500 sm:text-base">Seluruh mahasiswa magang beserta kontribusi logbook, media galeri, dan catatan kehadiran masing-masing.</p>
+<div className="grid-pusat-rapat mt-6">
+{loading
+? [0, 1, 2].map(function (i) { return <div key={i} className="kolom-kartu-rapat"><SkeletonPersonCard /></div> })
+: people.map(function (p) {
+const totalLog = logs.filter(function (x) { return x.mahasiswa_id === p.id }).length
+const totalGal = galRows.filter(function (x) { return x.mahasiswa_id === p.id }).length
+const totalHadir = hadirRows.filter(function (x) { return x.mahasiswa_id === p.id }).length
+return (
+<div key={p.id} className="kolom-kartu-rapat">
+<div className="card-hover rounded-3xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col h-full">
+<div className="flex items-center gap-4">
+<Avatar src={p.foto_profil || null} nama={p.nama} size="lg" />
+<div className="min-w-0 flex-1">
+<p className="truncate text-lg font-black text-slate-900">{p.nama}</p>
+<p className="truncate text-xs text-slate-500">NIM {p.nim}</p>
+{p.prodi ? <span className="mt-1.5 inline-flex px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold">{p.prodi}</span> : null}
+</div>
+</div>
+<div className="mt-4 grid grid-cols-2 gap-3">
+<div className="rounded-2xl bg-slate-50 p-3">
+<p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Logbook</p>
+<p className="mt-0.5 text-xl font-black text-bsi-800">{totalLog}</p>
+</div>
+<div className="rounded-2xl bg-slate-50 p-3">
+<p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Media</p>
+<p className="mt-0.5 text-xl font-black text-bsi-800">{totalGal}</p>
+</div>
+</div>
+<div className="mt-3 pt-3 border-t border-slate-100">
+<p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Rekap Kehadiran</p>
+<div className="grid grid-cols-3 gap-2">
+<div className="rounded-xl bg-emerald-50 p-2 text-center">
+<p className="text-[10px] font-bold text-emerald-600 uppercase">Masuk</p>
+<p className="text-base font-black text-emerald-700">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Masuk' }).length}</p>
+</div>
+<div className="rounded-xl bg-amber-50 p-2 text-center">
+<p className="text-[10px] font-bold text-amber-600 uppercase">Izin</p>
+<p className="text-base font-black text-amber-700">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Izin' }).length}</p>
+</div>
+<div className="rounded-xl bg-red-50 p-2 text-center">
+<p className="text-[10px] font-bold text-red-600 uppercase">Bolos</p>
+<p className="text-base font-black text-red-700">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Bolos' }).length}</p>
+</div>
+</div>
+</div>
+</div>
+ </div>
+)
+})}
+{!loading && !people.length ? <div className="w-full"><EmptyState title="Belum ada data mahasiswa" desc="Profil tim akan tampil setelah mahasiswa terdaftar." /></div> : null}
+</div>
+</section>
+
+      <section className="mt-10">
+        <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Aktivitas yang sudah dipublikasikan</h2>
+        <div className="grid-pusat mt-6">
+          {loading
+            ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
+            : urutkanTanggal(logs, 'terbaru').slice(0, 6).map(function (l) {
+                return (
+                  <div key={l.id} className="kolom-kartu">
+                    <LogbookCard log={l} onDetail={function () { setDetail(l) }} />
+                  </div>
+                )
+              })}
+          {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum ada logbook publik" desc="Logbook akan tampil setelah mahasiswa mengatur status siap dilihat." /></div> : null}
+        </div>
+        <div className="mt-8 flex justify-center">
+          <Link to="/logbook" className="rounded-xl bg-bsi-800 px-5 py-2.5 text-xs font-bold text-white hover:bg-bsi-900 sm:rounded-2xl sm:px-6 sm:py-3 sm:text-sm">Lihat semua logbook</Link>
+        </div>
+      </section>
+      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
+        {detail ? <LogbookDetail log={detail} /> : null}
+      </Modal>
+    </div>
+  )
+}
+```
+
 ## File: src/pages/HomePage.jsx
 ```javascript
 import { urutkanTanggal } from '../lib/format.js'
@@ -5697,30 +4586,30 @@ export default function HomePage() {
   return (
     <div>
       <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr] items-stretch">
-        <div className="card-hover relative overflow-hidden rounded-[2rem] bg-bsi-900 text-white p-8 lg:p-12">
+        <div className="card-hover relative overflow-hidden rounded-[2rem] bg-bsi-900 text-white p-5 sm:p-8 lg:p-12">
           <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-gold-500/20 blur-2xl" />
           <div className="absolute -left-10 bottom-0 h-40 w-40 rounded-full bg-emerald-300/10 blur-2xl" />
           <div className="relative z-10">
-            <span className="inline-flex px-4 py-2 rounded-full bg-white/10 text-xs font-semibold uppercase tracking-wide">Magang Bank BSI</span>
-            <h1 className="mt-6 text-3xl lg:text-5xl font-black leading-tight max-w-2xl">Logbook, Galeri, dan Daftar Hadir Magang dalam Satu Portal</h1>
-            <p className="mt-5 max-w-2xl text-white/80 leading-relaxed">Portal ini mencatat kegiatan harian, dokumentasi media, dan kehadiran tim magang selama membantu operasional Bank BSI.</p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link to="/logbook" className="px-6 py-3 rounded-2xl bg-gold-500 text-slate-900 font-bold hover:bg-gold-400">Lihat Logbook</Link>
-              <Link to="/galeri" className="px-6 py-3 rounded-2xl bg-white/10 text-white font-bold hover:bg-white/20">Lihat Galeri</Link>
-              <Link to="/absen" className="px-6 py-3 rounded-2xl bg-white/10 text-white font-bold hover:bg-white/20">Daftar Hadir</Link>
+            <span className="inline-flex px-3 py-1.5 rounded-full bg-white/10 text-[10px] font-semibold uppercase tracking-wide sm:px-4 sm:py-2 sm:text-xs">Magang Bank BSI</span>
+            <h1 className="mt-6 text-2xl sm:text-3xl lg:text-5xl font-black leading-tight max-w-2xl">Logbook, Galeri, dan Daftar Hadir Magang dalam Satu Portal</h1>
+            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-white/80 sm:mt-5 sm:text-base">Portal ini mencatat kegiatan harian, dokumentasi media, dan kehadiran tim magang selama membantu operasional Bank BSI.</p>
+            <div className="mt-6 flex flex-wrap gap-2 sm:mt-8 sm:gap-3">
+              <Link to="/logbook" className="px-4 py-2.5 rounded-xl bg-gold-500 text-slate-900 text-sm font-bold hover:bg-gold-400 sm:px-6 sm:py-3 sm:rounded-2xl sm:text-base">Lihat Logbook</Link>
+              <Link to="/galeri" className="px-4 py-2.5 rounded-xl bg-white/10 text-white text-sm font-bold hover:bg-white/20 sm:px-6 sm:py-3 sm:rounded-2xl sm:text-base">Lihat Galeri</Link>
+              <Link to="/absen" className="px-4 py-2.5 rounded-xl bg-white/10 text-white text-sm font-bold hover:bg-white/20 sm:px-6 sm:py-3 sm:rounded-2xl sm:text-base">Daftar Hadir</Link>
               {mahasiswa
-                ? <Link to="/dashboard" className="px-6 py-3 rounded-2xl bg-white text-bsi-900 font-bold hover:bg-slate-100">Buka Dashboard</Link>
-                : <Link to="/login" className="px-6 py-3 rounded-2xl bg-white text-bsi-900 font-bold hover:bg-slate-100">Masuk Intern</Link>}
+                ? <Link to="/dashboard" className="px-4 py-2.5 rounded-xl bg-[#ffffff] text-[#135033] text-sm font-bold hover:bg-[#f1f5f9] sm:px-6 sm:py-3 sm:rounded-2xl sm:text-base">Buka Dashboard</Link>
+                : <Link to="/login" className="px-4 py-2.5 rounded-xl bg-[#ffffff] text-[#135033] text-sm font-bold hover:bg-[#f1f5f9] sm:px-6 sm:py-3 sm:rounded-2xl sm:text-base">Masuk Intern</Link>}
             </div>
           </div>
         </div>
-        <div className="grid gap-4">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 lg:grid-cols-1 lg:gap-4">
           {loading
             ? [0, 1, 2].map(function (i) { return <SkeletonStatCard key={i} /> })
             : [
-                <StatCard key="mahasiswa" label="Total mahasiswa magang" value={stats.mahasiswa} sub="Mahasiswa terdaftar dalam tim" />,
-                <StatCard key="logbook" label="Total logbook publik" value={stats.logbook} sub="Catatan kegiatan harian" />,
-                <StatCard key="galeri" label="Total media galeri" value={stats.galeri} sub="Foto dan video dokumentasi" />
+                <StatCard key="mahasiswa" label="Total mahasiswa magang" labelRapat="Mahasiswa" value={stats.mahasiswa} sub="Mahasiswa terdaftar dalam tim" rapat />,
+                <StatCard key="logbook" label="Total logbook publik" labelRapat="Logbook" value={stats.logbook} sub="Catatan kegiatan harian" rapat />,
+                <StatCard key="galeri" label="Total media galeri" labelRapat="Media" value={stats.galeri} sub="Foto dan video dokumentasi" rapat />
               ]}
         </div>
       </section>
@@ -5729,7 +4618,7 @@ export default function HomePage() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Kegiatan terbaru</p>
-            <h2 className="mt-2 text-2xl lg:text-3xl font-black text-slate-900">Logbook terbaru tim</h2>
+            <h2 className="mt-2 text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Logbook terbaru tim</h2>
           </div>
           <Link to="/logbook" className="text-sm font-semibold text-bsi-800 hover:text-bsi-950">Lihat semua logbook</Link>
         </div>
@@ -5746,7 +4635,7 @@ export default function HomePage() {
           {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum ada logbook publik" desc="Logbook yang sudah berstatus Published akan tampil di sini." /></div> : null}
         </div>
         <div className="mt-8 flex justify-center">
-          <Link to="/logbook" className="rounded-2xl bg-bsi-800 px-6 py-3 text-sm font-bold text-white hover:bg-bsi-900">Lihat semua logbook</Link>
+          <Link to="/logbook" className="rounded-xl bg-bsi-800 px-5 py-2.5 text-xs font-bold text-white hover:bg-bsi-900 sm:rounded-2xl sm:px-6 sm:py-3 sm:text-sm">Lihat semua logbook</Link>
         </div>
       </section>
 
@@ -5824,10 +4713,10 @@ export default function LogbookPage() {
 
   return (
     <div>
-      <section className="rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
+      <section className="rounded-[2rem] bg-white border border-slate-200 p-5 sm:p-8 lg:p-10 shadow-sm">
         <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Logbook publik</p>
-        <h1 className="mt-2 text-3xl lg:text-4xl font-black text-slate-900">Catatan kegiatan magang</h1>
-        <p className="mt-3 text-slate-600 max-w-2xl">Satu logbook mewakili satu hari kerja dan bisa berisi beberapa kegiatan.</p>
+        <h1 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Catatan kegiatan magang</h1>
+        <p className="mt-2 text-sm text-slate-600 max-w-2xl sm:mt-3 sm:text-base">Satu logbook mewakili satu hari kerja dan bisa berisi beberapa kegiatan.</p>
       </section>
 
       <section className="mt-6">
@@ -5942,10 +4831,10 @@ export default function AttendancePage() {
 
   return (
     <div>
-      <section className="rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
+      <section className="rounded-[2rem] bg-white border border-slate-200 p-5 sm:p-5 sm:p-8 lg:p-10 shadow-sm">
         <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Daftar hadir</p>
-        <h1 className="mt-2 text-3xl lg:text-4xl font-black text-slate-900">Monitoring kehadiran tim magang</h1>
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <h1 className="mt-2 text-2xl sm:text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Monitoring kehadiran tim magang</h1>
+        <div className="mt-5 grid grid-cols-2 gap-2.5 sm:mt-8 sm:gap-4 xl:grid-cols-4">
           {loading
             ? [0, 1, 2, 3].map(function (i) { return <SkeletonStatCard key={i} /> })
             : [
@@ -5969,9 +4858,9 @@ export default function AttendancePage() {
         </FilterBar>
       </section>
 
-      <section className="mt-8 card-hover rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
+      <section className="mt-8 card-hover rounded-[2rem] bg-white border border-slate-200 p-5 sm:p-5 sm:p-8 lg:p-10 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <h2 className="text-2xl font-black text-slate-900">Grafik kehadiran per mahasiswa</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-slate-900">Grafik kehadiran per mahasiswa</h2>
           <div className="flex flex-wrap gap-3 text-xs font-semibold">
             <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-emerald-500" />Masuk</span>
             <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-amber-500" />Izin</span>
@@ -6003,7 +4892,7 @@ export default function AttendancePage() {
       </section>
 
       <section className="mt-8">
-        <h2 className="text-2xl lg:text-3xl font-black text-slate-900">Daftar kehadiran sesuai filter</h2>
+        <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Daftar kehadiran sesuai filter</h2>
         <div className="grid-pusat-rapat mt-6">
           {loading
             ? [0, 1, 2].map(function (i) { return <div key={i} className="kolom-kartu-rapat"><SkeletonAttendanceCard /></div> })
@@ -6091,10 +4980,10 @@ export default function GalleryPage() {
 
   return (
     <div>
-      <section className="rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
+      <section className="rounded-[2rem] bg-white border border-slate-200 p-5 sm:p-8 lg:p-10 shadow-sm">
         <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Galeri dokumentasi</p>
-        <h1 className="mt-2 text-3xl lg:text-4xl font-black text-slate-900">Foto dan video kegiatan magang</h1>
-        <p className="mt-3 text-slate-600 max-w-2xl">Setiap kartu mewakili satu kegiatan. Klik media untuk melihat detail.</p>
+        <h1 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Foto dan video kegiatan magang</h1>
+        <p className="mt-2 text-sm text-slate-600 max-w-2xl sm:mt-3 sm:text-base">Setiap kartu mewakili satu kegiatan. Klik media untuk melihat detail.</p>
       </section>
 
       <section className="mt-6">
@@ -6230,7 +5119,7 @@ export function LogbookDetail(props) {
       </div>
       <div>
         <p className="text-sm text-slate-500">{formatTanggal(log.tanggal)}</p>
-        <h2 className="mt-1 text-2xl font-black text-slate-900">{log.judul}</h2>
+        <h2 className="mt-1 text-xl sm:text-2xl font-black text-slate-900">{log.judul}</h2>
       </div>
       <div>
         <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Rincian kegiatan</p>
@@ -6336,7 +5225,7 @@ export function GalleryDetail(props) {
         <span className="text-sm text-slate-500">{formatTanggal(item.tanggal)}</span>
       </div>
       <div>
-        <h2 className="text-2xl font-black text-slate-900">{item.judul}</h2>
+        <h2 className="text-xl sm:text-2xl font-black text-slate-900">{item.judul}</h2>
         <p className="mt-3 text-slate-600 leading-relaxed">{item.deskripsi || 'Tidak ada deskripsi.'}</p>
       </div>
       <div className="border-t border-slate-100 pt-4"><PersonChip mahasiswa={item.mahasiswa} /></div>
@@ -6374,7 +5263,7 @@ export function AttendanceDetail(props) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm text-slate-500">{formatTanggal(row.tanggal)}</p>
-          <h2 className="mt-1 text-2xl font-black text-slate-900">Detail daftar hadir</h2>
+          <h2 className="mt-1 text-xl sm:text-2xl font-black text-slate-900">Detail daftar hadir</h2>
         </div>
         <AttendanceBadge status={row.status} />
       </div>
@@ -6414,15 +5303,21 @@ export const btnSmall = 'px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:round
 export const cardCls = 'card-hover bg-white rounded-3xl border border-slate-200 shadow-sm'
 
 export function StatCard(props) {
+  const rapat = props.rapat
+  const clsWadah = rapat ? ' p-3 sm:p-6' : ' p-4 sm:p-6'
+  const clsLabel = (rapat ? 'text-[11px] leading-snug sm:text-sm' : 'text-xs sm:text-sm') + ' text-slate-500'
+  const clsLabelRapat = 'text-[11px] leading-snug font-semibold text-slate-500 sm:hidden'
+  const clsValue = (rapat ? 'mt-1 text-xl sm:text-3xl' : 'mt-2 text-2xl sm:text-3xl') + ' font-black text-bsi-900'
+  const clsSub = (rapat ? 'hidden sm:block ' : '') + 'mt-1 text-[11px] leading-snug sm:text-xs text-slate-500'
   return (
-    <div className={cardCls + ' p-6'}>
-      <p className="text-sm text-slate-500">{props.label}</p>
-      <p className="mt-2 text-3xl font-black text-bsi-900">{props.value}</p>
-      {props.sub ? <p className="mt-1 text-xs text-slate-500">{props.sub}</p> : null}
+    <div className={cardCls + clsWadah}>
+      {props.labelRapat ? <p className={clsLabelRapat}>{props.labelRapat}</p> : null}
+      <p className={clsLabel + (props.labelRapat ? ' hidden sm:block' : '')}>{props.label}</p>
+      <p className={clsValue}>{props.value}</p>
+      {props.sub ? <p className={clsSub}>{props.sub}</p> : null}
     </div>
   )
 }
-
 export function EmptyState(props) {
   return (
     <div className={cardCls + ' border-dashed p-10 text-center'}>
@@ -8416,19 +7311,19 @@ async function submitHadir(e) {
 
   return (
     <div>
-      <section className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 lg:p-10 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-6">
+      <section className="card-hover rounded-[2rem] bg-white border border-slate-200 p-5 sm:p-8 lg:p-10 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-4 sm:gap-6">
           <div>
             <div className="flex flex-wrap items-center gap-4 sm:gap-6">
 <div className="avatar-kepala-dash"><Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl" onClick={function () { gantiTab('profil') }} title="Kelola foto profil" /></div>
 <div className="min-w-0 flex-1">
-            <h1 className="truncate text-lg sm:text-2xl lg:text-3xl font-black text-slate-900">{mahasiswa.nama}</h1>
+            <h1 className="truncate text-lg sm:text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">{mahasiswa.nama}</h1>
             <p className="text-sm text-slate-500">NIM {mahasiswa.nim}</p>
 {mahasiswa.prodi ? <p className="truncate text-sm text-slate-500">{mahasiswa.prodi}</p> : null}
           </div>
         </div>
         </div>
-<div className="mt-8 flex flex-wrap gap-2">
+<div className="flex flex-wrap gap-2 sm:mt-8">
           <button onClick={function () { gantiTab('logbook') }} className={tabCls('logbook')}>Logbook</button>
           <button onClick={function () { gantiTab('galeri') }} className={tabCls('galeri')}>Galeri</button>
           <button onClick={function () { gantiTab('absen') }} className={tabCls('absen')}>Daftar Hadir</button>
@@ -8483,7 +7378,7 @@ async function submitHadir(e) {
         <section className="anim-tab mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
           <div ref={refFormLog} className={'card-hover scroll-mt-24 bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editLogId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
             <ModeIndicator edit={!!editLogId} onCancel={cancelEditLog} />
-            <h2 className="mt-3 text-2xl font-black text-slate-900">{editLogId ? 'Ubah logbook harian' : 'Tambah logbook harian'}</h2>
+            <h2 className="mt-3 text-xl sm:text-2xl font-black text-slate-900">{editLogId ? 'Ubah logbook harian' : 'Tambah logbook harian'}</h2>
             <form onSubmit={submitLogbook} className="mt-6 space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
@@ -8574,7 +7469,7 @@ async function submitHadir(e) {
                           <input className={inputCls} value={it.driveLink} onChange={function (e) { patchItem(i, { driveLink: e.target.value }) }} placeholder="Link Google Drive untuk unduhan (opsional)" />
                         </div>
                       ) : (
-                        <FileInput accept="image/*" fileName={it.file ? it.file.name : ''} label="Klik untuk pilih foto" hint="Foto JPG, PNG, atau HEIC otomatis dikonversi ke WebP ringan."
+                        <FileInput accept="image/*" fileName={it.file ? it.file.name : ''} label="Klik untuk pilih foto" hint="Foto JPG, PNG, atau HEIC otomatis dikonversi ke WebP."
                           onChange={function (e) { onItemFile(i, e.target.files[0]) }} />
                       )}
                       <label className={'flex items-start gap-3 rounded-2xl border p-3 cursor-pointer w-full ' + (it.preview ? (it.show ? 'border-gold-500 bg-gold-500/5' : 'border-slate-200') : 'border-slate-200 bg-slate-50 opacity-50 cursor-not-allowed')}>
@@ -8597,7 +7492,7 @@ async function submitHadir(e) {
           </div>
 
           <div className="space-y-5 min-w-0">
-            <h2 ref={refListLog} className="text-2xl font-black text-slate-900 scroll-mt-24">Logbook kamu</h2>
+            <h2 ref={refListLog} className="text-xl sm:text-2xl font-black text-slate-900 scroll-mt-24">Logbook kamu</h2>
             <FilterBar open={logFilterOpen} onToggle={function () { setLogFilterOpen(function (o) { return !o }) }} activeCount={logFilterActive}
               onReset={function () { setLogFilter(LOG_INITIAL) }}>
               <FilterSelect icon={ICONS.tag} value={logFilter.kategori} onChange={function (v) { setLogFilter(Object.assign({}, logFilter, { kategori: v })) }}
@@ -8626,7 +7521,7 @@ async function submitHadir(e) {
         <section className="anim-tab mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
           <div ref={refFormGal} className={'card-hover scroll-mt-24 bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editGalId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
             <ModeIndicator edit={!!editGalId} onCancel={cancelEditGal} />
-            <h2 className="mt-3 text-2xl font-black text-slate-900">{editGalId ? 'Ubah media galeri' : 'Tambah media galeri'}</h2>
+            <h2 className="mt-3 text-xl sm:text-2xl font-black text-slate-900">{editGalId ? 'Ubah media galeri' : 'Tambah media galeri'}</h2>
             <form onSubmit={submitGaleri} className="mt-6 space-y-4">
               <div>
                 <label className={labelCls}>Jenis media {editGalId ? null : <span className="text-red-500">*</span>}</label>
@@ -8651,7 +7546,7 @@ async function submitHadir(e) {
                        <input className={inputCls} value={galDriveLink} onChange={function (e) { setGalDriveLink(e.target.value) }} placeholder="Link Google Drive untuk unduhan (opsional)" />
                     </div>
                   ) : (
-                    <FileInput accept="image/*" fileName={galForm.file ? galForm.file.name : ''} label="Klik untuk pilih foto" hint="Foto JPG, PNG, atau HEIC otomatis dikonversi ke WebP ringan."
+                    <FileInput accept="image/*" fileName={galForm.file ? galForm.file.name : ''} label="Klik untuk pilih foto" hint="Foto JPG, PNG, atau HEIC otomatis dikonversi ke WebP."
                       onChange={async function (e) {
                         const f = e.target.files[0]
                         if (!f) return
@@ -8710,7 +7605,7 @@ async function submitHadir(e) {
           </div>
 
           <div className="space-y-5 min-w-0">
-            <h2 ref={refListGal} className="text-2xl font-black text-slate-900 scroll-mt-24">Galeri kamu</h2>
+            <h2 ref={refListGal} className="text-xl sm:text-2xl font-black text-slate-900 scroll-mt-24">Galeri kamu</h2>
             <FilterBar open={galFilterOpen} onToggle={function () { setGalFilterOpen(function (o) { return !o }) }} activeCount={galFilterActive}
               onReset={function () { setGalFilter(GAL_INITIAL) }}>
               <FilterSelect icon={ICONS.tag} value={galFilter.kegiatan} onChange={function (v) { setGalFilter(Object.assign({}, galFilter, { kegiatan: v })) }}
@@ -8739,7 +7634,7 @@ async function submitHadir(e) {
         <section className="anim-tab mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
           <div ref={refFormHadir} className={'card-hover scroll-mt-24 bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editHadirId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
             <ModeIndicator edit={!!editHadirId} onCancel={cancelEditHadir} />
-            <h2 className="mt-3 text-2xl font-black text-slate-900">{editHadirId ? 'Ubah daftar hadir' : 'Isi daftar hadir'}</h2>
+            <h2 className="mt-3 text-xl sm:text-2xl font-black text-slate-900">{editHadirId ? 'Ubah daftar hadir' : 'Isi daftar hadir'}</h2>
             <form onSubmit={submitHadir} className="mt-6 space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
@@ -8773,7 +7668,7 @@ async function submitHadir(e) {
           </div>
 
           <div className="space-y-5 min-w-0">
-            <h2 ref={refListHadir} className="text-2xl font-black text-slate-900 scroll-mt-24">Daftar hadir kamu</h2>
+            <h2 ref={refListHadir} className="text-xl sm:text-2xl font-black text-slate-900 scroll-mt-24">Daftar hadir kamu</h2>
             <FilterBar open={hadirFilterOpen} onToggle={function () { setHadirFilterOpen(function (o) { return !o }) }} activeCount={hadirFilterActive}
               onReset={function () { setHadirFilter(HADIR_INITIAL) }}>
               <FilterSelect icon={ICONS.check} value={hadirFilter.status} onChange={function (v) { setHadirFilter(Object.assign({}, hadirFilter, { status: v })) }}
