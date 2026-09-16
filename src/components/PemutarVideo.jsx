@@ -215,15 +215,6 @@ export default function PemutarVideo(props) {
           className="absolute inset-0 z-10 h-full w-full bg-transparent" style={{ cursor: kontrolSembunyi ? 'none' : 'default' }} />
       ) : null}
 
-      {/* Ikon putar besar milik kita saat dijeda, menutup ikon bawaan YouTube */}
-      {dimulai && !memutar && !buffer && !selesai && !gagal ? (
-        <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center">
-          <span className="grid h-20 w-20 place-items-center rounded-full bg-black/60 text-white backdrop-blur-sm">
-            <IkonPlay className="ml-1 h-8 w-8" />
-          </span>
-        </div>
-      ) : null}
-
       {/* Poster awal dengan tombol putar minimalis */}
       {!dimulai ? (
         <div className="absolute inset-0 z-20">
