@@ -91,11 +91,101 @@ package.json
 postcss.config.js
 README.md
 tailwind.config.js
+terapkan-tombol-tambah-bawah.cjs
 vercel.json
 vite.config.js
 ```
 
 # Files
+
+## File: terapkan-tombol-tambah-bawah.cjs
+```javascript
+#!/usr/bin/env node
+/*
+ * terapkan-tombol-tambah-bawah.cjs
+ * Patch otomatis untuk memindahkan tombol tambah kegiatan pada form logbook dashboard.
+ * Tombol versi lama di baris judul rincian dihapus, lalu tombol baru berukuran penuh
+ * dengan garis putus putus disisipkan di bawah daftar kartu kegiatan, supaya pengguna
+ * tidak perlu menggulir ke atas saat ingin menambah kegiatan lagi.
+ *
+ * Target hanya satu file: src/pages/DashboardPage.jsx
+ *
+ * Cara pakai dari root project:
+ *   node terapkan-tombol-tambah-bawah.cjs
+ * Mode aman tanpa menulis file:
+ *   node terapkan-tombol-tambah-bawah.cjs --dry-run
+ *
+ * Script ini idempoten. Jika tombol bawah sudah ada, dilaporkan dilewati.
+ */
+const fs = require('fs')
+const path = require('path')
+
+const ROOT = process.cwd()
+const DRY = process.argv.indexOf('--dry-run') !== -1
+const TARGET = path.join(ROOT, 'src', 'pages', 'DashboardPage.jsx')
+
+const MARK_LAMA = 'whitespace-nowrap shrink-0 bg-bsi-100 text-bsi-900 hover:bg-bsi-200'
+const MARK_BARU = 'border-2 border-dashed border-slate-300 bg-white px-4 py-3'
+const BARIS_WRAPP = '<div className="flex flex-wrap items-center justify-between gap-2">'
+const BARIS_P = '<p className="text-sm font-semibold text-slate-700">Rincian kegiatan hari ini <span className="text-red-500">*</span></p>'
+const BARIS_MAP = '{items.map(function (it, i) {'
+const BARIS_GRID = '<div className="grid gap-4 md:grid-cols-3">'
+const TOMBOL_BARU = "<button type=\"button\" onClick={function () { setItems(function (p) { return p.concat([newItem()]) }) }} className={'flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-bsi-500 hover:bg-slate-100 hover:text-bsi-900'}>+ Tambah kegiatan</button>"
+
+function indentOf(line) {
+  const m = line.match(/^\s*/)
+  return m ? m[0] : ''
+}
+
+function main() {
+  if (!fs.existsSync(TARGET)) {
+    console.log('[GAGAL] src/pages/DashboardPage.jsx : file tidak ditemukan')
+    return 1
+  }
+  const isi = fs.readFileSync(TARGET, 'utf8')
+  const EOL = isi.indexOf('\r\n') !== -1 ? '\r\n' : '\n'
+  const lines = isi.split(EOL)
+
+  if (isi.indexOf(MARK_BARU) !== -1 && isi.indexOf(MARK_LAMA) === -1) {
+    console.log('[SUDAH ADA] src/pages/DashboardPage.jsx : tombol tambah kegiatan sudah berada di bawah daftar')
+    return 0
+  }
+
+  const b = lines.findIndex(function (l) { return l.indexOf(MARK_LAMA) !== -1 })
+  if (b === -1) {
+    console.log('[GAGAL] src/pages/DashboardPage.jsx : tombol tambah kegiatan versi lama tidak ditemukan')
+    return 1
+  }
+  const okStruktur = lines[b - 2] && lines[b - 2].trim() === BARIS_WRAPP &&
+    lines[b - 1] && lines[b - 1].trim() === BARIS_P &&
+    lines[b + 1] && lines[b + 1].trim() === '</div>'
+  if (!okStruktur) {
+    console.log('[GAGAL] src/pages/DashboardPage.jsx : struktur baris judul rincian tidak sesuai perkiraan')
+    return 1
+  }
+  const indP = indentOf(lines[b - 1])
+  lines.splice(b - 2, 4, indP + BARIS_P)
+
+  const m = lines.findIndex(function (l) { return l.trim() === BARIS_MAP })
+  const g = lines.findIndex(function (l) { return l.indexOf(BARIS_GRID) !== -1 })
+  if (m === -1 || g === -1 || g < m || !lines[g - 1] || lines[g - 1].trim() !== '</div>') {
+    console.log('[GAGAL] src/pages/DashboardPage.jsx : posisi akhir daftar kegiatan tidak terbaca')
+    return 1
+  }
+  const indM = indentOf(lines[m])
+  lines.splice(g - 1, 0, indM + TOMBOL_BARU)
+
+  if (!DRY) fs.writeFileSync(TARGET, lines.join(EOL), 'utf8')
+  console.log('[DIPATCH] src/pages/DashboardPage.jsx : tombol tambah kegiatan dipindah ke bawah daftar kegiatan')
+  console.log('')
+  console.log(DRY ? 'Dry run selesai. Jalankan tanpa --dry-run untuk menulis perubahan.' : 'Tombol tambah kegiatan kini berada di bawah form kegiatan.')
+  return 0
+}
+
+console.log('Mode: ' + (DRY ? 'dry run, tidak ada file yang ditulis' : 'patch langsung ke file'))
+console.log('')
+process.exit(main())
+```
 
 ## File: api/r2/delete.js
 ```javascript
@@ -686,59 +776,6 @@ export default async function handler(req, res) {
 }
 ```
 
-## File: src/lib/auth.js
-```javascript
-import { useEffect, useState } from 'react'
-import { supabase } from './supabase.js'
-
-const EMAIL_DOMAIN = '@mbsi.local'
-
-export async function loginWithNim(nim, kode) {
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: nim.trim() + EMAIL_DOMAIN,
-    password: kode
-  })
-  if (error) throw error
-  return data
-}
-
-export async function logoutMahasiswa() {
-  await supabase.auth.signOut()
-}
-
-export function useAuth() {
-  const [mahasiswa, setMahasiswa] = useState(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    let active = true
-    async function load() {
-      const { data } = await supabase.auth.getSession()
-      const uid = data.session ? data.session.user.id : null
-      if (!uid) {
-        if (active) setLoading(false)
-        return
-      }
-      const res = await supabase.from('mahasiswa').select('*').eq('auth_uid', uid).single()
-      if (active) {
-        setMahasiswa(res.data)
-        setLoading(false)
-      }
-    }
-    load()
-    const sub = supabase.auth.onAuthStateChange(function (event, session) {
-      if (!session) setMahasiswa(null)
-    })
-    return function () {
-      active = false
-      sub.data.subscription.unsubscribe()
-    }
-  }, [])
-
-  return { mahasiswa: mahasiswa, loading: loading }
-}
-```
-
 ## File: src/lib/constants.js
 ```javascript
 export const KATEGORI = [
@@ -940,6 +977,103 @@ dist
 .env
 *.log
 .env.youtube-*
+```
+
+## File: src/lib/auth.js
+```javascript
+import { useEffect, useState } from 'react'
+import { supabase } from './supabase.js'
+
+const EMAIL_DOMAIN = '@mbsi.local'
+
+export async function loginWithNim(nim, kode) {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: nim.trim() + EMAIL_DOMAIN,
+    password: kode
+  })
+  if (error) throw error
+  return data
+}
+
+export async function logoutMahasiswa() {
+  await supabase.auth.signOut()
+}
+
+async function cariMahasiswa(uid) {
+  if (!uid) return null
+  const { data } = await supabase
+    .from('mahasiswa')
+    .select('*')
+    .eq('auth_uid', uid)
+    .single()
+  return data || null
+}
+
+export function useAuth() {
+  const [mahasiswa, setMahasiswa] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(function () {
+    let active = true
+
+    async function sinkronkan(sessionUser) {
+      try {
+        let uid = sessionUser ? sessionUser.id : null
+
+        if (!uid) {
+          const { data } = await supabase.auth.getSession()
+          uid = data.session ? data.session.user.id : null
+        }
+
+        if (!uid) {
+          if (active) {
+            setMahasiswa(null)
+            setLoading(false)
+          }
+          return
+        }
+
+        const mhs = await cariMahasiswa(uid)
+        if (active) {
+          setMahasiswa(mhs)
+          setLoading(false)
+        }
+      } catch (e) {
+        if (active) setLoading(false)
+      }
+    }
+
+    sinkronkan(null)
+
+    function onVisibility() {
+      if (document.visibilityState === 'visible') {
+        sinkronkan(null)
+      }
+    }
+
+    document.addEventListener('visibilitychange', onVisibility)
+
+    const sub = supabase.auth.onAuthStateChange(function (event, session) {
+      if (event === 'SIGNED_OUT') {
+        if (active) {
+          setMahasiswa(null)
+          setLoading(false)
+        }
+        return
+      }
+
+      sinkronkan(session && session.user ? session.user : null)
+    })
+
+    return function () {
+      active = false
+      document.removeEventListener('visibilitychange', onVisibility)
+      sub.data.subscription.unsubscribe()
+    }
+  }, [])
+
+  return { mahasiswa: mahasiswa, loading: loading }
+}
 ```
 
 ## File: src/lib/theme.jsx
@@ -4173,7 +4307,7 @@ export function LogbookDetail(props) {
           </div>
         </div>
       ) : null}
-      <div className="border-t border-slate-100 pt-4"><PersonChip mahasiswa={log.mahasiswa} /></div>
+      <div className="detail-footer border-t border-slate-100 pt-4"><PersonChip mahasiswa={log.mahasiswa} /></div>
     </div>
   )
 }
@@ -4239,7 +4373,7 @@ export function GalleryDetail(props) {
         <h2 className="text-xl sm:text-2xl font-black text-slate-900">{item.judul}</h2>
         <p className="mt-3 text-slate-600 leading-relaxed">{item.deskripsi || 'Tidak ada deskripsi.'}</p>
       </div>
-      <div className="border-t border-slate-100 pt-4"><PersonChip mahasiswa={item.mahasiswa} /></div>
+      <div className="detail-footer border-t border-slate-100 pt-4"><PersonChip mahasiswa={item.mahasiswa} /></div>
     </div>
   )
 }
@@ -4282,7 +4416,7 @@ export function AttendanceDetail(props) {
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Alasan atau keterangan</p>
         <p className="mt-1 text-sm text-slate-700">{row.alasan || 'Tidak ada alasan.'}</p>
       </div>
-      <div className="border-t border-slate-100 pt-4"><PersonChip mahasiswa={row.mahasiswa} /></div>
+      <div className="detail-footer border-t border-slate-100 pt-4"><PersonChip mahasiswa={row.mahasiswa} /></div>
     </div>
   )
 }
@@ -4387,14 +4521,14 @@ export function Modal(props) {
   return (
     <div className={'anim-overlay fixed inset-0 z-[60] overflow-y-auto overscroll-contain bg-slate-900/60 p-4' + (tutup ? ' modal-tutup' : '')} onClick={props.onClose}>
       <div className="min-h-full flex items-center justify-center py-8">
-        <div className="anim-modal w-full max-w-3xl rounded-[2rem] bg-white shadow-2xl max-h-[88vh] overflow-y-auto overscroll-contain" onClick={function (e) { e.stopPropagation() }}>
+        <div className="anim-modal modal-detail w-full max-w-3xl rounded-[2rem] bg-white shadow-2xl max-h-[88vh] overflow-y-auto overscroll-contain" onClick={function (e) { e.stopPropagation() }}>
           <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
             <p className="font-bold text-slate-900">{props.title || 'Detail'}</p>
             <button onClick={props.onClose} aria-label="Tutup detail" className="h-9 w-9 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 grid place-items-center">
               <SizedIcon name="close" size={16} />
             </button>
           </div>
-          <div className="p-6">{props.open ? props.children : isiSimpan.current}</div>
+          <div className="px-6 pt-6">{props.open ? props.children : isiSimpan.current}</div>
         </div>
       </div>
     </div>
@@ -4979,8 +5113,8 @@ button:active, a:active, .clickable:active { transform: scale(.97); }
 /* ===== Carousel ===== */
 .media-carousel { position: relative; overflow: hidden; border-radius: 1rem; aspect-ratio: 16 / 9; background: #020617; }
 .carousel-track { display: flex; height: 100%; transition: transform .5s ease; }
-.carousel-slide { position: relative; flex: 0 0 100%; height: 100%; }
-.carousel-slide img, .carousel-slide video { position: absolute; inset: 0; width: 100%; height: 100%; background: #020617; }
+.carousel-slide { position: relative; flex: 0 0 100%; height: 100%; background: #020617; }
+.carousel-slide img, .carousel-slide video { position: absolute; inset: 0; width: 100%; height: 100%; background: transparent; }
 .media-carousel button:active { transform: scale(.97); }
 
 /* ===== Filter ===== */
@@ -5373,13 +5507,13 @@ html { scroll-behavior: smooth; }
 .modal-tutup .anim-overlay { animation: overlayFadeOut 0.2s ease-in forwards; }
 
 /* header-detail-sticky: judul dan tombol tutup popup detail tetap terlihat saat isi digulir di dalam panel */
-.anim-modal > div:first-child {
+.modal-detail > div:first-child {
   position: sticky;
   top: 0;
   z-index: 40;
   background: inherit;
 }
-.anim-modal > * + * {
+.modal-detail > * + * {
   position: relative;
   z-index: 1;
   isolation: isolate;
@@ -5655,6 +5789,48 @@ button:active:not(:disabled), a:active, .clickable:active { transition-duration:
   }
   .dark header.sticky { background-color: rgba(2, 6, 23, 0.97) !important; }
 }
+
+/* unggah-foto-halus: panel upload foto profil mengembang dan merapat mulus tanpa lompatan layout */
+.unggah-foto-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.34s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.unggah-foto-wrap.unggah-foto-buka { grid-template-rows: 1fr; }
+.unggah-foto-dalam {
+  overflow: hidden;
+  min-height: 0;
+  visibility: hidden;
+  transition: visibility 0.34s;
+}
+.unggah-foto-buka .unggah-foto-dalam { visibility: visible; }
+.unggah-foto-isi {
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity 0.18s ease, transform 0.22s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.unggah-foto-buka .unggah-foto-isi {
+  opacity: 1;
+  transform: none;
+  transition: opacity 0.3s ease 0.08s, transform 0.34s cubic-bezier(0.32, 0.72, 0, 1) 0.06s;
+}
+
+/* footer-detail-sticky: baris penulis di popup detail tetap diam di tepi bawah saat isi digulir */
+.detail-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 35;
+  margin-left: -1.5rem;
+  margin-right: -1.5rem;
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+  padding-bottom: 1.25rem;
+  background: #ffffff;
+  border-radius: 0 0 2rem 2rem;
+}
+.dark .detail-footer {
+  background: #0f172a;
+}
 ```
 
 ## File: src/pages/DashboardPage.jsx
@@ -5681,6 +5857,17 @@ import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } f
 
 function newItem() {
   return { key: Math.random().toString(36).slice(2), judul: '', deskripsi: '', hasil: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false, show: false, mode: 'foto', ytLink: '', oldYtId: null, oldSource: 'r2', driveLink: '' }
+}
+
+function buatPelaporUpload(setInfo, nomor, total) {
+  const awalan = total > 1 ? 'File ' + nomor + ' dari ' + total + ': ' : ''
+  return function (pesan) {
+    if (!pesan) {
+      setInfo(total > 1 ? awalan + 'menyiapkan file' : '')
+      return
+    }
+    setInfo(awalan + pesan)
+  }
 }
 
 const LOG_INITIAL = { kategori: '', status: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
@@ -5732,6 +5919,7 @@ export default function DashboardPage() {
   const [showUploadFoto, setShowUploadFoto] = useState(false)
   const [fotoPreview, setFotoPreview] = useState(null)
   const [fotoFile, setFotoFile] = useState(null)
+  const [previewLoadingFoto, setPreviewLoadingFoto] = useState(false)
   const [uploadingFoto, setUploadingFoto] = useState(false)
   const [, setVersiFoto] = useState(0)
   const [galMode, setGalMode] = useState('foto')
@@ -5873,6 +6061,9 @@ const refFormHadir = useRef(null)
      const menambahLog = !editLogId
     try {
       const clean = []
+      const totalUpload = items.reduce(function (n, x) { return n + (x.judul.trim() && x.file ? 1 : 0) }, 0)
+      let nomorUpload = 0
+      if (totalUpload > 1) setInfoProses('Mengunggah ' + totalUpload + ' file media sekaligus')
       for (let i = 0; i < items.length; i++) {
         const it = items[i]
         if (!it.judul.trim()) continue
@@ -5891,7 +6082,10 @@ const refFormHadir = useRef(null)
           mediaType = 'video'
         } else if (it.mode === 'video' && it.file) {
           if (ytQuota.remaining <= 0) { toast.gagal('Kuota upload video hari ini sudah habis. Gunakan link video.'); setBusy(false); return }
-          const hasilYt = await unggahVideoYouTube(it.file, it.judul || 'Dokumentasi Magang', function (p) { setInfoProses('Mengunggah video ' + Math.round(p * 100) + '%') })
+          nomorUpload += 1
+      const lapor = buatPelaporUpload(setInfoProses, nomorUpload, totalUpload)
+      lapor('')
+      const hasilYt = await unggahVideoYouTube(it.file, it.judul || 'Dokumentasi Magang', function (p) { lapor('Mengunggah video ' + Math.round(p * 100) + '%') })
           mediaSource = 'youtube'
           youtubeId = hasilYt.videoId
           mediaPath = ytThumb(hasilYt.videoId)
@@ -5900,7 +6094,10 @@ const refFormHadir = useRef(null)
           setYtQuota(function (q) { return Object.assign({}, q, { used: q.used + 1, remaining: Math.max(0, q.remaining - 1) }) })
           fetchYouTubeQuota().then(setYtQuota)
         } else if (it.file) {
-          const up = await uploadMedia(it.file, 'logbook', function (pesan) { setInfoProses(pesan) })
+          nomorUpload += 1
+      const lapor = buatPelaporUpload(setInfoProses, nomorUpload, totalUpload)
+      lapor('')
+      const up = await uploadMedia(it.file, 'logbook', lapor)
           mediaPath = up.publicUrl
           mediaType = it.file.type.indexOf('video') === 0 ? 'video' : 'foto'
           mediaThumb = up.thumbUrl || null
@@ -5926,6 +6123,7 @@ const refFormHadir = useRef(null)
          }
          clean.push({ judul: it.judul.trim(), deskripsi: it.deskripsi.trim(), hasil: it.hasil.trim(), media_path: mediaPath, media_type: mediaType, media_thumb: mediaThumb, media_source: mediaSource, youtube_id: youtubeId, drive_id: driveIdLog, show_in_gallery: it.show && !!mediaPath })
       }
+      setInfoProses('')
       if (!clean.length) { toast.gagal('Tambahkan minimal satu kegiatan dengan judul.'); setBusy(false); return }
 
       let logId = editLogId
@@ -6135,15 +6333,23 @@ function startEditLog(log) {
     setPendingDelete({ type: 'gal', data: item })
   }
 
-    function pilihFotoProfil(e) {
-    const f = e.target.files[0]
-    if (!f) return
-    if (f.size > 5 * 1024 * 1024) { toast.gagal('Ukuran foto maksimal 5 MB.'); e.target.value = ''; return }
-    setFotoFile(f)
-    const reader = new FileReader()
-    reader.onloadend = function () { setFotoPreview(reader.result) }
-    reader.readAsDataURL(f)
-  }
+    async function pilihFotoProfil(e) {
+      const f = e.target.files[0]
+      if (!f) return
+      if (f.size > 5 * 1024 * 1024) { toast.gagal('Ukuran foto maksimal 5 MB.'); e.target.value = ''; return }
+      if (fotoPreview && String(fotoPreview).indexOf('blob:') === 0) URL.revokeObjectURL(fotoPreview)
+      setFotoFile(f)
+      if (formatHeic(f)) {
+        setPreviewLoadingFoto(true)
+        setFotoPreview(null)
+        const blob = await pratinjauHeic(f)
+        setFotoPreview(blob ? URL.createObjectURL(blob) : URL.createObjectURL(f))
+        setPreviewLoadingFoto(false)
+      } else {
+        setFotoPreview(URL.createObjectURL(f))
+        setPreviewLoadingFoto(false)
+      }
+    }
   async function simpanFotoProfil() {
     if (!fotoFile) { toast.gagal('Pilih file foto terlebih dahulu.'); return }
     setUploadingFoto(true)
@@ -6154,8 +6360,6 @@ function startEditLog(log) {
       if (typeof refresh === 'function') await refresh()
       setVersiFoto(function (v) { return v + 1 })
       setShowUploadFoto(false)
-      setFotoPreview(null)
-      setFotoFile(null)
       toast.sukses('Foto profil berhasil disimpan')
     } catch (err) {
       toast.gagal('Gagal upload foto profil: ' + err.message)
@@ -6360,13 +6564,18 @@ async function submitHadir(e) {
 <h2 className="mt-4 text-xl font-black text-slate-900">{mahasiswa.nama}</h2>
 <p className="mt-1 text-sm text-slate-600">NIM {mahasiswa.nim}</p>
 <div className="mt-5 flex flex-wrap justify-center gap-2">
-<button type="button" onClick={function () { setShowUploadFoto(!showUploadFoto) }} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition">{mahasiswa.foto_profil ? 'Ganti Foto' : 'Upload Foto'}</button>
+<button type="button" onClick={function () { if (showUploadFoto) { setShowUploadFoto(false); return } setFotoPreview(null); setFotoFile(null); setShowUploadFoto(true) }} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition">{mahasiswa.foto_profil ? 'Ganti Foto' : 'Upload Foto'}</button>
 {mahasiswa.foto_profil ? <button type="button" onClick={hapusFotoProfilKu} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-red-50 text-red-700 hover:bg-red-100 transition">Hapus Foto</button> : null}
 </div>
-{showUploadFoto ? (
-<div className="mt-5 w-full border-t border-slate-200 pt-5 text-left">
+<div className={'unggah-foto-wrap w-full' + (showUploadFoto ? ' unggah-foto-buka' : '')}>
+<div className="unggah-foto-dalam">
+<div className="unggah-foto-isi mt-5 w-full border-t border-slate-200 pt-5 text-left">
 <div className="flex flex-wrap items-start gap-4">
-{fotoPreview ? <img src={fotoPreview} alt="Pratinjau foto profil" className="h-20 w-20 rounded-[28%] object-cover shadow-lg" /> : null}
+{previewLoadingFoto ? (
+  <div className="h-20 w-20 rounded-[28%] bg-slate-100 flex items-center justify-center">
+    <div className="h-6 w-6 rounded-full border-2 border-bsi-500 border-t-transparent animate-spin"></div>
+  </div>
+) : fotoPreview ? <img src={fotoPreview} alt="Pratinjau foto profil" className="h-20 w-20 rounded-[28%] object-cover shadow-lg" /> : null}
 <div className="min-w-0 flex-1">
 <input type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/heif" onChange={pilihFotoProfil} aria-label="Pilih foto profil" className="block w-full text-sm text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-800 hover:file:bg-emerald-100" />
 <p className="mt-2 text-xs text-slate-600">Format JPG, PNG, WebP, atau HEIC iPhone. Otomatis dikonversi ke WebP ringan. Maksimal 5 MB.</p>
@@ -6374,10 +6583,11 @@ async function submitHadir(e) {
 </div>
 <div className="mt-4 flex gap-2">
 <button type="button" onClick={simpanFotoProfil} disabled={uploadingFoto || !fotoFile} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition disabled:opacity-50">{uploadingFoto ? 'Mengunggah...' : 'Simpan Foto'}</button>
-<button type="button" onClick={function () { setShowUploadFoto(false); setFotoPreview(null); setFotoFile(null) }} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition">Batal</button>
+<button type="button" onClick={function () { setShowUploadFoto(false) }} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition">Batal</button>
 </div>
 </div>
-) : null}
+</div>
+</div>
 </div>
 <div className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 shadow-sm">
 <h2 className="text-lg font-black text-slate-900">Ringkasan aktivitas magang</h2>

@@ -816,14 +816,13 @@ async function submitHadir(e) {
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm font-semibold text-slate-700">Rincian kegiatan hari ini <span className="text-red-500">*</span></p>
-                <button type="button" onClick={function () { setItems(function (p) { return p.concat([newItem()]) }) }} className={btnSmall + ' whitespace-nowrap shrink-0 bg-bsi-100 text-bsi-900 hover:bg-bsi-200'}>+ Tambah kegiatan</button>
                 </div>
                 {items.map(function (it, i) {
                   return (
                     <div key={it.key} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3 min-w-0">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-bsi-800">Kegiatan {i + 1}</span>
-                        {items.length > 1 ? <button type="button" onClick={function () { setItems(function (p) { return p.filter(function (x, idx) { return idx !== i }) }) }} className="text-xs text-red-600 hover:underline">Hapus</button> : null}
+                        {items.length > 1 ? <button type="button" onClick={function () { setItems(function (p) { return p.filter(function (x, idx) { return idx !== i }) }); toast.sukses('Kegiatan ' + (i + 1) + ' dihapus') }} className="text-xs text-red-600 hover:underline">Hapus</button> : null}
                       </div>
                       <input className={inputCls} value={it.judul} onChange={function (e) { patchItem(i, { judul: e.target.value }) }} aria-label="Judul kegiatan" placeholder="Judul kegiatan" />
                       <AutoTextArea className={inputCls} value={it.deskripsi} onChange={function (e) { patchItem(i, { deskripsi: e.target.value }) }} aria-label="Deskripsi kegiatan" placeholder="Deskripsi singkat kegiatan" />
@@ -873,6 +872,7 @@ async function submitHadir(e) {
                     </div>
                   )
                 })}
+                <button type="button" onClick={function () { setItems(function (p) { return p.concat([newItem()]) }); toast.sukses('Kegiatan ' + (items.length + 1) + ' ditambahkan') }} className={'flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-bsi-500 hover:bg-slate-100 hover:text-bsi-900'}>+ Tambah kegiatan</button>
               </div>
 
               <div className="grid gap-4 md:grid-cols-3">
