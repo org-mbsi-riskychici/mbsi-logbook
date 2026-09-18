@@ -91,46 +91,50 @@ package.json
 postcss.config.js
 README.md
 tailwind.config.js
-terapkan-tombol-tambah-bawah.cjs
+terapkan-login-redirect.cjs
 vercel.json
 vite.config.js
 ```
 
 # Files
 
-## File: terapkan-tombol-tambah-bawah.cjs
+## File: terapkan-login-redirect.cjs
 ```javascript
 #!/usr/bin/env node
 /*
- * terapkan-tombol-tambah-bawah.cjs
- * Patch otomatis untuk memindahkan tombol tambah kegiatan pada form logbook dashboard.
- * Tombol versi lama di baris judul rincian dihapus, lalu tombol baru berukuran penuh
- * dengan garis putus putus disisipkan di bawah daftar kartu kegiatan, supaya pengguna
- * tidak perlu menggulir ke atas saat ingin menambah kegiatan lagi.
- *
- * Target hanya satu file: src/pages/DashboardPage.jsx
+ * terapkan-login-redirect.cjs
+ * Patch otomatis: pengguna yang sudah login tidak bisa membuka halaman login lagi.
+ * Menambahkan guard RequireGuest di src/App.jsx dan membungkus rute /login dengannya,
+ * sehingga akses manual maupun tombol back browser langsung diarahkan ke /dashboard.
  *
  * Cara pakai dari root project:
- *   node terapkan-tombol-tambah-bawah.cjs
+ *   node terapkan-login-redirect.cjs
  * Mode aman tanpa menulis file:
- *   node terapkan-tombol-tambah-bawah.cjs --dry-run
+ *   node terapkan-login-redirect.cjs --dry-run
  *
- * Script ini idempoten. Jika tombol bawah sudah ada, dilaporkan dilewati.
+ * Script ini idempoten. Bagian yang sudah terpatch dilaporkan dilewati.
  */
 const fs = require('fs')
 const path = require('path')
 
 const ROOT = process.cwd()
 const DRY = process.argv.indexOf('--dry-run') !== -1
-const TARGET = path.join(ROOT, 'src', 'pages', 'DashboardPage.jsx')
+const TARGET = path.join(ROOT, 'src', 'App.jsx')
 
-const MARK_LAMA = 'whitespace-nowrap shrink-0 bg-bsi-100 text-bsi-900 hover:bg-bsi-200'
-const MARK_BARU = 'border-2 border-dashed border-slate-300 bg-white px-4 py-3'
-const BARIS_WRAPP = '<div className="flex flex-wrap items-center justify-between gap-2">'
-const BARIS_P = '<p className="text-sm font-semibold text-slate-700">Rincian kegiatan hari ini <span className="text-red-500">*</span></p>'
-const BARIS_MAP = '{items.map(function (it, i) {'
-const BARIS_GRID = '<div className="grid gap-4 md:grid-cols-3">'
-const TOMBOL_BARU = "<button type=\"button\" onClick={function () { setItems(function (p) { return p.concat([newItem()]) }) }} className={'flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-bsi-500 hover:bg-slate-100 hover:text-bsi-900'}>+ Tambah kegiatan</button>"
+const FUNC_BARU = [
+  'function RequireGuest(props) {',
+  '  const { mahasiswa, loading } = useAuth()',
+  '  if (loading) return <div className="grid min-h-[60vh] place-items-center"><div className="h-10 w-10 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div></div>',
+  '  if (mahasiswa) return <Navigate to="/dashboard" replace />',
+  '  return props.children',
+  '}'
+]
+
+const MARK_FUNC = 'function RequireGuest('
+const MARK_ROUTE = 'RequireGuest><LoginPage'
+const ROUTE_LAMA = 'element={<LoginPage />}>'
+const ROUTE_BARU = 'element={<RequireGuest><LoginPage /></RequireGuest>}>'
+const BARIS_APP = 'export default function App() {'
 
 function indentOf(line) {
   const m = line.match(/^\s*/)
@@ -139,51 +143,67 @@ function indentOf(line) {
 
 function main() {
   if (!fs.existsSync(TARGET)) {
-    console.log('[GAGAL] src/pages/DashboardPage.jsx : file tidak ditemukan')
+    console.log('[GAGAL] src/App.jsx : file tidak ditemukan')
     return 1
   }
   const isi = fs.readFileSync(TARGET, 'utf8')
   const EOL = isi.indexOf('\r\n') !== -1 ? '\r\n' : '\n'
   const lines = isi.split(EOL)
+  const hasil = []
+  let gagal = false
 
-  if (isi.indexOf(MARK_BARU) !== -1 && isi.indexOf(MARK_LAMA) === -1) {
-    console.log('[SUDAH ADA] src/pages/DashboardPage.jsx : tombol tambah kegiatan sudah berada di bawah daftar')
+  if (isi.indexOf(MARK_FUNC) !== -1) {
+    hasil.push(['fungsi RequireGuest', 'lewati', 'guard sudah ada'])
+  } else {
+    const a = lines.findIndex(function (l) { return l.trim() === BARIS_APP })
+    if (a === -1) {
+      gagal = true
+      hasil.push(['fungsi RequireGuest', 'gagal', 'baris export default App tidak ditemukan'])
+    } else {
+      const ind = indentOf(lines[a])
+      const sisip = FUNC_BARU.map(function (l) { return ind + l }).concat([''])
+      lines.splice(a, 0, ...sisip)
+      hasil.push(['fungsi RequireGuest', 'ok', 'guard tamu ditambahkan sebelum App'])
+    }
+  }
+
+  const r = lines.findIndex(function (l) { return l.indexOf('path="/login"') !== -1 })
+  if (r === -1) {
+    gagal = true
+    hasil.push(['route login', 'gagal', 'baris rute login tidak ditemukan'])
+  } else if (lines[r].indexOf(MARK_ROUTE) !== -1) {
+    hasil.push(['route login', 'lewati', 'rute sudah dibungkus RequireGuest'])
+  } else if (lines[r].indexOf(ROUTE_LAMA) === -1) {
+    gagal = true
+    hasil.push(['route login', 'gagal', 'pola element LoginPage tidak sesuai'])
+  } else {
+    lines[r] = lines[r].split(ROUTE_LAMA).join(ROUTE_BARU)
+    hasil.push(['route login', 'ok', 'rute login kini dijaga RequireGuest'])
+  }
+
+  console.log('')
+  for (let i = 0; i < hasil.length; i++) {
+    const h = hasil[i]
+    const ikon = h[1] === 'ok' ? '[DIPATCH]' : (h[1] === 'lewati' ? '[SUDAH ADA]' : '[GAGAL]')
+    console.log(ikon + ' ' + h[0] + ' : ' + h[2])
+  }
+  console.log('')
+
+  if (gagal) {
+    console.log('Patch dibatalkan karena ada langkah gagal. Tidak ada file yang ditulis.')
+    return 1
+  }
+  const ok = hasil.filter(function (h) { return h[1] === 'ok' })
+  if (!ok.length) {
+    console.log('Semua bagian sudah ada sebelumnya. Tidak ada yang perlu diubah.')
     return 0
   }
-
-  const b = lines.findIndex(function (l) { return l.indexOf(MARK_LAMA) !== -1 })
-  if (b === -1) {
-    console.log('[GAGAL] src/pages/DashboardPage.jsx : tombol tambah kegiatan versi lama tidak ditemukan')
-    return 1
-  }
-  const okStruktur = lines[b - 2] && lines[b - 2].trim() === BARIS_WRAPP &&
-    lines[b - 1] && lines[b - 1].trim() === BARIS_P &&
-    lines[b + 1] && lines[b + 1].trim() === '</div>'
-  if (!okStruktur) {
-    console.log('[GAGAL] src/pages/DashboardPage.jsx : struktur baris judul rincian tidak sesuai perkiraan')
-    return 1
-  }
-  const indP = indentOf(lines[b - 1])
-  lines.splice(b - 2, 4, indP + BARIS_P)
-
-  const m = lines.findIndex(function (l) { return l.trim() === BARIS_MAP })
-  const g = lines.findIndex(function (l) { return l.indexOf(BARIS_GRID) !== -1 })
-  if (m === -1 || g === -1 || g < m || !lines[g - 1] || lines[g - 1].trim() !== '</div>') {
-    console.log('[GAGAL] src/pages/DashboardPage.jsx : posisi akhir daftar kegiatan tidak terbaca')
-    return 1
-  }
-  const indM = indentOf(lines[m])
-  lines.splice(g - 1, 0, indM + TOMBOL_BARU)
-
   if (!DRY) fs.writeFileSync(TARGET, lines.join(EOL), 'utf8')
-  console.log('[DIPATCH] src/pages/DashboardPage.jsx : tombol tambah kegiatan dipindah ke bawah daftar kegiatan')
-  console.log('')
-  console.log(DRY ? 'Dry run selesai. Jalankan tanpa --dry-run untuk menulis perubahan.' : 'Tombol tambah kegiatan kini berada di bawah form kegiatan.')
+  console.log(DRY ? 'Dry run selesai. Jalankan tanpa --dry-run untuk menulis perubahan.' : 'Pengalihan halaman login untuk pengguna login berhasil diterapkan.')
   return 0
 }
 
 console.log('Mode: ' + (DRY ? 'dry run, tidak ada file yang ditulis' : 'patch langsung ke file'))
-console.log('')
 process.exit(main())
 ```
 
@@ -6653,14 +6673,13 @@ async function submitHadir(e) {
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm font-semibold text-slate-700">Rincian kegiatan hari ini <span className="text-red-500">*</span></p>
-                <button type="button" onClick={function () { setItems(function (p) { return p.concat([newItem()]) }) }} className={btnSmall + ' whitespace-nowrap shrink-0 bg-bsi-100 text-bsi-900 hover:bg-bsi-200'}>+ Tambah kegiatan</button>
                 </div>
                 {items.map(function (it, i) {
                   return (
                     <div key={it.key} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3 min-w-0">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-bsi-800">Kegiatan {i + 1}</span>
-                        {items.length > 1 ? <button type="button" onClick={function () { setItems(function (p) { return p.filter(function (x, idx) { return idx !== i }) }) }} className="text-xs text-red-600 hover:underline">Hapus</button> : null}
+                        {items.length > 1 ? <button type="button" onClick={function () { setItems(function (p) { return p.filter(function (x, idx) { return idx !== i }) }); toast.sukses('Kegiatan ' + (i + 1) + ' dihapus') }} className="text-xs text-red-600 hover:underline">Hapus</button> : null}
                       </div>
                       <input className={inputCls} value={it.judul} onChange={function (e) { patchItem(i, { judul: e.target.value }) }} aria-label="Judul kegiatan" placeholder="Judul kegiatan" />
                       <AutoTextArea className={inputCls} value={it.deskripsi} onChange={function (e) { patchItem(i, { deskripsi: e.target.value }) }} aria-label="Deskripsi kegiatan" placeholder="Deskripsi singkat kegiatan" />
@@ -6710,6 +6729,7 @@ async function submitHadir(e) {
                     </div>
                   )
                 })}
+                <button type="button" onClick={function () { setItems(function (p) { return p.concat([newItem()]) }); toast.sukses('Kegiatan ' + (items.length + 1) + ' ditambahkan') }} className={'flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-bsi-500 hover:bg-slate-100 hover:text-bsi-900'}>+ Tambah kegiatan</button>
               </div>
 
               <div className="grid gap-4 md:grid-cols-3">

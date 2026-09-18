@@ -28,6 +28,13 @@ function RequireAuth(props) {
   return props.children
 }
 
+function RequireGuest(props) {
+  const { mahasiswa, loading } = useAuth()
+  if (loading) return <div className="grid min-h-[60vh] place-items-center"><div className="h-10 w-10 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div></div>
+  if (mahasiswa) return <Navigate to="/dashboard" replace />
+  return props.children
+}
+
 export default function App() {
   return (
     <ThemeProvider>
@@ -42,7 +49,7 @@ export default function App() {
             <Route path="/absen" element={<AttendancePage />} />
             <Route path="/dospem" element={<DospemPage />} />
             <Route path="/tim" element={<Navigate to="/dospem" replace />} />
-            <Route path="/login" element={<LoginPage />} />
+            <Route path="/login" element={<RequireGuest><LoginPage /></RequireGuest>} />
             <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
