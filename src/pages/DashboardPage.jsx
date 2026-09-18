@@ -22,6 +22,17 @@ function newItem() {
   return { key: Math.random().toString(36).slice(2), judul: '', deskripsi: '', hasil: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false, show: false, mode: 'foto', ytLink: '', oldYtId: null, oldSource: 'r2', driveLink: '' }
 }
 
+function buatPelaporUpload(setInfo, nomor, total) {
+  const awalan = total > 1 ? 'File ' + nomor + ' dari ' + total + ': ' : ''
+  return function (pesan) {
+    if (!pesan) {
+      setInfo(total > 1 ? awalan + 'menyiapkan file' : '')
+      return
+    }
+    setInfo(awalan + pesan)
+  }
+}
+
 const LOG_INITIAL = { kategori: '', status: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
 const GAL_INITIAL = { kegiatan: '', tipe: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
 const HADIR_INITIAL = { status: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
@@ -212,6 +223,9 @@ const refFormHadir = useRef(null)
      const menambahLog = !editLogId
     try {
       const clean = []
+      const totalUpload = items.reduce(function (n, x) { return n + (x.judul.trim() && x.file ? 1 : 0) }, 0)
+      let nomorUpload = 0
+      if (totalUpload > 1) setInfoProses('Mengunggah ' + totalUpload + ' file media sekaligus')
       for (let i = 0; i < items.length; i++) {
         const it = items[i]
         if (!it.judul.trim()) continue
@@ -230,7 +244,10 @@ const refFormHadir = useRef(null)
           mediaType = 'video'
         } else if (it.mode === 'video' && it.file) {
           if (ytQuota.remaining <= 0) { toast.gagal('Kuota upload video hari ini sudah habis. Gunakan link video.'); setBusy(false); return }
-          const hasilYt = await unggahVideoYouTube(it.file, it.judul || 'Dokumentasi Magang', function (p) { setInfoProses('Mengunggah video ' + Math.round(p * 100) + '%') })
+          nomorUpload += 1
+      const lapor = buatPelaporUpload(setInfoProses, nomorUpload, totalUpload)
+      lapor('')
+      const hasilYt = await unggahVideoYouTube(it.file, it.judul || 'Dokumentasi Magang', function (p) { lapor('Mengunggah video ' + Math.round(p * 100) + '%') })
           mediaSource = 'youtube'
           youtubeId = hasilYt.videoId
           mediaPath = ytThumb(hasilYt.videoId)
@@ -239,7 +256,10 @@ const refFormHadir = useRef(null)
           setYtQuota(function (q) { return Object.assign({}, q, { used: q.used + 1, remaining: Math.max(0, q.remaining - 1) }) })
           fetchYouTubeQuota().then(setYtQuota)
         } else if (it.file) {
-          const up = await uploadMedia(it.file, 'logbook', function (pesan) { setInfoProses(pesan) })
+          nomorUpload += 1
+      const lapor = buatPelaporUpload(setInfoProses, nomorUpload, totalUpload)
+      lapor('')
+      const up = await uploadMedia(it.file, 'logbook', lapor)
           mediaPath = up.publicUrl
           mediaType = it.file.type.indexOf('video') === 0 ? 'video' : 'foto'
           mediaThumb = up.thumbUrl || null
@@ -265,6 +285,7 @@ const refFormHadir = useRef(null)
          }
          clean.push({ judul: it.judul.trim(), deskripsi: it.deskripsi.trim(), hasil: it.hasil.trim(), media_path: mediaPath, media_type: mediaType, media_thumb: mediaThumb, media_source: mediaSource, youtube_id: youtubeId, drive_id: driveIdLog, show_in_gallery: it.show && !!mediaPath })
       }
+      setInfoProses('')
       if (!clean.length) { toast.gagal('Tambahkan minimal satu kegiatan dengan judul.'); setBusy(false); return }
 
       let logId = editLogId

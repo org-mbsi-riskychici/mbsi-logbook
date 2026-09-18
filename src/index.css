@@ -24,8 +24,8 @@ button:active, a:active, .clickable:active { transform: scale(.97); }
 /* ===== Carousel ===== */
 .media-carousel { position: relative; overflow: hidden; border-radius: 1rem; aspect-ratio: 16 / 9; background: #020617; }
 .carousel-track { display: flex; height: 100%; transition: transform .5s ease; }
-.carousel-slide { position: relative; flex: 0 0 100%; height: 100%; }
-.carousel-slide img, .carousel-slide video { position: absolute; inset: 0; width: 100%; height: 100%; background: #020617; }
+.carousel-slide { position: relative; flex: 0 0 100%; height: 100%; background: #020617; }
+.carousel-slide img, .carousel-slide video { position: absolute; inset: 0; width: 100%; height: 100%; background: transparent; }
 .media-carousel button:active { transform: scale(.97); }
 
 /* ===== Filter ===== */
@@ -418,13 +418,13 @@ html { scroll-behavior: smooth; }
 .modal-tutup .anim-overlay { animation: overlayFadeOut 0.2s ease-in forwards; }
 
 /* header-detail-sticky: judul dan tombol tutup popup detail tetap terlihat saat isi digulir di dalam panel */
-.anim-modal > div:first-child {
+.modal-detail > div:first-child {
   position: sticky;
   top: 0;
   z-index: 40;
   background: inherit;
 }
-.anim-modal > * + * {
+.modal-detail > * + * {
   position: relative;
   z-index: 1;
   isolation: isolate;
