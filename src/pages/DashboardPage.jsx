@@ -1,3 +1,4 @@
+import { SkeletonDashboard } from '../components/Skeleton.jsx'
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../lib/auth.js'
@@ -140,35 +141,8 @@ const refFormHadir = useRef(null)
    }, [logFilter, galFilter, hadirFilter, sort])
 
   if (loading || !mahasiswa) {
-    return <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:py-8">
-<div className="space-y-6">
-<div className="flex items-center gap-4 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
-<div className="skeleton h-14 w-14 rounded-2xl"></div>
-<div className="flex-1 space-y-2">
-<div className="skeleton h-4 w-44 rounded-full"></div>
-<div className="skeleton h-3 w-28 rounded-full"></div>
-</div>
-<div className="skeleton h-10 w-28 rounded-2xl"></div>
-</div>
-<div className="grid items-start gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-<div className="space-y-4 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
-<div className="skeleton h-5 w-36 rounded-full"></div>
-<div className="skeleton h-10 w-full rounded-2xl"></div>
-<div className="skeleton h-10 w-full rounded-2xl"></div>
-<div className="skeleton h-20 w-full rounded-2xl"></div>
-<div className="skeleton h-11 w-44 rounded-2xl"></div>
-</div>
-<div className="grid gap-5 md:grid-cols-2">
-<div className="skeleton h-64 rounded-3xl"></div>
-<div className="skeleton h-64 rounded-3xl"></div>
-<div className="skeleton h-64 rounded-3xl"></div>
-<div className="skeleton h-64 rounded-3xl"></div>
-</div>
-</div>
-</div>
-</div>
+    return <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:py-8"><SkeletonDashboard /></div>
   }
-
   function getItemMode(i) { return itemMode[i] || 'foto' }
   function setItemModeAt(i, mode) { setItemMode(function (p) { const n = Object.assign({}, p); n[i] = mode; return n }) }
   function patchItem(i, patch) {

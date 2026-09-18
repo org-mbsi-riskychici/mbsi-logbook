@@ -91,121 +91,11 @@ package.json
 postcss.config.js
 README.md
 tailwind.config.js
-terapkan-login-redirect.cjs
 vercel.json
 vite.config.js
 ```
 
 # Files
-
-## File: terapkan-login-redirect.cjs
-```javascript
-#!/usr/bin/env node
-/*
- * terapkan-login-redirect.cjs
- * Patch otomatis: pengguna yang sudah login tidak bisa membuka halaman login lagi.
- * Menambahkan guard RequireGuest di src/App.jsx dan membungkus rute /login dengannya,
- * sehingga akses manual maupun tombol back browser langsung diarahkan ke /dashboard.
- *
- * Cara pakai dari root project:
- *   node terapkan-login-redirect.cjs
- * Mode aman tanpa menulis file:
- *   node terapkan-login-redirect.cjs --dry-run
- *
- * Script ini idempoten. Bagian yang sudah terpatch dilaporkan dilewati.
- */
-const fs = require('fs')
-const path = require('path')
-
-const ROOT = process.cwd()
-const DRY = process.argv.indexOf('--dry-run') !== -1
-const TARGET = path.join(ROOT, 'src', 'App.jsx')
-
-const FUNC_BARU = [
-  'function RequireGuest(props) {',
-  '  const { mahasiswa, loading } = useAuth()',
-  '  if (loading) return <div className="grid min-h-[60vh] place-items-center"><div className="h-10 w-10 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div></div>',
-  '  if (mahasiswa) return <Navigate to="/dashboard" replace />',
-  '  return props.children',
-  '}'
-]
-
-const MARK_FUNC = 'function RequireGuest('
-const MARK_ROUTE = 'RequireGuest><LoginPage'
-const ROUTE_LAMA = 'element={<LoginPage />}>'
-const ROUTE_BARU = 'element={<RequireGuest><LoginPage /></RequireGuest>}>'
-const BARIS_APP = 'export default function App() {'
-
-function indentOf(line) {
-  const m = line.match(/^\s*/)
-  return m ? m[0] : ''
-}
-
-function main() {
-  if (!fs.existsSync(TARGET)) {
-    console.log('[GAGAL] src/App.jsx : file tidak ditemukan')
-    return 1
-  }
-  const isi = fs.readFileSync(TARGET, 'utf8')
-  const EOL = isi.indexOf('\r\n') !== -1 ? '\r\n' : '\n'
-  const lines = isi.split(EOL)
-  const hasil = []
-  let gagal = false
-
-  if (isi.indexOf(MARK_FUNC) !== -1) {
-    hasil.push(['fungsi RequireGuest', 'lewati', 'guard sudah ada'])
-  } else {
-    const a = lines.findIndex(function (l) { return l.trim() === BARIS_APP })
-    if (a === -1) {
-      gagal = true
-      hasil.push(['fungsi RequireGuest', 'gagal', 'baris export default App tidak ditemukan'])
-    } else {
-      const ind = indentOf(lines[a])
-      const sisip = FUNC_BARU.map(function (l) { return ind + l }).concat([''])
-      lines.splice(a, 0, ...sisip)
-      hasil.push(['fungsi RequireGuest', 'ok', 'guard tamu ditambahkan sebelum App'])
-    }
-  }
-
-  const r = lines.findIndex(function (l) { return l.indexOf('path="/login"') !== -1 })
-  if (r === -1) {
-    gagal = true
-    hasil.push(['route login', 'gagal', 'baris rute login tidak ditemukan'])
-  } else if (lines[r].indexOf(MARK_ROUTE) !== -1) {
-    hasil.push(['route login', 'lewati', 'rute sudah dibungkus RequireGuest'])
-  } else if (lines[r].indexOf(ROUTE_LAMA) === -1) {
-    gagal = true
-    hasil.push(['route login', 'gagal', 'pola element LoginPage tidak sesuai'])
-  } else {
-    lines[r] = lines[r].split(ROUTE_LAMA).join(ROUTE_BARU)
-    hasil.push(['route login', 'ok', 'rute login kini dijaga RequireGuest'])
-  }
-
-  console.log('')
-  for (let i = 0; i < hasil.length; i++) {
-    const h = hasil[i]
-    const ikon = h[1] === 'ok' ? '[DIPATCH]' : (h[1] === 'lewati' ? '[SUDAH ADA]' : '[GAGAL]')
-    console.log(ikon + ' ' + h[0] + ' : ' + h[2])
-  }
-  console.log('')
-
-  if (gagal) {
-    console.log('Patch dibatalkan karena ada langkah gagal. Tidak ada file yang ditulis.')
-    return 1
-  }
-  const ok = hasil.filter(function (h) { return h[1] === 'ok' })
-  if (!ok.length) {
-    console.log('Semua bagian sudah ada sebelumnya. Tidak ada yang perlu diubah.')
-    return 0
-  }
-  if (!DRY) fs.writeFileSync(TARGET, lines.join(EOL), 'utf8')
-  console.log(DRY ? 'Dry run selesai. Jalankan tanpa --dry-run untuk menulis perubahan.' : 'Pengalihan halaman login untuk pengguna login berhasil diterapkan.')
-  return 0
-}
-
-console.log('Mode: ' + (DRY ? 'dry run, tidak ada file yang ditulis' : 'patch langsung ke file'))
-process.exit(main())
-```
 
 ## File: api/r2/delete.js
 ```javascript
@@ -2795,64 +2685,6 @@ export function countActiveFilters(o) {
 }
 ```
 
-## File: src/App.jsx
-```javascript
-import { SkeletonDashboard } from './components/Skeleton.jsx'
-import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import { ThemeProvider } from './lib/theme.jsx'
- import { ToastProvider } from './components/ui.jsx'
-import { useAuth } from './lib/auth.js'
-import Layout from './components/Layout.jsx'
-import HomePage from './pages/HomePage.jsx'
-import LogbookPage from './pages/LogbookPage.jsx'
-import GalleryPage from './pages/GalleryPage.jsx'
-import AttendancePage from './pages/AttendancePage.jsx'
-import DospemPage from './pages/DospemPage.jsx'
-import TimPage from './pages/TimPage.jsx'
-import LoginPage from './pages/LoginPage.jsx'
-import DashboardPage from './pages/DashboardPage.jsx'
-
-function ScrollToTop() {
-  const { pathname } = useLocation()
-  useEffect(function () {
-    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
-  }, [pathname])
-  return null
-}
-function RequireAuth(props) {
-  const { mahasiswa, loading } = useAuth()
-  if (loading) return <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:py-8"><SkeletonDashboard /></div>
-  if (!mahasiswa) return <Navigate to="/login" replace />
-  return props.children
-}
-
-export default function App() {
-  return (
-    <ThemeProvider>
-      <ToastProvider>
-      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <ScrollToTop />
-        <Routes>
-          <Route element={<Layout />}>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/logbook" element={<LogbookPage />} />
-            <Route path="/galeri" element={<GalleryPage />} />
-            <Route path="/absen" element={<AttendancePage />} />
-            <Route path="/dospem" element={<DospemPage />} />
-            <Route path="/tim" element={<Navigate to="/dospem" replace />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-      </ToastProvider>
-    </ThemeProvider>
-  )
-}
-```
-
 ## File: src/main.jsx
 ```javascript
 import React from 'react'
@@ -3452,109 +3284,67 @@ export default function TimPage() {
 }
 ```
 
-## File: src/components/Layout.jsx
+## File: src/App.jsx
 ```javascript
-import { Outlet, Link, NavLink } from 'react-router-dom'
-import { useTheme } from '../lib/theme.jsx'
-import { useAuth, logoutMahasiswa } from '../lib/auth.js'
-import { SizedIcon } from './icons.jsx'
-import { useEffect, useState } from 'react'
+import { SkeletonDashboard } from './components/Skeleton.jsx'
+import { useEffect } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { ThemeProvider } from './lib/theme.jsx'
+ import { ToastProvider } from './components/ui.jsx'
+import { useAuth } from './lib/auth.js'
+import Layout from './components/Layout.jsx'
+import HomePage from './pages/HomePage.jsx'
+import LogbookPage from './pages/LogbookPage.jsx'
+import GalleryPage from './pages/GalleryPage.jsx'
+import AttendancePage from './pages/AttendancePage.jsx'
+import DospemPage from './pages/DospemPage.jsx'
+import TimPage from './pages/TimPage.jsx'
+import LoginPage from './pages/LoginPage.jsx'
+import DashboardPage from './pages/DashboardPage.jsx'
 
-const LINKS = [
-  { to: '/', label: 'Beranda' },
-  { to: '/logbook', label: 'Logbook' },
-  { to: '/galeri', label: 'Galeri' },
-  { to: '/absen', label: 'Daftar Hadir' },
-  { to: '/dospem', label: 'Tim & Dospem' }
-]
-
-function MenuMobile(props) {
-  return (
-    <div className={'menu-mobile-wrap xl:hidden' + (props.open ? ' menu-mobile-buka' : '')}>
-      <div className="menu-mobile-dalam">
-        <div className="menu-mobile-isi border-t border-slate-200 bg-white px-4 py-4 space-y-2">
-          {props.children}
-        </div>
-      </div>
-    </div>
-  )
+function ScrollToTop() {
+  const { pathname } = useLocation()
+  useEffect(function () {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+  }, [pathname])
+  return null
 }
-export default function Layout() {
-  const theme = useTheme()
-  const { mahasiswa } = useAuth()
-  const [open, setOpen] = useState(false)
+function RequireAuth(props) {
+  const { mahasiswa, loading } = useAuth()
+  if (loading) return <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:py-8"><SkeletonDashboard /></div>
+  if (!mahasiswa) return <Navigate to="/login" replace />
+  return props.children
+}
 
-  const linkCls = function (active) {
-    return 'px-3 py-2 rounded-xl text-sm font-semibold ' + (active ? 'bg-bsi-900 text-white' : 'text-slate-600 hover:bg-slate-100')
-  }
+function RequireGuest(props) {
+  const { mahasiswa, loading } = useAuth()
+  if (loading) return <div className="grid min-h-[60vh] place-items-center"><div className="h-10 w-10 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div></div>
+  if (mahasiswa) return <Navigate to="/dashboard" replace />
+  return props.children
+}
 
-  const themeBtn = function (extra) {
-    return (
-      <button onClick={theme.toggle} className={'rounded-xl border border-slate-300 grid place-items-center hover:bg-slate-100 text-slate-700 ' + (extra || 'h-10 w-10')} title="Ganti tema">
-        <SizedIcon name={theme.dark ? 'sun' : 'moon'} size={18} />
-      </button>
-    )
-  }
-
+export default function App() {
   return (
-    <div className="flex flex-col min-h-screen">
-      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="h-16 flex items-center justify-between gap-4">
-            <Link to="/" className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-gradient-to-tr from-bsi-800 to-gold-500 text-white grid place-items-center font-black">BSI</div>
-              <div>
-                <p className="font-bold leading-none text-slate-900">Logbook Magang</p>
-                <p className="text-xs text-slate-600 mt-1">Bank Syariah Indonesia</p>
-              </div>
-            </Link>
-            <nav className="hidden xl:flex items-center gap-1">
-              {LINKS.map(function (l) {
-                return <NavLink key={l.to} to={l.to} end={l.to === '/'} className={function (s) { return linkCls(s.isActive) }}>{l.label}</NavLink>
-              })}
-            </nav>
-            <div className="hidden xl:flex items-center gap-3">
-              {themeBtn()}
-              {mahasiswa ? (
-                <>
-                  <Link to="/dashboard" className="px-4 py-2 rounded-xl bg-bsi-800 text-white text-sm font-semibold hover:bg-bsi-900">Dashboard</Link>
-                  <Link to="/" onClick={function () { logoutMahasiswa() }} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-100">Keluar</Link>
-                </>
-              ) : (
-                <Link to="/login" className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-700">Masuk Intern</Link>
-              )}
-            </div>
-            <div className="flex xl:hidden items-center gap-2">
-              {themeBtn()}
-              <button onClick={function () { setOpen(function (o) { return !o }) }} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700">Menu</button>
-            </div>
-          </div>
-        </div>
-        <MenuMobile open={open}>
-            {LINKS.map(function (l) {
-              return <NavLink key={l.to} to={l.to} end={l.to === '/'} onClick={function () { setOpen(false) }} className={function (s) { return 'flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm ' + (s.isActive ? 'bg-bsi-100 text-bsi-900 font-bold ring-1 ring-bsi-200 dark:ring-bsi-500/40' : 'font-semibold text-slate-600 hover:bg-slate-100') }}>{function (s) { return <>{s.isActive ? <span className="h-2 w-2 shrink-0 rounded-full bg-current" /> : null}<span className="truncate">{l.label}</span></> }}</NavLink>
-            })}
-            {mahasiswa ? (
-              <>
-                <NavLink to="/dashboard" onClick={function () { setOpen(false) }} className={function (s) { return 'flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm font-semibold bg-bsi-800 text-white ' + (s.isActive ? 'ring-2 ring-gold-400' : '') }}>{function (s) { return <>{s.isActive ? <span className="h-2 w-2 shrink-0 rounded-full bg-gold-400" /> : null}<span className="truncate">Dashboard</span></> }}</NavLink>
-                <Link to="/" onClick={function () { setOpen(false); logoutMahasiswa() }} className="block px-4 py-3 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700">Keluar</Link>
-              </>
-            ) : (
-              <Link to="/login" onClick={function () { setOpen(false) }} className="block px-4 py-3 rounded-xl bg-slate-900 text-white text-sm font-semibold">Masuk Intern</Link>
-            )}
-        </MenuMobile>
-      </header>
-
-      <main className="anim-page max-w-7xl mx-auto px-4 py-8 lg:py-10 flex-1 w-full">
-        <Outlet />
-      </main>
-
-      <footer className="footer-ramping border-t border-slate-200 bg-white">
-<div className="mx-auto max-w-7xl px-4 py-4 text-center">
-<p className="text-xs text-slate-600">© 2026 Tim Magang BSI</p>
-</div>
-</footer>
-    </div>
+    <ThemeProvider>
+      <ToastProvider>
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ScrollToTop />
+        <Routes>
+          <Route element={<Layout />}>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/logbook" element={<LogbookPage />} />
+            <Route path="/galeri" element={<GalleryPage />} />
+            <Route path="/absen" element={<AttendancePage />} />
+            <Route path="/dospem" element={<DospemPage />} />
+            <Route path="/tim" element={<Navigate to="/dospem" replace />} />
+            <Route path="/login" element={<RequireGuest><LoginPage /></RequireGuest>} />
+            <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+      </ToastProvider>
+    </ThemeProvider>
   )
 }
 ```
@@ -3708,6 +3498,136 @@ return (
       <Modal open={!!detail} onClose={function () { setDetail(null) }}>
         {detail ? <LogbookDetail log={detail} /> : null}
       </Modal>
+    </div>
+  )
+}
+```
+
+## File: src/components/Layout.jsx
+```javascript
+import { Outlet, Link, NavLink, useNavigate } from 'react-router-dom'
+import { useTheme } from '../lib/theme.jsx'
+import { useAuth, logoutMahasiswa } from '../lib/auth.js'
+import { SizedIcon } from './icons.jsx'
+import { ConfirmModal } from './ui.jsx'
+import { useEffect, useState } from 'react'
+
+const LINKS = [
+  { to: '/', label: 'Beranda' },
+  { to: '/logbook', label: 'Logbook' },
+  { to: '/galeri', label: 'Galeri' },
+  { to: '/absen', label: 'Daftar Hadir' },
+  { to: '/dospem', label: 'Tim & Dospem' }
+]
+
+function MenuMobile(props) {
+  return (
+    <div className={'menu-mobile-wrap xl:hidden' + (props.open ? ' menu-mobile-buka' : '')}>
+      <div className="menu-mobile-dalam">
+        <div className="menu-mobile-isi border-t border-slate-200 bg-white px-4 py-4 space-y-2">
+          {props.children}
+        </div>
+      </div>
+    </div>
+  )
+}
+export default function Layout() {
+  const theme = useTheme()
+  const { mahasiswa } = useAuth()
+  const [open, setOpen] = useState(false)
+  const [konfirmasiKeluar, setKonfirmasiKeluar] = useState(false)
+  const navigate = useNavigate()
+  function mintaKeluar(e) {
+    e.preventDefault()
+    setOpen(false)
+    setKonfirmasiKeluar(true)
+  }
+  async function benarKeluar() {
+    setKonfirmasiKeluar(false)
+    await logoutMahasiswa()
+    navigate('/')
+  }
+
+  const linkCls = function (active) {
+    return 'px-3 py-2 rounded-xl text-sm font-semibold ' + (active ? 'bg-bsi-900 text-white' : 'text-slate-600 hover:bg-slate-100')
+  }
+
+  const themeBtn = function (extra) {
+    return (
+      <button onClick={theme.toggle} className={'rounded-xl border border-slate-300 grid place-items-center hover:bg-slate-100 text-slate-700 ' + (extra || 'h-10 w-10')} title="Ganti tema">
+        <SizedIcon name={theme.dark ? 'sun' : 'moon'} size={18} />
+      </button>
+    )
+  }
+
+  return (
+    <div className="flex flex-col min-h-screen">
+      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="h-16 flex items-center justify-between gap-4">
+            <Link to="/" className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-2xl bg-gradient-to-tr from-bsi-800 to-gold-500 text-white grid place-items-center font-black">BSI</div>
+              <div>
+                <p className="font-bold leading-none text-slate-900">Logbook Magang</p>
+                <p className="text-xs text-slate-600 mt-1">Bank Syariah Indonesia</p>
+              </div>
+            </Link>
+            <nav className="hidden xl:flex items-center gap-1">
+              {LINKS.map(function (l) {
+                return <NavLink key={l.to} to={l.to} end={l.to === '/'} className={function (s) { return linkCls(s.isActive) }}>{l.label}</NavLink>
+              })}
+            </nav>
+            <div className="hidden xl:flex items-center gap-3">
+              {themeBtn()}
+              {mahasiswa ? (
+                <>
+                  <Link to="/dashboard" className="px-4 py-2 rounded-xl bg-bsi-800 text-white text-sm font-semibold hover:bg-bsi-900">Dashboard</Link>
+                  <button type="button" onClick={mintaKeluar} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-100">Keluar</button>
+                </>
+              ) : (
+                <Link to="/login" className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-700">Masuk Intern</Link>
+              )}
+            </div>
+            <div className="flex xl:hidden items-center gap-2">
+              {themeBtn()}
+              <button onClick={function () { setOpen(function (o) { return !o }) }} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700">Menu</button>
+            </div>
+          </div>
+        </div>
+        <MenuMobile open={open}>
+            {LINKS.map(function (l) {
+              return <NavLink key={l.to} to={l.to} end={l.to === '/'} onClick={function () { setOpen(false) }} className={function (s) { return 'flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm ' + (s.isActive ? 'bg-bsi-100 text-bsi-900 font-bold ring-1 ring-bsi-200 dark:ring-bsi-500/40' : 'font-semibold text-slate-600 hover:bg-slate-100') }}>{function (s) { return <>{s.isActive ? <span className="h-2 w-2 shrink-0 rounded-full bg-current" /> : null}<span className="truncate">{l.label}</span></> }}</NavLink>
+            })}
+            {mahasiswa ? (
+              <>
+                <NavLink to="/dashboard" onClick={function () { setOpen(false) }} className={function (s) { return 'flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm font-semibold bg-bsi-800 text-white ' + (s.isActive ? 'ring-2 ring-gold-400' : '') }}>{function (s) { return <>{s.isActive ? <span className="h-2 w-2 shrink-0 rounded-full bg-gold-400" /> : null}<span className="truncate">Dashboard</span></> }}</NavLink>
+                <button type="button" onClick={mintaKeluar} className="block w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700">Keluar</button>
+              </>
+            ) : (
+              <Link to="/login" onClick={function () { setOpen(false) }} className="block px-4 py-3 rounded-xl bg-slate-900 text-white text-sm font-semibold">Masuk Intern</Link>
+            )}
+        </MenuMobile>
+      </header>
+
+      <main className="anim-page max-w-7xl mx-auto px-4 py-8 lg:py-10 flex-1 w-full">
+        <Outlet />
+      </main>
+
+      <footer className="footer-ramping border-t border-slate-200 bg-white">
+<div className="mx-auto max-w-7xl px-4 py-4 text-center">
+<p className="text-xs text-slate-600">© 2026 Tim Magang BSI</p>
+</div>
+</footer>
+<ConfirmModal
+  open={konfirmasiKeluar}
+  title="Keluar dari akun?"
+  message="Sesi login kamu akan berakhir dan area intern tidak bisa diakses sampai kamu masuk lagi. Data yang sudah disimpan tetap aman."
+  confirmLabel="Ya, Keluar"
+  icon="user"
+  tone="netral"
+  onCancel={function () { setKonfirmasiKeluar(false) }}
+  onConfirm={benarKeluar}
+/>
     </div>
   )
 }
@@ -4597,8 +4517,8 @@ return (
 <div className="min-h-full flex items-center justify-center py-8">
 <div className="anim-modal w-full max-w-md rounded-[2rem] bg-white shadow-2xl" onClick={function (e) { e.stopPropagation() }}>
 <div className="p-6 space-y-4">
-<div className="mx-auto h-14 w-14 rounded-2xl bg-red-100 text-red-600 grid place-items-center">
-<SizedIcon name="trash" size={24} />
+<div className={'mx-auto h-14 w-14 ' + 'rounded-2xl grid place-items-center ' + ((p.tone || 'bahaya') === 'bahaya' ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600')}>
+<SizedIcon name={p.icon || 'trash'} size={24} />
 </div>
 <div className="text-center">
 <h3 className="text-xl font-black text-slate-900">{p.title || 'Hapus data ini?'}</h3>
@@ -4608,7 +4528,7 @@ return (
 <button type="button" onClick={p.onCancel} className="rounded-2xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100">
 Batal
 </button>
-<button type="button" onClick={p.onConfirm} className="rounded-2xl bg-red-500 px-4 py-3 text-sm font-bold text-white hover:bg-red-600">
+<button type="button" onClick={p.onConfirm} className={'rounded-2xl px-4 py-3 ' + 'text-sm font-bold text-white ' + ((p.tone || 'bahaya') === 'bahaya' ? 'bg-red-500 hover:bg-red-600' : 'bg-bsi-800 hover:bg-bsi-900')}>
 {p.confirmLabel || 'Ya, Hapus'}
 </button>
 </div>
@@ -6436,6 +6356,14 @@ async function submitHadir(e) {
         message: 'Lampiran gambar pada form galeri akan dibatalkan. Kamu bisa memilih file lain setelahnya.'
       }
     }
+    if (pendingDelete.type === 'kegiatan') {
+      return {
+        title: 'Hapus kegiatan?',
+        message: 'Kegiatan ' + (pendingDelete.data + 1) + 
+          ' beserta isi formulir dan lampiran yang belum disimpan ' +
+          'akan dibuang. Tindakan ini tidak bisa dibatalkan.'
+      }
+    }
     if (pendingDelete.type === 'log') {
       return {
         title: 'Hapus logbook?',
@@ -6467,6 +6395,16 @@ async function submitHadir(e) {
     }
     if (target.type === 'media-gal') {
       setGalForm(function (g) { return Object.assign({}, g, { file: null, preview: '', oldPath: '' }) })
+      return
+    }
+    if (target.type === 'kegiatan') {
+      const buang = items[target.data]
+      const pratinjau = buang && buang.preview ? String(buang.preview) : ''
+      if (pratinjau.indexOf('blob:') === 0) URL.revokeObjectURL(pratinjau)
+      setItems(function (p) {
+        return p.filter(function (x, idx) { return idx !== target.data })
+      })
+      toast.sukses('Kegiatan ' + (target.data + 1) + ' dihapus')
       return
     }
     if (target.type === 'log') {
@@ -6679,7 +6617,7 @@ async function submitHadir(e) {
                     <div key={it.key} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3 min-w-0">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-bsi-800">Kegiatan {i + 1}</span>
-                        {items.length > 1 ? <button type="button" onClick={function () { setItems(function (p) { return p.filter(function (x, idx) { return idx !== i }) }); toast.sukses('Kegiatan ' + (i + 1) + ' dihapus') }} className="text-xs text-red-600 hover:underline">Hapus</button> : null}
+                        {items.length > 1 ? <button type="button" onClick={function () { setPendingDelete({ type: 'kegiatan', data: i }) }} className="text-xs text-red-600 hover:underline">Hapus</button> : null}
                       </div>
                       <input className={inputCls} value={it.judul} onChange={function (e) { patchItem(i, { judul: e.target.value }) }} aria-label="Judul kegiatan" placeholder="Judul kegiatan" />
                       <AutoTextArea className={inputCls} value={it.deskripsi} onChange={function (e) { patchItem(i, { deskripsi: e.target.value }) }} aria-label="Deskripsi kegiatan" placeholder="Deskripsi singkat kegiatan" />
