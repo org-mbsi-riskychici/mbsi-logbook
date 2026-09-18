@@ -579,6 +579,14 @@ async function submitHadir(e) {
         message: 'Lampiran gambar pada form galeri akan dibatalkan. Kamu bisa memilih file lain setelahnya.'
       }
     }
+    if (pendingDelete.type === 'kegiatan') {
+      return {
+        title: 'Hapus kegiatan?',
+        message: 'Kegiatan ' + (pendingDelete.data + 1) + 
+          ' beserta isi formulir dan lampiran yang belum disimpan ' +
+          'akan dibuang. Tindakan ini tidak bisa dibatalkan.'
+      }
+    }
     if (pendingDelete.type === 'log') {
       return {
         title: 'Hapus logbook?',
@@ -610,6 +618,16 @@ async function submitHadir(e) {
     }
     if (target.type === 'media-gal') {
       setGalForm(function (g) { return Object.assign({}, g, { file: null, preview: '', oldPath: '' }) })
+      return
+    }
+    if (target.type === 'kegiatan') {
+      const buang = items[target.data]
+      const pratinjau = buang && buang.preview ? String(buang.preview) : ''
+      if (pratinjau.indexOf('blob:') === 0) URL.revokeObjectURL(pratinjau)
+      setItems(function (p) {
+        return p.filter(function (x, idx) { return idx !== target.data })
+      })
+      toast.sukses('Kegiatan ' + (target.data + 1) + ' dihapus')
       return
     }
     if (target.type === 'log') {
@@ -822,7 +840,7 @@ async function submitHadir(e) {
                     <div key={it.key} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3 min-w-0">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-bsi-800">Kegiatan {i + 1}</span>
-                        {items.length > 1 ? <button type="button" onClick={function () { setItems(function (p) { return p.filter(function (x, idx) { return idx !== i }) }); toast.sukses('Kegiatan ' + (i + 1) + ' dihapus') }} className="text-xs text-red-600 hover:underline">Hapus</button> : null}
+                        {items.length > 1 ? <button type="button" onClick={function () { setPendingDelete({ type: 'kegiatan', data: i }) }} className="text-xs text-red-600 hover:underline">Hapus</button> : null}
                       </div>
                       <input className={inputCls} value={it.judul} onChange={function (e) { patchItem(i, { judul: e.target.value }) }} aria-label="Judul kegiatan" placeholder="Judul kegiatan" />
                       <AutoTextArea className={inputCls} value={it.deskripsi} onChange={function (e) { patchItem(i, { deskripsi: e.target.value }) }} aria-label="Deskripsi kegiatan" placeholder="Deskripsi singkat kegiatan" />
