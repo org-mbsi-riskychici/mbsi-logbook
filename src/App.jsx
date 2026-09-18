@@ -10,7 +10,6 @@ import LogbookPage from './pages/LogbookPage.jsx'
 import GalleryPage from './pages/GalleryPage.jsx'
 import AttendancePage from './pages/AttendancePage.jsx'
 import DospemPage from './pages/DospemPage.jsx'
-import TimPage from './pages/TimPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import DashboardPage from './pages/DashboardPage.jsx'
 

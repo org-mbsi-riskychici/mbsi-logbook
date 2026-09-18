@@ -93,6 +93,13 @@ export async function pratinjauHeic(file) {
   }
 }
 
+export async function urlPratinjau(file) {
+  if (formatHeic(file)) {
+    const blob = await pratinjauHeic(file)
+    return URL.createObjectURL(blob || file)
+  }
+  return URL.createObjectURL(file)
+}
 /* foto-profil-webp: pipeline konversi foto profil, pola sama dengan alur media R2 */
 function muatGambarProfil(sumber) {
   return new Promise(function (resolve, reject) {
@@ -108,12 +115,10 @@ export async function siapkanFotoProfil(file, maksSisi, kualitas) {
   const sisi = maksSisi || 640
   const mutu = kualitas || 0.85
   let kerja = file
-  const tipe = String(file.type || '').toLowerCase()
-  if (tipe.indexOf('heic') !== -1 || tipe.indexOf('heif') !== -1) {
-    const mod = await import('heic2any')
-    const heicFn = mod.default || mod
-    const blob = await heicFn({ blob: file, toType: 'image/jpeg', quality: 0.92 })
-    kerja = new File([Array.isArray(blob) ? blob[0] : blob], (file.name || 'foto').replace(/\.(heic|heif)$/i, '.jpg'), { type: 'image/jpeg' })
+  if (formatHeic(file)) {
+    const jpeg = await heicKeJpeg(file)
+    if (!jpeg) throw new Error('File HEIC tidak bisa dibaca')
+    kerja = new File([jpeg], (file.name || 'foto').replace(/\.(heic|heif)$/i, '.jpg'), { type: 'image/jpeg' })
   }
   const muat = await muatGambarProfil(kerja)
   try {

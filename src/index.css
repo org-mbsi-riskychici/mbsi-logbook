@@ -7,12 +7,10 @@
 @keyframes overlayFade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes modalPop { from { opacity: 0; transform: scale(.95) translateY(16px); } to { opacity: 1; transform: scale(1) translateY(0); } }
 @keyframes toastSlide { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes filterSlide { from { opacity: 0; max-height: 0; } to { opacity: 1; max-height: 600px; } }
 .anim-page { animation: appFadeUp .35s ease; }
 .anim-toast { animation: toastSlide .35s ease; }
 .anim-overlay { animation: overlayFade .25s ease; }
 .anim-modal { animation: modalPop .3s cubic-bezier(.16,1,.3,1); }
-.anim-filter { animation: filterSlide .3s ease; }
 
 /* ===== Komponen umum ===== */
 body { transition: background-color .3s ease, color .3s ease; }
@@ -171,24 +169,7 @@ textarea {
   30% { opacity: 1; transform: translateY(-1px) scale(1); }
 }
 
-.pemutar-bungkus iframe {
-  pointer-events: none;
-  border: 0;
-  background: transparent;
-}
 
-/* Pemutar video referensi: iframe cropping & slider custom */
-.pemutar-referensi iframe {
-  pointer-events: none;
-  border: 0;
-  background: transparent;
-}
-.pemutar-referensi:fullscreen {
-  border-radius: 0;
-  max-width: none;
-  width: 100vw;
-  height: 100vh;
-}
 .pemutar-progress::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
@@ -230,25 +211,6 @@ textarea {
   box-shadow: 0 1px 3px rgba(0,0,0,0.4);
 }
 
-/* pusat-pemutar-v3: iframe mengisi wadah persis, layar penuh menengahkan video */
-.pemutar-referensi iframe {
-  pointer-events: none;
-  border: 0;
-  background: transparent;
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 100% !important;
-  height: 100% !important;
-}
-.pemutar-referensi:fullscreen {
-  aspect-ratio: auto !important;
-  width: 100vw !important;
-  height: 100vh !important;
-  max-width: none !important;
-  border-radius: 0 !important;
-  background: #000;
-}
 
 /* pusat-pemutar-v4: margin crop 70px menyembunyikan seluruh chrome bawaan YouTube */
 .pemutar-referensi iframe {
@@ -468,16 +430,6 @@ html { scroll-behavior: smooth; }
 .panel-tutup .anim-modal, .panel-tutup .anim-filter { animation: panelOut 0.18s ease-in forwards; }
 
 /* ganti-mode-waktu: animasi halus saat berpindah antara pilihan bulan dan rentang waktu */
-@keyframes gantiBulan {
-from { opacity: 0; transform: translateX(-10px) scale(0.98); }
-to { opacity: 1; transform: translateX(0) scale(1); }
-}
-@keyframes gantiRentang {
-from { opacity: 0; transform: translateX(10px) scale(0.98); }
-to { opacity: 1; transform: translateX(0) scale(1); }
-}
-.anim-ganti-bulan { animation: gantiBulan 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
-.anim-ganti-rentang { animation: gantiRentang 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
 
 /* mode-smooth-v2: easing lebih lembut untuk masuk, bayangan cabang untuk keluar, tetangga bergeser mulus */
 @keyframes gantiBulan {

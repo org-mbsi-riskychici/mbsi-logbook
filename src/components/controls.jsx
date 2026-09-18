@@ -243,3 +243,29 @@ export function FileInput(props) {
     </div>
   )
 }
+export function ToggleModeMedia(props) {
+  const cls = function (aktif) {
+    return 'px-3 py-1.5 rounded-xl text-xs font-bold ' + (aktif ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700')
+  }
+  return (
+    <div className={props.className || 'flex gap-2'}>
+      <button type="button" onClick={function () { props.onChange('foto') }} className={cls(props.value !== 'video')}>Foto</button>
+      <button type="button" onClick={function () { props.onChange('video') }} className={cls(props.value === 'video')}>Video</button>
+    </div>
+  )
+}
+
+export function SumberVideo(props) {
+  const habis = props.quotaRemaining <= 0
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-semibold text-slate-600">Sisa kuota upload video hari ini: {props.quotaLoading ? <span className="inline-block w-3 h-3 ml-1 border-2 border-slate-400 border-t-transparent rounded-full animate-spin align-middle"></span> : <>{props.quotaRemaining} dari {props.quotaLimit}</>}</p>
+      <div className={habis && !props.fileName ? 'opacity-50 pointer-events-none' : ''}>
+        <FileInput accept="video/*" fileName={props.fileName || ''} label="Klik untuk pilih video" hint="Video maks 50 MB. Format MP4, MOV, WebM, atau MKV." onChange={props.onFile} />
+      </div>
+      {habis ? <p className="text-xs text-red-600">Kuota habis. Gunakan link video di bawah.</p> : null}
+      <input className={props.inputCls} value={props.ytLink} onChange={props.onYtLink} aria-label="Link video YouTube" placeholder="Link video YouTube untuk tampilan (opsional)" />
+      <input className={props.inputCls} value={props.driveLink} onChange={props.onDriveLink} aria-label="Link Google Drive" placeholder="Link Google Drive untuk unduhan (opsional)" />
+    </div>
+  )
+}

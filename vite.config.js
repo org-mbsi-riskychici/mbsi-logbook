@@ -3,16 +3,8 @@ import react from '@vitejs/plugin-react'
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { createClient } from '@supabase/supabase-js'
-
-function bacaBody(req) {
-  return new Promise(function (resolve) {
-    let data = ''
-    req.on('data', function (c) { data += c })
-    req.on('end', function () {
-      try { resolve(JSON.parse(data || '{}')) } catch (e) { resolve({}) }
-    })
-  })
-}
+import { LIMIT_PER_PROJECT, ptToday, daftarKredensial, getAccessToken } from './api/_lib/youtube.js'
+import { cekSesi, bacaBody } from './api/_lib/sesi.js'
 
 function pluginApiR2(env) {
   const s3 = new S3Client({
@@ -24,17 +16,6 @@ function pluginApiR2(env) {
     }
   })
 
-  async function cekSesi(req) {
-    const authHeader = req.headers.authorization || ''
-    const token = authHeader.replace('Bearer ', '')
-    if (!token) return false
-    const supabase = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY, {
-      global: { headers: { Authorization: authHeader } }
-    })
-    const r = await supabase.auth.getUser(token)
-    return !r.error && !!r.data.user
-  }
-
   // Bungkus middlewares agar bisa dipakai di dev dan preview
   const setupMiddlewares = (server) => {
     server.middlewares.use('/api/r2/presign', async function (req, res) {
@@ -43,7 +24,7 @@ function pluginApiR2(env) {
         res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
         return
       }
-      const ok = await cekSesi(req)
+      const ok = await cekSesi(env, req.headers.authorization)
       if (!ok) {
         res.statusCode = 401
         res.end(JSON.stringify({ error: 'Sesi tidak valid' }))
@@ -71,7 +52,7 @@ function pluginApiR2(env) {
         res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
         return
       }
-      const ok = await cekSesi(req)
+      const ok = await cekSesi(env, req.headers.authorization)
       if (!ok) {
         res.statusCode = 401
         res.end(JSON.stringify({ error: 'Sesi tidak valid' }))
@@ -93,57 +74,6 @@ function pluginApiR2(env) {
 
 function pluginApiYoutube(env) {
   const admin = createClient(env.VITE_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY)
-  const LIMIT_PER_PROJECT = 5
-  
-  function ptToday() {
-    const now = new Date()
-    const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
-    const y = pt.getFullYear()
-    const m = String(pt.getMonth() + 1).padStart(2, '0')
-    const d = String(pt.getDate()).padStart(2, '0')
-    return y + '-' + m + '-' + d
-  }
-  
-  function daftarKredensial() {
-    const list = []
-    for (let n = 1; n <= 6; n++) {
-      const id = env['YOUTUBE_CLIENT_ID_' + n]
-      const secret = env['YOUTUBE_CLIENT_SECRET_' + n]
-      const refresh = env['YOUTUBE_REFRESH_TOKEN_' + n]
-      if (id && secret && refresh) list.push({ n: n, id: id, secret: secret, refresh: refresh })
-    }
-    if (!list.length && env.YOUTUBE_CLIENT_ID && env.YOUTUBE_CLIENT_SECRET && env.YOUTUBE_REFRESH_TOKEN) {
-      list.push({ n: 1, id: env.YOUTUBE_CLIENT_ID, secret: env.YOUTUBE_CLIENT_SECRET, refresh: env.YOUTUBE_REFRESH_TOKEN })
-    }
-    return list
-  }
-  
-  const cacheToken = {}
-  async function getAccessToken(kred) {
-    const now = Date.now()
-    const c = cacheToken[kred.n]
-    if (c && c.expire > now + 60000) return c.token
-    const params = new URLSearchParams()
-    params.set('client_id', kred.id)
-    params.set('client_secret', kred.secret)
-    params.set('refresh_token', kred.refresh)
-    params.set('grant_type', 'refresh_token')
-    const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
-    if (!r.ok) throw new Error('refresh token project ' + kred.n + ' gagal (status ' + r.status + ')')
-    const j = await r.json()
-    cacheToken[kred.n] = { token: j.access_token, expire: now + (j.expires_in || 3600) * 1000 }
-    return j.access_token
-  }
-  
-  async function cekSesi(req) {
-    const authHeader = req.headers.authorization || ''
-    const token = authHeader.replace('Bearer ', '')
-    if (!token) return null
-    const supabase = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
-    const r = await supabase.auth.getUser(token)
-    return r.error ? null : r.data.user
-  }
-  
   function kirim(res, code, obj) {
     res.statusCode = code
     res.setHeader('Content-Type', 'application/json')
@@ -154,7 +84,7 @@ function pluginApiYoutube(env) {
   const setupMiddlewares = (server) => {
     server.middlewares.use('/api/youtube/quota', async function (req, res) {
       const today = ptToday()
-      const kredensial = daftarKredensial()
+      const kredensial = daftarKredensial(env)
       if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
       let usedTotal = 0
       const perProject = []
@@ -171,10 +101,10 @@ function pluginApiYoutube(env) {
 
     server.middlewares.use('/api/youtube/session', async function (req, res) {
       if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
-      const user = await cekSesi(req)
+      const user = await cekSesi(env, req.headers.authorization)
       if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
       const today = ptToday()
-      const kredensial = daftarKredensial()
+      const kredensial = daftarKredensial(env)
       if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
       const body = await bacaBody(req)
       if (!body.title) { kirim(res, 400, { error: 'Judul video wajib diisi' }); return }
@@ -205,9 +135,9 @@ function pluginApiYoutube(env) {
 
     server.middlewares.use('/api/youtube/latest', async function (req, res) {
       if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
-      const user = await cekSesi(req)
+      const user = await cekSesi(env, req.headers.authorization)
       if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
-      const kredensial = daftarKredensial()
+      const kredensial = daftarKredensial(env)
       if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
       let terakhir = ''
       for (const kred of kredensial) {

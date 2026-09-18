@@ -9,12 +9,9 @@ function PersonChip(props) {
   const p = props.mahasiswa
   const nama = p ? p.nama : 'Mahasiswa'
   const nim = p ? p.nim : '-'
-  const prodi = p && p.prodi ? p.prodi : ''
-  const initials = nama.split(' ').slice(0, 2).map(function (w) { return w.charAt(0) || '' }).join('').toUpperCase()
   return (
     <div className="flex items-center gap-3">
-      <div className={'rounded-2xl bg-bsi-800 text-white grid place-items-center font-bold ' + (props.size === 'sm' ? 'h-9 w-9 text-xs' : 'h-11 w-11')}>
-        {typeof p !== 'undefined' && p && p.foto_profil ? <img src={p.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : typeof m !== 'undefined' && m && m.foto_profil ? <img src={m.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : initials}</div>
+      <Avatar src={p && p.foto_profil ? p.foto_profil : null} nama={nama} size={props.size === 'sm' ? 'sm' : 'md'} />
       <div>
         <p className="font-semibold text-slate-900">{nama}</p>
         <p className="text-xs text-slate-600">NIM {nim}</p>
@@ -22,7 +19,6 @@ function PersonChip(props) {
     </div>
   )
 }
-
 function ActionButtons(props) {
   return (
     <div className="flex flex-wrap gap-2">
@@ -210,8 +206,7 @@ export function AttendanceCard(props) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm text-slate-600 pb-4">{formatTanggal(row.tanggal)}</p>
-          <div className="flex items-center gap-3"><Avatar src={props.row && props.row.mahasiswa && props.row.mahasiswa.foto_profil ? props.row.mahasiswa.foto_profil : null} nama={props.row && props.row.mahasiswa ? props.row.mahasiswa.nama : 'Mahasiswa'} size="md" /><div className="min-w-0 flex-1"><p className="mt-1 font-bold text-slate-900">{row.mahasiswa ? row.mahasiswa.nama : 'Mahasiswa'}</p>
-          <p className="text-xs text-slate-600">NIM {row.mahasiswa ? row.mahasiswa.nim : '-'}</p></div></div>
+          <PersonChip mahasiswa={row.mahasiswa} />
         </div>
         <AttendanceBadge status={row.status} />
       </div>

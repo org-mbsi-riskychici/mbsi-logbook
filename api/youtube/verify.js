@@ -1,11 +1,10 @@
-import { createClient } from '@supabase/supabase-js'
+import { cekSesi } from '../_lib/sesi.js'
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
   const authHeader = req.headers.authorization || ''
   if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
-  const authClient = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
-  const chk = await authClient.auth.getUser()
-  if (chk.error || !chk.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
+  const chkUser = await cekSesi(process.env, authHeader)
+  if (!chkUser) return res.status(401).json({ error: 'Sesi tidak valid' })
   const { ref } = req.body || {}
   if (!ref) return res.status(400).json({ error: 'Ref tidak ada' })
   const params = new URLSearchParams()
