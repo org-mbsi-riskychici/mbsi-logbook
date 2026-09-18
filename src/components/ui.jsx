@@ -151,8 +151,8 @@ return (
 <div className="min-h-full flex items-center justify-center py-8">
 <div className="anim-modal w-full max-w-md rounded-[2rem] bg-white shadow-2xl" onClick={function (e) { e.stopPropagation() }}>
 <div className="p-6 space-y-4">
-<div className="mx-auto h-14 w-14 rounded-2xl bg-red-100 text-red-600 grid place-items-center">
-<SizedIcon name="trash" size={24} />
+<div className={'mx-auto h-14 w-14 ' + 'rounded-2xl grid place-items-center ' + ((p.tone || 'bahaya') === 'bahaya' ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600')}>
+<SizedIcon name={p.icon || 'trash'} size={24} />
 </div>
 <div className="text-center">
 <h3 className="text-xl font-black text-slate-900">{p.title || 'Hapus data ini?'}</h3>
@@ -162,7 +162,7 @@ return (
 <button type="button" onClick={p.onCancel} className="rounded-2xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100">
 Batal
 </button>
-<button type="button" onClick={p.onConfirm} className="rounded-2xl bg-red-500 px-4 py-3 text-sm font-bold text-white hover:bg-red-600">
+<button type="button" onClick={p.onConfirm} className={'rounded-2xl px-4 py-3 ' + 'text-sm font-bold text-white ' + ((p.tone || 'bahaya') === 'bahaya' ? 'bg-red-500 hover:bg-red-600' : 'bg-bsi-800 hover:bg-bsi-900')}>
 {p.confirmLabel || 'Ya, Hapus'}
 </button>
 </div>

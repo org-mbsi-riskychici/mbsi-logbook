@@ -1,7 +1,8 @@
-import { Outlet, Link, NavLink } from 'react-router-dom'
+import { Outlet, Link, NavLink, useNavigate } from 'react-router-dom'
 import { useTheme } from '../lib/theme.jsx'
 import { useAuth, logoutMahasiswa } from '../lib/auth.js'
 import { SizedIcon } from './icons.jsx'
+import { ConfirmModal } from './ui.jsx'
 import { useEffect, useState } from 'react'
 
 const LINKS = [
@@ -27,6 +28,18 @@ export default function Layout() {
   const theme = useTheme()
   const { mahasiswa } = useAuth()
   const [open, setOpen] = useState(false)
+  const [konfirmasiKeluar, setKonfirmasiKeluar] = useState(false)
+  const navigate = useNavigate()
+  function mintaKeluar(e) {
+    e.preventDefault()
+    setOpen(false)
+    setKonfirmasiKeluar(true)
+  }
+  async function benarKeluar() {
+    setKonfirmasiKeluar(false)
+    await logoutMahasiswa()
+    navigate('/')
+  }
 
   const linkCls = function (active) {
     return 'px-3 py-2 rounded-xl text-sm font-semibold ' + (active ? 'bg-bsi-900 text-white' : 'text-slate-600 hover:bg-slate-100')
@@ -62,7 +75,7 @@ export default function Layout() {
               {mahasiswa ? (
                 <>
                   <Link to="/dashboard" className="px-4 py-2 rounded-xl bg-bsi-800 text-white text-sm font-semibold hover:bg-bsi-900">Dashboard</Link>
-                  <Link to="/" onClick={function () { logoutMahasiswa() }} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-100">Keluar</Link>
+                  <button type="button" onClick={mintaKeluar} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-100">Keluar</button>
                 </>
               ) : (
                 <Link to="/login" className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-700">Masuk Intern</Link>
@@ -81,7 +94,7 @@ export default function Layout() {
             {mahasiswa ? (
               <>
                 <NavLink to="/dashboard" onClick={function () { setOpen(false) }} className={function (s) { return 'flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm font-semibold bg-bsi-800 text-white ' + (s.isActive ? 'ring-2 ring-gold-400' : '') }}>{function (s) { return <>{s.isActive ? <span className="h-2 w-2 shrink-0 rounded-full bg-gold-400" /> : null}<span className="truncate">Dashboard</span></> }}</NavLink>
-                <Link to="/" onClick={function () { setOpen(false); logoutMahasiswa() }} className="block px-4 py-3 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700">Keluar</Link>
+                <button type="button" onClick={mintaKeluar} className="block w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700">Keluar</button>
               </>
             ) : (
               <Link to="/login" onClick={function () { setOpen(false) }} className="block px-4 py-3 rounded-xl bg-slate-900 text-white text-sm font-semibold">Masuk Intern</Link>
@@ -98,6 +111,16 @@ export default function Layout() {
 <p className="text-xs text-slate-600">© 2026 Tim Magang BSI</p>
 </div>
 </footer>
+<ConfirmModal
+  open={konfirmasiKeluar}
+  title="Keluar dari akun?"
+  message="Sesi login kamu akan berakhir dan area intern tidak bisa diakses sampai kamu masuk lagi. Data yang sudah disimpan tetap aman."
+  confirmLabel="Ya, Keluar"
+  icon="user"
+  tone="netral"
+  onCancel={function () { setKonfirmasiKeluar(false) }}
+  onConfirm={benarKeluar}
+/>
     </div>
   )
 }
