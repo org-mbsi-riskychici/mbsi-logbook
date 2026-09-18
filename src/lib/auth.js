@@ -16,31 +16,75 @@ export async function logoutMahasiswa() {
   await supabase.auth.signOut()
 }
 
+async function cariMahasiswa(uid) {
+  if (!uid) return null
+  const { data } = await supabase
+    .from('mahasiswa')
+    .select('*')
+    .eq('auth_uid', uid)
+    .single()
+  return data || null
+}
+
 export function useAuth() {
   const [mahasiswa, setMahasiswa] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
+  useEffect(function () {
     let active = true
-    async function load() {
-      const { data } = await supabase.auth.getSession()
-      const uid = data.session ? data.session.user.id : null
-      if (!uid) {
+
+    async function sinkronkan(sessionUser) {
+      try {
+        let uid = sessionUser ? sessionUser.id : null
+
+        if (!uid) {
+          const { data } = await supabase.auth.getSession()
+          uid = data.session ? data.session.user.id : null
+        }
+
+        if (!uid) {
+          if (active) {
+            setMahasiswa(null)
+            setLoading(false)
+          }
+          return
+        }
+
+        const mhs = await cariMahasiswa(uid)
+        if (active) {
+          setMahasiswa(mhs)
+          setLoading(false)
+        }
+      } catch (e) {
         if (active) setLoading(false)
-        return
-      }
-      const res = await supabase.from('mahasiswa').select('*').eq('auth_uid', uid).single()
-      if (active) {
-        setMahasiswa(res.data)
-        setLoading(false)
       }
     }
-    load()
+
+    sinkronkan(null)
+
+    function onVisibility() {
+      if (document.visibilityState === 'visible') {
+        sinkronkan(null)
+      }
+    }
+
+    document.addEventListener('visibilitychange', onVisibility)
+
     const sub = supabase.auth.onAuthStateChange(function (event, session) {
-      if (!session) setMahasiswa(null)
+      if (event === 'SIGNED_OUT') {
+        if (active) {
+          setMahasiswa(null)
+          setLoading(false)
+        }
+        return
+      }
+
+      sinkronkan(session && session.user ? session.user : null)
     })
+
     return function () {
       active = false
+      document.removeEventListener('visibilitychange', onVisibility)
       sub.data.subscription.unsubscribe()
     }
   }, [])
