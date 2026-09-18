@@ -82,6 +82,7 @@ export default function DashboardPage() {
   const [showUploadFoto, setShowUploadFoto] = useState(false)
   const [fotoPreview, setFotoPreview] = useState(null)
   const [fotoFile, setFotoFile] = useState(null)
+  const [previewLoadingFoto, setPreviewLoadingFoto] = useState(false)
   const [uploadingFoto, setUploadingFoto] = useState(false)
   const [, setVersiFoto] = useState(0)
   const [galMode, setGalMode] = useState('foto')
@@ -495,15 +496,23 @@ function startEditLog(log) {
     setPendingDelete({ type: 'gal', data: item })
   }
 
-    function pilihFotoProfil(e) {
-    const f = e.target.files[0]
-    if (!f) return
-    if (f.size > 5 * 1024 * 1024) { toast.gagal('Ukuran foto maksimal 5 MB.'); e.target.value = ''; return }
-    setFotoFile(f)
-    const reader = new FileReader()
-    reader.onloadend = function () { setFotoPreview(reader.result) }
-    reader.readAsDataURL(f)
-  }
+    async function pilihFotoProfil(e) {
+      const f = e.target.files[0]
+      if (!f) return
+      if (f.size > 5 * 1024 * 1024) { toast.gagal('Ukuran foto maksimal 5 MB.'); e.target.value = ''; return }
+      if (fotoPreview && String(fotoPreview).indexOf('blob:') === 0) URL.revokeObjectURL(fotoPreview)
+      setFotoFile(f)
+      if (formatHeic(f)) {
+        setPreviewLoadingFoto(true)
+        setFotoPreview(null)
+        const blob = await pratinjauHeic(f)
+        setFotoPreview(blob ? URL.createObjectURL(blob) : URL.createObjectURL(f))
+        setPreviewLoadingFoto(false)
+      } else {
+        setFotoPreview(URL.createObjectURL(f))
+        setPreviewLoadingFoto(false)
+      }
+    }
   async function simpanFotoProfil() {
     if (!fotoFile) { toast.gagal('Pilih file foto terlebih dahulu.'); return }
     setUploadingFoto(true)
@@ -726,7 +735,11 @@ async function submitHadir(e) {
 {showUploadFoto ? (
 <div className="mt-5 w-full border-t border-slate-200 pt-5 text-left">
 <div className="flex flex-wrap items-start gap-4">
-{fotoPreview ? <img src={fotoPreview} alt="Pratinjau foto profil" className="h-20 w-20 rounded-[28%] object-cover shadow-lg" /> : null}
+{previewLoadingFoto ? (
+  <div className="h-20 w-20 rounded-[28%] bg-slate-100 flex items-center justify-center">
+    <div className="h-6 w-6 rounded-full border-2 border-bsi-500 border-t-transparent animate-spin"></div>
+  </div>
+) : fotoPreview ? <img src={fotoPreview} alt="Pratinjau foto profil" className="h-20 w-20 rounded-[28%] object-cover shadow-lg" /> : null}
 <div className="min-w-0 flex-1">
 <input type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/heif" onChange={pilihFotoProfil} aria-label="Pilih foto profil" className="block w-full text-sm text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-800 hover:file:bg-emerald-100" />
 <p className="mt-2 text-xs text-slate-600">Format JPG, PNG, WebP, atau HEIC iPhone. Otomatis dikonversi ke WebP ringan. Maksimal 5 MB.</p>
