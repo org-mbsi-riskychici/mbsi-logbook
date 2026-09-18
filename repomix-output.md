@@ -43,6 +43,9 @@ api/
     quota.js
     session.js
     verify.js
+public/
+  llms.txt
+  robots.txt
 src/
   components/
     cards.jsx
@@ -86,10 +89,8 @@ supabase/
 index.html
 package.json
 postcss.config.js
-prototipe-tim-gabung.html
 README.md
 tailwind.config.js
-tesss-iframeeee.html
 vercel.json
 vite.config.js
 ```
@@ -208,44 +209,50 @@ export default async function handler(req, res) {
 }
 ```
 
-## File: src/lib/drive.js
-```javascript
-export function parseDriveId(url) {
-  if (!url) return null
-  const s = String(url).trim()
+## File: public/llms.txt
+```
+# Logbook Magang BSI
+Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia.
+Aplikasi single page berbasis React dengan data tersimpan di Supabase dan media di Cloudflare R2, YouTube, serta Google Drive.
 
-  if (/^[a-zA-Z0-9_-]{20,}$/.test(s) && s.indexOf('/') === -1 && s.indexOf('.') === -1) return s
+## Halaman publik
+- / : beranda, ringkasan statistik dan logbook terbaru tim
+- /logbook : daftar logbook publik lengkap dengan filter mahasiswa, kategori, dan tanggal
+- /galeri : galeri foto dan video kegiatan magang
+- /absen : daftar hadir tim beserta grafik kehadiran per mahasiswa
+- /dospem : ringkasan kegiatan untuk dosen pembimbing dan kaprodi tanpa login
 
-  try {
-    const u = new URL(s)
-    const host = u.hostname.replace('www.', '')
+## Area intern
+- /login : masuk mahasiswa menggunakan NIM dan kode akses
+- /dashboard : pengelolaan logbook, galeri, daftar hadir, dan foto profil, memerlukan sesi login
 
-    if (host === 'drive.google.com' || host === 'drive.usercontent.google.com') {
-      const m = u.pathname.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)
-      if (m) return m[1]
-      const id = u.searchParams.get('id')
-      if (id) return id
-    }
-  } catch (e) {}
+## Catatan teknis
+- Seluruh konten dimuat lewat JavaScript, tersedia blok noscript berisi tautan halaman utama.
+- robots.txt mengizinkan perayap umum dan agen AI.
+```
 
-  return null
-}
+## File: public/robots.txt
+```
+User-agent: *
+Allow: /
 
-export function drivePreviewUrl(id) {
-  return 'https://drive.google.com/file/d/' + id + '/preview'
-}
+User-agent: GPTBot
+Allow: /
 
-export function driveThumbUrl(id) {
-  return 'https://drive.google.com/thumbnail?id=' + id + '&sz=w1280'
-}
+User-agent: ChatGPT-User
+Allow: /
 
-export function driveDownloadUrl(id) {
-  return 'https://drive.usercontent.google.com/download?id=' + id + '&export=download&confirm=t'
-}
+User-agent: ClaudeBot
+Allow: /
 
-export function driveViewUrl(id) {
-  return 'https://drive.google.com/file/d/' + id + '/view'
-}
+User-agent: Claude-Web
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
 ```
 
 ## File: src/lib/profil.js
@@ -441,191 +448,6 @@ export default {
 }
 ```
 
-## File: prototipe-tim-gabung.html
-```html
-<!DOCTYPE html>
-<html lang="id">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Pratinjau Kartu Profil Tim dengan Rekap Kehadiran</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<script>
-tailwind.config = { theme: { extend: { colors: {
-  bsi: { 50:'#eefbf3',100:'#d6f5e0',200:'#b0e8c6',300:'#7dd4a4',400:'#48b97e',500:'#279d63',600:'#1a7f4e',700:'#166534',800:'#14532d',900:'#0f3d22' },
-  gold: { 50:'#fffbeb',100:'#fef3c7',300:'#fcd34d',400:'#fbbf24',500:'#f59e0b',600:'#d97706' }
-} } } }
-</script>
-<style>
-  body { font-family: ui-sans-serif, system-ui, sans-serif; }
-  .avatar-preview {
-    border-radius: 28%;
-    overflow: hidden;
-    box-shadow: 0 1px 2px rgba(15,23,42,.10), 0 10px 28px rgba(15,23,42,.22);
-    flex-shrink: 0;
-  }
-  .kartu { transition: transform .2s ease, box-shadow .2s ease; }
-  .kartu:hover { transform: translateY(-3px); box-shadow: 0 14px 34px rgba(15,23,42,.14); }
-</style>
-</head>
-<body class="bg-slate-100 text-slate-900">
-
-<p class="bg-gold-500 text-slate-900 text-center text-xs font-bold py-2 tracking-wide">PRATINJAU STATIS: KARTU PROFIL TIM DENGAN REKAP KEHADIRAN (MASUK / IZIN / BOLOS)</p>
-
-<main class="mx-auto max-w-6xl px-4 py-10 space-y-8">
-
-  <section>
-    <div class="flex flex-wrap items-end justify-between gap-3">
-      <div>
-        <h2 class="text-2xl lg:text-3xl font-black">Profil tim magang</h2>
-        <p class="mt-2 max-w-3xl text-slate-500">Seluruh mahasiswa magang beserta kontribusi kegiatan dan rekapitulasi kehadiran masing-masing.</p>
-      </div>
-      <span class="text-xs font-bold uppercase tracking-wide text-slate-400">3 anggota</span>
-    </div>
-    
-    <div class="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-
-      <!-- Kartu 1: Rajin Masuk -->
-      <div class="kartu rounded-3xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col">
-        <!-- Identitas -->
-        <div class="flex items-center gap-4">
-          <div class="avatar-preview h-14 w-14 grid place-items-center bg-bsi-700 text-white font-black text-lg">RW</div>
-          <div class="min-w-0 flex-1">
-            <p class="truncate text-lg font-black text-slate-900">Risky Wahyu Firmansyah</p>
-            <p class="truncate text-sm text-slate-500">NIM 24070041</p>
-            <span class="mt-1.5 inline-flex px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold">Rekayasa Perangkat Lunak</span>
-          </div>
-        </div>
-
-        <!-- Kontribusi Kegiatan -->
-        <div class="mt-4 grid grid-cols-2 gap-3">
-          <div class="rounded-2xl bg-slate-50 p-3">
-            <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Logbook</p>
-            <p class="mt-0.5 text-xl font-black text-bsi-800">8</p>
-          </div>
-          <div class="rounded-2xl bg-slate-50 p-3">
-            <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Media</p>
-            <p class="mt-0.5 text-xl font-black text-bsi-800">15</p>
-          </div>
-        </div>
-
-        <!-- Rekap Kehadiran -->
-        <div class="mt-3 pt-3 border-t border-slate-100">
-          <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Rekap Kehadiran</p>
-          <div class="grid grid-cols-3 gap-2">
-            <div class="rounded-xl bg-emerald-50 p-2 text-center">
-              <p class="text-[10px] font-bold text-emerald-600 uppercase">Masuk</p>
-              <p class="text-base font-black text-emerald-700">18</p>
-            </div>
-            <div class="rounded-xl bg-amber-50 p-2 text-center">
-              <p class="text-[10px] font-bold text-amber-600 uppercase">Izin</p>
-              <p class="text-base font-black text-amber-700">2</p>
-            </div>
-            <div class="rounded-xl bg-red-50 p-2 text-center">
-              <p class="text-[10px] font-bold text-red-600 uppercase">Bolos</p>
-              <p class="text-base font-black text-red-700">0</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Kartu 2: Ada Izin dan Bolos -->
-      <div class="kartu rounded-3xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col">
-        <!-- Identitas -->
-        <div class="flex items-center gap-4">
-          <div class="avatar-preview h-14 w-14 grid place-items-center bg-gold-600 text-white font-black text-lg">AS</div>
-          <div class="min-w-0 flex-1">
-            <p class="truncate text-lg font-black text-slate-900">Alya Salsabila</p>
-            <p class="truncate text-sm text-slate-500">NIM 24070042</p>
-            <span class="mt-1.5 inline-flex px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold">Rekayasa Perangkat Lunak</span>
-          </div>
-        </div>
-
-        <!-- Kontribusi Kegiatan -->
-        <div class="mt-4 grid grid-cols-2 gap-3">
-          <div class="rounded-2xl bg-slate-50 p-3">
-            <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Logbook</p>
-            <p class="mt-0.5 text-xl font-black text-bsi-800">6</p>
-          </div>
-          <div class="rounded-2xl bg-slate-50 p-3">
-            <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Media</p>
-            <p class="mt-0.5 text-xl font-black text-bsi-800">11</p>
-          </div>
-        </div>
-
-        <!-- Rekap Kehadiran -->
-        <div class="mt-3 pt-3 border-t border-slate-100">
-          <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Rekap Kehadiran</p>
-          <div class="grid grid-cols-3 gap-2">
-            <div class="rounded-xl bg-emerald-50 p-2 text-center">
-              <p class="text-[10px] font-bold text-emerald-600 uppercase">Masuk</p>
-              <p class="text-base font-black text-emerald-700">12</p>
-            </div>
-            <div class="rounded-xl bg-amber-50 p-2 text-center">
-              <p class="text-[10px] font-bold text-amber-600 uppercase">Izin</p>
-              <p class="text-base font-black text-amber-700">5</p>
-            </div>
-            <div class="rounded-xl bg-red-50 p-2 text-center">
-              <p class="text-[10px] font-bold text-red-600 uppercase">Bolos</p>
-              <p class="text-base font-black text-red-700">3</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Kartu 3: Belum Ada Data -->
-      <div class="kartu rounded-3xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col">
-        <!-- Identitas -->
-        <div class="flex items-center gap-4">
-          <div class="avatar-preview h-14 w-14 grid place-items-center bg-slate-700 text-white font-black text-lg">BP</div>
-          <div class="min-w-0 flex-1">
-            <p class="truncate text-lg font-black text-slate-900">Bagas Prakoso</p>
-            <p class="truncate text-sm text-slate-500">NIM 24070043</p>
-            <span class="mt-1.5 inline-flex px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold">Rekayasa Perangkat Lunak</span>
-          </div>
-        </div>
-
-        <!-- Kontribusi Kegiatan -->
-        <div class="mt-4 grid grid-cols-2 gap-3">
-          <div class="rounded-2xl bg-slate-50 p-3">
-            <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Logbook</p>
-            <p class="mt-0.5 text-xl font-black text-bsi-800">0</p>
-          </div>
-          <div class="rounded-2xl bg-slate-50 p-3">
-            <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Media</p>
-            <p class="mt-0.5 text-xl font-black text-bsi-800">0</p>
-          </div>
-        </div>
-
-        <!-- Rekap Kehadiran -->
-        <div class="mt-3 pt-3 border-t border-slate-100">
-          <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Rekap Kehadiran</p>
-          <div class="grid grid-cols-3 gap-2">
-            <div class="rounded-xl bg-emerald-50 p-2 text-center">
-              <p class="text-[10px] font-bold text-emerald-600 uppercase">Masuk</p>
-              <p class="text-base font-black text-emerald-700">0</p>
-            </div>
-            <div class="rounded-xl bg-amber-50 p-2 text-center">
-              <p class="text-[10px] font-bold text-amber-600 uppercase">Izin</p>
-              <p class="text-base font-black text-amber-700">0</p>
-            </div>
-            <div class="rounded-xl bg-red-50 p-2 text-center">
-              <p class="text-[10px] font-bold text-red-600 uppercase">Bolos</p>
-              <p class="text-base font-black text-red-700">0</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-    </div>
-  </section>
-
-  <p class="text-center text-xs text-slate-400 pb-6">File ini hanya pratinjau statis. Struktur datanya akan mengambil status 'Masuk', 'Izin', dan 'Bolos' langsung dari tabel daftar_hadir di Supabase.</p>
-</main>
-</body>
-</html>
-```
-
 ## File: tailwind.config.js
 ```javascript
 export default {
@@ -645,911 +467,6 @@ export default {
   },
   plugins: []
 }
-```
-
-## File: tesss-iframeeee.html
-```html
-<!DOCTYPE html>
-
-<html lang="id">
-
-<head>
-
-  <meta charset="UTF-8">
-
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <title>Centered Fullscreen Custom YouTube Player</title>
-
-  <style>
-
-    * {
-
-      box-sizing: border-box;
-
-      margin: 0;
-
-      padding: 0;
-
-      font-family: Arial, sans-serif;
-
-    }
-
-
-
-    body {
-
-      background-color: #121212;
-
-      color: #fff;
-
-      display: flex;
-
-      justify-content: center;
-
-      align-items: center;
-
-      min-height: 100vh;
-
-      flex-direction: column;
-
-    }
-
-
-
-    /* Container Pemutar Video Utama */
-
-    .player-container {
-
-      position: relative;
-
-      width: 720px;
-
-      max-width: 95vw;
-
-      background: #000;
-
-      border-radius: 12px;
-
-      overflow: hidden;
-
-      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-
-    }
-
-
-
-    /* Fullscreen Center */
-
-    .player-container:fullscreen {
-
-      width: 100vw;
-
-      height: 100vh;
-
-      max-width: none;
-
-      border-radius: 0;
-
-      display: flex;
-
-      flex-direction: column;
-
-      justify-content: center;
-
-      align-items: center;
-
-      background-color: #000;
-
-    }
-
-
-
-    .player-container.hide-controls {
-
-      cursor: none;
-
-    }
-
-
-
-    /* TRIK CROPPING Header YouTube */
-
-    .video-viewport {
-
-      position: relative;
-
-      width: 100%;
-
-      padding-top: 56.25%; /* Ratio 16:9 */
-
-      overflow: hidden;
-
-    }
-
-
-
-    .player-container:fullscreen .video-viewport {
-
-      width: 100%;
-
-      max-height: 100vh;
-
-    }
-
-
-
-    #player {
-
-      position: absolute;
-
-      top: -60px; /* Potong top bar YouTube */
-
-      left: -2px;
-
-      width: calc(100% + 4px);
-
-      height: calc(100% + 120px);
-
-      pointer-events: none;
-
-    }
-
-
-
-    /* Layer Poster & Tombol Play Kustom */
-
-    .custom-poster {
-
-      position: absolute;
-
-      top: 0;
-
-      left: 0;
-
-      width: 100%;
-
-      height: 100%;
-
-      z-index: 2;
-
-      background-size: cover;
-
-      background-position: center;
-
-      display: flex;
-
-      justify-content: center;
-
-      align-items: center;
-
-      cursor: default; /* Diubah menjadi panah biasa */
-
-      transition: opacity 0.3s ease, visibility 0.3s ease;
-
-    }
-
-
-
-    .custom-poster.is-hidden {
-
-      opacity: 0;
-
-      visibility: hidden;
-
-      pointer-events: none;
-
-    }
-
-
-
-    /* Ikon Play Tengah Minimalis & Kecil */
-
-    .center-play-btn {
-
-      width: 48px;
-
-      height: 48px;
-
-      background: rgba(0, 0, 0, 0.5);
-
-      border: 1px solid rgba(255, 255, 255, 0.2);
-
-      border-radius: 50%;
-
-      display: flex;
-
-      justify-content: center;
-
-      align-items: center;
-
-      backdrop-filter: blur(8px);
-
-      cursor: pointer; /* Tombol play tengah tetap jari agar jelas bisa diklik */
-
-      transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease;
-
-    }
-
-
-
-    .custom-poster:hover .center-play-btn {
-
-      transform: scale(1.08);
-
-      background: rgba(255, 0, 0, 0.85);
-
-      border-color: rgba(255, 0, 0, 0.85);
-
-    }
-
-
-
-    .center-play-btn svg {
-
-      width: 20px;
-
-      height: 20px;
-
-      fill: #fff;
-
-      margin-left: 3px;
-
-    }
-
-
-
-    /* Overlay Transparan (Aktif setelah video diputar) */
-
-    .overlay-shield {
-
-      position: absolute;
-
-      top: 0;
-
-      left: 0;
-
-      width: 100%;
-
-      height: 100%;
-
-      z-index: 1;
-
-      background: transparent;
-
-      cursor: default; /* Diubah menjadi panah biasa */
-
-    }
-
-
-
-    /* Panel Kontrol Kustom */
-
-    .custom-controls {
-
-      display: flex;
-
-      align-items: center;
-
-      gap: 12px;
-
-      padding: 12px 16px;
-
-      background: rgba(30, 30, 30, 0.95);
-
-      z-index: 3;
-
-      position: absolute;
-
-      bottom: 0;
-
-      left: 0;
-
-      width: 100%;
-
-      opacity: 1;
-
-      visibility: visible;
-
-      transition: opacity 0.4s ease, visibility 0.4s ease;
-
-    }
-
-
-
-    .player-container.hide-controls .custom-controls {
-
-      opacity: 0;
-
-      visibility: hidden;
-
-    }
-
-
-
-    button {
-
-      background: #333;
-
-      color: #fff;
-
-      border: none;
-
-      padding: 8px 12px;
-
-      border-radius: 6px;
-
-      cursor: pointer;
-
-      font-weight: bold;
-
-      transition: background 0.2s;
-
-      display: flex;
-
-      align-items: center;
-
-      justify-content: center;
-
-    }
-
-
-
-    button:hover {
-
-      background: #555;
-
-    }
-
-
-
-    button svg {
-
-      width: 18px;
-
-      height: 18px;
-
-      fill: #fff;
-
-    }
-
-
-
-    /* Progress Bar */
-
-    .progress-container {
-
-      flex-grow: 1;
-
-      display: flex;
-
-      align-items: center;
-
-    }
-
-
-
-    .progress-bar {
-
-      width: 100%;
-
-      height: 6px;
-
-      -webkit-appearance: none;
-
-      appearance: none;
-
-      background: linear-gradient(to right, #ff0000 0%, #444 0%);
-
-      border-radius: 3px;
-
-      outline: none;
-
-      cursor: pointer;
-
-    }
-
-
-
-    .progress-bar::-webkit-slider-thumb {
-
-      -webkit-appearance: none;
-
-      appearance: none;
-
-      width: 14px;
-
-      height: 14px;
-
-      border-radius: 50%;
-
-      background: #ff0000;
-
-      cursor: pointer;
-
-    }
-
-
-
-    /* Text & Slider Volume */
-
-    .time-display {
-
-      font-size: 13px;
-
-      color: #bbb;
-
-      min-width: 80px;
-
-      text-align: center;
-
-    }
-
-
-
-    .volume-slider {
-
-      width: 70px;
-
-      cursor: pointer;
-
-    }
-
-  </style>
-
-</head>
-
-<body>
-
-
-
-  <div class="player-container" id="playerContainer">
-
-    <div class="video-viewport">
-
-      <div id="player"></div>
-
-      
-
-      <!-- Poster Kustom + Tombol Play Tengah Minimalis -->
-
-      <div class="custom-poster" id="customPoster" onclick="togglePlay()">
-
-        <div class="center-play-btn">
-
-          <svg viewBox="0 0 24 24">
-
-            <path d="M8 5v14l11-7z"/>
-
-          </svg>
-
-        </div>
-
-      </div>
-
-
-
-      <div class="overlay-shield" id="overlayShield"></div>
-
-    </div>
-
-
-
-    <!-- Panel Kontrol Kustom -->
-
-    <div class="custom-controls" id="customControls">
-
-      <button id="playPauseBtn" onclick="togglePlay()" aria-label="Play/Pause">
-
-        <svg id="playIcon" viewBox="0 0 24 24">
-
-          <path d="M8 5v14l11-7z"/>
-
-        </svg>
-
-        <svg id="pauseIcon" viewBox="0 0 24 24" style="display: none;">
-
-          <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
-
-        </svg>
-
-      </button>
-
-      
-
-      <div class="progress-container">
-
-        <input type="range" id="progressBar" class="progress-bar" value="0" min="0" max="100" step="0.1" oninput="seekVideo(this.value)">
-
-      </div>
-
-
-
-      <span class="time-display" id="timeDisplay">0:00 / 0:00</span>
-
-
-
-      <button id="muteBtn" onclick="toggleMute()" aria-label="Mute/Unmute">
-
-        <svg id="volumeIcon" viewBox="0 0 24 24">
-
-          <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
-
-        </svg>
-
-        <svg id="muteIcon" viewBox="0 0 24 24" style="display: none;">
-
-          <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
-
-        </svg>
-
-      </button>
-
-      <input type="range" id="volumeSlider" class="volume-slider" min="0" max="100" value="100" oninput="changeVolume(this.value)">
-
-
-
-      <button onclick="toggleFullscreen()">&#x26F6;</button>
-
-    </div>
-
-  </div>
-
-
-
-  <script>
-
-    var videoId = 'ypqq9quWfkM'; // ID Video
-
-    var tag = document.createElement('script');
-
-    tag.src = "https://www.youtube.com/iframe_api";
-
-    var firstScriptTag = document.getElementsByTagName('script')[0];
-
-    firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-
-
-
-    var player;
-
-    var updateInterval;
-
-    var hideControlsTimeout;
-
-
-
-    var playerContainer = document.getElementById('playerContainer');
-
-    var customPoster = document.getElementById('customPoster');
-
-
-
-    customPoster.style.backgroundImage = `url('https://img.youtube.com/vi/${videoId}/maxresdefault.jpg')`;
-
-
-
-    function onYouTubeIframeAPIReady() {
-
-      player = new YT.Player('player', {
-
-        videoId: videoId,
-
-        playerVars: {
-
-          'controls': 0,
-
-          'rel': 0,
-
-          'modestbranding': 1,
-
-          'playsinline': 1,
-
-          'disablekb': 1
-
-        },
-
-        events: {
-
-          'onReady': onPlayerReady,
-
-          'onStateChange': onPlayerStateChange
-
-        }
-
-      });
-
-    }
-
-
-
-    function onPlayerReady(event) {
-
-      document.getElementById('overlayShield').addEventListener('click', togglePlay);
-
-      setupAutoHideControls();
-
-    }
-
-
-
-    function onPlayerStateChange(event) {
-
-      var playIcon = document.getElementById('playIcon');
-
-      var pauseIcon = document.getElementById('pauseIcon');
-
-      
-
-      if (event.data == YT.PlayerState.PLAYING) {
-
-        customPoster.classList.add('is-hidden');
-
-        playIcon.style.display = 'none';
-
-        pauseIcon.style.display = 'block';
-
-        updateInterval = setInterval(updateProgress, 250);
-
-        resetAutoHideTimer();
-
-      } else {
-
-        playIcon.style.display = 'block';
-
-        pauseIcon.style.display = 'none';
-
-        clearInterval(updateInterval);
-
-        showControls();
-
-        clearTimeout(hideControlsTimeout);
-
-      }
-
-    }
-
-
-
-    function setupAutoHideControls() {
-
-      playerContainer.addEventListener('mousemove', function() {
-
-        showControls();
-
-        resetAutoHideTimer();
-
-      });
-
-
-
-      playerContainer.addEventListener('mouseleave', function() {
-
-        if (player && player.getPlayerState() == YT.PlayerState.PLAYING) {
-
-          hideControls();
-
-        }
-
-      });
-
-    }
-
-
-
-    function showControls() {
-
-      playerContainer.classList.remove('hide-controls');
-
-    }
-
-
-
-    function hideControls() {
-
-      playerContainer.classList.add('hide-controls');
-
-    }
-
-
-
-    function resetAutoHideTimer() {
-
-      clearTimeout(hideControlsTimeout);
-
-      if (player && player.getPlayerState() == YT.PlayerState.PLAYING) {
-
-        hideControlsTimeout = setTimeout(function() {
-
-          hideControls();
-
-        }, 2500);
-
-      }
-
-    }
-
-
-
-    function togglePlay() {
-
-      var state = player.getPlayerState();
-
-      if (state == YT.PlayerState.PLAYING) {
-
-        player.pauseVideo();
-
-      } else {
-
-        player.playVideo();
-
-      }
-
-    }
-
-
-
-    function updateProgress() {
-
-      if (!player || !player.getCurrentTime) return;
-
-      var currentTime = player.getCurrentTime();
-
-      var duration = player.getDuration();
-
-      
-
-      if (duration > 0) {
-
-        var percentage = (currentTime / duration) * 100;
-
-        var progressBar = document.getElementById('progressBar');
-
-        
-
-        progressBar.value = percentage;
-
-        updateProgressBarFill(progressBar, percentage);
-
-
-
-        document.getElementById('timeDisplay').innerText = 
-
-          formatTime(currentTime) + ' / ' + formatTime(duration);
-
-      }
-
-    }
-
-
-
-    function updateProgressBarFill(element, percentage) {
-
-      element.style.background = `linear-gradient(to right, #ff0000 ${percentage}%, #444 ${percentage}%)`;
-
-    }
-
-
-
-    function seekVideo(value) {
-
-      var duration = player.getDuration();
-
-      var seekToTime = (value / 100) * duration;
-
-      updateProgressBarFill(document.getElementById('progressBar'), value);
-
-      player.seekTo(seekToTime, true);
-
-    }
-
-
-
-    function toggleMute() {
-
-      if (player.isMuted()) {
-
-        player.unMute();
-
-        updateVolumeUI(player.getVolume(), false);
-
-      } else {
-
-        player.mute();
-
-        updateVolumeUI(0, true);
-
-      }
-
-    }
-
-
-
-    function changeVolume(value) {
-
-      player.setVolume(value);
-
-      if (value == 0) {
-
-        player.mute();
-
-        updateVolumeUI(0, true);
-
-      } else {
-
-        if (player.isMuted()) player.unMute();
-
-        updateVolumeUI(value, false);
-
-      }
-
-    }
-
-
-
-    function updateVolumeUI(volumeValue, isMuted) {
-
-      var volumeIcon = document.getElementById('volumeIcon');
-
-      var muteIcon = document.getElementById('muteIcon');
-
-      var volumeSlider = document.getElementById('volumeSlider');
-
-
-
-      if (isMuted || volumeValue == 0) {
-
-        volumeIcon.style.display = 'none';
-
-        muteIcon.style.display = 'block';
-
-      } else {
-
-        volumeIcon.style.display = 'block';
-
-        muteIcon.style.display = 'none';
-
-        volumeSlider.value = volumeValue;
-
-      }
-
-    }
-
-
-
-    function toggleFullscreen() {
-
-      if (!document.fullscreenElement) {
-
-        playerContainer.requestFullscreen().catch(err => alert(err.message));
-
-      } else {
-
-        document.exitFullscreen();
-
-      }
-
-    }
-
-
-
-    function formatTime(seconds) {
-
-      var mins = Math.floor(seconds / 60);
-
-      var secs = Math.floor(seconds % 60);
-
-      if (secs < 10) secs = '0' + secs;
-
-      return mins + ':' + secs;
-
-    }
-
-  </script>
-
-</body>
-
-</html>
 ```
 
 ## File: vercel.json
@@ -1767,6 +684,396 @@ export default async function handler(req, res) {
   }
   return res.status(429).json({ error: 'Kuota harian semua project video sudah habis. Coba lagi besok atau gunakan link video eksternal.', detail: terakhir })
 }
+```
+
+## File: src/lib/auth.js
+```javascript
+import { useEffect, useState } from 'react'
+import { supabase } from './supabase.js'
+
+const EMAIL_DOMAIN = '@mbsi.local'
+
+export async function loginWithNim(nim, kode) {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: nim.trim() + EMAIL_DOMAIN,
+    password: kode
+  })
+  if (error) throw error
+  return data
+}
+
+export async function logoutMahasiswa() {
+  await supabase.auth.signOut()
+}
+
+export function useAuth() {
+  const [mahasiswa, setMahasiswa] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let active = true
+    async function load() {
+      const { data } = await supabase.auth.getSession()
+      const uid = data.session ? data.session.user.id : null
+      if (!uid) {
+        if (active) setLoading(false)
+        return
+      }
+      const res = await supabase.from('mahasiswa').select('*').eq('auth_uid', uid).single()
+      if (active) {
+        setMahasiswa(res.data)
+        setLoading(false)
+      }
+    }
+    load()
+    const sub = supabase.auth.onAuthStateChange(function (event, session) {
+      if (!session) setMahasiswa(null)
+    })
+    return function () {
+      active = false
+      sub.data.subscription.unsubscribe()
+    }
+  }, [])
+
+  return { mahasiswa: mahasiswa, loading: loading }
+}
+```
+
+## File: src/lib/constants.js
+```javascript
+export const KATEGORI = [
+  'Administrasi',
+  'Pengarsipan',
+  'Layanan Nasabah',
+  'Back Office',
+  'Edukasi Produk',
+  'Pendataan',
+  'Rapat',
+  'Pelatihan',
+  'Dokumentasi',
+  'Pendukung Lain'
+]
+
+export const UNIT = ['Frontliner', 'Back Office', 'Marketing', 'Operasional', 'Umum']
+
+export const GALERI_KEGIATAN = [
+  'Dokumentasi',
+  'Administrasi',
+  'Layanan Nasabah',
+  'Edukasi',
+  'Pelatihan',
+  'Operasional',
+  'Lainnya'
+]
+```
+
+## File: src/lib/drive.js
+```javascript
+export function parseDriveId(url) {
+  if (!url) return null
+  const s = String(url).trim()
+
+  if (/^[a-zA-Z0-9_-]{20,}$/.test(s) && s.indexOf('/') === -1 && s.indexOf('.') === -1) return s
+
+  try {
+    const u = new URL(s)
+    const host = u.hostname.replace('www.', '')
+
+    if (host === 'drive.google.com' || host === 'drive.usercontent.google.com') {
+      const m = u.pathname.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)
+      if (m) return m[1]
+      const id = u.searchParams.get('id')
+      if (id) return id
+    }
+  } catch (e) {}
+
+  return null
+}
+
+export function drivePreviewUrl(id) {
+  return 'https://drive.google.com/file/d/' + id + '/preview'
+}
+
+export function driveThumbUrl(id) {
+  return 'https://drive.google.com/thumbnail?id=' + id + '&sz=w1000'
+}
+
+export function driveDownloadUrl(id) {
+  return 'https://drive.usercontent.google.com/download?id=' + id + '&export=download&confirm=t'
+}
+
+export function driveViewUrl(id) {
+  return 'https://drive.google.com/file/d/' + id + '/view'
+}
+```
+
+## File: supabase/schema.sql
+```sql
+create extension if not exists "pgcrypto";
+create table public.mahasiswa (
+  id uuid primary key default gen_random_uuid(),
+  auth_uid uuid unique references auth.users(id) on delete cascade,
+  nim varchar(20) not null unique,
+  nama varchar(100) not null,
+  created_at timestamptz not null default now()
+);
+create table public.logbooks (
+  id uuid primary key default gen_random_uuid(),
+  mahasiswa_id uuid not null references public.mahasiswa(id) on delete cascade,
+  tanggal date not null,
+  unit varchar(50),
+  kategori varchar(50) not null,
+  judul varchar(255) not null,
+  kendala text,
+  solusi text,
+  pembelajaran text,
+  status varchar(20) not null default 'draft' check (status in ('draft','publik')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create table public.logbook_items (
+  id uuid primary key default gen_random_uuid(),
+  logbook_id uuid not null references public.logbooks(id) on delete cascade,
+  urutan integer not null default 1,
+  judul varchar(255) not null,
+  deskripsi text,
+  hasil text,
+  media_path text,
+  media_type varchar(10) check (media_type in ('foto','video')),
+  show_in_gallery boolean not null default false,
+  created_at timestamptz not null default now()
+);
+create table public.galeri (
+  id uuid primary key default gen_random_uuid(),
+  mahasiswa_id uuid not null references public.mahasiswa(id) on delete cascade,
+  logbook_item_id uuid unique references public.logbook_items(id) on delete cascade,
+  judul varchar(255) not null,
+  deskripsi text,
+  tanggal date not null,
+  kegiatan varchar(50),
+  media_path text not null,
+  media_type varchar(10) not null check (media_type in ('foto','video')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create table public.daftar_hadir (
+  id uuid primary key default gen_random_uuid(),
+  mahasiswa_id uuid not null references public.mahasiswa(id) on delete cascade,
+  tanggal date not null,
+  status varchar(20) not null check (status in ('Masuk','Izin','Bolos')),
+  alasan text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (mahasiswa_id, tanggal)
+);
+create or replace function public.set_updated_at() returns trigger language plpgsql as $$
+begin
+  new.updated_at = now();
+  return new;
+end $$;
+create trigger trg_logbooks_upd before update on public.logbooks for each row execute function public.set_updated_at();
+create trigger trg_galeri_upd before update on public.galeri for each row execute function public.set_updated_at();
+create trigger trg_hadir_upd before update on public.daftar_hadir for each row execute function public.set_updated_at();
+create index idx_logbooks_mahasiswa on public.logbooks(mahasiswa_id, tanggal desc);
+create index idx_logbooks_status on public.logbooks(status);
+create index idx_items_logbook on public.logbook_items(logbook_id, urutan);
+create index idx_galeri_mahasiswa on public.galeri(mahasiswa_id, tanggal desc);
+create index idx_galeri_item on public.galeri(logbook_item_id);
+create index idx_hadir_mahasiswa on public.daftar_hadir(mahasiswa_id, tanggal desc);
+alter table public.mahasiswa enable row level security;
+alter table public.logbooks enable row level security;
+alter table public.logbook_items enable row level security;
+alter table public.galeri enable row level security;
+alter table public.daftar_hadir enable row level security;
+create policy "mahasiswa_read_all" on public.mahasiswa for select using (true);
+create policy "mahasiswa_update_self" on public.mahasiswa for update using (auth_uid = auth.uid());
+create policy "logbooks_read" on public.logbooks for select using (
+  status = 'publik' or mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
+);
+create policy "logbooks_insert_self" on public.logbooks for insert with check (
+  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
+);
+create policy "logbooks_update_self" on public.logbooks for update using (
+  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
+);
+create policy "logbooks_delete_self" on public.logbooks for delete using (
+  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
+);
+create policy "items_read" on public.logbook_items for select using (
+  exists (select 1 from public.logbooks l where l.id = logbook_id
+    and (l.status = 'publik' or l.mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())))
+);
+create policy "items_write_self" on public.logbook_items for all using (
+  exists (select 1 from public.logbooks l where l.id = logbook_id
+    and l.mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid()))
+) with check (
+  exists (select 1 from public.logbooks l where l.id = logbook_id
+    and l.mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid()))
+);
+create policy "galeri_read_all" on public.galeri for select using (true);
+create policy "galeri_insert_self" on public.galeri for insert with check (
+  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
+);
+create policy "galeri_update_self" on public.galeri for update using (
+  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
+);
+create policy "galeri_delete_self" on public.galeri for delete using (
+  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
+);
+create policy "hadir_read_all" on public.daftar_hadir for select using (true);
+create policy "hadir_insert_self" on public.daftar_hadir for insert with check (
+  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
+);
+create policy "hadir_update_self" on public.daftar_hadir for update using (
+  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
+);
+create policy "hadir_delete_self" on public.daftar_hadir for delete using (
+  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
+);
+```
+
+## File: .gitignore
+```
+node_modules
+dist
+.env.local
+.env
+*.log
+.env.youtube-*
+```
+
+## File: src/lib/theme.jsx
+```javascript
+import { createContext, useContext, useEffect, useState } from 'react'
+
+const ThemeContext = createContext(null)
+
+export function ThemeProvider(props) {
+  const [dark, setDark] = useState(function () {
+    const saved = localStorage.getItem('mbsi-theme')
+    if (saved) return saved === 'dark'
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  })
+
+  useEffect(function () {
+    document.documentElement.classList.toggle('dark', dark)
+    localStorage.setItem('mbsi-theme', dark ? 'dark' : 'light')
+  }, [dark])
+
+  return (
+    <ThemeContext.Provider value={{ dark: dark, toggle: function () {
+const ganti = function () { setDark(function (d) { return !d }) }
+if (document.startViewTransition && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  const akar = document.documentElement
+  const vt = document.startViewTransition(function () {
+    akar.classList.add('vt-tema')
+    ganti()
+  })
+  const lepas = function () { akar.classList.remove('vt-tema') }
+  vt.finished.then(lepas, lepas)
+  setTimeout(lepas, 600)
+} else ganti()
+} }}>
+      {props.children}
+    </ThemeContext.Provider>
+  )
+}
+
+export function useTheme() {
+  return useContext(ThemeContext)
+}
+```
+
+## File: index.html
+```html
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="index, follow" />
+    <meta name="description" content="Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia. Catatan kegiatan harian, dokumentasi media, dan monitoring kehadiran tim magang dalam satu portal." />
+    <meta name="theme-color" content="#16623c" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Logbook Magang BSI" />
+    <meta property="og:description" content="Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia." />
+    <meta property="og:locale" content="id_ID" />
+    <link rel="preconnect" href="https://i.ytimg.com" crossorigin />
+    <link rel="preconnect" href="https://drive.google.com" crossorigin />
+    <link rel="dns-prefetch" href="https://drive.usercontent.google.com" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='14'%20fill='%2316623c'/%3E%3Ctext%20x='32'%20y='44'%20font-size='34'%20font-weight='700'%20text-anchor='middle'%20fill='%23ffffff'%20font-family='Arial,%20sans-serif'%3EB%3C/text%3E%3C/svg%3E" />
+    <title>Logbook Magang BSI</title>
+      <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"WebSite","name":"Logbook Magang BSI","alternateName":"Portal Logbook Magang Bank Syariah Indonesia","description":"Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia.","inLanguage":"id-ID"}
+    </script>
+  </head>
+  <body class="bg-slate-50 text-slate-800 min-h-screen antialiased">
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+      <noscript>
+      <div style="max-width:640px;margin:48px auto;padding:24px;font-family:sans-serif;line-height:1.6">
+        <h1>Logbook Magang BSI</h1>
+        <p>Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia. Aktifkan JavaScript untuk menggunakan portal ini secara penuh.</p>
+        <ul>
+          <li><a href="/logbook">Logbook publik</a></li>
+          <li><a href="/galeri">Galeri dokumentasi</a></li>
+          <li><a href="/absen">Daftar hadir tim</a></li>
+          <li><a href="/dospem">Ringkasan untuk dosen pembimbing dan kaprodi</a></li>
+        </ul>
+      </div>
+    </noscript>
+  </body>
+</html>
+```
+
+## File: package.json
+```json
+{
+  "name": "mbsi-logbook",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.600.0",
+    "@aws-sdk/s3-request-presigner": "^3.600.0",
+    "@supabase/supabase-js": "^2.45.0",
+    "heic2any": "^0.0.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.10",
+    "vite": "^5.4.0"
+  }
+}
+```
+
+## File: README.md
+```markdown
+# Logbook Magang BSI
+
+Portal logbook, galeri, dan daftar hadir magang Bank Syariah Indonesia.
+
+## Menjalankan lokal
+1. node setup project saat ini (sudah dilakukan saat setup)
+2. npm run dev
+3. Buka http://localhost:5173
+
+## Database
+Jalankan isi file supabase/schema.sql di Supabase SQL Editor.
+Buat user Auth dengan pola email NIM@mbsi.local dan isi tabel mahasiswa beserta auth_uid.
+
+## Deploy
+Push ke GitHub, import di Vercel, salin isi .env.local ke Environment Variables Vercel.
 ```
 
 ## File: src/components/PemutarVideo.jsx
@@ -1988,15 +1295,6 @@ export default function PemutarVideo(props) {
           className="absolute inset-0 z-10 h-full w-full bg-transparent" style={{ cursor: kontrolSembunyi ? 'none' : 'default' }} />
       ) : null}
 
-      {/* Ikon putar besar milik kita saat dijeda, menutup ikon bawaan YouTube */}
-      {dimulai && !memutar && !buffer && !selesai && !gagal ? (
-        <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center">
-          <span className="grid h-20 w-20 place-items-center rounded-full bg-black/60 text-white backdrop-blur-sm">
-            <IkonPlay className="ml-1 h-8 w-8" />
-          </span>
-        </div>
-      ) : null}
-
       {/* Poster awal dengan tombol putar minimalis */}
       {!dimulai ? (
         <div className="absolute inset-0 z-20">
@@ -2032,7 +1330,7 @@ export default function PemutarVideo(props) {
         <div className="absolute inset-0 z-30 grid place-items-center bg-black/90">
           <div className="flex flex-col items-center gap-2 px-6 text-center">
             <p className="text-sm font-semibold text-slate-200">Video tidak dapat dimuat</p>
-            <p className="text-xs text-slate-400">Periksa koneksi atau ketersediaan video di saluran.</p>
+            <p className="text-xs text-slate-300">Periksa koneksi atau ketersediaan video di saluran.</p>
           </div>
         </div>
       ) : null}
@@ -2062,720 +1360,6 @@ export default function PemutarVideo(props) {
           </button>
         </div>
       ) : null}
-    </div>
-  )
-}
-```
-
-## File: src/lib/auth.js
-```javascript
-import { useEffect, useState } from 'react'
-import { supabase } from './supabase.js'
-
-const EMAIL_DOMAIN = '@mbsi.local'
-
-export async function loginWithNim(nim, kode) {
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: nim.trim() + EMAIL_DOMAIN,
-    password: kode
-  })
-  if (error) throw error
-  return data
-}
-
-export async function logoutMahasiswa() {
-  await supabase.auth.signOut()
-}
-
-export function useAuth() {
-  const [mahasiswa, setMahasiswa] = useState(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    let active = true
-    async function load() {
-      const { data } = await supabase.auth.getSession()
-      const uid = data.session ? data.session.user.id : null
-      if (!uid) {
-        if (active) setLoading(false)
-        return
-      }
-      const res = await supabase.from('mahasiswa').select('*').eq('auth_uid', uid).single()
-      if (active) {
-        setMahasiswa(res.data)
-        setLoading(false)
-      }
-    }
-    load()
-    const sub = supabase.auth.onAuthStateChange(function (event, session) {
-      if (!session) setMahasiswa(null)
-    })
-    return function () {
-      active = false
-      sub.data.subscription.unsubscribe()
-    }
-  }, [])
-
-  return { mahasiswa: mahasiswa, loading: loading }
-}
-```
-
-## File: src/lib/constants.js
-```javascript
-export const KATEGORI = [
-  'Administrasi',
-  'Pengarsipan',
-  'Layanan Nasabah',
-  'Back Office',
-  'Edukasi Produk',
-  'Pendataan',
-  'Rapat',
-  'Pelatihan',
-  'Dokumentasi',
-  'Pendukung Lain'
-]
-
-export const UNIT = ['Frontliner', 'Back Office', 'Marketing', 'Operasional', 'Umum']
-
-export const GALERI_KEGIATAN = [
-  'Dokumentasi',
-  'Administrasi',
-  'Layanan Nasabah',
-  'Edukasi',
-  'Pelatihan',
-  'Operasional',
-  'Lainnya'
-]
-```
-
-## File: supabase/schema.sql
-```sql
-create extension if not exists "pgcrypto";
-create table public.mahasiswa (
-  id uuid primary key default gen_random_uuid(),
-  auth_uid uuid unique references auth.users(id) on delete cascade,
-  nim varchar(20) not null unique,
-  nama varchar(100) not null,
-  created_at timestamptz not null default now()
-);
-create table public.logbooks (
-  id uuid primary key default gen_random_uuid(),
-  mahasiswa_id uuid not null references public.mahasiswa(id) on delete cascade,
-  tanggal date not null,
-  unit varchar(50),
-  kategori varchar(50) not null,
-  judul varchar(255) not null,
-  kendala text,
-  solusi text,
-  pembelajaran text,
-  status varchar(20) not null default 'draft' check (status in ('draft','publik')),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-create table public.logbook_items (
-  id uuid primary key default gen_random_uuid(),
-  logbook_id uuid not null references public.logbooks(id) on delete cascade,
-  urutan integer not null default 1,
-  judul varchar(255) not null,
-  deskripsi text,
-  hasil text,
-  media_path text,
-  media_type varchar(10) check (media_type in ('foto','video')),
-  show_in_gallery boolean not null default false,
-  created_at timestamptz not null default now()
-);
-create table public.galeri (
-  id uuid primary key default gen_random_uuid(),
-  mahasiswa_id uuid not null references public.mahasiswa(id) on delete cascade,
-  logbook_item_id uuid unique references public.logbook_items(id) on delete cascade,
-  judul varchar(255) not null,
-  deskripsi text,
-  tanggal date not null,
-  kegiatan varchar(50),
-  media_path text not null,
-  media_type varchar(10) not null check (media_type in ('foto','video')),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-create table public.daftar_hadir (
-  id uuid primary key default gen_random_uuid(),
-  mahasiswa_id uuid not null references public.mahasiswa(id) on delete cascade,
-  tanggal date not null,
-  status varchar(20) not null check (status in ('Masuk','Izin','Bolos')),
-  alasan text,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (mahasiswa_id, tanggal)
-);
-create or replace function public.set_updated_at() returns trigger language plpgsql as $$
-begin
-  new.updated_at = now();
-  return new;
-end $$;
-create trigger trg_logbooks_upd before update on public.logbooks for each row execute function public.set_updated_at();
-create trigger trg_galeri_upd before update on public.galeri for each row execute function public.set_updated_at();
-create trigger trg_hadir_upd before update on public.daftar_hadir for each row execute function public.set_updated_at();
-create index idx_logbooks_mahasiswa on public.logbooks(mahasiswa_id, tanggal desc);
-create index idx_logbooks_status on public.logbooks(status);
-create index idx_items_logbook on public.logbook_items(logbook_id, urutan);
-create index idx_galeri_mahasiswa on public.galeri(mahasiswa_id, tanggal desc);
-create index idx_galeri_item on public.galeri(logbook_item_id);
-create index idx_hadir_mahasiswa on public.daftar_hadir(mahasiswa_id, tanggal desc);
-alter table public.mahasiswa enable row level security;
-alter table public.logbooks enable row level security;
-alter table public.logbook_items enable row level security;
-alter table public.galeri enable row level security;
-alter table public.daftar_hadir enable row level security;
-create policy "mahasiswa_read_all" on public.mahasiswa for select using (true);
-create policy "mahasiswa_update_self" on public.mahasiswa for update using (auth_uid = auth.uid());
-create policy "logbooks_read" on public.logbooks for select using (
-  status = 'publik' or mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
-);
-create policy "logbooks_insert_self" on public.logbooks for insert with check (
-  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
-);
-create policy "logbooks_update_self" on public.logbooks for update using (
-  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
-);
-create policy "logbooks_delete_self" on public.logbooks for delete using (
-  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
-);
-create policy "items_read" on public.logbook_items for select using (
-  exists (select 1 from public.logbooks l where l.id = logbook_id
-    and (l.status = 'publik' or l.mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())))
-);
-create policy "items_write_self" on public.logbook_items for all using (
-  exists (select 1 from public.logbooks l where l.id = logbook_id
-    and l.mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid()))
-) with check (
-  exists (select 1 from public.logbooks l where l.id = logbook_id
-    and l.mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid()))
-);
-create policy "galeri_read_all" on public.galeri for select using (true);
-create policy "galeri_insert_self" on public.galeri for insert with check (
-  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
-);
-create policy "galeri_update_self" on public.galeri for update using (
-  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
-);
-create policy "galeri_delete_self" on public.galeri for delete using (
-  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
-);
-create policy "hadir_read_all" on public.daftar_hadir for select using (true);
-create policy "hadir_insert_self" on public.daftar_hadir for insert with check (
-  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
-);
-create policy "hadir_update_self" on public.daftar_hadir for update using (
-  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
-);
-create policy "hadir_delete_self" on public.daftar_hadir for delete using (
-  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
-);
-```
-
-## File: .gitignore
-```
-node_modules
-dist
-.env.local
-.env
-*.log
-.env.youtube-*
-```
-
-## File: index.html
-```html
-<!DOCTYPE html>
-<html lang="id">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="robots" content="noindex" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='14'%20fill='%2316623c'/%3E%3Ctext%20x='32'%20y='44'%20font-size='34'%20font-weight='700'%20text-anchor='middle'%20fill='%23ffffff'%20font-family='Arial,%20sans-serif'%3EB%3C/text%3E%3C/svg%3E" />
-    <title>Logbook Magang BSI</title>
-  </head>
-  <body class="bg-slate-50 text-slate-800 min-h-screen antialiased">
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
-</html>
-```
-
-## File: src/lib/konversi.js
-```javascript
-import heic2any from 'heic2any'
-const MAKS_SISI_FULL = 2560
-const KUALITAS_FULL = 0.92
-const MAKS_SISI_THUMB = 1200
-const KUALITAS_THUMB = 0.9
-const EXT_VIDEO = ['mp4', 'mov', 'm4v', 'webm', 'ogg', 'mkv', 'avi']
-
-export function ekstensiFile(file) {
-  return String(file.name || '').split('.').pop().toLowerCase()
-}
-
-export function iniVideo(file) {
-  if (file.type && file.type.indexOf('video') === 0) return true
-  return EXT_VIDEO.indexOf(ekstensiFile(file)) !== -1
-}
-
-export function formatHeic(file) {
-  const e = ekstensiFile(file)
-  return e === 'heic' || e === 'heif'
-}
-
-async function heicKeJpeg(file) {
-  const mod = await import('heic2any')
-  const heic = mod.default || mod
-  const hasil = await heic({ blob: file, toType: 'image/jpeg', quality: 0.92 })
-  return Array.isArray(hasil) ? hasil[0] : hasil
-}
-
-async function bitmapDari(berkas) {
-  try {
-    return await createImageBitmap(berkas, { imageOrientation: 'from-image' })
-  } catch (e) {
-    return await createImageBitmap(berkas)
-  }
-}
-
-async function keWebP(berkas, maksSisi, kualitas) {
-  const bitmap = await bitmapDari(berkas)
-  const skala = Math.min(1, maksSisi / Math.max(bitmap.width, bitmap.height))
-  const w = Math.max(1, Math.round(bitmap.width * skala))
-  const h = Math.max(1, Math.round(bitmap.height * skala))
-  const canvas = document.createElement('canvas')
-  canvas.width = w
-  canvas.height = h
-  const ctx = canvas.getContext('2d')
-  ctx.imageSmoothingEnabled = true
-  ctx.imageSmoothingQuality = 'high'
-  ctx.drawImage(bitmap, 0, 0, w, h)
-  bitmap.close()
-  const blob = await new Promise(function (resolve) {
-    canvas.toBlob(resolve, 'image/webp', kualitas)
-  })
-  canvas.width = 0
-  canvas.height = 0
-  if (!blob || blob.type !== 'image/webp') return null
-  return blob
-}
-
-export async function siapkanFoto(file, onInfo) {
-  let sumber = file
-  if (formatHeic(file)) {
-    if (onInfo) onInfo('Mengonversi HEIC ke JPG')
-    const jpeg = await heicKeJpeg(file)
-    if (!jpeg) throw new Error('File HEIC tidak bisa dibaca')
-    sumber = new File([jpeg], 'sumber.jpg', { type: 'image/jpeg' })
-  }
-  if (onInfo) onInfo('Menyiapkan WebP')
-  let fullBlob = null
-  try {
-    fullBlob = await keWebP(sumber, MAKS_SISI_FULL, KUALITAS_FULL)
-  } catch (e) {
-    fullBlob = null
-  }
-  const pakaiWebp = !!fullBlob && (sumber.type !== 'image/jpeg' || fullBlob.size < sumber.size)
-  const fullFinal = pakaiWebp ? fullBlob : sumber
-  const fullType = pakaiWebp ? 'image/webp' : sumber.type
-  let thumbBlob = null
-  try {
-    thumbBlob = await keWebP(fullFinal, MAKS_SISI_THUMB, KUALITAS_THUMB)
-  } catch (e) {
-    thumbBlob = null
-  }
-  return { fullBlob: fullFinal, fullType: fullType, thumbBlob: thumbBlob }
-}
-
-
-export async function pratinjauHeic(file) {
-  if (!formatHeic(file)) return null
-  try {
-    const jpeg = await heicKeJpeg(file)
-    return jpeg || null
-  } catch (e) {
-    return null
-  }
-}
-
-/* foto-profil-webp: pipeline konversi foto profil, pola sama dengan alur media R2 */
-function muatGambarProfil(sumber) {
-  return new Promise(function (resolve, reject) {
-    const url = URL.createObjectURL(sumber)
-    const img = new Image()
-    img.onload = function () { resolve({ img: img, url: url }) }
-    img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('Gambar tidak dapat dibaca')) }
-    img.src = url
-  })
-}
-
-export async function siapkanFotoProfil(file, maksSisi, kualitas) {
-  const sisi = maksSisi || 640
-  const mutu = kualitas || 0.85
-  let kerja = file
-  const tipe = String(file.type || '').toLowerCase()
-  if (tipe.indexOf('heic') !== -1 || tipe.indexOf('heif') !== -1) {
-    const blob = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.92 })
-    kerja = new File([Array.isArray(blob) ? blob[0] : blob], (file.name || 'foto').replace(/\.(heic|heif)$/i, '.jpg'), { type: 'image/jpeg' })
-  }
-  const muat = await muatGambarProfil(kerja)
-  try {
-    const rasio = Math.min(1, sisi / Math.max(muat.img.width, muat.img.height))
-    const w = Math.max(1, Math.round(muat.img.width * rasio))
-    const h = Math.max(1, Math.round(muat.img.height * rasio))
-    const canvas = document.createElement('canvas')
-    canvas.width = w
-    canvas.height = h
-    const ctx = canvas.getContext('2d')
-    ctx.imageSmoothingEnabled = true
-    ctx.imageSmoothingQuality = 'high'
-    ctx.drawImage(muat.img, 0, 0, w, h)
-    const blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/webp', mutu) })
-    if (!blob) throw new Error('Gagal mengonversi foto ke WebP')
-    return new File([blob], 'profil-' + Date.now() + '.webp', { type: 'image/webp' })
-  } finally {
-    URL.revokeObjectURL(muat.url)
-  }
-}
-```
-
-## File: src/lib/theme.jsx
-```javascript
-import { createContext, useContext, useEffect, useState } from 'react'
-
-const ThemeContext = createContext(null)
-
-export function ThemeProvider(props) {
-  const [dark, setDark] = useState(function () {
-    const saved = localStorage.getItem('mbsi-theme')
-    if (saved) return saved === 'dark'
-    return window.matchMedia('(prefers-color-scheme: dark)').matches
-  })
-
-  useEffect(function () {
-    document.documentElement.classList.toggle('dark', dark)
-    localStorage.setItem('mbsi-theme', dark ? 'dark' : 'light')
-  }, [dark])
-
-  return (
-    <ThemeContext.Provider value={{ dark: dark, toggle: function () {
-const ganti = function () { setDark(function (d) { return !d }) }
-if (document.startViewTransition && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-  const akar = document.documentElement
-  const vt = document.startViewTransition(function () {
-    akar.classList.add('vt-tema')
-    ganti()
-  })
-  const lepas = function () { akar.classList.remove('vt-tema') }
-  vt.finished.then(lepas, lepas)
-  setTimeout(lepas, 600)
-} else ganti()
-} }}>
-      {props.children}
-    </ThemeContext.Provider>
-  )
-}
-
-export function useTheme() {
-  return useContext(ThemeContext)
-}
-```
-
-## File: package.json
-```json
-{
-  "name": "mbsi-logbook",
-  "private": true,
-  "version": "1.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite --host",
-    "build": "vite build",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "@aws-sdk/client-s3": "^3.600.0",
-    "@aws-sdk/s3-request-presigner": "^3.600.0",
-    "@supabase/supabase-js": "^2.45.0",
-    "heic2any": "^0.0.4",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-router-dom": "^6.26.0"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.1",
-    "autoprefixer": "^10.4.19",
-    "postcss": "^8.4.38",
-    "tailwindcss": "^3.4.10",
-    "vite": "^5.4.0"
-  }
-}
-```
-
-## File: README.md
-```markdown
-# Logbook Magang BSI
-
-Portal logbook, galeri, dan daftar hadir magang Bank Syariah Indonesia.
-
-## Menjalankan lokal
-1. node setup project saat ini (sudah dilakukan saat setup)
-2. npm run dev
-3. Buka http://localhost:5173
-
-## Database
-Jalankan isi file supabase/schema.sql di Supabase SQL Editor.
-Buat user Auth dengan pola email NIM@mbsi.local dan isi tabel mahasiswa beserta auth_uid.
-
-## Deploy
-Push ke GitHub, import di Vercel, salin isi .env.local ke Environment Variables Vercel.
-```
-
-## File: src/components/controls.jsx
-```javascript
-import { SelubungPanel } from './ui.jsx'
-import { useEffect, useRef, useState } from 'react'
-import { ICONS } from './icons.jsx'
-
-const BULAN_NAMA = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
-const BULAN_PENDEK = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
-const HARI_NAMA = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
-
-const defaultBtn = 'flex w-full items-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-bsi-500'
-
-function pad(n) {
-  return (n < 10 ? '0' : '') + n
-}
-
-function parseValue(value, mode) {
-  if (!value) return null
-  const p = String(value).split('-')
-  if (mode === 'month') {
-    if (p.length < 2) return null
-    const y = parseInt(p[0], 10)
-    const m = parseInt(p[1], 10) - 1
-    if (isNaN(y) || isNaN(m) || m < 0 || m > 11) return null
-    return { y: y, m: m }
-  }
-  if (p.length < 3) return null
-  const y = parseInt(p[0], 10)
-  const m = parseInt(p[1], 10) - 1
-  const d = parseInt(p[2], 10)
-  if (isNaN(y) || isNaN(m) || isNaN(d)) return null
-  return { y: y, m: m, d: d }
-}
-
-function useOutside(ref, open, setOpen) {
-  useEffect(function () {
-    if (!open) return undefined
-    function handler(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return function () { document.removeEventListener('mousedown', handler) }
-  }, [open])
-}
-
-export function CustomSelect(props) {
-  const [open, setOpen] = useState(false)
-  const boxRef = useRef(null)
-  useOutside(boxRef, open, setOpen)
-  const options = props.options || []
-  const current = options.find(function (o) { return o.value === props.value }) || null
-
-  return (
-    <div ref={boxRef} className={'relative ' + (props.className || '')}>
-      <button
-        type="button"
-        onClick={function () { setOpen(function (o) { return !o }) }}
-        className={(props.buttonCls || defaultBtn) + ' text-left'}
-      >
-        {props.icon ? <span className="shrink-0 text-slate-400">{props.icon}</span> : null}
-        <span className={'flex-1 truncate ' + (current ? 'text-slate-800' : 'text-slate-400')}>
-          {current ? current.label : (props.placeholder || 'Pilih')}
-        </span>
-        <span className={'shrink-0 text-slate-400 transition-transform duration-200 ' + (open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
-      </button>
-      <SelubungPanel open={open}>
-<div className="anim-modal absolute z-30 mt-2 max-h-64 w-full overflow-y-auto rounded-2xl border border-slate-200 bg-white py-1 shadow-xl">
-          {options.map(function (o) {
-            const active = o.value === props.value
-            return (
-              <button
-                type="button"
-                key={String(o.value)}
-                onClick={function () { props.onChange(o.value); setOpen(false) }}
-                className={'flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left text-sm ' + (active ? 'bg-bsi-800 text-white' : 'text-slate-700 hover:bg-slate-100')}
-              >
-                <span className="truncate">{o.label}</span>
-                {active ? <span className="shrink-0">{ICONS.check}</span> : null}
-              </button>
-            )
-          })}
-        </div>
-</SelubungPanel>
-    </div>
-  )
-}
-
-export function CustomDateInput(props) {
-  const mode = props.mode || 'date'
-  const [open, setOpen] = useState(false)
-  const [view, setView] = useState(function () {
-    const p = parseValue(props.value, mode)
-    const t = new Date()
-    return p ? { y: p.y, m: p.m } : { y: t.getFullYear(), m: t.getMonth() }
-  })
-  const boxRef = useRef(null)
-  useOutside(boxRef, open, setOpen)
-
-  const sel = parseValue(props.value, mode)
-  const today = new Date()
-
-  function toggle() {
-    if (!open) {
-      const p = parseValue(props.value, mode)
-      if (p) setView({ y: p.y, m: p.m })
-    }
-    setOpen(function (o) { return !o })
-  }
-
-  function shift(delta) {
-    setView(function (v) {
-      if (mode === 'month') return { y: v.y + delta, m: v.m }
-      let m = v.m + delta
-      let y = v.y
-      if (m < 0) { m = 11; y -= 1 }
-      if (m > 11) { m = 0; y += 1 }
-      return { y: y, m: m }
-    })
-  }
-
-  function pickDay(d) {
-    props.onChange(view.y + '-' + pad(view.m + 1) + '-' + pad(d))
-    setOpen(false)
-  }
-
-  function pickMonth(m) {
-    props.onChange(view.y + '-' + pad(m + 1))
-    setOpen(false)
-  }
-
-  function pickToday() {
-    const t = new Date()
-    if (mode === 'month') props.onChange(t.getFullYear() + '-' + pad(t.getMonth() + 1))
-    else props.onChange(t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate()))
-    setOpen(false)
-  }
-
-  const label = sel
-    ? (mode === 'month' ? BULAN_NAMA[sel.m] + ' ' + sel.y : sel.d + ' ' + BULAN_PENDEK[sel.m] + ' ' + sel.y)
-    : ''
-
-  const firstDay = new Date(view.y, view.m, 1).getDay()
-  const daysCount = new Date(view.y, view.m + 1, 0).getDate()
-  const cells = []
-  for (let i = 0; i < firstDay; i++) cells.push(null)
-  for (let d = 1; d <= daysCount; d++) cells.push(d)
-
-  return (
-    <div ref={boxRef} className={'relative ' + (props.className || '')}>
-      <button type="button" onClick={toggle} className={(props.buttonCls || defaultBtn) + ' text-left'}>
-        <span className="shrink-0 text-slate-400">{ICONS.calendar}</span>
-        <span className={'flex-1 truncate ' + (props.value ? 'text-slate-800' : 'text-slate-400')}>
-          {label || (mode === 'month' ? 'Pilih bulan' : 'Pilih tanggal')}
-        </span>
-        <span className={'shrink-0 text-slate-400 transition-transform duration-200 ' + (open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
-      </button>
-      <SelubungPanel open={open}>
-<div className="anim-modal absolute z-30 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
-          <div className="flex items-center justify-between">
-            <button type="button" onClick={function () { shift(-1) }} className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-100">&#8249;</button>
-            <p className="text-sm font-bold text-slate-800">
-              {mode === 'month' ? String(view.y) : BULAN_NAMA[view.m] + ' ' + view.y}
-            </p>
-            <button type="button" onClick={function () { shift(1) }} className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-100">&#8250;</button>
-          </div>
-
-          {mode === 'date' ? (
-            <div className="mt-3 grid grid-cols-7 gap-1 text-center">
-              {HARI_NAMA.map(function (h) {
-                return <span key={h} className="py-1 text-[11px] font-semibold text-slate-400">{h}</span>
-              })}
-              {cells.map(function (d, i) {
-                if (d === null) return <span key={'kosong' + i} />
-                const isSel = sel && sel.y === view.y && sel.m === view.m && sel.d === d
-                const isToday = today.getFullYear() === view.y && today.getMonth() === view.m && today.getDate() === d
-                return (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={function () { pickDay(d) }}
-                    className={'mx-auto grid h-8 w-8 place-items-center rounded-lg text-sm ' + (isSel ? 'bg-bsi-800 font-semibold text-white' : isToday ? 'font-bold text-bsi-700 ring-1 ring-bsi-500' : 'text-slate-700 hover:bg-slate-100')}
-                  >
-                    {d}
-                  </button>
-                )
-              })}
-            </div>
-          ) : (
-            <div className="mt-3 grid grid-cols-3 gap-2">
-              {BULAN_NAMA.map(function (nama, m) {
-                const isSel = sel && sel.y === view.y && sel.m === m
-                const isNow = today.getFullYear() === view.y && today.getMonth() === m
-                return (
-                  <button
-                    key={nama}
-                    type="button"
-                    onClick={function () { pickMonth(m) }}
-                    className={'rounded-lg px-2 py-2 text-xs font-semibold ' + (isSel ? 'bg-bsi-800 text-white' : isNow ? 'text-bsi-700 ring-1 ring-bsi-500' : 'text-slate-700 hover:bg-slate-100')}
-                  >
-                    {nama}
-                  </button>
-                )
-              })}
-            </div>
-          )}
-
-          <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
-            <button type="button" onClick={function () { props.onChange(''); setOpen(false) }} className="text-sm font-semibold text-slate-500 hover:text-red-600">Hapus</button>
-            <button type="button" onClick={pickToday} className="text-sm font-semibold text-bsi-700 hover:text-bsi-900">Hari ini</button>
-          </div>
-        </div>
-</SelubungPanel>
-    </div>
-  )
-}
-
-export function FileInput(props) {
-  const inputRef = useRef(null)
-  return (
-    <div className={props.className || ''}>
-      <input
-        ref={inputRef}
-        type="file"
-        accept={props.accept || 'image/*,video/*'}
-        className="hidden"
-        onChange={function (e) {
-          if (props.onChange) props.onChange(e)
-          e.target.value = ''
-        }}
-      />
-      <button
-        type="button"
-        onClick={function () { inputRef.current.click() }}
-        className="flex w-full items-center gap-3 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-4 py-4 text-left transition hover:border-bsi-500 hover:bg-slate-100"
-      >
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-bsi-100 text-bsi-800">{ICONS.image}</span>
-        <span className="min-w-0 flex-1">
-          <span className={'block truncate text-sm font-semibold ' + (props.fileName ? 'text-slate-800' : 'text-slate-500')}>
-            {props.fileName || props.label || 'Klik untuk pilih foto atau video'}
-          </span>
-          <span className="block text-xs text-slate-400">{props.hint || 'Foto JPG, PNG, atau HEIC otomatis dikonversi. Video maks 50 MB.'}</span>
-        </span>
-        {props.fileName ? <span className="shrink-0 text-xs font-semibold text-bsi-700">Ganti</span> : null}
-      </button>
     </div>
   )
 }
@@ -2996,6 +1580,545 @@ export function urutkanTanggal(list, mode) {
     return 0
   })
   return arr
+}
+```
+
+## File: src/lib/konversi.js
+```javascript
+const MAKS_SISI_FULL = 2560
+const KUALITAS_FULL = 0.92
+const MAKS_SISI_THUMB = 1200
+const KUALITAS_THUMB = 0.9
+const EXT_VIDEO = ['mp4', 'mov', 'm4v', 'webm', 'ogg', 'mkv', 'avi']
+
+export function ekstensiFile(file) {
+  return String(file.name || '').split('.').pop().toLowerCase()
+}
+
+export function iniVideo(file) {
+  if (file.type && file.type.indexOf('video') === 0) return true
+  return EXT_VIDEO.indexOf(ekstensiFile(file)) !== -1
+}
+
+export function formatHeic(file) {
+  const e = ekstensiFile(file)
+  return e === 'heic' || e === 'heif'
+}
+
+async function heicKeJpeg(file) {
+  const mod = await import('heic2any')
+  const heic = mod.default || mod
+  const hasil = await heic({ blob: file, toType: 'image/jpeg', quality: 0.92 })
+  return Array.isArray(hasil) ? hasil[0] : hasil
+}
+
+async function bitmapDari(berkas) {
+  try {
+    return await createImageBitmap(berkas, { imageOrientation: 'from-image' })
+  } catch (e) {
+    return await createImageBitmap(berkas)
+  }
+}
+
+async function keWebP(berkas, maksSisi, kualitas) {
+  const bitmap = await bitmapDari(berkas)
+  const skala = Math.min(1, maksSisi / Math.max(bitmap.width, bitmap.height))
+  const w = Math.max(1, Math.round(bitmap.width * skala))
+  const h = Math.max(1, Math.round(bitmap.height * skala))
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d')
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(bitmap, 0, 0, w, h)
+  bitmap.close()
+  const blob = await new Promise(function (resolve) {
+    canvas.toBlob(resolve, 'image/webp', kualitas)
+  })
+  canvas.width = 0
+  canvas.height = 0
+  if (!blob || blob.type !== 'image/webp') return null
+  return blob
+}
+
+export async function siapkanFoto(file, onInfo) {
+  let sumber = file
+  if (formatHeic(file)) {
+    if (onInfo) onInfo('Mengonversi HEIC ke JPG')
+    const jpeg = await heicKeJpeg(file)
+    if (!jpeg) throw new Error('File HEIC tidak bisa dibaca')
+    sumber = new File([jpeg], 'sumber.jpg', { type: 'image/jpeg' })
+  }
+  if (onInfo) onInfo('Menyiapkan WebP')
+  let fullBlob = null
+  try {
+    fullBlob = await keWebP(sumber, MAKS_SISI_FULL, KUALITAS_FULL)
+  } catch (e) {
+    fullBlob = null
+  }
+  const pakaiWebp = !!fullBlob && (sumber.type !== 'image/jpeg' || fullBlob.size < sumber.size)
+  const fullFinal = pakaiWebp ? fullBlob : sumber
+  const fullType = pakaiWebp ? 'image/webp' : sumber.type
+  let thumbBlob = null
+  try {
+    thumbBlob = await keWebP(fullFinal, MAKS_SISI_THUMB, KUALITAS_THUMB)
+  } catch (e) {
+    thumbBlob = null
+  }
+  return { fullBlob: fullFinal, fullType: fullType, thumbBlob: thumbBlob }
+}
+
+
+export async function pratinjauHeic(file) {
+  if (!formatHeic(file)) return null
+  try {
+    const jpeg = await heicKeJpeg(file)
+    return jpeg || null
+  } catch (e) {
+    return null
+  }
+}
+
+/* foto-profil-webp: pipeline konversi foto profil, pola sama dengan alur media R2 */
+function muatGambarProfil(sumber) {
+  return new Promise(function (resolve, reject) {
+    const url = URL.createObjectURL(sumber)
+    const img = new Image()
+    img.onload = function () { resolve({ img: img, url: url }) }
+    img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('Gambar tidak dapat dibaca')) }
+    img.src = url
+  })
+}
+
+export async function siapkanFotoProfil(file, maksSisi, kualitas) {
+  const sisi = maksSisi || 640
+  const mutu = kualitas || 0.85
+  let kerja = file
+  const tipe = String(file.type || '').toLowerCase()
+  if (tipe.indexOf('heic') !== -1 || tipe.indexOf('heif') !== -1) {
+    const mod = await import('heic2any')
+    const heicFn = mod.default || mod
+    const blob = await heicFn({ blob: file, toType: 'image/jpeg', quality: 0.92 })
+    kerja = new File([Array.isArray(blob) ? blob[0] : blob], (file.name || 'foto').replace(/\.(heic|heif)$/i, '.jpg'), { type: 'image/jpeg' })
+  }
+  const muat = await muatGambarProfil(kerja)
+  try {
+    const rasio = Math.min(1, sisi / Math.max(muat.img.width, muat.img.height))
+    const w = Math.max(1, Math.round(muat.img.width * rasio))
+    const h = Math.max(1, Math.round(muat.img.height * rasio))
+    const canvas = document.createElement('canvas')
+    canvas.width = w
+    canvas.height = h
+    const ctx = canvas.getContext('2d')
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
+    ctx.drawImage(muat.img, 0, 0, w, h)
+    const blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/webp', mutu) })
+    if (!blob) throw new Error('Gagal mengonversi foto ke WebP')
+    return new File([blob], 'profil-' + Date.now() + '.webp', { type: 'image/webp' })
+  } finally {
+    URL.revokeObjectURL(muat.url)
+  }
+}
+```
+
+## File: src/components/controls.jsx
+```javascript
+import { SelubungPanel } from './ui.jsx'
+import { useEffect, useRef, useState } from 'react'
+import { ICONS } from './icons.jsx'
+
+const BULAN_NAMA = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
+const BULAN_PENDEK = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
+const HARI_NAMA = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
+
+const defaultBtn = 'flex w-full items-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-bsi-500'
+
+function pad(n) {
+  return (n < 10 ? '0' : '') + n
+}
+
+function parseValue(value, mode) {
+  if (!value) return null
+  const p = String(value).split('-')
+  if (mode === 'month') {
+    if (p.length < 2) return null
+    const y = parseInt(p[0], 10)
+    const m = parseInt(p[1], 10) - 1
+    if (isNaN(y) || isNaN(m) || m < 0 || m > 11) return null
+    return { y: y, m: m }
+  }
+  if (p.length < 3) return null
+  const y = parseInt(p[0], 10)
+  const m = parseInt(p[1], 10) - 1
+  const d = parseInt(p[2], 10)
+  if (isNaN(y) || isNaN(m) || isNaN(d)) return null
+  return { y: y, m: m, d: d }
+}
+
+function useOutside(ref, open, setOpen) {
+  useEffect(function () {
+    if (!open) return undefined
+    function handler(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return function () { document.removeEventListener('mousedown', handler) }
+  }, [open])
+}
+
+export function CustomSelect(props) {
+  const [open, setOpen] = useState(false)
+  const boxRef = useRef(null)
+  useOutside(boxRef, open, setOpen)
+  const options = props.options || []
+  const current = options.find(function (o) { return o.value === props.value }) || null
+
+  return (
+    <div ref={boxRef} className={'relative ' + (props.className || '')}>
+      <button
+        type="button"
+        onClick={function () { setOpen(function (o) { return !o }) }}
+        className={(props.buttonCls || defaultBtn) + ' text-left'}
+      >
+        {props.icon ? <span className="shrink-0 text-slate-600">{props.icon}</span> : null}
+        <span className={'flex-1 truncate ' + (current ? 'text-slate-800' : 'text-slate-600')}>
+          {current ? current.label : (props.placeholder || 'Pilih')}
+        </span>
+        <span className={'shrink-0 text-slate-600 transition-transform duration-200 ' + (open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
+      </button>
+      <SelubungPanel open={open}>
+<div className="anim-modal absolute z-30 mt-2 max-h-64 w-full overflow-y-auto rounded-2xl border border-slate-200 bg-white py-1 shadow-xl">
+          {options.map(function (o) {
+            const active = o.value === props.value
+            return (
+              <button
+                type="button"
+                key={String(o.value)}
+                onClick={function () { props.onChange(o.value); setOpen(false) }}
+                className={'flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left text-sm ' + (active ? 'bg-bsi-800 text-white' : 'text-slate-700 hover:bg-slate-100')}
+              >
+                <span className="truncate">{o.label}</span>
+                {active ? <span className="shrink-0">{ICONS.check}</span> : null}
+              </button>
+            )
+          })}
+        </div>
+</SelubungPanel>
+    </div>
+  )
+}
+
+export function CustomDateInput(props) {
+  const mode = props.mode || 'date'
+  const [open, setOpen] = useState(false)
+  const [view, setView] = useState(function () {
+    const p = parseValue(props.value, mode)
+    const t = new Date()
+    return p ? { y: p.y, m: p.m } : { y: t.getFullYear(), m: t.getMonth() }
+  })
+  const boxRef = useRef(null)
+  useOutside(boxRef, open, setOpen)
+
+  const sel = parseValue(props.value, mode)
+  const today = new Date()
+
+  function toggle() {
+    if (!open) {
+      const p = parseValue(props.value, mode)
+      if (p) setView({ y: p.y, m: p.m })
+    }
+    setOpen(function (o) { return !o })
+  }
+
+  function shift(delta) {
+    setView(function (v) {
+      if (mode === 'month') return { y: v.y + delta, m: v.m }
+      let m = v.m + delta
+      let y = v.y
+      if (m < 0) { m = 11; y -= 1 }
+      if (m > 11) { m = 0; y += 1 }
+      return { y: y, m: m }
+    })
+  }
+
+  function pickDay(d) {
+    props.onChange(view.y + '-' + pad(view.m + 1) + '-' + pad(d))
+    setOpen(false)
+  }
+
+  function pickMonth(m) {
+    props.onChange(view.y + '-' + pad(m + 1))
+    setOpen(false)
+  }
+
+  function pickToday() {
+    const t = new Date()
+    if (mode === 'month') props.onChange(t.getFullYear() + '-' + pad(t.getMonth() + 1))
+    else props.onChange(t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate()))
+    setOpen(false)
+  }
+
+  const label = sel
+    ? (mode === 'month' ? BULAN_NAMA[sel.m] + ' ' + sel.y : sel.d + ' ' + BULAN_PENDEK[sel.m] + ' ' + sel.y)
+    : ''
+
+  const firstDay = new Date(view.y, view.m, 1).getDay()
+  const daysCount = new Date(view.y, view.m + 1, 0).getDate()
+  const cells = []
+  for (let i = 0; i < firstDay; i++) cells.push(null)
+  for (let d = 1; d <= daysCount; d++) cells.push(d)
+
+  return (
+    <div ref={boxRef} className={'relative ' + (props.className || '')}>
+      <button type="button" onClick={toggle} className={(props.buttonCls || defaultBtn) + ' text-left'}>
+        <span className="shrink-0 text-slate-600">{ICONS.calendar}</span>
+        <span className={'flex-1 truncate ' + (props.value ? 'text-slate-800' : 'text-slate-600')}>
+          {label || (mode === 'month' ? 'Pilih bulan' : 'Pilih tanggal')}
+        </span>
+        <span className={'shrink-0 text-slate-600 transition-transform duration-200 ' + (open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
+      </button>
+      <SelubungPanel open={open}>
+<div className="anim-modal absolute z-30 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
+          <div className="flex items-center justify-between">
+            <button type="button" onClick={function () { shift(-1) }} className="grid h-8 w-8 place-items-center rounded-lg text-slate-600 hover:bg-slate-100">&#8249;</button>
+            <p className="text-sm font-bold text-slate-800">
+              {mode === 'month' ? String(view.y) : BULAN_NAMA[view.m] + ' ' + view.y}
+            </p>
+            <button type="button" onClick={function () { shift(1) }} className="grid h-8 w-8 place-items-center rounded-lg text-slate-600 hover:bg-slate-100">&#8250;</button>
+          </div>
+
+          {mode === 'date' ? (
+            <div className="mt-3 grid grid-cols-7 gap-1 text-center">
+              {HARI_NAMA.map(function (h) {
+                return <span key={h} className="py-1 text-[11px] font-semibold text-slate-600">{h}</span>
+              })}
+              {cells.map(function (d, i) {
+                if (d === null) return <span key={'kosong' + i} />
+                const isSel = sel && sel.y === view.y && sel.m === view.m && sel.d === d
+                const isToday = today.getFullYear() === view.y && today.getMonth() === view.m && today.getDate() === d
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={function () { pickDay(d) }}
+                    className={'mx-auto grid h-8 w-8 place-items-center rounded-lg text-sm ' + (isSel ? 'bg-bsi-800 font-semibold text-white' : isToday ? 'font-bold text-bsi-700 ring-1 ring-bsi-500' : 'text-slate-700 hover:bg-slate-100')}
+                  >
+                    {d}
+                  </button>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {BULAN_NAMA.map(function (nama, m) {
+                const isSel = sel && sel.y === view.y && sel.m === m
+                const isNow = today.getFullYear() === view.y && today.getMonth() === m
+                return (
+                  <button
+                    key={nama}
+                    type="button"
+                    onClick={function () { pickMonth(m) }}
+                    className={'rounded-lg px-2 py-2 text-xs font-semibold ' + (isSel ? 'bg-bsi-800 text-white' : isNow ? 'text-bsi-700 ring-1 ring-bsi-500' : 'text-slate-700 hover:bg-slate-100')}
+                  >
+                    {nama}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
+            <button type="button" onClick={function () { props.onChange(''); setOpen(false) }} className="text-sm font-semibold text-slate-600 hover:text-red-600">Hapus</button>
+            <button type="button" onClick={pickToday} className="text-sm font-semibold text-bsi-700 hover:text-bsi-900">Hari ini</button>
+          </div>
+        </div>
+</SelubungPanel>
+    </div>
+  )
+}
+
+export function FileInput(props) {
+  const inputRef = useRef(null)
+  return (
+    <div className={props.className || ''}>
+      <input
+        ref={inputRef}
+        type="file"
+        accept={props.accept || 'image/*,video/*'}
+        className="hidden"
+        onChange={function (e) {
+          if (props.onChange) props.onChange(e)
+          e.target.value = ''
+        }}
+      />
+      <button
+        type="button"
+        onClick={function () { inputRef.current.click() }}
+        className="flex w-full items-center gap-3 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-4 py-4 text-left transition hover:border-bsi-500 hover:bg-slate-100"
+      >
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-bsi-100 text-bsi-800">{ICONS.image}</span>
+        <span className="min-w-0 flex-1">
+          <span className={'block truncate text-sm font-semibold ' + (props.fileName ? 'text-slate-800' : 'text-slate-600')}>
+            {props.fileName || props.label || 'Klik untuk pilih foto atau video'}
+          </span>
+          <span className="block text-xs text-slate-600">{props.hint || 'Foto JPG, PNG, atau HEIC otomatis dikonversi. Video maks 50 MB.'}</span>
+        </span>
+        {props.fileName ? <span className="shrink-0 text-xs font-semibold text-bsi-700">Ganti</span> : null}
+      </button>
+    </div>
+  )
+}
+```
+
+## File: src/lib/logbook.js
+```javascript
+import { supabase } from './supabase.js'
+
+const EMPTY = '00000000-0000-0000-0000-000000000000'
+
+export async function syncGaleriFromLogbook(mahasiswaId, items, meta) {
+  const itemIds = items.map(function (i) { return i.id }).filter(Boolean)
+  const all = await supabase
+    .from('galeri')
+    .select('id, logbook_item_id')
+    .in('logbook_item_id', itemIds.length ? itemIds : [EMPTY])
+  const existing = new Map((all.data || []).map(function (g) { return [g.logbook_item_id, g.id] }))
+
+  for (const item of items) {
+    if (!item.id) continue
+    if (item.show_in_gallery && item.media_path) {
+      if (existing.has(item.id)) {
+        await supabase.from('galeri').update({
+          media_path: item.media_path,
+          media_type: item.media_type || 'foto',
+          media_thumb: item.media_thumb || null,
+        media_source: item.media_source || 'r2', youtube_id: item.youtube_id || null }).eq('id', existing.get(item.id))
+      } else {
+        await supabase.from('galeri').insert({
+          mahasiswa_id: mahasiswaId,
+          logbook_item_id: item.id,
+          judul: item.judul,
+          deskripsi: item.deskripsi || 'Dokumentasi kegiatan dari logbook harian.',
+          tanggal: meta.tanggal,
+          kegiatan: meta.kategori,
+          media_path: item.media_path,
+          media_type: item.media_type || 'foto',
+          media_thumb: item.media_thumb || null,
+        media_source: item.media_source || 'r2', youtube_id: item.youtube_id || null })
+      }
+    } else if (existing.has(item.id)) {
+      await supabase.from('galeri').delete().eq('id', existing.get(item.id))
+    }
+  }
+}
+```
+
+## File: src/lib/upload.js
+```javascript
+import { supabase } from './supabase.js'
+import { iniVideo, ekstensiFile, siapkanFoto } from './konversi.js'
+
+const MAKS_FOTO = 15 * 1024 * 1024
+const MAKS_VIDEO = 50 * 1024 * 1024
+
+async function getToken() {
+  const { data } = await supabase.auth.getSession()
+  return data.session ? data.session.access_token : ''
+}
+
+function namaDasar(nama) {
+  return String(nama || 'media').replace(/\.[^.]+$/, '')
+}
+
+function kirimDenganProgres(uploadUrl, blob, contentType, onProgres) {
+  return new Promise(function (resolve, reject) {
+    const xhr = new XMLHttpRequest()
+    xhr.open('PUT', uploadUrl)
+    xhr.setRequestHeader('Content-Type', contentType)
+    if (onProgres) {
+      xhr.upload.onprogress = function (e) {
+        if (e.lengthComputable) onProgres(e.loaded / e.total)
+      }
+    }
+    xhr.onload = function () {
+      if (xhr.status >= 200 && xhr.status < 300) resolve()
+      else reject(new Error('Gagal upload file ke R2 (status ' + xhr.status + ')'))
+    }
+    xhr.onerror = function () { reject(new Error('Gagal jaringan saat upload ke R2')) }
+    xhr.send(blob)
+  })
+}
+
+async function mintaIzin(token, filename, contentType, kind) {
+  const res = await fetch('/api/r2/presign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ filename: filename, contentType: contentType, kind: kind })
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error('Gagal membuat izin upload (status ' + res.status + '): ' + text)
+  }
+  return res.json()
+}
+
+export async function uploadMedia(file, kind, onInfo) {
+  const video = iniVideo(file)
+  if (video && file.size > MAKS_VIDEO) {
+    throw new Error('Video melebihi 50 MB. Potong dulu durasinya supaya upload cepat dan kuota aman.')
+  }
+  if (!video && file.size > MAKS_FOTO) {
+    throw new Error('Foto melebihi 15 MB. Pilih file dengan ukuran lebih kecil.')
+  }
+  let fullBlob = file
+  let fullType = file.type
+  let thumbBlob = null
+  if (!video) {
+    try {
+      const hasil = await siapkanFoto(file, onInfo)
+      fullBlob = hasil.fullBlob
+      fullType = hasil.fullType
+      thumbBlob = hasil.thumbBlob
+    } catch (e) {
+      throw new Error('Foto format .' + ekstensiFile(file) + ' tidak bisa diproses browser. Ubah dulu ke JPG atau PNG. Di iPhone: Settings, Camera, Formats, pilih Most Compatible.')
+    }
+  }
+  if (onInfo) onInfo('')
+  const token = await getToken()
+  const extFull = fullType === 'image/webp' ? 'webp' : (fullType === 'image/jpeg' ? 'jpg' : ekstensiFile(file))
+  const infoFull = await mintaIzin(token, namaDasar(file.name) + '.' + extFull, fullType, kind)
+  await kirimDenganProgres(infoFull.uploadUrl, fullBlob, fullType, function (p) {
+    if (onInfo) onInfo('Mengunggah ' + Math.round(p * 100) + '%')
+  })
+  let thumbUrl = null
+  if (thumbBlob) {
+    try {
+      const namaThumb = namaDasar(infoFull.key.split('/').pop()) + '.webp'
+      const infoThumb = await mintaIzin(token, namaThumb, 'image/webp', 'thumb/' + kind)
+      await kirimDenganProgres(infoThumb.uploadUrl, thumbBlob, 'image/webp', null)
+      thumbUrl = infoThumb.publicUrl
+    } catch (e) {
+      thumbUrl = null
+    }
+  }
+  console.log('[UPLOAD] File penuh: ' + infoFull.key + ' | Thumbnail: ' + (thumbUrl || 'tidak dibuat'))
+  return { path: infoFull.key, publicUrl: infoFull.publicUrl, thumbUrl: thumbUrl }
+}
+
+export async function deleteMedia(key) {
+  const token = await getToken()
+  const res = await fetch('/api/r2/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ key: key })
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error('Gagal hapus media di R2 (status ' + res.status + '): ' + text)
+  }
+  return res.json()
 }
 ```
 
@@ -3227,159 +2350,22 @@ function pluginApiYoutube(env) {
 export default defineConfig(function ({ mode }) {
   const env = loadEnv(mode, process.cwd(), '')
   return {
-    plugins: [react(), pluginApiR2(env), pluginApiYoutube(env)]
+    plugins: [react(), pluginApiR2(env), pluginApiYoutube(env)],
+    build: {
+      chunkSizeWarningLimit: 1000,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+            'vendor-supabase': ['@supabase/supabase-js'],
+            'vendor-aws': ['@aws-sdk/client-s3', '@aws-sdk/s3-request-presigner'],
+            'vendor-media': ['heic2any']
+          }
+        }
+      }
+    }
   }
 })
-```
-
-## File: src/lib/logbook.js
-```javascript
-import { supabase } from './supabase.js'
-
-const EMPTY = '00000000-0000-0000-0000-000000000000'
-
-export async function syncGaleriFromLogbook(mahasiswaId, items, meta) {
-  const itemIds = items.map(function (i) { return i.id }).filter(Boolean)
-  const all = await supabase
-    .from('galeri')
-    .select('id, logbook_item_id')
-    .in('logbook_item_id', itemIds.length ? itemIds : [EMPTY])
-  const existing = new Map((all.data || []).map(function (g) { return [g.logbook_item_id, g.id] }))
-
-  for (const item of items) {
-    if (!item.id) continue
-    if (item.show_in_gallery && item.media_path) {
-      if (existing.has(item.id)) {
-        await supabase.from('galeri').update({
-          media_path: item.media_path,
-          media_type: item.media_type || 'foto',
-          media_thumb: item.media_thumb || null,
-        media_source: item.media_source || 'r2', youtube_id: item.youtube_id || null }).eq('id', existing.get(item.id))
-      } else {
-        await supabase.from('galeri').insert({
-          mahasiswa_id: mahasiswaId,
-          logbook_item_id: item.id,
-          judul: item.judul,
-          deskripsi: item.deskripsi || 'Dokumentasi kegiatan dari logbook harian.',
-          tanggal: meta.tanggal,
-          kegiatan: meta.kategori,
-          media_path: item.media_path,
-          media_type: item.media_type || 'foto',
-          media_thumb: item.media_thumb || null,
-        media_source: item.media_source || 'r2', youtube_id: item.youtube_id || null })
-      }
-    } else if (existing.has(item.id)) {
-      await supabase.from('galeri').delete().eq('id', existing.get(item.id))
-    }
-  }
-}
-```
-
-## File: src/lib/upload.js
-```javascript
-import { supabase } from './supabase.js'
-import { iniVideo, ekstensiFile, siapkanFoto } from './konversi.js'
-
-const MAKS_FOTO = 15 * 1024 * 1024
-const MAKS_VIDEO = 50 * 1024 * 1024
-
-async function getToken() {
-  const { data } = await supabase.auth.getSession()
-  return data.session ? data.session.access_token : ''
-}
-
-function namaDasar(nama) {
-  return String(nama || 'media').replace(/\.[^.]+$/, '')
-}
-
-function kirimDenganProgres(uploadUrl, blob, contentType, onProgres) {
-  return new Promise(function (resolve, reject) {
-    const xhr = new XMLHttpRequest()
-    xhr.open('PUT', uploadUrl)
-    xhr.setRequestHeader('Content-Type', contentType)
-    if (onProgres) {
-      xhr.upload.onprogress = function (e) {
-        if (e.lengthComputable) onProgres(e.loaded / e.total)
-      }
-    }
-    xhr.onload = function () {
-      if (xhr.status >= 200 && xhr.status < 300) resolve()
-      else reject(new Error('Gagal upload file ke R2 (status ' + xhr.status + ')'))
-    }
-    xhr.onerror = function () { reject(new Error('Gagal jaringan saat upload ke R2')) }
-    xhr.send(blob)
-  })
-}
-
-async function mintaIzin(token, filename, contentType, kind) {
-  const res = await fetch('/api/r2/presign', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify({ filename: filename, contentType: contentType, kind: kind })
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error('Gagal membuat izin upload (status ' + res.status + '): ' + text)
-  }
-  return res.json()
-}
-
-export async function uploadMedia(file, kind, onInfo) {
-  const video = iniVideo(file)
-  if (video && file.size > MAKS_VIDEO) {
-    throw new Error('Video melebihi 50 MB. Potong dulu durasinya supaya upload cepat dan kuota aman.')
-  }
-  if (!video && file.size > MAKS_FOTO) {
-    throw new Error('Foto melebihi 15 MB. Pilih file dengan ukuran lebih kecil.')
-  }
-  let fullBlob = file
-  let fullType = file.type
-  let thumbBlob = null
-  if (!video) {
-    try {
-      const hasil = await siapkanFoto(file, onInfo)
-      fullBlob = hasil.fullBlob
-      fullType = hasil.fullType
-      thumbBlob = hasil.thumbBlob
-    } catch (e) {
-      throw new Error('Foto format .' + ekstensiFile(file) + ' tidak bisa diproses browser. Ubah dulu ke JPG atau PNG. Di iPhone: Settings, Camera, Formats, pilih Most Compatible.')
-    }
-  }
-  if (onInfo) onInfo('')
-  const token = await getToken()
-  const extFull = fullType === 'image/webp' ? 'webp' : (fullType === 'image/jpeg' ? 'jpg' : ekstensiFile(file))
-  const infoFull = await mintaIzin(token, namaDasar(file.name) + '.' + extFull, fullType, kind)
-  await kirimDenganProgres(infoFull.uploadUrl, fullBlob, fullType, function (p) {
-    if (onInfo) onInfo('Mengunggah ' + Math.round(p * 100) + '%')
-  })
-  let thumbUrl = null
-  if (thumbBlob) {
-    try {
-      const namaThumb = namaDasar(infoFull.key.split('/').pop()) + '.webp'
-      const infoThumb = await mintaIzin(token, namaThumb, 'image/webp', 'thumb/' + kind)
-      await kirimDenganProgres(infoThumb.uploadUrl, thumbBlob, 'image/webp', null)
-      thumbUrl = infoThumb.publicUrl
-    } catch (e) {
-      thumbUrl = null
-    }
-  }
-  console.log('[UPLOAD] File penuh: ' + infoFull.key + ' | Thumbnail: ' + (thumbUrl || 'tidak dibuat'))
-  return { path: infoFull.key, publicUrl: infoFull.publicUrl, thumbUrl: thumbUrl }
-}
-
-export async function deleteMedia(key) {
-  const token = await getToken()
-  const res = await fetch('/api/r2/delete', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify({ key: key })
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error('Gagal hapus media di R2 (status ' + res.status + '): ' + text)
-  }
-  return res.json()
-}
 ```
 
 ## File: src/components/Carousel.jsx
@@ -3495,7 +2481,7 @@ export default function Carousel(props) {
             return (
               <button
                 key={i}
-                onClick={function () { setIdx(i) }}
+                onClick={function () { setIdx(i) }} aria-label={'Ke slide ' + (i + 1)}
                 className={'carousel-dot h-2 w-2 rounded-full transition-all ' + (i === idx ? 'bg-white' : 'bg-white/40')}
               />
             )
@@ -3556,7 +2542,7 @@ export function TimeFilter(props) {
 </div>
         : <div key="rentang" className="anim-ganti-rentang flex flex-wrap items-center gap-2">
             <FilterDate value={f.dari} onChange={function (v) { set(Object.assign({}, f, { dari: v })) }} />
-            <span className="text-slate-400 text-sm">sampai</span>
+            <span className="text-slate-600 text-sm">sampai</span>
             <FilterDate value={f.sampai} onChange={function (v) { set(Object.assign({}, f, { sampai: v })) }} />
           </div>}
     </div>
@@ -3583,12 +2569,12 @@ export function FilterBar(props) {
           {props.activeCount > 0 ? (
             <span className="inline-flex items-center justify-center h-6 min-w-6 px-2 rounded-full bg-bsi-800 text-white text-xs font-bold">{props.activeCount}</span>
           ) : null}
-          <span className={'transition-transform duration-200 text-slate-400 ' + (props.open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
+          <span className={'transition-transform duration-200 text-slate-600 ' + (props.open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
         </button>
-        <div className="hidden xl:block text-sm text-slate-500">
+        <div className="hidden xl:block text-sm text-slate-600">
           {props.activeCount > 0
             ? <span className="inline-flex items-center gap-2"><span className="text-bsi-700">{ICONS.funnel}</span><span><strong className="text-slate-900">{props.activeCount}</strong> filter aktif</span></span>
-            : <span className="inline-flex items-center gap-2"><span className="text-slate-400">{ICONS.funnel}</span><span>Belum ada filter aktif</span></span>}
+            : <span className="inline-flex items-center gap-2"><span className="text-slate-600">{ICONS.funnel}</span><span>Belum ada filter aktif</span></span>}
         </div>
       </div>
             <div className={'filter-wrap' + (props.open ? ' filter-wrap-buka' : '')}>
@@ -3627,171 +2613,6 @@ export function countActiveFilters(o) {
     if (o[k]) c++
   }
   return c
-}
-```
-
-## File: src/pages/LoginPage.jsx
-```javascript
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { loginWithNim } from '../lib/auth.js'
-import { inputCls, labelCls, btnPrimary } from '../components/ui.jsx'
-import { EyeToggle, SizedIcon } from '../components/icons.jsx'
-
-function pesanErrorLogin(err) {
-  const pesan = String((err && err.message) || '')
-  const rendah = pesan.toLowerCase()
-  if (rendah.indexOf('invalid login credentials') !== -1) {
-    return 'NIM atau kode akses yang kamu masukkan tidak cocok dengan data kami. Periksa kembali penulisannya, pastikan tidak ada spasi berlebih, lalu coba lagi.'
-  }
-  if (rendah.indexOf('not confirmed') !== -1) {
-    return 'Akun untuk NIM ini belum diaktifkan. Hubungi admin tim magang untuk mengaktifkan akunmu terlebih dahulu.'
-  }
-  if (rendah.indexOf('too many requests') !== -1 || rendah.indexOf('try again after') !== -1 || rendah.indexOf('rate limit') !== -1) {
-    return 'Terlalu banyak percobaan masuk dalam waktu singkat demi keamanan. Tunggu sekitar satu menit, lalu coba lagi.'
-  }
-  if (rendah.indexOf('fetch') !== -1 || rendah.indexOf('network') !== -1 || rendah.indexOf('failed to load') !== -1 || (typeof navigator !== 'undefined' && !navigator.onLine)) {
-    return 'Tidak bisa terhubung ke server. Periksa koneksi internetmu, lalu coba lagi.'
-  }
-  if (rendah.indexOf('email') !== -1 && rendah.indexOf('format') !== -1) {
-    return 'Format NIM tidak terbaca. Masukkan NIM berupa angka tanpa spasi, contoh: 24070041.'
-  }
-  if (pesan) return 'Gagal masuk: ' + pesan + '. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
-  return 'Terjadi kesalahan tidak terduga saat masuk. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
-}
-export default function LoginPage() {
-  const navigate = useNavigate()
-  const [nim, setNim] = useState('')
-  const [kode, setKode] = useState('')
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [lihatKode, setLihatKode] = useState(false)
-
-  async function submit(e) {
-    e.preventDefault()
-    setBusy(true)
-    setError('')
-    try {
-  await loginWithNim(nim, kode)
-  navigate('/dashboard')
-} catch (err) {
-  setError(pesanErrorLogin(err))
-}
-    setBusy(false)
-  }
-
-  return (
-    <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr] items-start">
-      <div className="card-hover rounded-[2rem] bg-bsi-900 text-white p-5 sm:p-8 lg:p-10">
-        <span className="inline-flex px-3 py-1.5 rounded-full bg-white/10 text-[10px] font-semibold uppercase tracking-wide sm:px-4 sm:py-2 sm:text-xs">Area Intern</span>
-        <h1 className="mt-6 text-2xl sm:text-3xl lg:text-4xl font-black leading-tight">Masuk untuk mengisi logbook, galeri, dan daftar hadir</h1>
-        <p className="mt-3 text-sm leading-relaxed text-white/80 sm:mt-4 sm:text-base">Halaman ini hanya digunakan oleh mahasiswa magang. Dosen pembimbing dan kaprodi tidak perlu login untuk melihat halaman publik.</p>
-      </div>
-      <div className="card-hover bg-white rounded-[2rem] border border-slate-200 shadow-sm p-5 sm:p-8 lg:p-10">
-        <h2 className="text-xl sm:text-2xl font-black text-slate-900">Login mahasiswa magang</h2>
-        {error ? (
-          <div className="mt-3 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-red-100 text-red-600">
-              <SizedIcon name="close" size={12} />
-            </span>
-            <div className="min-w-0">
-              <p className="font-bold">Gagal masuk</p>
-              <p className="mt-1 leading-relaxed">{error}</p>
-            </div>
-          </div>
-        ) : null}
-        <form onSubmit={submit} className="mt-6 space-y-5">
-          <div>
-            <label className={labelCls}>NIM <span className="text-red-500">*</span></label>
-            <input className={inputCls} value={nim} onChange={function (e) { setNim(e.target.value) }} placeholder="Contoh: 20260001" required />
-          </div>
-          <div>
-            <label className={labelCls}>Kode akses <span className="text-red-500">*</span></label>
-            <div className="relative mt-1.5">
-              <input
-                type={lihatKode ? 'text' : 'password'}
-                className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 pr-12 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
-                value={kode}
-                onChange={function (e) { setKode(e.target.value) }}
-                placeholder="Masukkan kode akses"
-                required
-              />
-              <button
-                type="button"
-                onClick={function () { setLihatKode(function (v) { return !v }) }}
-                title={lihatKode ? 'Sembunyikan kode akses' : 'Lihat kode akses'}
-                className="absolute right-2 top-0 bottom-0 my-auto grid h-9 w-9 place-items-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-              >
-                <EyeToggle open={lihatKode} size={18} />
-              </button>
-            </div>
-          </div>
-          <button type="submit" disabled={busy} className={btnPrimary}>{busy ? 'Memproses...' : 'Masuk ke dashboard'}</button>
-        </form>
-      </div>
-    </section>
-  )
-}
-```
-
-## File: src/pages/TimPage.jsx
-```javascript
-import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase.js'
-import { SkeletonPersonCard } from '../components/Skeleton.jsx'
-
-export default function TimPage() {
-  const [people, setPeople] = useState([])
-  const [logs, setLogs] = useState([])
-  const [galeri, setGaleri] = useState([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(function () {
-    async function load() {
-      const p = await supabase.from('mahasiswa').select('id, nama, nim, prodi, foto_profil').order('nama')
-      const l = await supabase.from('logbooks').select('id, mahasiswa_id, foto_profil').eq('status', 'publik')
-      const g = await supabase.from('galeri').select('id, mahasiswa_id, foto_profil')
-      setPeople(p.data || [])
-      setLogs(l.data || [])
-      setGaleri(g.data || [])
-      setLoading(false)
-    }
-    load()
-  }, [])
-
-  return (
-    <div>
-      <section className="card-hover rounded-[2rem] bg-white border border-slate-200 p-5 sm:p-8 lg:p-10 shadow-sm">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Profil Mahasiswa</p>
-        <h1 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Mahasiswa magang Bank BSI</h1>
-      </section>
-      <section className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-        {loading
-          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <SkeletonPersonCard key={i} /> })
-          : people.map(function (p) {
-              const totalLog = logs.filter(function (l) { return l.mahasiswa_id === p.id }).length
-              const totalGal = galeri.filter(function (g) { return g.mahasiswa_id === p.id }).length
-              const initials = p.nama.split(' ').slice(0, 2).map(function (w) { return w.charAt(0) || '' }).join('').toUpperCase()
-              return (
-                <div key={p.id} className="card-hover bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
-                  <div className="flex items-center gap-4">
-                    <div className="h-14 w-14 rounded-3xl bg-bsi-800 text-white grid place-items-center text-xl font-black">{typeof p !== 'undefined' && p && p.foto_profil ? <img src={p.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : typeof m !== 'undefined' && m && m.foto_profil ? <img src={m.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : initials}</div>
-                    <div>
-                      <p className="text-lg font-bold text-slate-900">{p.nama}</p>
-                      <p className="text-sm text-slate-500">NIM {p.nim}</p>
-                      {p.prodi ? <span className="mt-1 inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-bsi-100 text-bsi-900">{p.prodi}</span> : null}
-                    </div>
-                  </div>
-                  <div className="mt-5 grid grid-cols-2 gap-3">
-                    <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Logbook publik</p><p className="mt-1 text-xl sm:text-2xl font-black text-bsi-900">{totalLog}</p></div>
-                    <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Media galeri</p><p className="mt-1 text-xl sm:text-2xl font-black text-bsi-900">{totalGal}</p></div>
-                  </div>
-                </div>
-              )
-            })}
-      </section>
-    </div>
-  )
 }
 ```
 
@@ -4287,6 +3108,171 @@ export function EyeToggle(props) {
 }
 ```
 
+## File: src/pages/LoginPage.jsx
+```javascript
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { loginWithNim } from '../lib/auth.js'
+import { inputCls, labelCls, btnPrimary } from '../components/ui.jsx'
+import { EyeToggle, SizedIcon } from '../components/icons.jsx'
+
+function pesanErrorLogin(err) {
+  const pesan = String((err && err.message) || '')
+  const rendah = pesan.toLowerCase()
+  if (rendah.indexOf('invalid login credentials') !== -1) {
+    return 'NIM atau kode akses yang kamu masukkan tidak cocok dengan data kami. Periksa kembali penulisannya, pastikan tidak ada spasi berlebih, lalu coba lagi.'
+  }
+  if (rendah.indexOf('not confirmed') !== -1) {
+    return 'Akun untuk NIM ini belum diaktifkan. Hubungi admin tim magang untuk mengaktifkan akunmu terlebih dahulu.'
+  }
+  if (rendah.indexOf('too many requests') !== -1 || rendah.indexOf('try again after') !== -1 || rendah.indexOf('rate limit') !== -1) {
+    return 'Terlalu banyak percobaan masuk dalam waktu singkat demi keamanan. Tunggu sekitar satu menit, lalu coba lagi.'
+  }
+  if (rendah.indexOf('fetch') !== -1 || rendah.indexOf('network') !== -1 || rendah.indexOf('failed to load') !== -1 || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+    return 'Tidak bisa terhubung ke server. Periksa koneksi internetmu, lalu coba lagi.'
+  }
+  if (rendah.indexOf('email') !== -1 && rendah.indexOf('format') !== -1) {
+    return 'Format NIM tidak terbaca. Masukkan NIM berupa angka tanpa spasi, contoh: 24070041.'
+  }
+  if (pesan) return 'Gagal masuk: ' + pesan + '. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
+  return 'Terjadi kesalahan tidak terduga saat masuk. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
+}
+export default function LoginPage() {
+  const navigate = useNavigate()
+  const [nim, setNim] = useState('')
+  const [kode, setKode] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [lihatKode, setLihatKode] = useState(false)
+
+  async function submit(e) {
+    e.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+  await loginWithNim(nim, kode)
+  navigate('/dashboard')
+} catch (err) {
+  setError(pesanErrorLogin(err))
+}
+    setBusy(false)
+  }
+
+  return (
+    <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr] items-start">
+      <div className="card-hover rounded-[2rem] bg-bsi-900 text-white p-5 sm:p-8 lg:p-10">
+        <span className="inline-flex px-3 py-1.5 rounded-full bg-white/10 text-[10px] font-semibold uppercase tracking-wide sm:px-4 sm:py-2 sm:text-xs">Area Intern</span>
+        <h1 className="mt-6 text-2xl sm:text-3xl lg:text-4xl font-black leading-tight">Masuk untuk mengisi logbook, galeri, dan daftar hadir</h1>
+        <p className="mt-3 text-sm leading-relaxed text-white/80 sm:mt-4 sm:text-base">Halaman ini hanya digunakan oleh mahasiswa magang. Dosen pembimbing dan kaprodi tidak perlu login untuk melihat halaman publik.</p>
+      </div>
+      <div className="card-hover bg-white rounded-[2rem] border border-slate-200 shadow-sm p-5 sm:p-8 lg:p-10">
+        <h2 className="text-xl sm:text-2xl font-black text-slate-900">Login mahasiswa magang</h2>
+        {error ? (
+          <div className="mt-3 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-red-100 text-red-600">
+              <SizedIcon name="close" size={12} />
+            </span>
+            <div className="min-w-0">
+              <p className="font-bold">Gagal masuk</p>
+              <p className="mt-1 leading-relaxed">{error}</p>
+            </div>
+          </div>
+        ) : null}
+        <form onSubmit={submit} className="mt-6 space-y-5">
+          <div>
+            <label className={labelCls}>NIM <span className="text-red-500">*</span></label>
+            <input className={inputCls} value={nim} onChange={function (e) { setNim(e.target.value) }} aria-label="NIM" placeholder="Contoh: 20260001" required />
+          </div>
+          <div>
+            <label className={labelCls}>Kode akses <span className="text-red-500">*</span></label>
+            <div className="relative mt-1.5">
+              <input
+                type={lihatKode ? 'text' : 'password'}
+                className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 pr-12 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+                value={kode}
+                onChange={function (e) { setKode(e.target.value) }}
+                aria-label="Kode akses" placeholder="Masukkan kode akses"
+                required
+              />
+              <button
+                type="button"
+                onClick={function () { setLihatKode(function (v) { return !v }) }}
+                title={lihatKode ? 'Sembunyikan kode akses' : 'Lihat kode akses'}
+                className="absolute right-2 top-0 bottom-0 my-auto grid h-9 w-9 place-items-center rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-600"
+              >
+                <EyeToggle open={lihatKode} size={18} />
+              </button>
+            </div>
+          </div>
+          <button type="submit" disabled={busy} className={btnPrimary}>{busy ? 'Memproses...' : 'Masuk ke dashboard'}</button>
+        </form>
+      </div>
+    </section>
+  )
+}
+```
+
+## File: src/pages/TimPage.jsx
+```javascript
+import { useEffect, useState } from 'react'
+import { supabase } from '../lib/supabase.js'
+import { SkeletonPersonCard } from '../components/Skeleton.jsx'
+
+export default function TimPage() {
+  const [people, setPeople] = useState([])
+  const [logs, setLogs] = useState([])
+  const [galeri, setGaleri] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(function () {
+    async function load() {
+      const p = await supabase.from('mahasiswa').select('id, nama, nim, prodi, foto_profil').order('nama')
+      const l = await supabase.from('logbooks').select('id, mahasiswa_id, foto_profil').eq('status', 'publik')
+      const g = await supabase.from('galeri').select('id, mahasiswa_id, foto_profil')
+      setPeople(p.data || [])
+      setLogs(l.data || [])
+      setGaleri(g.data || [])
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  return (
+    <div>
+      <section className="card-hover rounded-[2rem] bg-white border border-slate-200 p-5 sm:p-8 lg:p-10 shadow-sm">
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-400">Profil Mahasiswa</p>
+        <h1 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Mahasiswa magang Bank BSI</h1>
+      </section>
+      <section className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        {loading
+          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <SkeletonPersonCard key={i} /> })
+          : people.map(function (p) {
+              const totalLog = logs.filter(function (l) { return l.mahasiswa_id === p.id }).length
+              const totalGal = galeri.filter(function (g) { return g.mahasiswa_id === p.id }).length
+              const initials = p.nama.split(' ').slice(0, 2).map(function (w) { return w.charAt(0) || '' }).join('').toUpperCase()
+              return (
+                <div key={p.id} className="card-hover bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
+                  <div className="flex items-center gap-4">
+                    <div className="h-14 w-14 rounded-3xl bg-bsi-800 text-white grid place-items-center text-xl font-black">{typeof p !== 'undefined' && p && p.foto_profil ? <img src={p.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : typeof m !== 'undefined' && m && m.foto_profil ? <img src={m.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : initials}</div>
+                    <div>
+                      <p className="text-lg font-bold text-slate-900">{p.nama}</p>
+                      <p className="text-sm text-slate-600">NIM {p.nim}</p>
+                      {p.prodi ? <span className="mt-1 inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-bsi-100 text-bsi-900">{p.prodi}</span> : null}
+                    </div>
+                  </div>
+                  <div className="mt-5 grid grid-cols-2 gap-3">
+                    <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-600">Logbook publik</p><p className="mt-1 text-xl sm:text-2xl font-black text-bsi-900">{totalLog}</p></div>
+                    <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-600">Media galeri</p><p className="mt-1 text-xl sm:text-2xl font-black text-bsi-900">{totalGal}</p></div>
+                  </div>
+                </div>
+              )
+            })}
+      </section>
+    </div>
+  )
+}
+```
+
 ## File: src/components/Layout.jsx
 ```javascript
 import { Outlet, Link, NavLink } from 'react-router-dom'
@@ -4340,7 +3326,7 @@ export default function Layout() {
               <div className="h-10 w-10 rounded-2xl bg-gradient-to-tr from-bsi-800 to-gold-500 text-white grid place-items-center font-black">BSI</div>
               <div>
                 <p className="font-bold leading-none text-slate-900">Logbook Magang</p>
-                <p className="text-xs text-slate-500 mt-1">Bank Syariah Indonesia</p>
+                <p className="text-xs text-slate-600 mt-1">Bank Syariah Indonesia</p>
               </div>
             </Link>
             <nav className="hidden xl:flex items-center gap-1">
@@ -4386,7 +3372,7 @@ export default function Layout() {
 
       <footer className="footer-ramping border-t border-slate-200 bg-white">
 <div className="mx-auto max-w-7xl px-4 py-4 text-center">
-<p className="text-xs text-slate-500">© 2026 Tim Magang BSI</p>
+<p className="text-xs text-slate-600">© 2026 Tim Magang BSI</p>
 </div>
 </footer>
     </div>
@@ -4453,10 +3439,10 @@ export default function DospemPage() {
                 )
               })
             : [
-                <div key="mahasiswa" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/70">Total mahasiswa</p><p className="mt-1 text-2xl sm:text-3xl font-black">{people.length}</p></div>,
-                <div key="logbook" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/70">Logbook publik</p><p className="mt-1 text-2xl sm:text-3xl font-black">{logs.length}</p></div>,
-                <div key="galeri" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/70">Media galeri</p><p className="mt-1 text-2xl sm:text-3xl font-black">{galCount}</p></div>,
-                <div key="hadir" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/70">Catatan hadir</p><p className="mt-1 text-2xl sm:text-3xl font-black">{hadirCount}</p></div>
+                <div key="mahasiswa" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Total mahasiswa</p><p className="mt-1 text-2xl sm:text-3xl font-black">{people.length}</p></div>,
+                <div key="logbook" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Logbook publik</p><p className="mt-1 text-2xl sm:text-3xl font-black">{logs.length}</p></div>,
+                <div key="galeri" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Media galeri</p><p className="mt-1 text-2xl sm:text-3xl font-black">{galCount}</p></div>,
+                <div key="hadir" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Catatan hadir</p><p className="mt-1 text-2xl sm:text-3xl font-black">{hadirCount}</p></div>
               ]}
         </div>
         <div className="mt-6 flex flex-wrap gap-2 sm:mt-8 sm:gap-3">
@@ -4468,7 +3454,7 @@ export default function DospemPage() {
 
       <section className="mt-10">
 <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Profil tim magang</h2>
-<p className="mt-2 max-w-3xl text-sm text-slate-500 sm:text-base">Seluruh mahasiswa magang beserta kontribusi logbook, media galeri, dan catatan kehadiran masing-masing.</p>
+<p className="mt-2 max-w-3xl text-sm text-slate-600 sm:text-base">Seluruh mahasiswa magang beserta kontribusi logbook, media galeri, dan catatan kehadiran masing-masing.</p>
 <div className="grid-pusat-rapat mt-6">
 {loading
 ? [0, 1, 2].map(function (i) { return <div key={i} className="kolom-kartu-rapat"><SkeletonPersonCard /></div> })
@@ -4483,29 +3469,29 @@ return (
 <Avatar src={p.foto_profil || null} nama={p.nama} size="lg" />
 <div className="min-w-0 flex-1">
 <p className="truncate text-lg font-black text-slate-900">{p.nama}</p>
-<p className="truncate text-xs text-slate-500">NIM {p.nim}</p>
+<p className="truncate text-xs text-slate-600">NIM {p.nim}</p>
 {p.prodi ? <span className="mt-1.5 inline-flex px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold">{p.prodi}</span> : null}
 </div>
 </div>
 <div className="mt-4 grid grid-cols-2 gap-3">
 <div className="rounded-2xl bg-slate-50 p-3">
-<p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Logbook</p>
+<p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">Logbook</p>
 <p className="mt-0.5 text-xl font-black text-bsi-800">{totalLog}</p>
 </div>
 <div className="rounded-2xl bg-slate-50 p-3">
-<p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Media</p>
+<p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">Media</p>
 <p className="mt-0.5 text-xl font-black text-bsi-800">{totalGal}</p>
 </div>
 </div>
 <div className="mt-3 pt-3 border-t border-slate-100">
-<p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Rekap Kehadiran</p>
+<p className="text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">Rekap Kehadiran</p>
 <div className="grid grid-cols-3 gap-2">
 <div className="rounded-xl bg-emerald-50 p-2 text-center">
-<p className="text-[10px] font-bold text-emerald-600 uppercase">Masuk</p>
+<p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase">Masuk</p>
 <p className="text-base font-black text-emerald-700">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Masuk' }).length}</p>
 </div>
 <div className="rounded-xl bg-amber-50 p-2 text-center">
-<p className="text-[10px] font-bold text-amber-600 uppercase">Izin</p>
+<p className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase">Izin</p>
 <p className="text-base font-black text-amber-700">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Izin' }).length}</p>
 </div>
 <div className="rounded-xl bg-red-50 p-2 text-center">
@@ -4615,7 +3601,7 @@ export default function LogbookPage() {
   return (
     <div>
       <section className="rounded-[2rem] bg-white border border-slate-200 p-5 sm:p-8 lg:p-10 shadow-sm">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Logbook publik</p>
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-400">Logbook publik</p>
         <h1 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Catatan kegiatan magang</h1>
         <p className="mt-2 text-sm text-slate-600 max-w-2xl sm:mt-3 sm:text-base">Satu logbook mewakili satu hari kerja dan bisa berisi beberapa kegiatan.</p>
       </section>
@@ -4646,7 +3632,7 @@ export default function LogbookPage() {
         {!loading && !logs.length ? <div className="w-full"><EmptyState title="Logbook tidak ditemukan" desc="Coba reset filter atau pilih filter lain." /></div> : null}
       </section>
       {!loading && totalData > 0 ? (
-        <div className="mt-6 text-center text-sm text-slate-500">
+        <div className="mt-6 text-center text-sm text-slate-600">
           Total {totalData} logbook{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}
         </div>
       ) : null}
@@ -4733,7 +3719,7 @@ export default function AttendancePage() {
   return (
     <div>
       <section className="rounded-[2rem] bg-white border border-slate-200 p-5 sm:p-5 sm:p-8 lg:p-10 shadow-sm">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Daftar hadir</p>
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-400">Daftar hadir</p>
         <h1 className="mt-2 text-2xl sm:text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Monitoring kehadiran tim magang</h1>
         <div className="mt-5 grid grid-cols-2 gap-2.5 sm:mt-8 sm:gap-4 xl:grid-cols-4">
           {loading
@@ -4777,9 +3763,9 @@ export default function AttendancePage() {
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
                         <p className="font-bold text-slate-900">{p.nama}</p>
-                        <p className="text-xs text-slate-500">NIM {p.nim}</p>
+                        <p className="text-xs text-slate-600">NIM {p.nim}</p>
                       </div>
-                      <div className="text-xs text-slate-500">Masuk: {p.Masuk} | Izin: {p.Izin} | Bolos: {p.Bolos}</div>
+                      <div className="text-xs text-slate-600">Masuk: {p.Masuk} | Izin: {p.Izin} | Bolos: {p.Bolos}</div>
                     </div>
                     <div className="mt-4 flex h-4 w-full overflow-hidden rounded-full bg-slate-100">
                       <div className="bg-emerald-500 transition-all duration-500" style={{ width: (p.Masuk / maxTotal) * 100 + '%' }} />
@@ -4809,7 +3795,7 @@ export default function AttendancePage() {
         </div>
       </section>
       {!loading && totalData > 0 ? (
-        <div className="mt-6 text-center text-sm text-slate-500">
+        <div className="mt-6 text-center text-sm text-slate-600">
           Total {totalData} catatan{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}
         </div>
       ) : null}
@@ -4892,7 +3878,7 @@ export default function HomePage() {
       <section className="mt-10">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Kegiatan terbaru</p>
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-400">Kegiatan terbaru</p>
             <h2 className="mt-2 text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Logbook terbaru tim</h2>
           </div>
           <Link to="/logbook" className="text-sm font-semibold text-bsi-800 hover:text-bsi-950">Lihat semua logbook</Link>
@@ -4981,7 +3967,7 @@ export default function GalleryPage() {
   return (
     <div>
       <section className="rounded-[2rem] bg-white border border-slate-200 p-5 sm:p-8 lg:p-10 shadow-sm">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Galeri dokumentasi</p>
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-400">Galeri dokumentasi</p>
         <h1 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Foto dan video kegiatan magang</h1>
         <p className="mt-2 text-sm text-slate-600 max-w-2xl sm:mt-3 sm:text-base">Setiap kartu mewakili satu kegiatan. Klik media untuk melihat detail.</p>
       </section>
@@ -5012,7 +3998,7 @@ export default function GalleryPage() {
         {!loading && !items.length ? <div className="w-full"><EmptyState icon="camera" title="Belum ada media galeri" desc="Media galeri yang diunggah mahasiswa akan tampil di sini." /></div> : null}
       </section>
       {!loading && totalData > 0 ? (
-        <div className="mt-6 text-center text-sm text-slate-500">
+        <div className="mt-6 text-center text-sm text-slate-600">
           Total {totalData} media{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}
         </div>
       ) : null}
@@ -5047,7 +4033,7 @@ function PersonChip(props) {
         {typeof p !== 'undefined' && p && p.foto_profil ? <img src={p.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : typeof m !== 'undefined' && m && m.foto_profil ? <img src={m.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : initials}</div>
       <div>
         <p className="font-semibold text-slate-900">{nama}</p>
-        <p className="text-xs text-slate-500">NIM {nim}</p>
+        <p className="text-xs text-slate-600">NIM {nim}</p>
       </div>
     </div>
   )
@@ -5089,12 +4075,12 @@ export function LogbookCard(props) {
         <StatusBadge status={log.status} />
       </div>
       <div>
-        <p className="text-sm text-slate-500">{formatTanggal(log.tanggal)}</p>
+        <p className="text-sm text-slate-600">{formatTanggal(log.tanggal)}</p>
         <h3 className="mt-2 text-xl font-bold text-slate-900">{log.judul}</h3>
         <p className="mt-3 flex items-center gap-2 text-xs font-semibold text-bsi-800">Terdapat {items.length} kegiatan</p>
         <div className="mt-2 space-y-1">
           {preview.map(function (it, i) {
-            return <p key={it.id} className="text-xs text-slate-500 truncate">{i + 1}. {it.judul}</p>
+            return <p key={it.id} className="text-xs text-slate-600 truncate">{i + 1}. {it.judul}</p>
           })}
           {items.length > 2 ? <p className="text-xs text-bsi-700 font-semibold">+{items.length - 2} kegiatan lainnya</p> : null}
         </div>
@@ -5118,11 +4104,11 @@ export function LogbookDetail(props) {
         <StatusBadge status={log.status} />
       </div>
       <div>
-        <p className="text-sm text-slate-500">{formatTanggal(log.tanggal)}</p>
+        <p className="text-sm text-slate-600">{formatTanggal(log.tanggal)}</p>
         <h2 className="mt-1 text-xl sm:text-2xl font-black text-slate-900">{log.judul}</h2>
       </div>
       <div>
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Rincian kegiatan</p>
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-400">Rincian kegiatan</p>
         <div className="mt-4">
           {items.map(function (it, i) {
             return (
@@ -5141,7 +4127,7 @@ export function LogbookDetail(props) {
                     ) : null}
                   <p className="font-bold text-slate-900">
                     {it.judul}
-                    {it.show_in_gallery && it.media_path ? <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gold-500/15 text-gold-600">Di galeri</span> : null}
+                    {it.show_in_gallery && it.media_path ? <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gold-500/15 text-amber-700 dark:text-amber-400">Di galeri</span> : null}
                   </p>
                   {it.deskripsi ? <p className="mt-1 text-sm text-slate-600">{it.deskripsi}</p> : null}
                   {it.hasil ? <p className="mt-2 inline-flex px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold">Hasil: {it.hasil}</p> : null}
@@ -5149,16 +4135,16 @@ export function LogbookDetail(props) {
               </div>
             )
           })}
-          {!items.length ? <p className="text-sm text-slate-500">Belum ada rincian kegiatan.</p> : null}
+          {!items.length ? <p className="text-sm text-slate-600">Belum ada rincian kegiatan.</p> : null}
         </div>
       </div>
       {log.kendala || log.solusi || log.pembelajaran ? (
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600">Refleksi harian</p>
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-400">Refleksi harian</p>
           <div className="mt-3 grid gap-3 md:grid-cols-3">
-            {log.kendala ? <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs font-semibold uppercase text-slate-400">Kendala</p><p className="mt-1 text-sm text-slate-700">{log.kendala}</p></div> : null}
-            {log.solusi ? <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs font-semibold uppercase text-slate-400">Solusi</p><p className="mt-1 text-sm text-slate-700">{log.solusi}</p></div> : null}
-            {log.pembelajaran ? <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs font-semibold uppercase text-slate-400">Pembelajaran</p><p className="mt-1 text-sm text-slate-700">{log.pembelajaran}</p></div> : null}
+            {log.kendala ? <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs font-semibold uppercase text-slate-600">Kendala</p><p className="mt-1 text-sm text-slate-700">{log.kendala}</p></div> : null}
+            {log.solusi ? <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs font-semibold uppercase text-slate-600">Solusi</p><p className="mt-1 text-sm text-slate-700">{log.solusi}</p></div> : null}
+            {log.pembelajaran ? <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs font-semibold uppercase text-slate-600">Pembelajaran</p><p className="mt-1 text-sm text-slate-700">{log.pembelajaran}</p></div> : null}
           </div>
         </div>
       ) : null}
@@ -5184,9 +4170,9 @@ export function GalleryCard(props) {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap gap-1.5">
             <CategoryBadge value={item.kegiatan} />
-            {item.logbook_item_id ? <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gold-500/15 text-gold-600">Dari logbook</span> : null}
+            {item.logbook_item_id ? <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gold-500/15 text-amber-700 dark:text-amber-400">Dari logbook</span> : null}
           </div>
-          <span className="text-xs text-slate-500">{formatTanggalShort(item.tanggal)}</span>
+          <span className="text-xs text-slate-600">{formatTanggalShort(item.tanggal)}</span>
         </div>
         <h3 className="text-lg font-bold text-slate-900">{item.judul}</h3>
         <p className="text-sm text-slate-600 line-clamp-2">{item.deskripsi || 'Tidak ada deskripsi.'}</p>
@@ -5222,7 +4208,7 @@ export function GalleryDetail(props) {
           <CategoryBadge value={item.kegiatan} />
           <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">{item.media_type === 'video' ? 'Video' : 'Foto'}</span>
         </div>
-        <span className="text-sm text-slate-500">{formatTanggal(item.tanggal)}</span>
+        <span className="text-sm text-slate-600">{formatTanggal(item.tanggal)}</span>
       </div>
       <div>
         <h2 className="text-xl sm:text-2xl font-black text-slate-900">{item.judul}</h2>
@@ -5239,14 +4225,14 @@ export function AttendanceCard(props) {
     <div className="card-hover bg-white rounded-3xl border border-slate-200 shadow-sm p-5 flex flex-col h-full">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-sm text-slate-500 pb-4">{formatTanggal(row.tanggal)}</p>
+          <p className="text-sm text-slate-600 pb-4">{formatTanggal(row.tanggal)}</p>
           <div className="flex items-center gap-3"><Avatar src={props.row && props.row.mahasiswa && props.row.mahasiswa.foto_profil ? props.row.mahasiswa.foto_profil : null} nama={props.row && props.row.mahasiswa ? props.row.mahasiswa.nama : 'Mahasiswa'} size="md" /><div className="min-w-0 flex-1"><p className="mt-1 font-bold text-slate-900">{row.mahasiswa ? row.mahasiswa.nama : 'Mahasiswa'}</p>
-          <p className="text-xs text-slate-500">NIM {row.mahasiswa ? row.mahasiswa.nim : '-'}</p></div></div>
+          <p className="text-xs text-slate-600">NIM {row.mahasiswa ? row.mahasiswa.nim : '-'}</p></div></div>
         </div>
         <AttendanceBadge status={row.status} />
       </div>
       <div className="mt-4 rounded-2xl bg-slate-50 p-4 flex-1">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Alasan atau keterangan</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Alasan atau keterangan</p>
         <p className="mt-1 text-sm text-slate-700">{row.alasan || 'Tidak ada alasan.'}</p>
       </div>
       <div className="mt-4">
@@ -5262,13 +4248,13 @@ export function AttendanceDetail(props) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-sm text-slate-500">{formatTanggal(row.tanggal)}</p>
+          <p className="text-sm text-slate-600">{formatTanggal(row.tanggal)}</p>
           <h2 className="mt-1 text-xl sm:text-2xl font-black text-slate-900">Detail daftar hadir</h2>
         </div>
         <AttendanceBadge status={row.status} />
       </div>
       <div className="rounded-2xl bg-slate-50 p-4">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Alasan atau keterangan</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Alasan atau keterangan</p>
         <p className="mt-1 text-sm text-slate-700">{row.alasan || 'Tidak ada alasan.'}</p>
       </div>
       <div className="border-t border-slate-100 pt-4"><PersonChip mahasiswa={row.mahasiswa} /></div>
@@ -5305,10 +4291,10 @@ export const cardCls = 'card-hover bg-white rounded-3xl border border-slate-200 
 export function StatCard(props) {
   const rapat = props.rapat
   const clsWadah = rapat ? ' p-3 sm:p-6' : ' p-4 sm:p-6'
-  const clsLabel = (rapat ? 'text-[11px] leading-snug sm:text-sm' : 'text-xs sm:text-sm') + ' text-slate-500'
-  const clsLabelRapat = 'text-[11px] leading-snug font-semibold text-slate-500 sm:hidden'
+  const clsLabel = (rapat ? 'text-[11px] leading-snug sm:text-sm' : 'text-xs sm:text-sm') + ' text-slate-600'
+  const clsLabelRapat = 'text-[11px] leading-snug font-semibold text-slate-600 sm:hidden'
   const clsValue = (rapat ? 'mt-1 text-xl sm:text-3xl' : 'mt-2 text-2xl sm:text-3xl') + ' font-black text-bsi-900'
-  const clsSub = (rapat ? 'hidden sm:block ' : '') + 'mt-1 text-[11px] leading-snug sm:text-xs text-slate-500'
+  const clsSub = (rapat ? 'hidden sm:block ' : '') + 'mt-1 text-[11px] leading-snug sm:text-xs text-slate-600'
   return (
     <div className={cardCls + clsWadah}>
       {props.labelRapat ? <p className={clsLabelRapat}>{props.labelRapat}</p> : null}
@@ -5325,7 +4311,7 @@ export function EmptyState(props) {
         <SizedIcon name={props.icon || 'file'} size={24} />
       </div>
       <h3 className="mt-4 text-lg font-bold text-slate-800">{props.title}</h3>
-      <p className="mt-2 text-sm text-slate-500 max-w-md mx-auto">{props.desc}</p>
+      <p className="mt-2 text-sm text-slate-600 max-w-md mx-auto">{props.desc}</p>
     </div>
   )
 }
@@ -5379,7 +4365,7 @@ export function Modal(props) {
         <div className="anim-modal w-full max-w-3xl rounded-[2rem] bg-white shadow-2xl max-h-[88vh] overflow-y-auto overscroll-contain" onClick={function (e) { e.stopPropagation() }}>
           <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
             <p className="font-bold text-slate-900">{props.title || 'Detail'}</p>
-            <button onClick={props.onClose} className="h-9 w-9 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 grid place-items-center">
+            <button onClick={props.onClose} aria-label="Tutup detail" className="h-9 w-9 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 grid place-items-center">
               <SizedIcon name="close" size={16} />
             </button>
           </div>
@@ -5437,7 +4423,7 @@ return (
 </div>
 <div className="text-center">
 <h3 className="text-xl font-black text-slate-900">{p.title || 'Hapus data ini?'}</h3>
-<p className="mt-2 text-sm text-slate-500">{p.message}</p>
+<p className="mt-2 text-sm text-slate-600">{p.message}</p>
 </div>
 <div className="grid grid-cols-2 gap-3">
 <button type="button" onClick={p.onCancel} className="rounded-2xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100">
@@ -5477,7 +4463,7 @@ export function MediaDrive(props) {
       src={driveThumbUrl(props.driveId)}
       alt={props.alt || 'Video Google Drive'}
       onClick={props.onClick || undefined}
-      onError={function () { setGagal(true) }}
+      onError={function () { setGagal(true) }} loading="lazy" decoding="async"
       className={(props.className || 'absolute inset-0 h-full w-full object-cover') + (props.onClick ? ' cursor-zoom-in' : '')}
     />
   )
@@ -5805,13 +4791,13 @@ export function Avatar(props) {
   if (bisaKlik) {
     return (
       <button type="button" onClick={props.onClick} title={props.title} style={gaya}>
-        {props.src ? <img src={props.src} alt={nama || 'Foto profil'} style={gayaFoto} /> : <span style={gayaTeks}>{inisial}</span>}
+        {props.src ? <img src={props.src} alt={nama || 'Foto profil'} style={gayaFoto} loading="lazy" decoding="async" /> : <span style={gayaTeks}>{inisial}</span>}
       </button>
     )
   }
   return (
     <span style={gaya}>
-      {props.src ? <img src={props.src} alt={nama || 'Foto profil'} style={gayaFoto} /> : <span style={gayaTeks}>{inisial}</span>}
+      {props.src ? <img src={props.src} alt={nama || 'Foto profil'} style={gayaFoto} loading="lazy" decoding="async" /> : <span style={gayaTeks}>{inisial}</span>}
     </span>
   )
 }
@@ -5853,7 +4839,7 @@ export function Pagination(props) {
       ) : null}
       {halaman.map(function (h, idx) {
         if (h === '...') {
-          return <span key={'lompat' + idx} className="px-1 text-sm font-bold text-slate-400">...</span>
+          return <span key={'lompat' + idx} className="px-1 text-sm font-bold text-slate-600">...</span>
         }
         const aktif = h === page
         return (
@@ -6634,6 +5620,16 @@ button:active:not(:disabled), a:active, .clickable:active { transition-duration:
 @media (min-width: 640px) {
   .stats-profil-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+
+/* performa-mobile-v1: header padat tanpa blur di layar sempit supaya scroll dan paint murah di ponsel */
+@media (max-width: 639px) {
+  header.sticky {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background-color: rgba(255, 255, 255, 0.97) !important;
+  }
+  .dark header.sticky { background-color: rgba(2, 6, 23, 0.97) !important; }
+}
 ```
 
 ## File: src/pages/DashboardPage.jsx
@@ -6670,7 +5666,7 @@ const PER_PAGE_DASH = 6
 function ModeIndicator(props) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className={'inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold ' + (props.edit ? 'bg-gold-500/15 text-gold-600' : 'bg-bsi-100 text-bsi-900')}>
+      <span className={'inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold ' + (props.edit ? 'bg-gold-500/15 text-amber-700 dark:text-amber-400' : 'bg-bsi-100 text-bsi-900')}>
         <span className={'h-2 w-2 rounded-full ' + (props.edit ? 'bg-gold-500' : 'bg-bsi-500')}></span>
         {props.edit ? 'Mode Edit' : 'Mode Tambah'}
       </span>
@@ -7318,8 +6314,8 @@ async function submitHadir(e) {
 <div className="avatar-kepala-dash"><Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl" onClick={function () { gantiTab('profil') }} title="Kelola foto profil" /></div>
 <div className="min-w-0 flex-1">
             <h1 className="truncate text-lg sm:text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">{mahasiswa.nama}</h1>
-            <p className="text-sm text-slate-500">NIM {mahasiswa.nim}</p>
-{mahasiswa.prodi ? <p className="truncate text-sm text-slate-500">{mahasiswa.prodi}</p> : null}
+            <p className="text-sm text-slate-600">NIM {mahasiswa.nim}</p>
+{mahasiswa.prodi ? <p className="truncate text-sm text-slate-600">{mahasiswa.prodi}</p> : null}
           </div>
         </div>
         </div>
@@ -7337,7 +6333,7 @@ async function submitHadir(e) {
 <div className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 shadow-sm flex flex-col items-center text-center">
 <div className="avatar-profil-tab"><Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="2xl" /></div>
 <h2 className="mt-4 text-xl font-black text-slate-900">{mahasiswa.nama}</h2>
-<p className="mt-1 text-sm text-slate-500">NIM {mahasiswa.nim}</p>
+<p className="mt-1 text-sm text-slate-600">NIM {mahasiswa.nim}</p>
 <div className="mt-5 flex flex-wrap justify-center gap-2">
 <button type="button" onClick={function () { setShowUploadFoto(!showUploadFoto) }} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition">{mahasiswa.foto_profil ? 'Ganti Foto' : 'Upload Foto'}</button>
 {mahasiswa.foto_profil ? <button type="button" onClick={hapusFotoProfilKu} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-red-50 text-red-700 hover:bg-red-100 transition">Hapus Foto</button> : null}
@@ -7347,8 +6343,8 @@ async function submitHadir(e) {
 <div className="flex flex-wrap items-start gap-4">
 {fotoPreview ? <img src={fotoPreview} alt="Pratinjau foto profil" className="h-20 w-20 rounded-[28%] object-cover shadow-lg" /> : null}
 <div className="min-w-0 flex-1">
-<input type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/heif" onChange={pilihFotoProfil} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-800 hover:file:bg-emerald-100" />
-<p className="mt-2 text-xs text-slate-500">Format JPG, PNG, WebP, atau HEIC iPhone. Otomatis dikonversi ke WebP ringan. Maksimal 5 MB.</p>
+<input type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/heif" onChange={pilihFotoProfil} aria-label="Pilih foto profil" className="block w-full text-sm text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-800 hover:file:bg-emerald-100" />
+<p className="mt-2 text-xs text-slate-600">Format JPG, PNG, WebP, atau HEIC iPhone. Otomatis dikonversi ke WebP ringan. Maksimal 5 MB.</p>
 </div>
 </div>
 <div className="mt-4 flex gap-2">
@@ -7361,9 +6357,9 @@ async function submitHadir(e) {
 <div className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 shadow-sm">
 <h2 className="text-lg font-black text-slate-900">Ringkasan aktivitas magang</h2>
 <div className="stats-profil-grid mt-4 grid grid-cols-3 gap-2">
-<div className="rounded-xl bg-slate-50 p-2 text-center"><p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Logbook</p><p className="text-base font-black text-bsi-800">{typeof logs !== 'undefined' ? logs.length : 0}</p></div>
-<div className="rounded-xl bg-slate-50 p-2 text-center"><p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Media</p><p className="text-base font-black text-bsi-800">{typeof galeri !== 'undefined' ? galeri.length : 0}</p></div>
-<div className="rounded-xl bg-slate-50 p-2 text-center"><p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Kehadiran</p><p className="text-base font-black text-bsi-800">{typeof hadir !== 'undefined' ? hadir.length : 0}</p></div>
+<div className="rounded-xl bg-slate-50 p-2 text-center"><p className="text-[10px] font-bold text-slate-600 uppercase tracking-wide">Logbook</p><p className="text-base font-black text-bsi-800">{typeof logs !== 'undefined' ? logs.length : 0}</p></div>
+<div className="rounded-xl bg-slate-50 p-2 text-center"><p className="text-[10px] font-bold text-slate-600 uppercase tracking-wide">Media</p><p className="text-base font-black text-bsi-800">{typeof galeri !== 'undefined' ? galeri.length : 0}</p></div>
+<div className="rounded-xl bg-slate-50 p-2 text-center"><p className="text-[10px] font-bold text-slate-600 uppercase tracking-wide">Kehadiran</p><p className="text-base font-black text-bsi-800">{typeof hadir !== 'undefined' ? hadir.length : 0}</p></div>
 </div>
 <div className="mt-6 space-y-2 border-t border-slate-100 pt-4 text-sm text-slate-600">
 <p>Foto profil tampil otomatis di kartu kamu pada halaman publik, logbook, galeri, dan daftar hadir.</p>
@@ -7416,7 +6412,7 @@ async function submitHadir(e) {
               </div>
               <div>
                 <label className={labelCls}>Ringkasan hari ini <span className="text-red-500">*</span></label>
-                <input required className={inputCls} value={form.judul} onChange={function (e) { setForm(Object.assign({}, form, { judul: e.target.value })) }} placeholder="Contoh: Kegiatan harian di divisi Back Office" />
+                <input required className={inputCls} value={form.judul} onChange={function (e) { setForm(Object.assign({}, form, { judul: e.target.value })) }} aria-label="Ringkasan hari ini" placeholder="Contoh: Kegiatan harian di divisi Back Office" />
               </div>
 
               <div className="space-y-3">
@@ -7431,14 +6427,14 @@ async function submitHadir(e) {
                         <span className="text-xs font-bold text-bsi-800">Kegiatan {i + 1}</span>
                         {items.length > 1 ? <button type="button" onClick={function () { setItems(function (p) { return p.filter(function (x, idx) { return idx !== i }) }) }} className="text-xs text-red-600 hover:underline">Hapus</button> : null}
                       </div>
-                      <input className={inputCls} value={it.judul} onChange={function (e) { patchItem(i, { judul: e.target.value }) }} placeholder="Judul kegiatan" />
-                      <AutoTextArea className={inputCls} value={it.deskripsi} onChange={function (e) { patchItem(i, { deskripsi: e.target.value }) }} placeholder="Deskripsi singkat kegiatan" />
-                      <input className={inputCls} value={it.hasil} onChange={function (e) { patchItem(i, { hasil: e.target.value }) }} placeholder="Hasil (opsional)" />
+                      <input className={inputCls} value={it.judul} onChange={function (e) { patchItem(i, { judul: e.target.value }) }} aria-label="Judul kegiatan" placeholder="Judul kegiatan" />
+                      <AutoTextArea className={inputCls} value={it.deskripsi} onChange={function (e) { patchItem(i, { deskripsi: e.target.value }) }} aria-label="Deskripsi kegiatan" placeholder="Deskripsi singkat kegiatan" />
+                      <input className={inputCls} value={it.hasil} onChange={function (e) { patchItem(i, { hasil: e.target.value }) }} aria-label="Hasil kegiatan" placeholder="Hasil (opsional)" />
                       {it.previewLoading ? (
                         <div className="rounded-2xl border border-slate-200 bg-slate-100 aspect-video grid place-items-center">
                           <div className="flex flex-col items-center gap-3">
                             <div className="h-9 w-9 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div>
-                            <p className="text-xs font-semibold text-slate-500">Mengonversi pratinjau</p>
+                            <p className="text-xs font-semibold text-slate-600">Mengonversi pratinjau</p>
                           </div>
                         </div>
                       ) : null}
@@ -7459,14 +6455,14 @@ async function submitHadir(e) {
                       </div>
                       {it.mode === 'video' ? (
                         <div className="space-y-2">
-                          <p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuotaLoading ? <span className="inline-block w-3 h-3 ml-1 border-2 border-slate-400 border-t-transparent rounded-full animate-spin align-middle"></span> : <>{ytQuota.remaining} dari {ytQuota.limit}</>}</p>
+                          <p className="text-xs font-semibold text-slate-600">Sisa kuota upload video hari ini: {ytQuotaLoading ? <span className="inline-block w-3 h-3 ml-1 border-2 border-slate-400 border-t-transparent rounded-full animate-spin align-middle"></span> : <>{ytQuota.remaining} dari {ytQuota.limit}</>}</p>
                           <div className={ytQuota.remaining <= 0 && !it.file ? 'opacity-50 pointer-events-none' : ''}>
                             <FileInput accept="video/*" fileName={it.file ? it.file.name : ''} label="Klik untuk pilih video" hint="Video maks 50 MB. Format MP4, MOV, WebM, atau MKV."
                               onChange={function (e) { onItemFile(i, e.target.files[0]) }} />
                           </div>
                           {ytQuota.remaining <= 0 ? <p className="text-xs text-red-600">Kuota habis. Gunakan link video di bawah.</p> : null}
-                          <input className={inputCls} value={it.ytLink} onChange={function (e) { patchItem(i, { ytLink: e.target.value }) }} placeholder="Link video YouTube untuk tampilan (opsional)" />
-                          <input className={inputCls} value={it.driveLink} onChange={function (e) { patchItem(i, { driveLink: e.target.value }) }} placeholder="Link Google Drive untuk unduhan (opsional)" />
+                          <input className={inputCls} value={it.ytLink} onChange={function (e) { patchItem(i, { ytLink: e.target.value }) }} aria-label="Link video YouTube" placeholder="Link video YouTube untuk tampilan (opsional)" />
+                          <input className={inputCls} value={it.driveLink} onChange={function (e) { patchItem(i, { driveLink: e.target.value }) }} aria-label="Link Google Drive" placeholder="Link Google Drive untuk unduhan (opsional)" />
                         </div>
                       ) : (
                         <FileInput accept="image/*" fileName={it.file ? it.file.name : ''} label="Klik untuk pilih foto" hint="Foto JPG, PNG, atau HEIC otomatis dikonversi ke WebP."
@@ -7482,9 +6478,9 @@ async function submitHadir(e) {
               </div>
 
               <div className="grid gap-4 md:grid-cols-3">
-                <div><label className={labelCls}>Kendala</label><AutoTextArea className={inputCls} value={form.kendala} onChange={function (e) { setForm(Object.assign({}, form, { kendala: e.target.value })) }} placeholder="Opsional" /></div>
-                <div><label className={labelCls}>Solusi</label><AutoTextArea className={inputCls} value={form.solusi} onChange={function (e) { setForm(Object.assign({}, form, { solusi: e.target.value })) }} placeholder="Opsional" /></div>
-                <div><label className={labelCls}>Pembelajaran</label><AutoTextArea className={inputCls} value={form.pembelajaran} onChange={function (e) { setForm(Object.assign({}, form, { pembelajaran: e.target.value })) }} placeholder="Opsional" /></div>
+                <div><label className={labelCls}>Kendala</label><AutoTextArea className={inputCls} value={form.kendala} onChange={function (e) { setForm(Object.assign({}, form, { kendala: e.target.value })) }} aria-label="Kendala" placeholder="Opsional" /></div>
+                <div><label className={labelCls}>Solusi</label><AutoTextArea className={inputCls} value={form.solusi} onChange={function (e) { setForm(Object.assign({}, form, { solusi: e.target.value })) }} aria-label="Solusi" placeholder="Opsional" /></div>
+                <div><label className={labelCls}>Pembelajaran</label><AutoTextArea className={inputCls} value={form.pembelajaran} onChange={function (e) { setForm(Object.assign({}, form, { pembelajaran: e.target.value })) }} aria-label="Pembelajaran" placeholder="Opsional" /></div>
               </div>
 
               <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks={infoProses || 'Menyimpan'} /> : (editLogId ? 'Simpan perubahan' : 'Simpan logbook')}</button>
@@ -7502,7 +6498,7 @@ async function submitHadir(e) {
               <TimeFilter filter={logFilter} set={setLogFilter} />
               <SortSelect value={sort} onChange={setSort} />
             </FilterBar>
-            <p className="text-sm text-slate-500">Total {filteredLogs.length} logbook{logTotalPages > 1 ? ' • Halaman ' + logPageAman + ' dari ' + logTotalPages : ''}</p>
+            <p className="text-sm text-slate-600">Total {filteredLogs.length} logbook{logTotalPages > 1 ? ' • Halaman ' + logPageAman + ' dari ' + logTotalPages : ''}</p>
             <div className="grid gap-5 md:grid-cols-2 kartu-grid">
               {paginatedLogs.map(function (l) {
                 return <LogbookCard key={l.id} log={l} isOwner
@@ -7532,7 +6528,7 @@ async function submitHadir(e) {
                 <div className="mt-1.5">
                   {galMode === 'video' ? (
                     <div className="space-y-2">
-                      <p className="text-xs font-semibold text-slate-500">Sisa kuota upload video hari ini: {ytQuotaLoading ? <span className="inline-block w-3 h-3 ml-1 border-2 border-slate-400 border-t-transparent rounded-full animate-spin align-middle"></span> : <>{ytQuota.remaining} dari {ytQuota.limit}</>}</p>
+                      <p className="text-xs font-semibold text-slate-600">Sisa kuota upload video hari ini: {ytQuotaLoading ? <span className="inline-block w-3 h-3 ml-1 border-2 border-slate-400 border-t-transparent rounded-full animate-spin align-middle"></span> : <>{ytQuota.remaining} dari {ytQuota.limit}</>}</p>
                       <div className={ytQuota.remaining <= 0 && !galForm.file ? 'opacity-50 pointer-events-none' : ''}>
                         <FileInput accept="video/*" fileName={galForm.file ? galForm.file.name : ''} label="Klik untuk pilih video" hint="Video maks 50 MB. Format MP4, MOV, WebM, atau MKV."
                           onChange={function (e) {
@@ -7542,8 +6538,8 @@ async function submitHadir(e) {
                           }} />
                       </div>
                       {ytQuota.remaining <= 0 ? <p className="text-xs text-red-600">Kuota habis. Gunakan link video di bawah.</p> : null}
-                      <input className={inputCls} value={galYtLink} onChange={function (e) { setGalYtLink(e.target.value) }} placeholder="Link video YouTube untuk tampilan (opsional)" />
-                       <input className={inputCls} value={galDriveLink} onChange={function (e) { setGalDriveLink(e.target.value) }} placeholder="Link Google Drive untuk unduhan (opsional)" />
+                      <input className={inputCls} value={galYtLink} onChange={function (e) { setGalYtLink(e.target.value) }} aria-label="Link video YouTube" placeholder="Link video YouTube untuk tampilan (opsional)" />
+                       <input className={inputCls} value={galDriveLink} onChange={function (e) { setGalDriveLink(e.target.value) }} aria-label="Link Google Drive" placeholder="Link Google Drive untuk unduhan (opsional)" />
                     </div>
                   ) : (
                     <FileInput accept="image/*" fileName={galForm.file ? galForm.file.name : ''} label="Klik untuk pilih foto" hint="Foto JPG, PNG, atau HEIC otomatis dikonversi ke WebP."
@@ -7566,7 +6562,7 @@ async function submitHadir(e) {
                 <div className="rounded-2xl border border-slate-200 bg-slate-100 aspect-video grid place-items-center">
                   <div className="flex flex-col items-center gap-3">
                     <div className="h-9 w-9 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div>
-                    <p className="text-xs font-semibold text-slate-500">Mengonversi pratinjau</p>
+                    <p className="text-xs font-semibold text-slate-600">Mengonversi pratinjau</p>
                   </div>
                 </div>
               ) : null}
@@ -7582,7 +6578,7 @@ async function submitHadir(e) {
                 </div>
               ) : null}
               <div className="grid gap-4 sm:grid-cols-2">
-                <div><label className={labelCls}>Judul (opsional)</label><input className={inputCls} value={galForm.judul} onChange={function (e) { setGalForm(Object.assign({}, galForm, { judul: e.target.value })) }} placeholder="Kosongkan untuk judul otomatis" /></div>
+                <div><label className={labelCls}>Judul (opsional)</label><input className={inputCls} value={galForm.judul} onChange={function (e) { setGalForm(Object.assign({}, galForm, { judul: e.target.value })) }} aria-label="Judul media" placeholder="Kosongkan untuk judul otomatis" /></div>
                 <div>
                   <label className={labelCls}>Tanggal (opsional)</label>
                   <div className="mt-1.5">
@@ -7597,9 +6593,9 @@ async function submitHadir(e) {
                     onChange={function (v) { setGalForm(Object.assign({}, galForm, { kegiatan: v })) }}
                     options={GALERI_KEGIATAN.map(function (k) { return { value: k, label: k } })} />
                 </div>
-                {editGalDerived ? <p className="mt-1 text-xs text-slate-400">Media ini berasal dari logbook. Perubahan judul, deskripsi, kegiatan, dan tanggal hanya memengaruhi galeri dan tidak akan ditimpa saat logbook disimpan.</p> : null}
+                {editGalDerived ? <p className="mt-1 text-xs text-slate-600">Media ini berasal dari logbook. Perubahan judul, deskripsi, kegiatan, dan tanggal hanya memengaruhi galeri dan tidak akan ditimpa saat logbook disimpan.</p> : null}
               </div>
-              <div><label className={labelCls}>Deskripsi (opsional)</label><AutoTextArea className={inputCls} value={galForm.deskripsi} onChange={function (e) { setGalForm(Object.assign({}, galForm, { deskripsi: e.target.value })) }} placeholder="Tambahkan keterangan media." /></div>
+              <div><label className={labelCls}>Deskripsi (opsional)</label><AutoTextArea className={inputCls} value={galForm.deskripsi} onChange={function (e) { setGalForm(Object.assign({}, galForm, { deskripsi: e.target.value })) }} aria-label="Deskripsi media" placeholder="Tambahkan keterangan media." /></div>
               <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks={infoProses || 'Menyimpan'} /> : (editGalId ? 'Simpan perubahan media' : 'Unggah media')}</button>
             </form>
           </div>
@@ -7615,7 +6611,7 @@ async function submitHadir(e) {
               <TimeFilter filter={galFilter} set={setGalFilter} />
               <SortSelect value={sort} onChange={setSort} />
             </FilterBar>
-            <p className="text-sm text-slate-500">Total {filteredGaleri.length} media{galTotalPages > 1 ? ' • Halaman ' + galPageAman + ' dari ' + galTotalPages : ''}</p>
+            <p className="text-sm text-slate-600">Total {filteredGaleri.length} media{galTotalPages > 1 ? ' • Halaman ' + galPageAman + ' dari ' + galTotalPages : ''}</p>
             <div className="grid gap-5 md:grid-cols-2 kartu-grid">
               {paginatedGaleri.map(function (g) {
                 return <GalleryCard key={g.id} item={g} isOwner
@@ -7658,10 +6654,10 @@ async function submitHadir(e) {
                   className={inputCls + (hadirForm.status === 'Masuk' ? ' opacity-60 cursor-not-allowed' : '')}
                   value={hadirForm.alasan}
                   onChange={function (e) { setHadirForm(Object.assign({}, hadirForm, { alasan: e.target.value })) }}
-                  placeholder={hadirForm.status === 'Masuk' ? 'Status Masuk tidak memerlukan alasan' : 'Contoh: Keperluan keluarga, sakit.'}
+                  aria-label="Alasan atau keterangan" placeholder={hadirForm.status === 'Masuk' ? 'Status Masuk tidak memerlukan alasan' : 'Contoh: Keperluan keluarga, sakit.'}
                   disabled={hadirForm.status === 'Masuk'}
                 />
-                {hadirForm.status === 'Masuk' ? <p className="mt-1 text-xs text-slate-400">Field ini hanya terisi untuk status Izin atau Bolos.</p> : null}
+                {hadirForm.status === 'Masuk' ? <p className="mt-1 text-xs text-slate-600">Field ini hanya terisi untuk status Izin atau Bolos.</p> : null}
               </div>
               <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks="Menyimpan" /> : (editHadirId ? 'Simpan perubahan' : 'Simpan daftar hadir')}</button>
             </form>
@@ -7676,7 +6672,7 @@ async function submitHadir(e) {
               <TimeFilter filter={hadirFilter} set={setHadirFilter} />
               <SortSelect value={sort} onChange={setHadirFilterOpen && setSort ? setSort : setSort} />
             </FilterBar>
-            <p className="text-sm text-slate-500">Total {filteredHadir.length} catatan{hadirTotalPages > 1 ? ' • Halaman ' + hadirPageAman + ' dari ' + hadirTotalPages : ''}</p>
+            <p className="text-sm text-slate-600">Total {filteredHadir.length} catatan{hadirTotalPages > 1 ? ' • Halaman ' + hadirPageAman + ' dari ' + hadirTotalPages : ''}</p>
             <div className="grid gap-5 md:grid-cols-2 kartu-grid">
             {paginatedHadir.map(function (h) {
               return <AttendanceCard key={h.id} row={h} isOwner
