@@ -132,7 +132,7 @@ export function LogbookDetail(props) {
           </div>
         </div>
       ) : null}
-      <div className="border-t border-slate-100 pt-4"><PersonChip mahasiswa={log.mahasiswa} /></div>
+      <div className="detail-footer border-t border-slate-100 pt-4"><PersonChip mahasiswa={log.mahasiswa} /></div>
     </div>
   )
 }
@@ -198,7 +198,7 @@ export function GalleryDetail(props) {
         <h2 className="text-xl sm:text-2xl font-black text-slate-900">{item.judul}</h2>
         <p className="mt-3 text-slate-600 leading-relaxed">{item.deskripsi || 'Tidak ada deskripsi.'}</p>
       </div>
-      <div className="border-t border-slate-100 pt-4"><PersonChip mahasiswa={item.mahasiswa} /></div>
+      <div className="detail-footer border-t border-slate-100 pt-4"><PersonChip mahasiswa={item.mahasiswa} /></div>
     </div>
   )
 }
@@ -241,7 +241,7 @@ export function AttendanceDetail(props) {
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Alasan atau keterangan</p>
         <p className="mt-1 text-sm text-slate-700">{row.alasan || 'Tidak ada alasan.'}</p>
       </div>
-      <div className="border-t border-slate-100 pt-4"><PersonChip mahasiswa={row.mahasiswa} /></div>
+      <div className="detail-footer border-t border-slate-100 pt-4"><PersonChip mahasiswa={row.mahasiswa} /></div>
     </div>
   )
 }

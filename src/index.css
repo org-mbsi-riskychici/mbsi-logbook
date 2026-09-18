@@ -725,3 +725,20 @@ button:active:not(:disabled), a:active, .clickable:active { transition-duration:
   transform: none;
   transition: opacity 0.3s ease 0.08s, transform 0.34s cubic-bezier(0.32, 0.72, 0, 1) 0.06s;
 }
+
+/* footer-detail-sticky: baris penulis di popup detail tetap diam di tepi bawah saat isi digulir */
+.detail-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 35;
+  margin-left: -1.5rem;
+  margin-right: -1.5rem;
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+  padding-bottom: 1.25rem;
+  background: #ffffff;
+  border-radius: 0 0 2rem 2rem;
+}
+.dark .detail-footer {
+  background: #0f172a;
+}

@@ -102,7 +102,7 @@ export function Modal(props) {
               <SizedIcon name="close" size={16} />
             </button>
           </div>
-          <div className="p-6">{props.open ? props.children : isiSimpan.current}</div>
+          <div className="px-6 pt-6">{props.open ? props.children : isiSimpan.current}</div>
         </div>
       </div>
     </div>
