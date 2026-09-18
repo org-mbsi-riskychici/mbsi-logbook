@@ -523,8 +523,6 @@ function startEditLog(log) {
       if (typeof refresh === 'function') await refresh()
       setVersiFoto(function (v) { return v + 1 })
       setShowUploadFoto(false)
-      setFotoPreview(null)
-      setFotoFile(null)
       toast.sukses('Foto profil berhasil disimpan')
     } catch (err) {
       toast.gagal('Gagal upload foto profil: ' + err.message)
@@ -729,11 +727,12 @@ async function submitHadir(e) {
 <h2 className="mt-4 text-xl font-black text-slate-900">{mahasiswa.nama}</h2>
 <p className="mt-1 text-sm text-slate-600">NIM {mahasiswa.nim}</p>
 <div className="mt-5 flex flex-wrap justify-center gap-2">
-<button type="button" onClick={function () { setShowUploadFoto(!showUploadFoto) }} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition">{mahasiswa.foto_profil ? 'Ganti Foto' : 'Upload Foto'}</button>
+<button type="button" onClick={function () { if (showUploadFoto) { setShowUploadFoto(false); return } setFotoPreview(null); setFotoFile(null); setShowUploadFoto(true) }} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition">{mahasiswa.foto_profil ? 'Ganti Foto' : 'Upload Foto'}</button>
 {mahasiswa.foto_profil ? <button type="button" onClick={hapusFotoProfilKu} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-red-50 text-red-700 hover:bg-red-100 transition">Hapus Foto</button> : null}
 </div>
-{showUploadFoto ? (
-<div className="mt-5 w-full border-t border-slate-200 pt-5 text-left">
+<div className={'unggah-foto-wrap w-full' + (showUploadFoto ? ' unggah-foto-buka' : '')}>
+<div className="unggah-foto-dalam">
+<div className="unggah-foto-isi mt-5 w-full border-t border-slate-200 pt-5 text-left">
 <div className="flex flex-wrap items-start gap-4">
 {previewLoadingFoto ? (
   <div className="h-20 w-20 rounded-[28%] bg-slate-100 flex items-center justify-center">
@@ -747,10 +746,11 @@ async function submitHadir(e) {
 </div>
 <div className="mt-4 flex gap-2">
 <button type="button" onClick={simpanFotoProfil} disabled={uploadingFoto || !fotoFile} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition disabled:opacity-50">{uploadingFoto ? 'Mengunggah...' : 'Simpan Foto'}</button>
-<button type="button" onClick={function () { setShowUploadFoto(false); setFotoPreview(null); setFotoFile(null) }} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition">Batal</button>
+<button type="button" onClick={function () { setShowUploadFoto(false) }} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition">Batal</button>
 </div>
 </div>
-) : null}
+</div>
+</div>
 </div>
 <div className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 shadow-sm">
 <h2 className="text-lg font-black text-slate-900">Ringkasan aktivitas magang</h2>

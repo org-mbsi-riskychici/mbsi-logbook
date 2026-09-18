@@ -700,3 +700,28 @@ button:active:not(:disabled), a:active, .clickable:active { transition-duration:
   }
   .dark header.sticky { background-color: rgba(2, 6, 23, 0.97) !important; }
 }
+
+/* unggah-foto-halus: panel upload foto profil mengembang dan merapat mulus tanpa lompatan layout */
+.unggah-foto-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.34s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.unggah-foto-wrap.unggah-foto-buka { grid-template-rows: 1fr; }
+.unggah-foto-dalam {
+  overflow: hidden;
+  min-height: 0;
+  visibility: hidden;
+  transition: visibility 0.34s;
+}
+.unggah-foto-buka .unggah-foto-dalam { visibility: visible; }
+.unggah-foto-isi {
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity 0.18s ease, transform 0.22s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.unggah-foto-buka .unggah-foto-isi {
+  opacity: 1;
+  transform: none;
+  transition: opacity 0.3s ease 0.08s, transform 0.34s cubic-bezier(0.32, 0.72, 0, 1) 0.06s;
+}
