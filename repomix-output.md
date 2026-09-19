@@ -89,10 +89,7 @@ supabase/
 .gitignore
 index.html
 package.json
-pagination-ikon-panah.cjs
-pagination-mobile-nomor.cjs
 postcss.config.js
-rapikan-pagination.cjs
 README.md
 tailwind.config.js
 vercel.json
@@ -100,337 +97,6 @@ vite.config.js
 ```
 
 # Files
-
-## File: pagination-ikon-panah.cjs
-```javascript
-#!/usr/bin/env node
-/*
- * pagination-ikon-panah.cjs
- * Menulis ulang komponen Pagination di ui.jsx:
- *  - Tombol Sebelumnya/Berikutnya menjadi ikon panah saja, ukurannya sama
- *    dengan tombol nomor (h-8 di mobile, h-10 di desktop).
- *  - Satu baris untuk semua ukuran layar (muat hingga 360px).
- *  - Elipsis "..." otomatis saat total halaman > 7 (pola web korporat).
- * Idempoten: aman dijalankan ulang.
- *
- * Pakai (dari root proyek):  node pagination-ikon-panah.cjs
- */
-const fs = require('fs')
-const path = require('path')
-
-const REL = path.join('src', 'components', 'ui.jsx')
-const p = path.resolve(process.cwd(), REL)
-if (!fs.existsSync(p)) { console.error('✗ File tidak ditemukan: ' + REL); process.exit(1) }
-
-const raw = fs.readFileSync(p, 'utf8')
-const crlf = raw.indexOf('\r\n') !== -1
-let isi = crlf ? raw.replace(/\r\n/g, '\n') : raw
-
-if (isi.indexOf('pagination-v3') !== -1) {
-  console.log('= Pagination ikon panah sudah terpasang, tidak ada yang diubah.')
-  process.exit(0)
-}
-
-const rePag = /export function Pagination\(props\) \{[\s\S]*?\n\}\n(?=const ToastContext)/
-if (!rePag.test(isi)) {
-  console.error('✗ Fungsi Pagination tidak dikenali di ui.jsx.')
-  process.exit(1)
-}
-
-const BARU = [
-  'export function Pagination(props) {',
-  '  /* pagination-v3: nav ikon panah sebesar tombol nomor + elipsis ala web korporat */',
-  '  const totalItems = props.totalItems || 0',
-  '  const perPage = props.perPage || 10',
-  '  const page = props.page || 1',
-  '  const onPageChange = props.onPageChange || function () {}',
-  '  const totalPages = Math.ceil(totalItems / perPage)',
-  '  if (!totalItems || totalPages <= 1) return null',
-  '  const halaman = []',
-  '  if (totalPages <= 7) {',
-  '    for (let i = 1; i <= totalPages; i++) halaman.push(i)',
-  '  } else {',
-  '    for (let i = 1; i <= totalPages; i++) {',
-  '      if (i === 1 || i === totalPages || (i >= page - 1 && i <= page + 1)) {',
-  '        halaman.push(i)',
-  '      } else if (halaman[halaman.length - 1] !== \'...\') {',
-  "        halaman.push('...')",
-  '      }',
-  '    }',
-  '  }',
-  "  const clsItem = 'grid h-8 min-w-8 place-items-center rounded-lg px-1.5 text-xs font-bold transition sm:h-10 sm:min-w-10 sm:rounded-xl sm:px-3 sm:text-sm '",
-  "  const clsNetral = 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 hover:text-bsi-800'",
-  '  const panahKiri = <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 sm:h-5 sm:w-5" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>',
-  '  const panahKanan = <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 sm:h-5 sm:w-5" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>',
-  '  return (',
-  '    <div className="mt-8 flex flex-wrap items-center justify-center gap-1 sm:gap-2">',
-  '      <button',
-  '        type="button"',
-  '        disabled={page <= 1}',
-  '        onClick={function () { onPageChange(page - 1) }}',
-  '        aria-label="Sebelumnya"',
-  '        title="Sebelumnya"',
-  "        className={clsItem + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}",
-  '      >',
-  '        {panahKiri}',
-  '      </button>',
-  '      {halaman.map(function (h, idx) {',
-  "        if (h === '...') {",
-  "          return <span key={'lompat' + idx} className=\"px-0.5 text-xs font-bold text-slate-600 sm:px-1 sm:text-sm\">...</span>",
-  '        }',
-  '        const aktif = h === page',
-  '        return (',
-  '          <button',
-  "            key={'hal' + h}",
-  '            type="button"',
-  '            onClick={function () { onPageChange(h) }}',
-  "            aria-label={'Halaman ' + h}",
-  '            className={clsItem + (aktif',
-  "              ? 'bg-bsi-800 text-white shadow-lg shadow-bsi-900/25'",
-  '              : clsNetral)}',
-  '          >',
-  '            {h}',
-  '          </button>',
-  '        )',
-  '      })}',
-  '      <button',
-  '        type="button"',
-  '        disabled={page >= totalPages}',
-  '        onClick={function () { onPageChange(page + 1) }}',
-  '        aria-label="Berikutnya"',
-  '        title="Berikutnya"',
-  "        className={clsItem + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}",
-  '      >',
-  '        {panahKanan}',
-  '      </button>',
-  '    </div>',
-  '  )',
-  '}',
-  ''
-].join('\n')
-
-isi = isi.replace(rePag, BARU)
-
-if (isi.indexOf('pagination-v3') === -1 || isi.indexOf('aria-label="Berikutnya"') === -1) {
-  console.error('✗ Verifikasi gagal, file tidak ditulis.')
-  process.exit(1)
-}
-
-fs.writeFileSync(p + '.bak', raw, 'utf8')
-fs.writeFileSync(p, crlf ? isi.replace(/\n/g, '\r\n') : isi, 'utf8')
-console.log('✓ SELESAI: Pagination kini memakai ikon panah + elipsis (backup: ui.jsx.bak).')
-console.log('  - Nav panah sama besar dengan tombol nomor (mobile 32px, desktop 40px).')
-console.log('  - Satu baris rapi di semua layar; elipsis "..." muncul bila halaman > 7.')
-```
-
-## File: pagination-mobile-nomor.cjs
-```javascript
-#!/usr/bin/env node
-/*
- * pagination-mobile-nomor.cjs
- * Mengubah pagination mobile: menambah baris nomor halaman berukuran kecil
- * (h-8, text-xs, dengan elipsis) di atas, dan tombol Sebelumnya/Berikutnya
- * kecil proporsional (h-9, flex-1) di bawahnya. Desktop/tablet tidak berubah.
- * Idempoten: aman dijalankan ulang.
- *
- * Pakai (dari root proyek):  node pagination-mobile-nomor.cjs
- */
-const fs = require('fs')
-const path = require('path')
-
-const REL = path.join('src', 'components', 'ui.jsx')
-const p = path.resolve(process.cwd(), REL)
-if (!fs.existsSync(p)) { console.error('✗ File tidak ditemukan: ' + REL); process.exit(1) }
-
-const raw = fs.readFileSync(p, 'utf8')
-const crlf = raw.indexOf('\r\n') !== -1
-let isi = crlf ? raw.replace(/\r\n/g, '\n') : raw
-
-if (isi.indexOf('pagination-mobile-v2') !== -1) {
-  console.log('= Pagination mobile bernomor sudah terpasang, tidak ada yang diubah.')
-  process.exit(0)
-}
-
-const reMobile = /<div className="flex items-center gap-3 sm:hidden">[\s\S]*?\n      <\/div>/
-if (!reMobile.test(isi)) {
-  console.error('✗ Blok pagination mobile (sm:hidden) tidak ditemukan di ui.jsx.')
-  process.exit(1)
-}
-
-const BARU = [
-  '      {/* pagination-mobile-v2: nomor halaman kecil di atas + prev/next proporsional di bawah */}',
-  '      <div className="space-y-2 sm:hidden">',
-  '        <div className="flex flex-wrap items-center justify-center gap-1">',
-  '        {halaman.map(function (h, idx) {',
-  "          if (h === '...') {",
-  "            return <span key={'lompat-m' + idx} className=\"px-0.5 text-xs font-bold text-slate-600\">...</span>",
-  '          }',
-  '          const aktif = h === page',
-  '          return (',
-  '            <button',
-  "              key={'hal-m' + h}",
-  '              type="button"',
-  '              onClick={function () { onPageChange(h) }}',
-  "              className={'grid h-8 min-w-8 place-items-center rounded-lg px-1.5 text-xs font-bold transition ' + (aktif",
-  "                ? 'bg-bsi-800 text-white shadow-md shadow-bsi-900/25'",
-  '                : clsNetral)}',
-  '            >',
-  '              {h}',
-  '            </button>',
-  '          )',
-  '        })}',
-  '        </div>',
-  '        <div className="flex gap-2">',
-  '          <button',
-  '            type="button"',
-  '            disabled={page <= 1}',
-  '            onClick={function () { onPageChange(page - 1) }}',
-  "            className={'flex h-9 flex-1 items-center justify-center rounded-lg px-2 text-xs font-semibold transition ' + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}",
-  '          >',
-  '            Sebelumnya',
-  '          </button>',
-  '          <button',
-  '            type="button"',
-  '            disabled={page >= totalPages}',
-  '            onClick={function () { onPageChange(page + 1) }}',
-  "            className={'flex h-9 flex-1 items-center justify-center rounded-lg px-2 text-xs font-semibold transition ' + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}",
-  '          >',
-  '            Berikutnya',
-  '          </button>',
-  '        </div>',
-  '      </div>'
-].join('\n')
-
-isi = isi.replace(reMobile, BARU)
-
-if (isi.indexOf('pagination-mobile-v2') === -1 || (isi.split('halaman.map').length - 1) !== 2) {
-  console.error('✗ Verifikasi gagal, file tidak ditulis.')
-  process.exit(1)
-}
-
-fs.writeFileSync(p + '.bak', raw, 'utf8')
-fs.writeFileSync(p, crlf ? isi.replace(/\n/g, '\r\n') : isi, 'utf8')
-console.log('✓ SELESAI: pagination mobile kini menampilkan nomor halaman kecil (backup: ui.jsx.bak).')
-console.log('  - Baris 1: nomor halaman + elipsis, tinggi 32px, teks xs, halaman aktif hijau.')
-console.log('  - Baris 2: Sebelumnya / Berikutnya kecil (36px) sama lebar.')
-console.log('  - Desktop/tablet (≥640px) tidak berubah.')
-```
-
-## File: rapikan-pagination.cjs
-```javascript
-#!/usr/bin/env node
-/*
- * rapikan-pagination.cjs
- * Merapikan pagination di layar kecil: mobile memakai baris proporsional
- * (Sebelumnya + indikator X/Y + Berikutnya, flex-1) tanpa daftar nomor,
- * sedangkan tablet/desktop tetap memakai daftar nomor ber-elipsis.
- * Pagination juga disembunyikan bila hanya ada 1 halaman.
- * Idempoten: aman dijalankan ulang.
- *
- * Pakai (dari root proyek):  node rapikan-pagination.cjs
- */
-const fs = require('fs')
-const path = require('path')
-
-const REL = path.join('src', 'components', 'ui.jsx')
-const p = path.resolve(process.cwd(), REL)
-if (!fs.existsSync(p)) { console.error('✗ File tidak ditemukan: ' + REL); process.exit(1) }
-
-const raw = fs.readFileSync(p, 'utf8')
-const crlf = raw.indexOf('\r\n') !== -1
-let isi = crlf ? raw.replace(/\r\n/g, '\n') : raw
-
-if (isi.indexOf('pagination-mobile-v1') !== -1) {
-  console.log('= Pagination responsif sudah terpasang, tidak ada yang diubah.')
-  process.exit(0)
-}
-
-const reReturn = /return \(\s*<div className="mt-8 flex flex-wrap items-center justify-center gap-2">[\s\S]*?<\/div>\s*\)\s*\}/
-if (!reReturn.test(isi)) {
-  console.error('✗ Blok return Pagination tidak dikenali di ui.jsx.')
-  process.exit(1)
-}
-
-const BARU = [
-  '  if (totalPages <= 1) return null',
-  '  return (',
-  '    <div className="mt-8">',
-  '      {/* pagination-mobile-v1: layar kecil pakai prev/next proporsional + indikator, tanpa daftar nomor yang berantakan */}',
-  '      <div className="flex items-center gap-3 sm:hidden">',
-  '        <button',
-  '          type="button"',
-  '          disabled={page <= 1}',
-  '          onClick={function () { onPageChange(page - 1) }}',
-  "          className={clsNav + clsNetral + ' flex-1 justify-center disabled:cursor-not-allowed disabled:opacity-40'}",
-  '        >',
-  '          Sebelumnya',
-  '        </button>',
-  '        <span className="shrink-0 text-sm font-bold text-slate-600">{page} / {totalPages}</span>',
-  '        <button',
-  '          type="button"',
-  '          disabled={page >= totalPages}',
-  '          onClick={function () { onPageChange(page + 1) }}',
-  "          className={clsNav + clsNetral + ' flex-1 justify-center disabled:cursor-not-allowed disabled:opacity-40'}",
-  '        >',
-  '          Berikutnya',
-  '        </button>',
-  '      </div>',
-  '      {/* tablet & desktop: daftar nomor dengan elipsis */}',
-  '      <div className="hidden sm:flex flex-wrap items-center justify-center gap-2">',
-  '        <button',
-  '          type="button"',
-  '          disabled={page <= 1}',
-  '          onClick={function () { onPageChange(page - 1) }}',
-  "          className={clsNav + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}",
-  '        >',
-  '          Sebelumnya',
-  '        </button>',
-  '        {halaman.map(function (h, idx) {',
-  "          if (h === '...') {",
-  "            return <span key={'lompat' + idx} className=\"px-1 text-sm font-bold text-slate-600\">...</span>",
-  '          }',
-  '          const aktif = h === page',
-  '          return (',
-  '            <button',
-  "              key={'hal' + h}",
-  '              type="button"',
-  '              onClick={function () { onPageChange(h) }}',
-  '              className={clsAngka + (aktif',
-  "                ? 'bg-bsi-800 text-white shadow-lg shadow-bsi-900/25'",
-  '                : clsNetral)}',
-  '            >',
-  '              {h}',
-  '            </button>',
-  '          )',
-  '        })}',
-  '        <button',
-  '          type="button"',
-  '          disabled={page >= totalPages}',
-  '          onClick={function () { onPageChange(page + 1) }}',
-  "          className={clsNav + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}",
-  '        >',
-  '          Berikutnya',
-  '        </button>',
-  '      </div>',
-  '    </div>',
-  '  )',
-  '}'
-].join('\n')
-
-isi = isi.replace(reReturn, BARU)
-
-if (isi.indexOf('pagination-mobile-v1') === -1 || isi.indexOf('sm:hidden') === -1 || isi.indexOf('hidden sm:flex') === -1) {
-  console.error('✗ Verifikasi gagal, file tidak ditulis.')
-  process.exit(1)
-}
-
-fs.writeFileSync(p + '.bak', raw, 'utf8')
-fs.writeFileSync(p, crlf ? isi.replace(/\n/g, '\r\n') : isi, 'utf8')
-console.log('✓ SELESAI: pagination responsif terpasang di ui.jsx (backup: ui.jsx.bak).')
-console.log('  - Mobile (<640px): baris proporsional Sebelumnya | X / Y | Berikutnya, tanpa wrap.')
-console.log('  - Tablet/desktop: daftar nomor ber-elipsis seperti semula.')
-console.log('  - 1 halaman: pagination disembunyikan.')
-```
 
 ## File: api/_lib/sesi.js
 ```javascript
@@ -5829,13 +5495,13 @@ export function Avatar(props) {
 }
 
 export function Pagination(props) {
-  /* pagination-v2: tombol nomor halaman sesuai tema BSI */
+  /* pagination-v3: nav ikon panah sebesar tombol nomor + elipsis ala web korporat */
   const totalItems = props.totalItems || 0
   const perPage = props.perPage || 10
   const page = props.page || 1
   const onPageChange = props.onPageChange || function () {}
   const totalPages = Math.ceil(totalItems / perPage)
-  if (!totalItems) return null
+  if (!totalItems || totalPages <= 1) return null
   const halaman = []
   if (totalPages <= 7) {
     for (let i = 1; i <= totalPages; i++) halaman.push(i)
@@ -5848,91 +5514,51 @@ export function Pagination(props) {
       }
     }
   }
-  const clsAngka = 'grid h-10 min-w-10 place-items-center rounded-xl px-3 text-sm font-bold transition '
-  const clsNav = 'flex h-10 items-center rounded-xl px-4 text-sm font-semibold transition '
+  const clsItem = 'grid h-8 min-w-8 place-items-center rounded-lg px-1.5 text-xs font-bold transition sm:h-10 sm:min-w-10 sm:rounded-xl sm:px-3 sm:text-sm '
   const clsNetral = 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 hover:text-bsi-800'
-    if (totalPages <= 1) return null
+  const panahKiri = <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 sm:h-5 sm:w-5" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+  const panahKanan = <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 sm:h-5 sm:w-5" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
   return (
-    <div className="mt-8">
-      {/* pagination-mobile-v1: layar kecil pakai prev/next proporsional + indikator, tanpa daftar nomor yang berantakan */}
-            {/* pagination-mobile-v2: nomor halaman kecil di atas + prev/next proporsional di bawah */}
-      <div className="space-y-2 sm:hidden">
-        <div className="flex flex-wrap items-center justify-center gap-1">
-        {halaman.map(function (h, idx) {
-          if (h === '...') {
-            return <span key={'lompat-m' + idx} className="px-0.5 text-xs font-bold text-slate-600">...</span>
-          }
-          const aktif = h === page
-          return (
-            <button
-              key={'hal-m' + h}
-              type="button"
-              onClick={function () { onPageChange(h) }}
-              className={'grid h-8 min-w-8 place-items-center rounded-lg px-1.5 text-xs font-bold transition ' + (aktif
-                ? 'bg-bsi-800 text-white shadow-md shadow-bsi-900/25'
-                : clsNetral)}
-            >
-              {h}
-            </button>
-          )
-        })}
-        </div>
-        <div className="flex gap-2">
+    <div className="mt-8 flex flex-wrap items-center justify-center gap-1 sm:gap-2">
+      <button
+        type="button"
+        disabled={page <= 1}
+        onClick={function () { onPageChange(page - 1) }}
+        aria-label="Sebelumnya"
+        title="Sebelumnya"
+        className={clsItem + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}
+      >
+        {panahKiri}
+      </button>
+      {halaman.map(function (h, idx) {
+        if (h === '...') {
+          return <span key={'lompat' + idx} className="px-0.5 text-xs font-bold text-slate-600 sm:px-1 sm:text-sm">...</span>
+        }
+        const aktif = h === page
+        return (
           <button
+            key={'hal' + h}
             type="button"
-            disabled={page <= 1}
-            onClick={function () { onPageChange(page - 1) }}
-            className={'flex h-9 flex-1 items-center justify-center rounded-lg px-2 text-xs font-semibold transition ' + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}
+            onClick={function () { onPageChange(h) }}
+            aria-label={'Halaman ' + h}
+            className={clsItem + (aktif
+              ? 'bg-bsi-800 text-white shadow-lg shadow-bsi-900/25'
+              : clsNetral)}
           >
-            Sebelumnya
+            {h}
           </button>
-          <button
-            type="button"
-            disabled={page >= totalPages}
-            onClick={function () { onPageChange(page + 1) }}
-            className={'flex h-9 flex-1 items-center justify-center rounded-lg px-2 text-xs font-semibold transition ' + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}
-          >
-            Berikutnya
-          </button>
-        </div>
-      </div>
-      {/* tablet & desktop: daftar nomor dengan elipsis */}
-      <div className="hidden sm:flex flex-wrap items-center justify-center gap-2">
-        <button
-          type="button"
-          disabled={page <= 1}
-          onClick={function () { onPageChange(page - 1) }}
-          className={clsNav + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}
-        >
-          Sebelumnya
-        </button>
-        {halaman.map(function (h, idx) {
-          if (h === '...') {
-            return <span key={'lompat' + idx} className="px-1 text-sm font-bold text-slate-600">...</span>
-          }
-          const aktif = h === page
-          return (
-            <button
-              key={'hal' + h}
-              type="button"
-              onClick={function () { onPageChange(h) }}
-              className={clsAngka + (aktif
-                ? 'bg-bsi-800 text-white shadow-lg shadow-bsi-900/25'
-                : clsNetral)}
-            >
-              {h}
-            </button>
-          )
-        })}
-        <button
-          type="button"
-          disabled={page >= totalPages}
-          onClick={function () { onPageChange(page + 1) }}
-          className={clsNav + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}
-        >
-          Berikutnya
-        </button>
-      </div>
+        )
+      })}
+      <button
+        type="button"
+        disabled={page >= totalPages}
+        onClick={function () { onPageChange(page + 1) }}
+        aria-label="Berikutnya"
+        title="Berikutnya"
+        className={clsItem + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}
+      >
+        {panahKanan}
+      </button>
     </div>
   )
 }
