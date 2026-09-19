@@ -48,8 +48,6 @@ export default function GalleryPage() {
   const totalData = sortedItems.length
   const totalPages = Math.ceil(totalData / PER_PAGE)
   const pageAman = Math.min(page, Math.max(1, totalPages))
-  const mulai = totalData === 0 ? 0 : (pageAman - 1) * PER_PAGE + 1
-  const akhir = Math.min(pageAman * PER_PAGE, totalData)
   const paginatedItems = sortedItems.slice((pageAman - 1) * PER_PAGE, pageAman * PER_PAGE)
 
   return (

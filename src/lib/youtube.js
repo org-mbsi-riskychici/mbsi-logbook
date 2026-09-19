@@ -26,9 +26,6 @@ export function parseYouTubeId(url) {
 export function ytThumb(id) {
   return 'https://i.ytimg.com/vi/' + id + '/hqdefault.jpg'
 }
-export function ytEmbedUrl(id) {
-  return 'https://www.youtube-nocookie.com/embed/' + id + '?rel=0&modestbranding=1'
-}
 export async function fetchYouTubeQuota() {
   try {
     const r = await fetch('/api/youtube/quota', { cache: 'no-store' })

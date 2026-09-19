@@ -50,8 +50,6 @@ export default function AttendancePage() {
   const totalData = sortedRows.length
   const totalPages = Math.ceil(totalData / PER_PAGE)
   const pageAman = Math.min(page, Math.max(1, totalPages))
-  const mulai = totalData === 0 ? 0 : (pageAman - 1) * PER_PAGE + 1
-  const akhir = Math.min(pageAman * PER_PAGE, totalData)
   const paginatedRows = sortedRows.slice((pageAman - 1) * PER_PAGE, pageAman * PER_PAGE)
 
   const counts = rows.reduce(function (acc, r) {

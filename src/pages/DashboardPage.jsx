@@ -11,7 +11,7 @@ import { uploadFotoProfil, updateFotoProfilMahasiswa, hapusFotoProfil } from '..
 import { urlPratinjau } from '../lib/konversi.js'
 import { todayInput, detectMediaType, matchesDateFilters, urutkanTanggal } from '../lib/format.js'
 import { KATEGORI, UNIT, GALERI_KEGIATAN } from '../lib/constants.js'
-import { Avatar, LabelProses, EmptyState, Modal, ConfirmModal, inputCls, labelCls, btnPrimary, btnSmall, AutoTextArea, Pagination, useToast } from '../components/ui.jsx'
+import { Avatar, LabelProses, EmptyState, Modal, ConfirmModal, inputCls, labelCls, btnPrimary, AutoTextArea, Pagination, useToast } from '../components/ui.jsx'
 import { LogbookCard, LogbookDetail, GalleryCard, GalleryDetail, AttendanceCard, AttendanceDetail } from '../components/cards.jsx'
 import { CustomSelect, CustomDateInput, FileInput, ToggleModeMedia, SumberVideo } from '../components/controls.jsx'
 import { SizedIcon, ICONS } from '../components/icons.jsx'
@@ -89,8 +89,6 @@ export default function DashboardPage() {
   const [galYtLink, setGalYtLink] = useState('')
   const [galDriveLink, setGalDriveLink] = useState('')
   const [galOldYt, setGalOldYt] = useState(null)
-  const [itemMode, setItemMode] = useState({})
-  const [galYtTitle, setGalYtTitle] = useState('')
   const [pendingDelete, setPendingDelete] = useState(null)
   const [konfirmasiEdit, setKonfirmasiEdit] = useState(null)
   const [logFilter, setLogFilter] = useState(LOG_INITIAL)
@@ -216,8 +214,6 @@ export default function DashboardPage() {
     return <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:py-8"><SkeletonDashboard /></div>
   }
 
-  function getItemMode(i) { return itemMode[i] || 'foto' }
-  function setItemModeAt(i, mode) { setItemMode(function (p) { const n = Object.assign({}, p); n[i] = mode; return n }) }
   
   function patchItem(i, patch) {
     setItems(function (prev) {
