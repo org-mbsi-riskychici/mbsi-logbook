@@ -111,22 +111,14 @@ export function Modal(props) {
 
 export function AutoTextArea(props) {
   const ref = useRef(null)
+
   useEffect(function () {
     const el = ref.current
     if (!el) return
     el.style.height = 'auto'
     el.style.height = el.scrollHeight + 'px'
   }, [props.value])
-  useEffect(function () {
-    const el = ref.current
-    if (!el || typeof ResizeObserver === 'undefined') return undefined
-    const ro = new ResizeObserver(function () {
-      el.style.height = 'auto'
-      el.style.height = el.scrollHeight + 'px'
-    })
-    ro.observe(el.parentElement || el)
-    return function () { ro.disconnect() }
-  }, [])
+
   return (
     <textarea
       ref={ref}
@@ -135,8 +127,6 @@ export function AutoTextArea(props) {
       value={props.value}
       placeholder={props.placeholder}
       onChange={props.onChange}
-      onFocus={props.onFocus}
-      onBlur={props.onBlur}
       disabled={props.disabled || false}
     />
   )

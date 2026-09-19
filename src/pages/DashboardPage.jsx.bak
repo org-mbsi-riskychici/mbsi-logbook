@@ -98,7 +98,7 @@ export default function DashboardPage() {
    const refleksiBlurTimer = useRef(null)
    function rekamRefleksi() {
      const map = {}
-     ;['kendala', 'solusi', 'pembelajaran', 'tombol'].forEach(function (k) {
+     ;['kendala', 'solusi', 'pembelajaran'].forEach(function (k) {
        const el = refleksiRefs.current[k]
        if (el) map[k] = el.getBoundingClientRect()
      })
@@ -128,7 +128,7 @@ export default function DashboardPage() {
      const prev = refleksiPrevRects.current
      refleksiPrevRects.current = null
      if (!prev) return
-     ;['kendala', 'solusi', 'pembelajaran', 'tombol'].forEach(function (k) {
+     ;['kendala', 'solusi', 'pembelajaran'].forEach(function (k) {
        const el = refleksiRefs.current[k]
        const old = prev[k]
        if (!el || !old || typeof el.animate !== 'function') return
@@ -950,7 +950,7 @@ export default function DashboardPage() {
                   onFocus={function () { fokusRefleksi('pembelajaran') }} onBlur={blurRefleksi} />
               </div>
               </div>
-              <button ref={function (el) { refleksiRefs.current.tombol = el }} type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks={infoProses || 'Menyimpan'} /> : (editLogId ? 'Simpan Perubahan' : 'Simpan Logbook')}</button>
+              <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks={infoProses || 'Menyimpan'} /> : (editLogId ? 'Simpan Perubahan' : 'Simpan Logbook')}</button>
             </form>
           </div>
           <div className="space-y-5 min-w-0">

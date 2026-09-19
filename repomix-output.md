@@ -45,7 +45,6 @@ api/
     latest.js
     quota.js
     session.js
-    verify.js
 public/
   llms.txt
   robots.txt
@@ -88,8 +87,10 @@ supabase/
   schema.sql
 .env.example
 .gitignore
+fokus-refleksi.cjs
 index.html
 package.json
+perbaiki-animasi-refleksi.cjs
 postcss.config.js
 README.md
 tailwind.config.js
@@ -98,6 +99,261 @@ vite.config.js
 ```
 
 # Files
+
+## File: fokus-refleksi.cjs
+```javascript
+#!/usr/bin/env node
+/*
+ * fokus-refleksi.cjs (v2 - toleran CRLF/Windows)
+ * Membuat 3 kolom refleksi (Kendala/Solusi/Pembelajaran) di form logbook dashboard
+ * berperilaku fokus-melebar: kolom difokuskan / sudah terisi -> melebar sepenuh baris,
+ * kolom kosong lain turun ke bawah (grid 3 kolom), dengan animasi geser halus (FLIP).
+ * Idempoten: aman dijalankan ulang; tidak menulis bila penanda sudah ada.
+ *
+ * Pakai (dari root proyek):  node fokus-refleksi.cjs
+ */
+const fs = require('fs')
+const path = require('path')
+
+function baca(rel) {
+  const p = path.resolve(process.cwd(), rel)
+  if (!fs.existsSync(p)) return null
+  const raw = fs.readFileSync(p, 'utf8')
+  const crlf = raw.includes('\r\n')
+  return { p: p, isi: crlf ? raw.replace(/\r\n/g, '\n') : raw, crlf: crlf }
+}
+function tulis(obj, isi) {
+  const keluar = obj.crlf ? isi.replace(/\n/g, '\r\n') : isi
+  fs.writeFileSync(obj.p + '.bak', fs.readFileSync(obj.p))
+  fs.writeFileSync(obj.p, keluar, 'utf8')
+}
+
+const AUTO_BARU = [
+  'export function AutoTextArea(props) {',
+  '  const ref = useRef(null)',
+  '  useEffect(function () {',
+  '    const el = ref.current',
+  '    if (!el) return',
+  "    el.style.height = 'auto'",
+  "    el.style.height = el.scrollHeight + 'px'",
+  '  }, [props.value])',
+  '  useEffect(function () {',
+  '    const el = ref.current',
+  "    if (!el || typeof ResizeObserver === 'undefined') return undefined",
+  '    const ro = new ResizeObserver(function () {',
+  "      el.style.height = 'auto'",
+  "      el.style.height = el.scrollHeight + 'px'",
+  '    })',
+  '    ro.observe(el.parentElement || el)',
+  '    return function () { ro.disconnect() }',
+  '  }, [])',
+  '  return (',
+  '    <textarea',
+  '      ref={ref}',
+  '      className={props.className}',
+  '      rows={props.rows || 2}',
+  '      value={props.value}',
+  '      placeholder={props.placeholder}',
+  '      onChange={props.onChange}',
+  '      onFocus={props.onFocus}',
+  '      onBlur={props.onBlur}',
+  '      disabled={props.disabled || false}',
+  '    />',
+  '  )',
+  '}',
+  ''
+].join('\n')
+
+const SISIP_STATE = [
+  '',
+  "   const [refleksiFokus, setRefleksiFokus] = useState('')",
+  '   const refleksiRefs = useRef({})',
+  '   const refleksiPrevRects = useRef(null)',
+  '   function rekamRefleksi() {',
+  '     const map = {}',
+  "     ;['kendala', 'solusi', 'pembelajaran'].forEach(function (k) {",
+  '       const el = refleksiRefs.current[k]',
+  '       if (el) map[k] = el.getBoundingClientRect()',
+  '     })',
+  '     refleksiPrevRects.current = map',
+  '   }',
+  '   const refleksiExpand = {',
+  "     kendala: refleksiFokus === 'kendala' || form.kendala.trim() !== '',",
+  "     solusi: refleksiFokus === 'solusi' || form.solusi.trim() !== '',",
+  "     pembelajaran: refleksiFokus === 'pembelajaran' || form.pembelajaran.trim() !== ''",
+  '   }',
+  "   const refleksiExpandKey = (refleksiExpand.kendala ? 'k' : '-') + (refleksiExpand.solusi ? 's' : '-') + (refleksiExpand.pembelajaran ? 'p' : '-')",
+  '   useLayoutEffect(function () {',
+  '     const prev = refleksiPrevRects.current',
+  '     refleksiPrevRects.current = null',
+  '     if (!prev) return',
+  "     ;['kendala', 'solusi', 'pembelajaran'].forEach(function (k) {",
+  '       const el = refleksiRefs.current[k]',
+  '       const old = prev[k]',
+  "       if (!el || !old || typeof el.animate !== 'function') return",
+  '       const now = el.getBoundingClientRect()',
+  '       const dx = old.left - now.left',
+  '       const dy = old.top - now.top',
+  '       const dw = old.width - now.width',
+  '       if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(dw) < 1) return',
+  '       el.animate([',
+  "         { transform: 'translate(' + dx + 'px,' + dy + 'px)', width: old.width + 'px' },",
+  "         { transform: 'translate(0,0)', width: now.width + 'px' }",
+  "       ], { duration: 320, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' })",
+  '     })',
+  "   }, [refleksiExpandKey])"
+].join('\n')
+
+function kolomRefleksi(key, label, ind) {
+  return [
+    ind + '<div ref={function (el) { refleksiRefs.current.' + key + ' = el }} className={\'min-w-0 \' + (refleksiExpand.' + key + ' ? \'md:col-span-3 md:order-first\' : \'\')}>',
+    ind + '  <label className={labelCls}>' + label + '</label>',
+    ind + '  <AutoTextArea className={inputCls} value={form.' + key + '} onChange={function (e) { setForm(Object.assign({}, form, { ' + key + ": e.target.value })) }} aria-label=\"" + label + '" placeholder="Opsional"',
+    ind + '    onFocus={function () { rekamRefleksi(); setRefleksiFokus(\'' + key + '\') }} onBlur={function () { rekamRefleksi(); setRefleksiFokus(\'\') }} />',
+    ind + '</div>'
+  ].join('\n')
+}
+
+const masalah = []
+
+/* ---------- 1) ui.jsx: AutoTextArea + onFocus/onBlur + ResizeObserver ---------- */
+const relUi = path.join('src', 'components', 'ui.jsx')
+const ui = baca(relUi)
+if (!ui) { console.error('✗ File tidak ditemukan: ' + relUi); process.exit(1) }
+if (ui.isi.indexOf('ResizeObserver') !== -1 && ui.isi.indexOf('onFocus={props.onFocus}') !== -1) {
+  console.log('= ui.jsx sudah siap, dilewati.')
+} else {
+  const reAuto = /export function AutoTextArea\(props\) \{[\s\S]*?\n[ \t]*\}\n/
+  if (!reAuto.test(ui.isi)) {
+    masalah.push('ui.jsx: fungsi AutoTextArea tidak dikenali')
+  } else {
+    tulis(ui, ui.isi.replace(reAuto, AUTO_BARU))
+    console.log('✓ ui.jsx: AutoTextArea diperbarui (onFocus/onBlur + ResizeObserver).')
+  }
+}
+
+/* ---------- 2) DashboardPage.jsx ---------- */
+const relDash = path.join('src', 'pages', 'DashboardPage.jsx')
+const dash = baca(relDash)
+if (!dash) { console.error('✗ File tidak ditemukan: ' + relDash); process.exit(1) }
+let d = dash.isi
+
+if (d.indexOf('refleksiFokus') !== -1) {
+  console.log('= DashboardPage sudah siap, dilewati.')
+} else {
+  /* 2a. import useLayoutEffect */
+  if (d.indexOf('useLayoutEffect') === -1) {
+    const reImp = /import \{ useEffect, useRef, useState \} from 'react'/
+    if (!reImp.test(d)) masalah.push('DashboardPage: import react tidak dikenali')
+    else d = d.replace(reImp, "import { useEffect, useLayoutEffect, useRef, useState } from 'react'")
+  }
+  /* 2b. sisip state + refs + FLIP setelah state konfirmasiEdit */
+  const reState = /(\n[ \t]*const \[konfirmasiEdit, setKonfirmasiEdit\] = useState\(null\))/
+  if (!reState.test(d)) masalah.push('DashboardPage: state konfirmasiEdit tidak ditemukan')
+  else d = d.replace(reState, function (m) { return m + SISIP_STATE })
+  /* 2c. ganti grid 3 kolom refleksi dengan versi fokus-melebar */
+  const reGrid = /([ \t]*)<div className="grid gap-4 md:grid-cols-3">\s*(<div><label className=\{labelCls\}>Kendala<\/label>[\s\S]*?<\/div>)\s*(<div><label className=\{labelCls\}>Solusi<\/label>[\s\S]*?<\/div>)\s*(<div><label className=\{labelCls\}>Pembelajaran<\/label>[\s\S]*?<\/div>)\s*<\/div>/
+  if (!reGrid.test(d)) {
+    masalah.push('DashboardPage: grid refleksi 3 kolom tidak dikenali')
+  } else {
+    d = d.replace(reGrid, function (m, ind) {
+      return [
+        ind + '<div className="grid gap-4 md:grid-cols-3">',
+        kolomRefleksi('kendala', 'Kendala', ind),
+        kolomRefleksi('solusi', 'Solusi', ind),
+        kolomRefleksi('pembelajaran', 'Pembelajaran', ind),
+        ind + '</div>'
+      ].join('\n')
+    })
+  }
+  if (masalah.length) {
+    console.error('✗ GAGAL, DashboardPage tidak ditulis:')
+    masalah.forEach(function (x) { console.error('  - ' + x) })
+    process.exit(1)
+  }
+  tulis(dash, d)
+  console.log('✓ DashboardPage.jsx: kolom refleksi fokus-melebar terpasang.')
+}
+
+if (masalah.length) process.exit(1)
+console.log('')
+console.log('✓ SELESAI. Perilaku: klik/fokus salah satu kolom -> melebar sepenuh baris;')
+console.log('  kolom kosong lain turun ke bawah; kolom terisi tetap melebar;')
+console.log('  kosongkan lalu blur -> kembali ke grid 3 kolom. Animasi geser halus.')
+```
+
+## File: perbaiki-animasi-refleksi.cjs
+```javascript
+#!/usr/bin/env node
+/*
+ * perbaiki-animasi-refleksi.cjs
+ * Memperbaiki glitch animasi fokus-melebar pada kolom Kendala/Solusi/Pembelajaran:
+ *  - Batalkan animasi FLIP yang masih berjalan sebelum animasi baru mulai
+ *    (mencegah lebar tertahan panjang saat fokus pindah cepat).
+ *  - Animasikan lebar + posisi sekaligus dengan easing lembut supaya
+ *    pembesaran kolom terlihat dan tidak menimpa kolom tetangga.
+ * Idempoten: aman dijalankan ulang.
+ *
+ * Pakai (dari root proyek):  node perbaiki-animasi-refleksi.cjs
+ */
+const fs = require('fs')
+const path = require('path')
+
+const REL = path.join('src', 'pages', 'DashboardPage.jsx')
+const p = path.resolve(process.cwd(), REL)
+if (!fs.existsSync(p)) { console.error('✗ File tidak ditemukan: ' + REL); process.exit(1) }
+
+let isi = fs.readFileSync(p, 'utf8')
+isi = isi.replace(/\r\n/g, '\n')
+
+const LAMA = [
+  "       if (!el || !old || typeof el.animate !== 'function') return",
+  "       const now = el.getBoundingClientRect()",
+  "       const dx = old.left - now.left",
+  "       const dy = old.top - now.top",
+  "       const dw = old.width - now.width",
+  "       if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(dw) < 1) return",
+  "       el.animate([",
+  "         { transform: 'translate(' + dx + 'px,' + dy + 'px)', width: old.width + 'px' },",
+  "         { transform: 'translate(0,0)', width: now.width + 'px' }",
+  "       ], { duration: 320, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' })"
+].join('\n')
+
+const BARU = [
+  "       if (!el || !old || typeof el.animate !== 'function') return",
+  "       if (typeof el.getAnimations === 'function') {",
+  "         el.getAnimations().forEach(function (a) { a.cancel() })",
+  "       }",
+  "       const now = el.getBoundingClientRect()",
+  "       const dx = old.left - now.left",
+  "       const dy = old.top - now.top",
+  "       const dw = old.width - now.width",
+  "       if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(dw) < 1) return",
+  "       el.style.overflow = 'hidden'",
+  "       const anim = el.animate([",
+  "         { transform: 'translate(' + dx + 'px,' + dy + 'px)', width: old.width + 'px' },",
+  "         { transform: 'translate(0,0)', width: now.width + 'px' }",
+  "       ], { duration: 420, easing: 'cubic-bezier(0.4, 0, 0.2, 1)' })",
+  "       anim.onfinish = function () { el.style.overflow = '' }",
+  "       anim.oncancel = function () { el.style.overflow = '' }"
+].join('\n')
+
+if (isi.indexOf(BARU) !== -1) {
+  console.log('= Perbaikan animasi refleksi sudah terpasang, tidak ada yang diubah.')
+  process.exit(0)
+}
+if (isi.indexOf(LAMA) === -1) {
+  console.error('✗ Pola animasi lama tidak ditemukan. Periksa blok useLayoutEffect refleksi di DashboardPage.jsx.')
+  process.exit(1)
+}
+
+isi = isi.replace(LAMA, BARU)
+fs.writeFileSync(p + '.bak', fs.readFileSync(p, 'utf8'), 'utf8')
+fs.writeFileSync(p, isi, 'utf8')
+console.log('✓ SELESAI: animasi fokus-melebar diperbaiki.')
+console.log('  - Animasi lama dibatalkan sebelum animasi baru (tidak ada lebar tertahan).')
+console.log('  - Durasi 420ms dengan easing lembut; overflow dijaga supaya tidak menimpa tetangga.')
+```
 
 ## File: api/_lib/sesi.js
 ```javascript
@@ -265,119 +521,6 @@ export const supabase = createClient(
 )
 ```
 
-## File: src/lib/youtube.js
-```javascript
-import { supabase } from './supabase.js'
-
-export function parseYouTubeId(url) {
-  if (!url) return null
-  const s = String(url).trim()
-  if (/^[A-Za-z0-9_-]{11}$/.test(s)) return s
-  try {
-    const u = new URL(s)
-    const host = u.hostname.replace('www.', '').replace('m.', '')
-    if (host === 'youtu.be') {
-      const id = u.pathname.slice(1).split('/')[0]
-      return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null
-    }
-    if (host.endsWith('youtube.com') || host.endsWith('youtube-nocookie.com')) {
-      const v = u.searchParams.get('v')
-      if (v && /^[A-Za-z0-9_-]{11}$/.test(v)) return v
-      const parts = u.pathname.split('/').filter(Boolean)
-      if (parts[0] === 'embed' || parts[0] === 'shorts' || parts[0] === 'live') {
-        const id = parts[1]
-        return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null
-      }
-    }
-  } catch (e) {}
-  return null
-}
-export function ytThumb(id) {
-  return 'https://i.ytimg.com/vi/' + id + '/hqdefault.jpg'
-}
-export function ytEmbedUrl(id) {
-  return 'https://www.youtube-nocookie.com/embed/' + id + '?rel=0&modestbranding=1'
-}
-export async function fetchYouTubeQuota() {
-  try {
-    const r = await fetch('/api/youtube/quota', { cache: 'no-store' })
-    if (!r.ok) return { limit: 5, used: 0, remaining: 5 }
-    return await r.json()
-  } catch (e) {
-    return { limit: 5, used: 0, remaining: 5 }
-  }
-}
-export async function startYouTubeSession(title, description, contentType, token) {
-  if (!token) throw new Error('Sesi login tidak terbaca. Silakan masuk ulang lalu coba lagi.')
-  const r = await fetch('/api/youtube/session', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify({ title: title, description: description, contentType: contentType })
-  })
-  if (!r.ok) {
-    const j = await r.json().catch(function () { return { error: 'Gagal memulai sesi upload video' } })
-    throw new Error(j.error || 'Gagal memulai sesi upload video')
-  }
-  return await r.json()
-}
-export async function uploadToYouTube(sessionUri, blob, onProgress) {
-  const hasil = await new Promise(function (resolve) {
-    const xhr = new XMLHttpRequest()
-    xhr.open('PUT', sessionUri)
-    xhr.setRequestHeader('Content-Type', blob.type || 'video/mp4')
-    if (onProgress) {
-      xhr.upload.onprogress = function (e) {
-        if (e.lengthComputable) onProgress(e.loaded / e.total)
-      }
-    }
-    xhr.onload = function () { resolve({ status: xhr.status, body: xhr.responseText }) }
-    xhr.onerror = function () { resolve({ status: 0, body: '' }) }
-    xhr.send(blob)
-  })
-  if (hasil.status >= 200 && hasil.status < 300) {
-    try {
-      const j = JSON.parse(hasil.body || '{}')
-      if (j && j.id) return { videoId: j.id }
-    } catch (e) { /* respons tidak terbaca, pulihkan lewat server */ }
-  } else if (hasil.status !== 0) {
-    throw new Error('Upload video gagal (status ' + hasil.status + ')')
-  }
-  const sesi = await supabase.auth.getSession()
-  const token = await ambilTokenSesi()
-  const r = await fetch('/api/youtube/latest', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify({})
-  })
-  if (r.ok) {
-    try {
-      const j = await r.json()
-      if (j && j.videoId) return { videoId: j.videoId }
-    } catch (e) {
-      console.warn('Respons pemulihan bukan JSON, dilewati:', e.message)
-    }
-  }
-  throw new Error('Upload selesai tetapi id video tidak terbaca. Video kemungkinan sudah tersimpan; tempel link video secara manual.')
-}
-
-export async function unggahVideoYouTube(file, judul, onProgress) {
-  const sesiData = await supabase.auth.getSession()
-  const token = await ambilTokenSesi()
-  const sesi = await startYouTubeSession(judul || 'Dokumentasi Magang', 'Diunggah dari portal logbook magang BSI.', file.type || 'video/mp4', token)
-  return await uploadToYouTube(sesi.sessionUri, file, onProgress)
-}
-
-export async function ambilTokenSesi() {
-  try {
-    const r = await supabase.auth.getSession()
-    const ssn = r && r.data ? r.data.session : null
-    return ssn && ssn.access_token ? ssn.access_token : ''
-  } catch (e) {
-    return ''
-  }
-}
-```
-
 ## File: supabase/migrasi-drive-download.sql
 ```sql
 -- Migrasi fitur download Google Drive
@@ -495,41 +638,6 @@ export default async function handler(req, res) {
 }
 ```
 
-## File: api/youtube/verify.js
-```javascript
-import { cekSesi } from '../_lib/sesi.js'
-export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
-  const authHeader = req.headers.authorization || ''
-  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
-  const chkUser = await cekSesi(process.env, authHeader)
-  if (!chkUser) return res.status(401).json({ error: 'Sesi tidak valid' })
-  const { ref } = req.body || {}
-  if (!ref) return res.status(400).json({ error: 'Ref tidak ada' })
-  const params = new URLSearchParams()
-  params.set('client_id', process.env.YOUTUBE_CLIENT_ID || '')
-  params.set('client_secret', process.env.YOUTUBE_CLIENT_SECRET || '')
-  params.set('refresh_token', process.env.YOUTUBE_REFRESH_TOKEN || '')
-  params.set('grant_type', 'refresh_token')
-  const tr = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
-  if (!tr.ok) return res.status(500).json({ error: 'Gagal refresh token YouTube' })
-  const tok = await tr.json()
-  const url = 'https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&forMine=true&order=date&maxResults=10&q=' + encodeURIComponent(ref)
-  const r = await fetch(url, { headers: { Authorization: 'Bearer ' + tok.access_token } })
-  if (!r.ok) return res.status(502).json({ error: 'Gagal memeriksa video di YouTube' })
-  const j = await r.json()
-  const items = j.items || []
-  const batas = Date.now() - 15 * 60 * 1000
-  const cocok = items.find(function (it) {
-    const desc = (it.snippet && it.snippet.description) || ''
-    const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
-    return desc.indexOf('REF ' + ref) === 0 && (isNaN(t) ? true : t >= batas)
-  }) || items[0]
-  if (!cocok) return res.status(404).json({ error: 'Video tidak ditemukan di channel' })
-  return res.status(200).json({ videoId: cocok.id && cocok.id.videoId })
-}
-```
-
 ## File: src/lib/constants.js
 ```javascript
 export const KATEGORI = [
@@ -595,6 +703,116 @@ export function driveDownloadUrl(id) {
 
 export function driveViewUrl(id) {
   return 'https://drive.google.com/file/d/' + id + '/view'
+}
+```
+
+## File: src/lib/youtube.js
+```javascript
+import { supabase } from './supabase.js'
+
+export function parseYouTubeId(url) {
+  if (!url) return null
+  const s = String(url).trim()
+  if (/^[A-Za-z0-9_-]{11}$/.test(s)) return s
+  try {
+    const u = new URL(s)
+    const host = u.hostname.replace('www.', '').replace('m.', '')
+    if (host === 'youtu.be') {
+      const id = u.pathname.slice(1).split('/')[0]
+      return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null
+    }
+    if (host.endsWith('youtube.com') || host.endsWith('youtube-nocookie.com')) {
+      const v = u.searchParams.get('v')
+      if (v && /^[A-Za-z0-9_-]{11}$/.test(v)) return v
+      const parts = u.pathname.split('/').filter(Boolean)
+      if (parts[0] === 'embed' || parts[0] === 'shorts' || parts[0] === 'live') {
+        const id = parts[1]
+        return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null
+      }
+    }
+  } catch (e) {}
+  return null
+}
+export function ytThumb(id) {
+  return 'https://i.ytimg.com/vi/' + id + '/hqdefault.jpg'
+}
+export async function fetchYouTubeQuota() {
+  try {
+    const r = await fetch('/api/youtube/quota', { cache: 'no-store' })
+    if (!r.ok) return { limit: 5, used: 0, remaining: 5 }
+    return await r.json()
+  } catch (e) {
+    return { limit: 5, used: 0, remaining: 5 }
+  }
+}
+export async function startYouTubeSession(title, description, contentType, token) {
+  if (!token) throw new Error('Sesi login tidak terbaca. Silakan masuk ulang lalu coba lagi.')
+  const r = await fetch('/api/youtube/session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ title: title, description: description, contentType: contentType })
+  })
+  if (!r.ok) {
+    const j = await r.json().catch(function () { return { error: 'Gagal memulai sesi upload video' } })
+    throw new Error(j.error || 'Gagal memulai sesi upload video')
+  }
+  return await r.json()
+}
+export async function uploadToYouTube(sessionUri, blob, onProgress) {
+  const hasil = await new Promise(function (resolve) {
+    const xhr = new XMLHttpRequest()
+    xhr.open('PUT', sessionUri)
+    xhr.setRequestHeader('Content-Type', blob.type || 'video/mp4')
+    if (onProgress) {
+      xhr.upload.onprogress = function (e) {
+        if (e.lengthComputable) onProgress(e.loaded / e.total)
+      }
+    }
+    xhr.onload = function () { resolve({ status: xhr.status, body: xhr.responseText }) }
+    xhr.onerror = function () { resolve({ status: 0, body: '' }) }
+    xhr.send(blob)
+  })
+  if (hasil.status >= 200 && hasil.status < 300) {
+    try {
+      const j = JSON.parse(hasil.body || '{}')
+      if (j && j.id) return { videoId: j.id }
+    } catch (e) { /* respons tidak terbaca, pulihkan lewat server */ }
+  } else if (hasil.status !== 0) {
+    throw new Error('Upload video gagal (status ' + hasil.status + ')')
+  }
+  const sesi = await supabase.auth.getSession()
+  const token = await ambilTokenSesi()
+  const r = await fetch('/api/youtube/latest', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({})
+  })
+  if (r.ok) {
+    try {
+      const j = await r.json()
+      if (j && j.videoId) return { videoId: j.videoId }
+    } catch (e) {
+      console.warn('Respons pemulihan bukan JSON, dilewati:', e.message)
+    }
+  }
+  throw new Error('Upload selesai tetapi id video tidak terbaca. Video kemungkinan sudah tersimpan; tempel link video secara manual.')
+}
+
+export async function unggahVideoYouTube(file, judul, onProgress) {
+  const sesiData = await supabase.auth.getSession()
+  const token = await ambilTokenSesi()
+  const sesi = await startYouTubeSession(judul || 'Dokumentasi Magang', 'Diunggah dari portal logbook magang BSI.', file.type || 'video/mp4', token)
+  return await uploadToYouTube(sesi.sessionUri, file, onProgress)
+}
+
+export async function ambilTokenSesi() {
+  try {
+    const r = await supabase.auth.getSession()
+    const ssn = r && r.data ? r.data.session : null
+    return ssn && ssn.access_token ? ssn.access_token : ''
+  } catch (e) {
+    return ''
+  }
 }
 ```
 
@@ -3282,6 +3500,160 @@ export default function LoginPage() {
 }
 ```
 
+## File: src/pages/DospemPage.jsx
+```javascript
+import { urutkanTanggal } from '../lib/format.js'
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { supabase } from '../lib/supabase.js'
+import { EmptyState, Modal , Avatar } from '../components/ui.jsx'
+import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
+import { SkeletonLogbookCard, SkeletonPersonCard } from '../components/Skeleton.jsx'
+
+export default function DospemPage() {
+  const [logs, setLogs] = useState([])
+  const [people, setPeople] = useState([])
+  const [galCount, setGalCount] = useState(0)
+  const [hadirCount, setHadirCount] = useState(0)
+  const [galRows, setGalRows] = useState([])
+  const [hadirRows, setHadirRows] = useState([])
+  const [detail, setDetail] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(function () {
+    async function load() {
+      const l = await supabase
+        .from('logbooks')
+        .select('*, mahasiswa(*), logbook_items(*)')
+        .eq('status', 'publik')
+        .order('tanggal', { ascending: false })
+        .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
+      const p = await supabase.from('mahasiswa').select('id, nama, nim, prodi, foto_profil').order('nama')
+      const g = await supabase.from('galeri').select('id, mahasiswa_id')
+      const h = await supabase.from('daftar_hadir').select('id, mahasiswa_id, status')
+      setLogs(l.data || [])
+      setPeople(p.data || [])
+      setGalCount((g.data || []).length)
+      setGalRows(g.data || [])
+      setHadirCount((h.data || []).length)
+      setHadirRows(h.data || [])
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  return (
+    <div>
+      <section className="card-hover rounded-[2rem] bg-bsi-900 text-white p-5 sm:p-5 sm:p-8 lg:p-12">
+        <span className="inline-flex px-3 py-1.5 rounded-full bg-white/10 text-[10px] font-semibold uppercase tracking-wide sm:px-4 sm:py-2 sm:text-xs">Untuk Dospem & Kaprodi</span>
+        <h1 className="mt-6 text-2xl sm:text-2xl sm:text-3xl lg:text-5xl font-black max-w-3xl leading-tight">Ringkasan Kegiatan Magang Tim di Bank BSI</h1>
+        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-white/80 sm:mt-4 sm:text-base">Halaman ini dapat diakses tanpa login.</p>
+        <div className="mt-5 grid grid-cols-2 gap-2.5 sm:mt-8 sm:gap-4 xl:grid-cols-4">
+          {loading
+            ? [0, 1, 2, 3].map(function (i) {
+                return (
+                  <div key={i} className="rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5">
+                    <div className="skeleton skeleton-on-dark h-4 w-24"></div>
+                    <div className="skeleton skeleton-on-dark h-9 w-14 mt-2"></div>
+                  </div>
+                )
+              })
+            : [
+                <div key="mahasiswa" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Total Mahasiswa</p><p className="mt-1 text-2xl sm:text-3xl font-black">{people.length}</p></div>,
+                <div key="logbook" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Logbook Publik</p><p className="mt-1 text-2xl sm:text-3xl font-black">{logs.length}</p></div>,
+                <div key="galeri" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Media Galeri</p><p className="mt-1 text-2xl sm:text-3xl font-black">{galCount}</p></div>,
+                <div key="hadir" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Catatan Hadir</p><p className="mt-1 text-2xl sm:text-3xl font-black">{hadirCount}</p></div>
+              ]}
+        </div>
+        <div className="mt-6 flex flex-wrap gap-2 sm:mt-8 sm:gap-3">
+          <Link to="/logbook" className="px-4 py-2 rounded-xl bg-gold-500 text-slate-900 text-xs font-bold hover:bg-gold-400 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat Logbook</Link>
+          <Link to="/galeri" className="px-4 py-2 rounded-xl bg-white/10 text-white text-xs font-bold hover:bg-white/20 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat Galeri</Link>
+          <Link to="/absen" className="px-4 py-2 rounded-xl bg-white/10 text-white text-xs font-bold hover:bg-white/20 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat Daftar Hadir</Link>
+        </div>
+      </section>
+
+      <section className="mt-10">
+<h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Profil Tim Magang</h2>
+<p className="mt-2 max-w-3xl text-sm text-slate-600 sm:text-base">Seluruh mahasiswa magang beserta kontribusi logbook, media galeri, dan catatan kehadiran masing-masing.</p>
+<div className="grid-pusat-rapat mt-6">
+{loading
+? [0, 1, 2].map(function (i) { return <div key={i} className="kolom-kartu-rapat"><SkeletonPersonCard /></div> })
+: people.map(function (p) {
+const totalLog = logs.filter(function (x) { return x.mahasiswa_id === p.id }).length
+const totalGal = galRows.filter(function (x) { return x.mahasiswa_id === p.id }).length
+const totalHadir = hadirRows.filter(function (x) { return x.mahasiswa_id === p.id }).length
+return (
+<div key={p.id} className="kolom-kartu-rapat">
+<div className="card-hover rounded-3xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col h-full">
+<div className="flex items-center gap-4">
+<Avatar src={p.foto_profil || null} nama={p.nama} size="lg" />
+<div className="min-w-0 flex-1">
+<p className="truncate text-lg font-black text-slate-900">{p.nama}</p>
+<p className="truncate text-xs text-slate-600">NIM {p.nim}</p>
+{p.prodi ? <span className="mt-1.5 inline-flex px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold">{p.prodi}</span> : null}
+</div>
+</div>
+<div className="mt-4 grid grid-cols-2 gap-3">
+<div className="rounded-2xl bg-slate-50 p-3">
+<p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">Logbook</p>
+<p className="mt-0.5 text-xl font-black text-bsi-800">{totalLog}</p>
+</div>
+<div className="rounded-2xl bg-slate-50 p-3">
+<p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">Media</p>
+<p className="mt-0.5 text-xl font-black text-bsi-800">{totalGal}</p>
+</div>
+</div>
+<div className="mt-3 pt-3 border-t border-slate-100">
+<p className="text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">Rekap Kehadiran</p>
+<div className="grid grid-cols-3 gap-2">
+<div className="rounded-xl bg-emerald-50 p-2 text-center">
+<p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase">Masuk</p>
+<p className="text-base font-black text-emerald-700 dark:text-emerald-400">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Masuk' }).length}</p>
+</div>
+<div className="rounded-xl bg-amber-50 p-2 text-center">
+<p className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase">Izin</p>
+<p className="text-base font-black text-amber-700 dark:text-amber-400">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Izin' }).length}</p>
+</div>
+<div className="rounded-xl bg-red-50 p-2 text-center">
+<p className="text-[10px] font-bold text-red-600 dark:text-red-400 uppercase">Bolos</p>
+<p className="text-base font-black text-red-600 dark:text-red-400">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Bolos' }).length}</p>
+</div>
+</div>
+</div>
+</div>
+ </div>
+)
+})}
+{!loading && !people.length ? <div className="w-full"><EmptyState title="Belum Ada Data Mahasiswa" desc="Profil tim akan tampil setelah mahasiswa terdaftar." /></div> : null}
+</div>
+</section>
+
+      <section className="mt-10">
+        <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Aktivitas yang Sudah Dibagikan</h2>
+        <div className="grid-pusat mt-6">
+          {loading
+            ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
+            : urutkanTanggal(logs, 'terbaru').slice(0, 6).map(function (l) {
+                return (
+                  <div key={l.id} className="kolom-kartu">
+                    <LogbookCard log={l} onDetail={function () { setDetail(l) }} />
+                  </div>
+                )
+              })}
+          {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum Ada Logbook Publik" desc="Logbook akan tampil setelah mahasiswa mengatur status siap dilihat." /></div> : null}
+        </div>
+        <div className="mt-8 flex justify-center">
+          <Link to="/logbook" className="rounded-xl bg-bsi-800 px-5 py-2.5 text-xs font-bold text-white hover:bg-bsi-900 sm:rounded-2xl sm:px-6 sm:py-3 sm:text-sm">Lihat Semua Logbook</Link>
+        </div>
+      </section>
+      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
+        {detail ? <LogbookDetail log={detail} /> : null}
+      </Modal>
+    </div>
+  )
+}
+```
+
 ## File: src/pages/LogbookPage.jsx
 ```javascript
 import { useEffect, useState } from 'react'
@@ -3342,8 +3714,6 @@ export default function LogbookPage() {
   const totalData = sortedLogs.length
   const totalPages = Math.ceil(totalData / PER_PAGE)
   const pageAman = Math.min(page, Math.max(1, totalPages))
-  const mulai = totalData === 0 ? 0 : (pageAman - 1) * PER_PAGE + 1
-  const akhir = Math.min(pageAman * PER_PAGE, totalData)
   const paginatedLogs = sortedLogs.slice((pageAman - 1) * PER_PAGE, pageAman * PER_PAGE)
 
   return (
@@ -3524,23 +3894,21 @@ export default function Layout() {
 }
 ```
 
-## File: src/pages/DospemPage.jsx
+## File: src/pages/HomePage.jsx
 ```javascript
 import { urutkanTanggal } from '../lib/format.js'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
-import { EmptyState, Modal , Avatar } from '../components/ui.jsx'
+import { useAuth } from '../lib/auth.js'
+import { StatCard, EmptyState, Modal } from '../components/ui.jsx'
 import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
-import { SkeletonLogbookCard, SkeletonPersonCard } from '../components/Skeleton.jsx'
+import { SkeletonLogbookCard, SkeletonStatCard } from '../components/Skeleton.jsx'
 
-export default function DospemPage() {
+export default function HomePage() {
+  const { mahasiswa } = useAuth()
   const [logs, setLogs] = useState([])
-  const [people, setPeople] = useState([])
-  const [galCount, setGalCount] = useState(0)
-  const [hadirCount, setHadirCount] = useState(0)
-  const [galRows, setGalRows] = useState([])
-  const [hadirRows, setHadirRows] = useState([])
+  const [stats, setStats] = useState({ logbook: 0, galeri: 0, mahasiswa: 0 })
   const [detail, setDetail] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -3552,15 +3920,10 @@ export default function DospemPage() {
         .eq('status', 'publik')
         .order('tanggal', { ascending: false })
         .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
-      const p = await supabase.from('mahasiswa').select('id, nama, nim, prodi, foto_profil').order('nama')
-      const g = await supabase.from('galeri').select('id, mahasiswa_id')
-      const h = await supabase.from('daftar_hadir').select('id, mahasiswa_id, status')
+      const g = await supabase.from('galeri').select('id')
+      const p = await supabase.from('mahasiswa').select('id')
       setLogs(l.data || [])
-      setPeople(p.data || [])
-      setGalCount((g.data || []).length)
-      setGalRows(g.data || [])
-      setHadirCount((h.data || []).length)
-      setHadirRows(h.data || [])
+      setStats({ logbook: (l.data || []).length, galeri: (g.data || []).length, mahasiswa: (p.data || []).length })
       setLoading(false)
     }
     load()
@@ -3568,92 +3931,43 @@ export default function DospemPage() {
 
   return (
     <div>
-      <section className="card-hover rounded-[2rem] bg-bsi-900 text-white p-5 sm:p-5 sm:p-8 lg:p-12">
-        <span className="inline-flex px-3 py-1.5 rounded-full bg-white/10 text-[10px] font-semibold uppercase tracking-wide sm:px-4 sm:py-2 sm:text-xs">Untuk Dospem & Kaprodi</span>
-        <h1 className="mt-6 text-2xl sm:text-2xl sm:text-3xl lg:text-5xl font-black max-w-3xl leading-tight">Ringkasan Kegiatan Magang Tim di Bank BSI</h1>
-        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-white/80 sm:mt-4 sm:text-base">Halaman ini dapat diakses tanpa login.</p>
-        <div className="mt-5 grid grid-cols-2 gap-2.5 sm:mt-8 sm:gap-4 xl:grid-cols-4">
-          {loading
-            ? [0, 1, 2, 3].map(function (i) {
-                return (
-                  <div key={i} className="rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5">
-                    <div className="skeleton skeleton-on-dark h-4 w-24"></div>
-                    <div className="skeleton skeleton-on-dark h-9 w-14 mt-2"></div>
-                  </div>
-                )
-              })
-            : [
-                <div key="mahasiswa" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Total Mahasiswa</p><p className="mt-1 text-2xl sm:text-3xl font-black">{people.length}</p></div>,
-                <div key="logbook" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Logbook Publik</p><p className="mt-1 text-2xl sm:text-3xl font-black">{logs.length}</p></div>,
-                <div key="galeri" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Media Galeri</p><p className="mt-1 text-2xl sm:text-3xl font-black">{galCount}</p></div>,
-                <div key="hadir" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Catatan Hadir</p><p className="mt-1 text-2xl sm:text-3xl font-black">{hadirCount}</p></div>
-              ]}
+      <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr] items-stretch">
+        <div className="card-hover relative overflow-hidden rounded-[2rem] bg-bsi-900 text-white p-5 sm:p-8 lg:p-12">
+          <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-gold-500/20 blur-2xl" />
+          <div className="absolute -left-10 bottom-0 h-40 w-40 rounded-full bg-emerald-300/10 blur-2xl" />
+          <div className="relative z-10">
+            <span className="inline-flex px-3 py-1.5 rounded-full bg-white/10 text-[10px] font-semibold uppercase tracking-wide sm:px-4 sm:py-2 sm:text-xs">Magang Bank BSI</span>
+            <h1 className="mt-6 text-2xl sm:text-3xl lg:text-5xl font-black leading-tight max-w-2xl">Logbook, Galeri, dan Daftar Hadir Magang dalam Satu Portal</h1>
+            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-white/80 sm:mt-5 sm:text-base">Portal ini mencatat kegiatan harian, dokumentasi media, dan kehadiran tim magang selama membantu operasional Bank BSI.</p>
+            <div className="mt-6 flex flex-wrap gap-2 sm:mt-8 sm:gap-3">
+              <Link to="/logbook" className="px-4 py-2.5 rounded-xl bg-gold-500 text-slate-900 text-sm font-bold hover:bg-gold-400 sm:px-6 sm:py-3 sm:rounded-2xl sm:text-base">Lihat Logbook</Link>
+              <Link to="/galeri" className="px-4 py-2.5 rounded-xl bg-white/10 text-white text-sm font-bold hover:bg-white/20 sm:px-6 sm:py-3 sm:rounded-2xl sm:text-base">Lihat Galeri</Link>
+              <Link to="/absen" className="px-4 py-2.5 rounded-xl bg-white/10 text-white text-sm font-bold hover:bg-white/20 sm:px-6 sm:py-3 sm:rounded-2xl sm:text-base">Daftar Hadir</Link>
+              {mahasiswa
+                ? <Link to="/dashboard" className="px-4 py-2.5 rounded-xl bg-[#ffffff] text-[#135033] text-sm font-bold hover:bg-[#f1f5f9] sm:px-6 sm:py-3 sm:rounded-2xl sm:text-base">Buka Dashboard</Link>
+                : <Link to="/login" className="px-4 py-2.5 rounded-xl bg-[#ffffff] text-[#135033] text-sm font-bold hover:bg-[#f1f5f9] sm:px-6 sm:py-3 sm:rounded-2xl sm:text-base">Masuk Akun</Link>}
+            </div>
+          </div>
         </div>
-        <div className="mt-6 flex flex-wrap gap-2 sm:mt-8 sm:gap-3">
-          <Link to="/logbook" className="px-4 py-2 rounded-xl bg-gold-500 text-slate-900 text-xs font-bold hover:bg-gold-400 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat Logbook</Link>
-          <Link to="/galeri" className="px-4 py-2 rounded-xl bg-white/10 text-white text-xs font-bold hover:bg-white/20 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat Galeri</Link>
-          <Link to="/absen" className="px-4 py-2 rounded-xl bg-white/10 text-white text-xs font-bold hover:bg-white/20 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat Daftar Hadir</Link>
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 lg:grid-cols-1 lg:gap-4">
+          {loading
+            ? [0, 1, 2].map(function (i) { return <SkeletonStatCard key={i} /> })
+            : [
+                <StatCard key="mahasiswa" label="Total Mahasiswa Magang" labelRapat="Mahasiswa" value={stats.mahasiswa} sub="Mahasiswa Terdaftar dalam Tim" rapat />,
+                <StatCard key="logbook" label="Total Logbook Publik" labelRapat="Logbook" value={stats.logbook} sub="Catatan Kegiatan Harian" rapat />,
+                <StatCard key="galeri" label="Total Media Galeri" labelRapat="Media" value={stats.galeri} sub="Foto dan Video Dokumentasi" rapat />
+              ]}
         </div>
       </section>
 
       <section className="mt-10">
-<h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Profil Tim Magang</h2>
-<p className="mt-2 max-w-3xl text-sm text-slate-600 sm:text-base">Seluruh mahasiswa magang beserta kontribusi logbook, media galeri, dan catatan kehadiran masing-masing.</p>
-<div className="grid-pusat-rapat mt-6">
-{loading
-? [0, 1, 2].map(function (i) { return <div key={i} className="kolom-kartu-rapat"><SkeletonPersonCard /></div> })
-: people.map(function (p) {
-const totalLog = logs.filter(function (x) { return x.mahasiswa_id === p.id }).length
-const totalGal = galRows.filter(function (x) { return x.mahasiswa_id === p.id }).length
-const totalHadir = hadirRows.filter(function (x) { return x.mahasiswa_id === p.id }).length
-return (
-<div key={p.id} className="kolom-kartu-rapat">
-<div className="card-hover rounded-3xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col h-full">
-<div className="flex items-center gap-4">
-<Avatar src={p.foto_profil || null} nama={p.nama} size="lg" />
-<div className="min-w-0 flex-1">
-<p className="truncate text-lg font-black text-slate-900">{p.nama}</p>
-<p className="truncate text-xs text-slate-600">NIM {p.nim}</p>
-{p.prodi ? <span className="mt-1.5 inline-flex px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold">{p.prodi}</span> : null}
-</div>
-</div>
-<div className="mt-4 grid grid-cols-2 gap-3">
-<div className="rounded-2xl bg-slate-50 p-3">
-<p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">Logbook</p>
-<p className="mt-0.5 text-xl font-black text-bsi-800">{totalLog}</p>
-</div>
-<div className="rounded-2xl bg-slate-50 p-3">
-<p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">Media</p>
-<p className="mt-0.5 text-xl font-black text-bsi-800">{totalGal}</p>
-</div>
-</div>
-<div className="mt-3 pt-3 border-t border-slate-100">
-<p className="text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">Rekap Kehadiran</p>
-<div className="grid grid-cols-3 gap-2">
-<div className="rounded-xl bg-emerald-50 p-2 text-center">
-<p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase">Masuk</p>
-<p className="text-base font-black text-emerald-700 dark:text-emerald-400">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Masuk' }).length}</p>
-</div>
-<div className="rounded-xl bg-amber-50 p-2 text-center">
-<p className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase">Izin</p>
-<p className="text-base font-black text-amber-700 dark:text-amber-400">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Izin' }).length}</p>
-</div>
-<div className="rounded-xl bg-red-50 p-2 text-center">
-<p className="text-[10px] font-bold text-red-600 dark:text-red-400 uppercase">Bolos</p>
-<p className="text-base font-black text-red-600 dark:text-red-400">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Bolos' }).length}</p>
-</div>
-</div>
-</div>
-</div>
- </div>
-)
-})}
-{!loading && !people.length ? <div className="w-full"><EmptyState title="Belum Ada Data Mahasiswa" desc="Profil tim akan tampil setelah mahasiswa terdaftar." /></div> : null}
-</div>
-</section>
-
-      <section className="mt-10">
-        <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Aktivitas yang Sudah Dibagikan</h2>
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-400">Kegiatan terbaru</p>
+            <h2 className="mt-2 text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Logbook Terbaru Tim</h2>
+          </div>
+          <Link to="/logbook" className="text-sm font-semibold text-bsi-800 hover:text-bsi-950">Lihat Semua Logbook</Link>
+        </div>
         <div className="grid-pusat mt-6">
           {loading
             ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
@@ -3664,12 +3978,13 @@ return (
                   </div>
                 )
               })}
-          {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum Ada Logbook Publik" desc="Logbook akan tampil setelah mahasiswa mengatur status siap dilihat." /></div> : null}
+          {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum Ada Logbook Publik" desc="Logbook yang sudah dibagikan akan tampil di sini." /></div> : null}
         </div>
         <div className="mt-8 flex justify-center">
           <Link to="/logbook" className="rounded-xl bg-bsi-800 px-5 py-2.5 text-xs font-bold text-white hover:bg-bsi-900 sm:rounded-2xl sm:px-6 sm:py-3 sm:text-sm">Lihat Semua Logbook</Link>
         </div>
       </section>
+
       <Modal open={!!detail} onClose={function () { setDetail(null) }}>
         {detail ? <LogbookDetail log={detail} /> : null}
       </Modal>
@@ -3732,8 +4047,6 @@ export default function AttendancePage() {
   const totalData = sortedRows.length
   const totalPages = Math.ceil(totalData / PER_PAGE)
   const pageAman = Math.min(page, Math.max(1, totalPages))
-  const mulai = totalData === 0 ? 0 : (pageAman - 1) * PER_PAGE + 1
-  const akhir = Math.min(pageAman * PER_PAGE, totalData)
   const paginatedRows = sortedRows.slice((pageAman - 1) * PER_PAGE, pageAman * PER_PAGE)
 
   const counts = rows.reduce(function (acc, r) {
@@ -3841,105 +4154,6 @@ export default function AttendancePage() {
 }
 ```
 
-## File: src/pages/HomePage.jsx
-```javascript
-import { urutkanTanggal } from '../lib/format.js'
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { supabase } from '../lib/supabase.js'
-import { useAuth } from '../lib/auth.js'
-import { StatCard, EmptyState, Modal } from '../components/ui.jsx'
-import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
-import { SkeletonLogbookCard, SkeletonStatCard } from '../components/Skeleton.jsx'
-
-export default function HomePage() {
-  const { mahasiswa } = useAuth()
-  const [logs, setLogs] = useState([])
-  const [stats, setStats] = useState({ logbook: 0, galeri: 0, mahasiswa: 0 })
-  const [detail, setDetail] = useState(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(function () {
-    async function load() {
-      const l = await supabase
-        .from('logbooks')
-        .select('*, mahasiswa(*), logbook_items(*)')
-        .eq('status', 'publik')
-        .order('tanggal', { ascending: false })
-        .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
-      const g = await supabase.from('galeri').select('id')
-      const p = await supabase.from('mahasiswa').select('id')
-      setLogs(l.data || [])
-      setStats({ logbook: (l.data || []).length, galeri: (g.data || []).length, mahasiswa: (p.data || []).length })
-      setLoading(false)
-    }
-    load()
-  }, [])
-
-  return (
-    <div>
-      <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr] items-stretch">
-        <div className="card-hover relative overflow-hidden rounded-[2rem] bg-bsi-900 text-white p-5 sm:p-8 lg:p-12">
-          <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-gold-500/20 blur-2xl" />
-          <div className="absolute -left-10 bottom-0 h-40 w-40 rounded-full bg-emerald-300/10 blur-2xl" />
-          <div className="relative z-10">
-            <span className="inline-flex px-3 py-1.5 rounded-full bg-white/10 text-[10px] font-semibold uppercase tracking-wide sm:px-4 sm:py-2 sm:text-xs">Magang Bank BSI</span>
-            <h1 className="mt-6 text-2xl sm:text-3xl lg:text-5xl font-black leading-tight max-w-2xl">Logbook, Galeri, dan Daftar Hadir Magang dalam Satu Portal</h1>
-            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-white/80 sm:mt-5 sm:text-base">Portal ini mencatat kegiatan harian, dokumentasi media, dan kehadiran tim magang selama membantu operasional Bank BSI.</p>
-            <div className="mt-6 flex flex-wrap gap-2 sm:mt-8 sm:gap-3">
-              <Link to="/logbook" className="px-4 py-2.5 rounded-xl bg-gold-500 text-slate-900 text-sm font-bold hover:bg-gold-400 sm:px-6 sm:py-3 sm:rounded-2xl sm:text-base">Lihat Logbook</Link>
-              <Link to="/galeri" className="px-4 py-2.5 rounded-xl bg-white/10 text-white text-sm font-bold hover:bg-white/20 sm:px-6 sm:py-3 sm:rounded-2xl sm:text-base">Lihat Galeri</Link>
-              <Link to="/absen" className="px-4 py-2.5 rounded-xl bg-white/10 text-white text-sm font-bold hover:bg-white/20 sm:px-6 sm:py-3 sm:rounded-2xl sm:text-base">Daftar Hadir</Link>
-              {mahasiswa
-                ? <Link to="/dashboard" className="px-4 py-2.5 rounded-xl bg-[#ffffff] text-[#135033] text-sm font-bold hover:bg-[#f1f5f9] sm:px-6 sm:py-3 sm:rounded-2xl sm:text-base">Buka Dashboard</Link>
-                : <Link to="/login" className="px-4 py-2.5 rounded-xl bg-[#ffffff] text-[#135033] text-sm font-bold hover:bg-[#f1f5f9] sm:px-6 sm:py-3 sm:rounded-2xl sm:text-base">Masuk Akun</Link>}
-            </div>
-          </div>
-        </div>
-        <div className="grid grid-cols-3 gap-2 sm:gap-3 lg:grid-cols-1 lg:gap-4">
-          {loading
-            ? [0, 1, 2].map(function (i) { return <SkeletonStatCard key={i} /> })
-            : [
-                <StatCard key="mahasiswa" label="Total Mahasiswa Magang" labelRapat="Mahasiswa" value={stats.mahasiswa} sub="Mahasiswa Terdaftar dalam Tim" rapat />,
-                <StatCard key="logbook" label="Total Logbook Publik" labelRapat="Logbook" value={stats.logbook} sub="Catatan Kegiatan Harian" rapat />,
-                <StatCard key="galeri" label="Total Media Galeri" labelRapat="Media" value={stats.galeri} sub="Foto dan Video Dokumentasi" rapat />
-              ]}
-        </div>
-      </section>
-
-      <section className="mt-10">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-400">Kegiatan terbaru</p>
-            <h2 className="mt-2 text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Logbook Terbaru Tim</h2>
-          </div>
-          <Link to="/logbook" className="text-sm font-semibold text-bsi-800 hover:text-bsi-950">Lihat Semua Logbook</Link>
-        </div>
-        <div className="grid-pusat mt-6">
-          {loading
-            ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
-            : urutkanTanggal(logs, 'terbaru').slice(0, 6).map(function (l) {
-                return (
-                  <div key={l.id} className="kolom-kartu">
-                    <LogbookCard log={l} onDetail={function () { setDetail(l) }} />
-                  </div>
-                )
-              })}
-          {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum Ada Logbook Publik" desc="Logbook yang sudah dibagikan akan tampil di sini." /></div> : null}
-        </div>
-        <div className="mt-8 flex justify-center">
-          <Link to="/logbook" className="rounded-xl bg-bsi-800 px-5 py-2.5 text-xs font-bold text-white hover:bg-bsi-900 sm:rounded-2xl sm:px-6 sm:py-3 sm:text-sm">Lihat Semua Logbook</Link>
-        </div>
-      </section>
-
-      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
-        {detail ? <LogbookDetail log={detail} /> : null}
-      </Modal>
-    </div>
-  )
-}
-```
-
 ## File: src/pages/GalleryPage.jsx
 ```javascript
 import { useEffect, useState } from 'react'
@@ -3992,8 +4206,6 @@ export default function GalleryPage() {
   const totalData = sortedItems.length
   const totalPages = Math.ceil(totalData / PER_PAGE)
   const pageAman = Math.min(page, Math.max(1, totalPages))
-  const mulai = totalData === 0 ? 0 : (pageAman - 1) * PER_PAGE + 1
-  const akhir = Math.min(pageAman * PER_PAGE, totalData)
   const paginatedItems = sortedItems.slice((pageAman - 1) * PER_PAGE, pageAman * PER_PAGE)
 
   return (
@@ -5105,14 +5317,22 @@ export function Modal(props) {
 
 export function AutoTextArea(props) {
   const ref = useRef(null)
-
   useEffect(function () {
     const el = ref.current
     if (!el) return
     el.style.height = 'auto'
     el.style.height = el.scrollHeight + 'px'
   }, [props.value])
-
+  useEffect(function () {
+    const el = ref.current
+    if (!el || typeof ResizeObserver === 'undefined') return undefined
+    const ro = new ResizeObserver(function () {
+      el.style.height = 'auto'
+      el.style.height = el.scrollHeight + 'px'
+    })
+    ro.observe(el.parentElement || el)
+    return function () { ro.disconnect() }
+  }, [])
   return (
     <textarea
       ref={ref}
@@ -5121,6 +5341,8 @@ export function AutoTextArea(props) {
       value={props.value}
       placeholder={props.placeholder}
       onChange={props.onChange}
+      onFocus={props.onFocus}
+      onBlur={props.onBlur}
       disabled={props.disabled || false}
     />
   )
@@ -5656,7 +5878,7 @@ export function SelubungPanel(props) {
 ## File: src/pages/DashboardPage.jsx
 ```javascript
 import { SkeletonDashboard } from '../components/Skeleton.jsx'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../lib/auth.js'
@@ -5668,7 +5890,7 @@ import { uploadFotoProfil, updateFotoProfilMahasiswa, hapusFotoProfil } from '..
 import { urlPratinjau } from '../lib/konversi.js'
 import { todayInput, detectMediaType, matchesDateFilters, urutkanTanggal } from '../lib/format.js'
 import { KATEGORI, UNIT, GALERI_KEGIATAN } from '../lib/constants.js'
-import { Avatar, LabelProses, EmptyState, Modal, ConfirmModal, inputCls, labelCls, btnPrimary, btnSmall, AutoTextArea, Pagination, useToast } from '../components/ui.jsx'
+import { Avatar, LabelProses, EmptyState, Modal, ConfirmModal, inputCls, labelCls, btnPrimary, AutoTextArea, Pagination, useToast } from '../components/ui.jsx'
 import { LogbookCard, LogbookDetail, GalleryCard, GalleryDetail, AttendanceCard, AttendanceDetail } from '../components/cards.jsx'
 import { CustomSelect, CustomDateInput, FileInput, ToggleModeMedia, SumberVideo } from '../components/controls.jsx'
 import { SizedIcon, ICONS } from '../components/icons.jsx'
@@ -5746,10 +5968,44 @@ export default function DashboardPage() {
   const [galYtLink, setGalYtLink] = useState('')
   const [galDriveLink, setGalDriveLink] = useState('')
   const [galOldYt, setGalOldYt] = useState(null)
-  const [itemMode, setItemMode] = useState({})
-  const [galYtTitle, setGalYtTitle] = useState('')
   const [pendingDelete, setPendingDelete] = useState(null)
   const [konfirmasiEdit, setKonfirmasiEdit] = useState(null)
+   const [refleksiFokus, setRefleksiFokus] = useState('')
+   const refleksiRefs = useRef({})
+   const refleksiPrevRects = useRef(null)
+   function rekamRefleksi() {
+     const map = {}
+     ;['kendala', 'solusi', 'pembelajaran'].forEach(function (k) {
+       const el = refleksiRefs.current[k]
+       if (el) map[k] = el.getBoundingClientRect()
+     })
+     refleksiPrevRects.current = map
+   }
+   const refleksiExpand = {
+     kendala: refleksiFokus === 'kendala' || form.kendala.trim() !== '',
+     solusi: refleksiFokus === 'solusi' || form.solusi.trim() !== '',
+     pembelajaran: refleksiFokus === 'pembelajaran' || form.pembelajaran.trim() !== ''
+   }
+   const refleksiExpandKey = (refleksiExpand.kendala ? 'k' : '-') + (refleksiExpand.solusi ? 's' : '-') + (refleksiExpand.pembelajaran ? 'p' : '-')
+   useLayoutEffect(function () {
+     const prev = refleksiPrevRects.current
+     refleksiPrevRects.current = null
+     if (!prev) return
+     ;['kendala', 'solusi', 'pembelajaran'].forEach(function (k) {
+       const el = refleksiRefs.current[k]
+       const old = prev[k]
+       if (!el || !old || typeof el.animate !== 'function') return
+       const now = el.getBoundingClientRect()
+       const dx = old.left - now.left
+       const dy = old.top - now.top
+       const dw = old.width - now.width
+       if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(dw) < 1) return
+       el.animate([
+         { transform: 'translate(' + dx + 'px,' + dy + 'px)', width: old.width + 'px' },
+         { transform: 'translate(0,0)', width: now.width + 'px' }
+       ], { duration: 450, easing: 'cubic-bezier(0.4, 0, 0.2, 1)' })
+     })
+   }, [refleksiExpandKey])
   const [logFilter, setLogFilter] = useState(LOG_INITIAL)
   const [logFilterOpen, setLogFilterOpen] = useState(false)
   const [galFilter, setGalFilter] = useState(GAL_INITIAL)
@@ -5873,8 +6129,6 @@ export default function DashboardPage() {
     return <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:py-8"><SkeletonDashboard /></div>
   }
 
-  function getItemMode(i) { return itemMode[i] || 'foto' }
-  function setItemModeAt(i, mode) { setItemMode(function (p) { const n = Object.assign({}, p); n[i] = mode; return n }) }
   
   function patchItem(i, patch) {
     setItems(function (prev) {
@@ -6519,9 +6773,21 @@ export default function DashboardPage() {
                 <button type="button" onClick={function () { setItems(function (p) { return p.concat([newItem()]) }); toast.sukses('Kegiatan ' + (items.length + 1) + ' ditambahkan') }} className={'flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-bsi-500 hover:bg-slate-100 hover:text-bsi-900'}>+ Tambah Kegiatan</button>
               </div>
               <div className="grid gap-4 md:grid-cols-3">
-                <div><label className={labelCls}>Kendala</label><AutoTextArea className={inputCls} value={form.kendala} onChange={function (e) { setForm(Object.assign({}, form, { kendala: e.target.value })) }} aria-label="Kendala" placeholder="Opsional" /></div>
-                <div><label className={labelCls}>Solusi</label><AutoTextArea className={inputCls} value={form.solusi} onChange={function (e) { setForm(Object.assign({}, form, { solusi: e.target.value })) }} aria-label="Solusi" placeholder="Opsional" /></div>
-                <div><label className={labelCls}>Pembelajaran</label><AutoTextArea className={inputCls} value={form.pembelajaran} onChange={function (e) { setForm(Object.assign({}, form, { pembelajaran: e.target.value })) }} aria-label="Pembelajaran" placeholder="Opsional" /></div>
+              <div ref={function (el) { refleksiRefs.current.kendala = el }} className={'min-w-0 ' + (refleksiExpand.kendala ? 'md:col-span-3 md:order-first' : '')}>
+                <label className={labelCls}>Kendala</label>
+                <AutoTextArea className={inputCls} value={form.kendala} onChange={function (e) { setForm(Object.assign({}, form, { kendala: e.target.value })) }} aria-label="Kendala" placeholder="Opsional"
+                  onFocus={function () { rekamRefleksi(); setRefleksiFokus('kendala') }} onBlur={function () { rekamRefleksi(); setRefleksiFokus('') }} />
+              </div>
+              <div ref={function (el) { refleksiRefs.current.solusi = el }} className={'min-w-0 ' + (refleksiExpand.solusi ? 'md:col-span-3 md:order-first' : '')}>
+                <label className={labelCls}>Solusi</label>
+                <AutoTextArea className={inputCls} value={form.solusi} onChange={function (e) { setForm(Object.assign({}, form, { solusi: e.target.value })) }} aria-label="Solusi" placeholder="Opsional"
+                  onFocus={function () { rekamRefleksi(); setRefleksiFokus('solusi') }} onBlur={function () { rekamRefleksi(); setRefleksiFokus('') }} />
+              </div>
+              <div ref={function (el) { refleksiRefs.current.pembelajaran = el }} className={'min-w-0 ' + (refleksiExpand.pembelajaran ? 'md:col-span-3 md:order-first' : '')}>
+                <label className={labelCls}>Pembelajaran</label>
+                <AutoTextArea className={inputCls} value={form.pembelajaran} onChange={function (e) { setForm(Object.assign({}, form, { pembelajaran: e.target.value })) }} aria-label="Pembelajaran" placeholder="Opsional"
+                  onFocus={function () { rekamRefleksi(); setRefleksiFokus('pembelajaran') }} onBlur={function () { rekamRefleksi(); setRefleksiFokus('') }} />
+              </div>
               </div>
               <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks={infoProses || 'Menyimpan'} /> : (editLogId ? 'Simpan Perubahan' : 'Simpan Logbook')}</button>
             </form>
