@@ -177,15 +177,15 @@ export default function DashboardPage() {
      })
    }
    function cobaCancelEditLog() {
-     if (isLogbookDirty()) { bukaModalUnsaved('Buang Perubahan Logbook?', 'Perubahan pada logbook akan hilang dan tidak bisa dikembalikan. Yakin ingin membatalkan?', 'Ya, Buang', cancelEditLog); return }
+     if (isLogbookDirty()) { bukaModalUnsaved('Buang Perubahan Logbook?', 'Perubahan pada logbook akan hilang dan tidak bisa dikembalikan. Yakin ingin membatalkan?', 'Buang', cancelEditLog); return }
      cancelEditLog()
    }
    function cobaCancelEditGal() {
-     if (isGaleriDirty()) { bukaModalUnsaved('Buang Perubahan Galeri?', 'Perubahan pada media galeri akan hilang dan tidak bisa dikembalikan. Yakin ingin membatalkan?', 'Ya, Buang', cancelEditGal); return }
+     if (isGaleriDirty()) { bukaModalUnsaved('Buang Perubahan Galeri?', 'Perubahan pada media galeri akan hilang dan tidak bisa dikembalikan. Yakin ingin membatalkan?', 'Buang', cancelEditGal); return }
      cancelEditGal()
    }
    function cobaCancelEditHadir() {
-     if (isHadirDirty()) { bukaModalUnsaved('Buang Perubahan Kehadiran?', 'Perubahan pada daftar hadir akan hilang dan tidak bisa dikembalikan. Yakin ingin membatalkan?', 'Ya, Buang', cancelEditHadir); return }
+     if (isHadirDirty()) { bukaModalUnsaved('Buang Perubahan Kehadiran?', 'Perubahan pada daftar hadir akan hilang dan tidak bisa dikembalikan. Yakin ingin membatalkan?', 'Buang', cancelEditHadir); return }
      cancelEditHadir()
    }
    useEffect(function () {
@@ -203,7 +203,7 @@ export default function DashboardPage() {
        if (!href || href.indexOf('http') === 0 || href.indexOf('#') === 0 || a.target === '_blank') return
        e.preventDefault()
        e.mbsiDicegah = true
-       bukaModalUnsaved('Pindah Halaman?', 'Kamu punya perubahan yang belum disimpan. Yakin ingin meninggalkan halaman ini? Semua perubahan akan hilang.', 'Ya, Tinggalkan', function () { navigate(href); ulangAnimHalaman() })
+       bukaModalUnsaved('Pindah Halaman?', 'Kamu punya perubahan yang belum disimpan. Yakin ingin meninggalkan halaman ini? Semua perubahan akan hilang.', 'Tinggalkan', function () { navigate(href); ulangAnimHalaman() })
      }
      window.addEventListener('beforeunload', onBeforeUnload)
      document.addEventListener('click', onClickLink, true)
@@ -679,7 +679,7 @@ export default function DashboardPage() {
      function gantiTab(tabBaru) {
      if (tabBaru === tab) return
      if (isAnyFormDirty()) {
-       bukaModalUnsaved('Pindah Tab?', 'Kamu punya perubahan yang belum disimpan. Yakin ingin pindah tab? Semua perubahan akan hilang.', 'Ya, Pindah', function () {
+       bukaModalUnsaved('Pindah Tab?', 'Kamu punya perubahan yang belum disimpan. Yakin ingin pindah tab? Semua perubahan akan hilang.', 'Pindah', function () {
          cancelEditLog()
          cancelEditGal()
          cancelEditHadir()
@@ -1057,7 +1057,7 @@ export default function DashboardPage() {
           open={!!konfirmasiEdit}
           title={konfirmasiEdit ? konfirmasiEdit.judul : ''}
           message={konfirmasiEdit ? konfirmasiEdit.pesan : ''}
-          confirmLabel="Ya, Ganti"
+          confirmLabel="Ganti"
           icon="trash"
           tone="bahaya"
           onCancel={function () { setKonfirmasiEdit(null) }}
@@ -1067,7 +1067,7 @@ export default function DashboardPage() {
          open={!!unsavedModal}
          title={unsavedModal ? unsavedModal.title : ''}
          message={unsavedModal ? unsavedModal.message : ''}
-         confirmLabel={unsavedModal ? unsavedModal.confirmLabel : 'Ya'}
+         confirmLabel={unsavedModal ? unsavedModal.confirmLabel : 'Konfirmasi'}
          icon="trash"
          tone="bahaya"
          onCancel={unsavedModal ? unsavedModal.onCancel : function () { setUnsavedModal(null) }}

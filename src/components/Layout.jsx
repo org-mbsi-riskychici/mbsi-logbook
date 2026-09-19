@@ -115,7 +115,7 @@ export default function Layout() {
   open={konfirmasiKeluar}
   title="Keluar dari Akun?"
   message="Sesi login kamu akan berakhir dan area intern tidak bisa diakses sampai kamu masuk lagi. Data yang sudah disimpan tetap aman."
-  confirmLabel="Ya, Keluar"
+  confirmLabel="Keluar"
   icon="user"
   tone="netral"
   onCancel={function () { setKonfirmasiKeluar(false) }}

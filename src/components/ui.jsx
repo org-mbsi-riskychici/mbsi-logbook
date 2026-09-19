@@ -163,7 +163,7 @@ return (
 Batal
 </button>
 <button type="button" onClick={p.onConfirm} className={'rounded-2xl px-4 py-3 ' + 'text-sm font-bold text-white ' + ((p.tone || 'bahaya') === 'bahaya' ? 'bg-red-500 hover:bg-red-600' : 'bg-bsi-800 hover:bg-bsi-900')}>
-{p.confirmLabel || 'Ya, Hapus'}
+{p.confirmLabel || 'Hapus'}
 </button>
 </div>
 </div>

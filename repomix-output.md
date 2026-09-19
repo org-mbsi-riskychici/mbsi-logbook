@@ -1131,295 +1131,6 @@ export function urutkanTanggal(list, mode) {
 }
 ```
 
-## File: src/components/PemutarVideo.jsx
-```javascript
-import { useEffect, useRef, useState } from 'react'
-
-let janjiApi = null
-function muatApiYouTube() {
-  if (janjiApi) return janjiApi
-  janjiApi = new Promise(function (resolve) {
-    if (window.YT && window.YT.Player) { resolve(window.YT); return }
-    const lama = window.onYouTubeIframeAPIReady
-    window.onYouTubeIframeAPIReady = function () {
-      if (lama) lama()
-      resolve(window.YT)
-    }
-    const tag = document.createElement('script')
-    tag.src = 'https://www.youtube.com/iframe_api'
-    tag.async = true
-    document.head.appendChild(tag)
-  })
-  return janjiApi
-}
-
-function formatWaktu(detik) {
-  const d = isFinite(detik) && detik > 0 ? detik : 0
-  const m = Math.floor(d / 60)
-  const s = Math.floor(d % 60)
-  return m + ':' + (s < 10 ? '0' : '') + s
-}
-
-function paksaKualitas(p) {
-  try { if (p && typeof p.setPlaybackQualityRange === 'function') p.setPlaybackQualityRange('720', '1080') } catch (e) {}
-}
-function matikanSubtitel(p) {
-  try { if (p && typeof p.unloadModule === 'function') p.unloadModule('captions') } catch (e) {}
-  try { if (p && typeof p.setOption === 'function') p.setOption('captions', 'track', {}) } catch (e) {}
-}
-
-function IkonPlay({ className }) { return <svg viewBox="0 0 24 24" fill="currentColor" className={className || 'h-5 w-5'}><path d="M8 5v14l11-7z" /></svg> }
-function IkonPause({ className }) { return <svg viewBox="0 0 24 24" fill="currentColor" className={className || 'h-5 w-5'}><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg> }
-function IkonSuara() {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
-      <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
-    </svg>
-  )
-}
-function IkonBisu() {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
-      <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
-    </svg>
-  )
-}
-function IkonPenuh() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg> }
-function IkonKecil() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" /></svg> }
-function IkonUlang() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></svg> }
-
-export default function PemutarVideo(props) {
-  const youtubeId = props.youtubeId
-  const [dimulai, setDimulai] = useState(false)
-  const [memutar, setMemutar] = useState(false)
-  const [buffer, setBuffer] = useState(false)
-  const [selesai, setSelesai] = useState(false)
-  const [gagal, setGagal] = useState(false)
-  const [waktu, setWaktu] = useState(0)
-  const [durasi, setDurasi] = useState(0)
-  const [volume, setVolume] = useState(100)
-  const [bisu, setBisu] = useState(false)
-  const [penuh, setPenuh] = useState(false)
-  const [sembunyi, setSembunyi] = useState(false)
-  const [thumbPakaiHq, setThumbPakaiHq] = useState(false)
-  const kotakRef = useRef(null)
-  const wadahRef = useRef(null)
-  const playerRef = useRef(null)
-  const timerSembunyi = useRef(null)
-
-  useEffect(function () {
-    const iv = setInterval(function () {
-      const p = playerRef.current
-      if (p && p.getCurrentTime) {
-        setWaktu(p.getCurrentTime() || 0)
-        const d = p.getDuration ? p.getDuration() : 0
-        if (d) setDurasi(d)
-      }
-    }, 250)
-    return function () { clearInterval(iv) }
-  }, [])
-
-  useEffect(function () {
-    function saatPenuh() { setPenuh(Boolean(document.fullscreenElement)) }
-    document.addEventListener('fullscreenchange', saatPenuh)
-    return function () {
-      document.removeEventListener('fullscreenchange', saatPenuh)
-      if (timerSembunyi.current) clearTimeout(timerSembunyi.current)
-      if (playerRef.current && playerRef.current.destroy) {
-        try { playerRef.current.destroy() } catch (e) {}
-        playerRef.current = null
-      }
-    }
-  }, [])
-
-  function sedangMain() {
-    const p = playerRef.current
-    return Boolean(p && p.getPlayerState && window.YT && p.getPlayerState() === window.YT.PlayerState.PLAYING)
-  }
-
-  function resetTimerSembunyi() {
-    if (!dimulai) return
-    if (timerSembunyi.current) clearTimeout(timerSembunyi.current)
-    setSembunyi(false)
-    if (sedangMain()) {
-      timerSembunyi.current = setTimeout(function () { setSembunyi(true) }, 2500)
-    }
-  }
-
-  async function mulai() {
-    setDimulai(true)
-    setGagal(false)
-    try {
-      const YT = await muatApiYouTube()
-      if (!wadahRef.current) return
-      playerRef.current = new YT.Player(wadahRef.current, {
-        videoId: youtubeId,
-        playerVars: {
-          autoplay: 1, controls: 0, modestbranding: 1, rel: 0, fs: 0,
-          disablekb: 1, iv_load_policy: 3, playsinline: 1, autohide: 1,
-          showinfo: 0, cc_load_policy: 0, origin: window.location.origin
-        },
-        events: {
-          onReady: function (e) {
-            setDurasi(e.target.getDuration() || 0)
-            paksaKualitas(e.target)
-            matikanSubtitel(e.target)
-            e.target.playVideo()
-          },
-          onStateChange: function (e) {
-            const S = window.YT.PlayerState
-            if (e.data === S.PLAYING) {
-              setMemutar(true); setBuffer(false); setSelesai(false)
-              paksaKualitas(e.target); matikanSubtitel(e.target)
-              resetTimerSembunyi()
-            } else if (e.data === S.PAUSED) {
-              setMemutar(false); setBuffer(false); setSembunyi(false)
-            } else if (e.data === S.BUFFERING) {
-              setBuffer(true)
-            } else if (e.data === S.ENDED) {
-              setMemutar(false); setSelesai(true); setSembunyi(false)
-            }
-          },
-          onError: function () { setGagal(true); setBuffer(false); setMemutar(false) }
-        }
-      })
-    } catch (e) {
-      setGagal(true)
-    }
-  }
-
-  function jungkir() {
-    const p = playerRef.current
-    if (!p) return
-    if (sedangMain()) p.pauseVideo()
-    else p.playVideo()
-  }
-
-  function geser(ev) {
-    const p = playerRef.current
-    if (!p || !durasi) return
-    const nilai = Number(ev.target.value)
-    p.seekTo((nilai / 100) * durasi, true)
-    setWaktu((nilai / 100) * durasi)
-  }
-
-  function aturVolume(ev) {
-    const p = playerRef.current
-    const nilai = Number(ev.target.value)
-    setVolume(nilai)
-    if (!p) return
-    p.setVolume(nilai)
-    if (nilai === 0) { p.mute(); setBisu(true) }
-    else if (bisu) { p.unMute(); setBisu(false) }
-  }
-
-  function aturBisu() {
-    const p = playerRef.current
-    if (!p) return
-    if (bisu) { p.unMute(); p.setVolume(volume || 100); setBisu(false) }
-    else { p.mute(); setBisu(true) }
-  }
-
-  function aturPenuh() {
-    const el = kotakRef.current
-    if (!el) return
-    if (document.fullscreenElement) document.exitFullscreen()
-    else if (el.requestFullscreen) el.requestFullscreen()
-  }
-
-  const thumb = thumbPakaiHq
-    ? 'https://i.ytimg.com/vi/' + youtubeId + '/hqdefault.jpg'
-    : 'https://img.youtube.com/vi/' + youtubeId + '/maxresdefault.jpg'
-  const persen = durasi ? Math.min(100, (waktu / durasi) * 100) : 0
-  const kontrolSembunyi = dimulai && !gagal && sembunyi
-
-  return (
-    <div
-      ref={kotakRef}
-      className={'pemutar-referensi group relative overflow-hidden rounded-2xl bg-black shadow-xl ' + (props.className || 'aspect-video w-full')}
-      style={{ cursor: kontrolSembunyi ? 'none' : 'default' }}
-      onMouseMove={resetTimerSembunyi}
-      onMouseLeave={function () { if (sedangMain()) { if (timerSembunyi.current) clearTimeout(timerSembunyi.current); setSembunyi(true) } }}
-    >
-      {/* Wadah player: setelah diisi YouTube, iframe diposisikan CSS dengan margin crop 70px */}
-      <div ref={wadahRef} className="h-full w-full" />
-
-      {/* Perisai penangkap klik */}
-      {dimulai && !selesai && !gagal ? (
-        <button type="button" aria-label="Putar atau Jeda Video" onClick={jungkir}
-          className="absolute inset-0 z-10 h-full w-full bg-transparent" style={{ cursor: kontrolSembunyi ? 'none' : 'default' }} />
-      ) : null}
-
-      {/* Poster awal dengan tombol putar minimalis */}
-      {!dimulai ? (
-        <div className="absolute inset-0 z-20">
-          <img src={thumb} alt={props.title || 'Pratinjau video'} onError={function () { setThumbPakaiHq(true) }}
-            className="absolute inset-0 h-full w-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
-          <div className="absolute inset-0 grid place-items-center">
-            <button type="button" onClick={mulai} title="Putar Video"
-              className="grid h-12 w-12 place-items-center rounded-full border border-white/20 bg-black/50 text-white backdrop-blur-md transition hover:scale-110 hover:border-bsi-500 hover:bg-bsi-600">
-              <IkonPlay className="ml-0.5 h-5 w-5" />
-            </button>
-          </div>
-          {props.title ? <p className="absolute bottom-3 left-4 right-4 truncate text-sm font-semibold text-white drop-shadow-md">{props.title}</p> : null}
-        </div>
-      ) : null}
-
-      {/* Layar akhir dengan putar ulang */}
-      {selesai ? (
-        <div className="absolute inset-0 z-20 grid place-items-center bg-black/85 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-3">
-            <button type="button" title="Putar Ulang"
-              onClick={function () { const p = playerRef.current; if (p) { p.seekTo(0, true); p.playVideo() } setSelesai(false) }}
-              className="grid h-14 w-14 place-items-center rounded-full bg-gold-500 text-slate-900 shadow-lg transition hover:scale-105">
-              <IkonUlang />
-            </button>
-            <p className="text-xs font-semibold text-slate-200">Putar Ulang</p>
-          </div>
-        </div>
-      ) : null}
-
-      {/* Layar gagal */}
-      {gagal ? (
-        <div className="absolute inset-0 z-30 grid place-items-center bg-black/90">
-          <div className="flex flex-col items-center gap-2 px-6 text-center">
-            <p className="text-sm font-semibold text-slate-200">Video Tidak Dapat Dimuat</p>
-            <p className="text-xs text-slate-300">Periksa koneksi atau ketersediaan video di saluran.</p>
-          </div>
-        </div>
-      ) : null}
-
-      {/* Panel kontrol overlay di atas video */}
-      {dimulai && !gagal ? (
-        <div className={'absolute inset-x-0 bottom-0 z-30 flex items-center gap-2 sm:gap-3 bg-gradient-to-t from-black/90 via-black/60 to-transparent px-3 sm:px-4 pb-3 pt-10 transition-opacity duration-300 ' + (kontrolSembunyi ? 'pointer-events-none opacity-0' : 'opacity-100')}>
-          <button type="button" onClick={jungkir} title={memutar ? 'Jeda' : 'Putar'}
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-bsi-700 text-white transition hover:bg-bsi-600">
-            {memutar ? <IkonPause className="h-4 w-4" /> : <IkonPlay className="ml-0.5 h-4 w-4" />}
-          </button>
-          <input type="range" min="0" max="100" step="0.1" value={persen} onChange={geser} title="Geser Durasi"
-            className="pemutar-progress h-1.5 w-full cursor-pointer appearance-none rounded-full outline-none"
-            style={{ background: 'linear-gradient(to right, #166534 0%, #166534 ' + persen + '%, rgba(255,255,255,0.25) ' + persen + '%, rgba(255,255,255,0.25) 100%)' }} />
-          <span className="min-w-[64px] sm:min-w-[84px] shrink-0 text-center text-[10px] sm:text-[11px] font-semibold tabular-nums text-slate-200">{formatWaktu(waktu)} / {formatWaktu(durasi)}</span>
-          <button type="button" onClick={aturBisu} title={bisu ? 'Nyalakan Suara' : 'Bisukan'}
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/10 text-white transition hover:bg-white/20">
-            {bisu ? <IkonBisu /> : <IkonSuara />}
-          </button>
-          <input type="range" min="0" max="100" value={bisu ? 0 : volume} onChange={aturVolume} title="Volume"
-            className="pemutar-volume hidden sm:block h-1 w-16 shrink-0 cursor-pointer appearance-none rounded-full outline-none"
-            style={{ background: 'linear-gradient(to right, #eab308 0%, #eab308 ' + (bisu ? 0 : volume) + '%, rgba(255,255,255,0.25) ' + (bisu ? 0 : volume) + '%, rgba(255,255,255,0.25) 100%)' }} />
-          {buffer ? <span className="inline-block h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-gold-500 border-t-transparent" /> : null}
-          <button type="button" onClick={aturPenuh} title={penuh ? 'Keluar Layar Penuh' : 'Layar Penuh'}
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/10 text-white transition hover:bg-white/20">
-            {penuh ? <IkonKecil /> : <IkonPenuh />}
-          </button>
-        </div>
-      ) : null}
-    </div>
-  )
-}
-```
-
 ## File: src/components/Skeleton.jsx
 ```javascript
 export function SkeletonLogbookCard() {
@@ -1955,400 +1666,292 @@ export async function deleteMedia(key) {
 }
 ```
 
-## File: src/components/controls.jsx
+## File: src/components/PemutarVideo.jsx
 ```javascript
-import { SelubungPanel } from './ui.jsx'
 import { useEffect, useRef, useState } from 'react'
-import { ICONS } from './icons.jsx'
 
-const BULAN_NAMA = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
-const BULAN_PENDEK = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
-const HARI_NAMA = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
-
-const defaultBtn = 'flex w-full items-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-bsi-500'
-
-function pad(n) {
-  return (n < 10 ? '0' : '') + n
-}
-
-function parseValue(value, mode) {
-  if (!value) return null
-  const p = String(value).split('-')
-  if (mode === 'month') {
-    if (p.length < 2) return null
-    const y = parseInt(p[0], 10)
-    const m = parseInt(p[1], 10) - 1
-    if (isNaN(y) || isNaN(m) || m < 0 || m > 11) return null
-    return { y: y, m: m }
-  }
-  if (p.length < 3) return null
-  const y = parseInt(p[0], 10)
-  const m = parseInt(p[1], 10) - 1
-  const d = parseInt(p[2], 10)
-  if (isNaN(y) || isNaN(m) || isNaN(d)) return null
-  return { y: y, m: m, d: d }
-}
-
-function useOutside(ref, open, setOpen) {
-  useEffect(function () {
-    if (!open) return undefined
-    function handler(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+let janjiApi = null
+function muatApiYouTube() {
+  if (janjiApi) return janjiApi
+  janjiApi = new Promise(function (resolve) {
+    if (window.YT && window.YT.Player) { resolve(window.YT); return }
+    const lama = window.onYouTubeIframeAPIReady
+    window.onYouTubeIframeAPIReady = function () {
+      if (lama) lama()
+      resolve(window.YT)
     }
-    document.addEventListener('mousedown', handler)
-    return function () { document.removeEventListener('mousedown', handler) }
-  }, [open])
-}
-
-export function CustomSelect(props) {
-  const [open, setOpen] = useState(false)
-  const boxRef = useRef(null)
-  useOutside(boxRef, open, setOpen)
-  const options = props.options || []
-  const current = options.find(function (o) { return o.value === props.value }) || null
-
-  return (
-    <div ref={boxRef} className={'relative ' + (props.className || '')}>
-      <button
-        type="button"
-        onClick={function () { setOpen(function (o) { return !o }) }}
-        className={(props.buttonCls || defaultBtn) + ' text-left'}
-      >
-        {props.icon ? <span className="shrink-0 text-slate-600">{props.icon}</span> : null}
-        <span className={'flex-1 truncate ' + (current ? 'text-slate-800' : 'text-slate-600')}>
-          {current ? current.label : (props.placeholder || 'Pilih')}
-        </span>
-        <span className={'shrink-0 text-slate-600 transition-transform duration-200 ' + (open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
-      </button>
-      <SelubungPanel open={open}>
-<div className="anim-modal absolute z-30 mt-2 max-h-64 w-full overflow-y-auto rounded-2xl border border-slate-200 bg-white py-1 shadow-xl">
-          {options.map(function (o) {
-            const active = o.value === props.value
-            return (
-              <button
-                type="button"
-                key={String(o.value)}
-                onClick={function () { props.onChange(o.value); setOpen(false) }}
-                className={'flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left text-sm ' + (active ? 'bg-bsi-800 text-white' : 'text-slate-700 hover:bg-slate-100')}
-              >
-                <span className="truncate">{o.label}</span>
-                {active ? <span className="shrink-0">{ICONS.check}</span> : null}
-              </button>
-            )
-          })}
-        </div>
-</SelubungPanel>
-    </div>
-  )
-}
-
-export function CustomDateInput(props) {
-  const mode = props.mode || 'date'
-  const [open, setOpen] = useState(false)
-  const [view, setView] = useState(function () {
-    const p = parseValue(props.value, mode)
-    const t = new Date()
-    return p ? { y: p.y, m: p.m } : { y: t.getFullYear(), m: t.getMonth() }
+    const tag = document.createElement('script')
+    tag.src = 'https://www.youtube.com/iframe_api'
+    tag.async = true
+    document.head.appendChild(tag)
   })
-  const boxRef = useRef(null)
-  useOutside(boxRef, open, setOpen)
-
-  const sel = parseValue(props.value, mode)
-  const today = new Date()
-
-  function toggle() {
-    if (!open) {
-      const p = parseValue(props.value, mode)
-      if (p) setView({ y: p.y, m: p.m })
-    }
-    setOpen(function (o) { return !o })
-  }
-
-  function shift(delta) {
-    setView(function (v) {
-      if (mode === 'month') return { y: v.y + delta, m: v.m }
-      let m = v.m + delta
-      let y = v.y
-      if (m < 0) { m = 11; y -= 1 }
-      if (m > 11) { m = 0; y += 1 }
-      return { y: y, m: m }
-    })
-  }
-
-  function pickDay(d) {
-    props.onChange(view.y + '-' + pad(view.m + 1) + '-' + pad(d))
-    setOpen(false)
-  }
-
-  function pickMonth(m) {
-    props.onChange(view.y + '-' + pad(m + 1))
-    setOpen(false)
-  }
-
-  function pickToday() {
-    const t = new Date()
-    if (mode === 'month') props.onChange(t.getFullYear() + '-' + pad(t.getMonth() + 1))
-    else props.onChange(t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate()))
-    setOpen(false)
-  }
-
-  const label = sel
-    ? (mode === 'month' ? BULAN_NAMA[sel.m] + ' ' + sel.y : sel.d + ' ' + BULAN_PENDEK[sel.m] + ' ' + sel.y)
-    : ''
-
-  const firstDay = new Date(view.y, view.m, 1).getDay()
-  const daysCount = new Date(view.y, view.m + 1, 0).getDate()
-  const cells = []
-  for (let i = 0; i < firstDay; i++) cells.push(null)
-  for (let d = 1; d <= daysCount; d++) cells.push(d)
-
-  return (
-    <div ref={boxRef} className={'relative ' + (props.className || '')}>
-      <button type="button" onClick={toggle} className={(props.buttonCls || defaultBtn) + ' text-left'}>
-        <span className="shrink-0 text-slate-600">{ICONS.calendar}</span>
-        <span className={'flex-1 truncate ' + (props.value ? 'text-slate-800' : 'text-slate-600')}>
-          {label || (mode === 'month' ? 'Pilih Bulan' : 'Pilih Tanggal')}
-        </span>
-        <span className={'shrink-0 text-slate-600 transition-transform duration-200 ' + (open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
-      </button>
-      <SelubungPanel open={open}>
-<div className="anim-modal absolute z-30 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
-          <div className="flex items-center justify-between">
-            <button type="button" onClick={function () { shift(-1) }} className="grid h-8 w-8 place-items-center rounded-lg text-slate-600 hover:bg-slate-100">&#8249;</button>
-            <p className="text-sm font-bold text-slate-800">
-              {mode === 'month' ? String(view.y) : BULAN_NAMA[view.m] + ' ' + view.y}
-            </p>
-            <button type="button" onClick={function () { shift(1) }} className="grid h-8 w-8 place-items-center rounded-lg text-slate-600 hover:bg-slate-100">&#8250;</button>
-          </div>
-
-          {mode === 'date' ? (
-            <div className="mt-3 grid grid-cols-7 gap-1 text-center">
-              {HARI_NAMA.map(function (h) {
-                return <span key={h} className="py-1 text-[11px] font-semibold text-slate-600">{h}</span>
-              })}
-              {cells.map(function (d, i) {
-                if (d === null) return <span key={'kosong' + i} />
-                const isSel = sel && sel.y === view.y && sel.m === view.m && sel.d === d
-                const isToday = today.getFullYear() === view.y && today.getMonth() === view.m && today.getDate() === d
-                return (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={function () { pickDay(d) }}
-                    className={'mx-auto grid h-8 w-8 place-items-center rounded-lg text-sm ' + (isSel ? 'bg-bsi-800 font-semibold text-white' : isToday ? 'font-bold text-bsi-700 ring-1 ring-bsi-500' : 'text-slate-700 hover:bg-slate-100')}
-                  >
-                    {d}
-                  </button>
-                )
-              })}
-            </div>
-          ) : (
-            <div className="mt-3 grid grid-cols-3 gap-2">
-              {BULAN_NAMA.map(function (nama, m) {
-                const isSel = sel && sel.y === view.y && sel.m === m
-                const isNow = today.getFullYear() === view.y && today.getMonth() === m
-                return (
-                  <button
-                    key={nama}
-                    type="button"
-                    onClick={function () { pickMonth(m) }}
-                    className={'rounded-lg px-2 py-2 text-xs font-semibold ' + (isSel ? 'bg-bsi-800 text-white' : isNow ? 'text-bsi-700 ring-1 ring-bsi-500' : 'text-slate-700 hover:bg-slate-100')}
-                  >
-                    {nama}
-                  </button>
-                )
-              })}
-            </div>
-          )}
-
-          <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
-            <button type="button" onClick={function () { props.onChange(''); setOpen(false) }} className="text-sm font-semibold text-slate-600 hover:text-red-600">Hapus</button>
-            <button type="button" onClick={pickToday} className="text-sm font-semibold text-bsi-700 hover:text-bsi-900">Hari Ini</button>
-          </div>
-        </div>
-</SelubungPanel>
-    </div>
-  )
+  return janjiApi
 }
 
-export function FileInput(props) {
-  const inputRef = useRef(null)
-  return (
-    <div className={props.className || ''}>
-      <input
-        ref={inputRef}
-        type="file"
-        accept={props.accept || 'image/*,video/*'}
-        className="hidden"
-        onChange={function (e) {
-          if (props.onChange) props.onChange(e)
-          e.target.value = ''
-        }}
-      />
-      <button
-        type="button"
-        onClick={function () { inputRef.current.click() }}
-        className="flex w-full items-center gap-3 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-4 py-4 text-left transition hover:border-bsi-500 hover:bg-slate-100"
-      >
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-bsi-100 text-bsi-800">{ICONS.image}</span>
-        <span className="min-w-0 flex-1">
-          <span className={'block truncate text-sm font-semibold ' + (props.fileName ? 'text-slate-800' : 'text-slate-600')}>
-            {props.fileName || props.label || 'Klik untuk Pilih Foto atau Video'}
-          </span>
-          <span className="block text-xs text-slate-600">{props.hint || 'Foto JPG, PNG, atau HEIC otomatis dikonversi. Video maks 50 MB.'}</span>
-        </span>
-        {props.fileName ? <span className="shrink-0 text-xs font-semibold text-bsi-700">Ganti</span> : null}
-      </button>
-    </div>
-  )
-}
-export function ToggleModeMedia(props) {
-  const cls = function (aktif) {
-    return 'px-3 py-1.5 rounded-xl text-xs font-bold ' + (aktif ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700')
-  }
-  return (
-    <div className={props.className || 'flex gap-2'}>
-      <button type="button" onClick={function () { props.onChange('foto') }} className={cls(props.value !== 'video')}>Foto</button>
-      <button type="button" onClick={function () { props.onChange('video') }} className={cls(props.value === 'video')}>Video</button>
-    </div>
-  )
+function formatWaktu(detik) {
+  const d = isFinite(detik) && detik > 0 ? detik : 0
+  const m = Math.floor(d / 60)
+  const s = Math.floor(d % 60)
+  return m + ':' + (s < 10 ? '0' : '') + s
 }
 
-export function SumberVideo(props) {
-  const habis = props.quotaRemaining <= 0
-  return (
-    <div className="space-y-2">
-      <p className="text-xs font-semibold text-slate-600">Sisa kuota upload video hari ini: {props.quotaLoading ? <span className="inline-block w-3 h-3 ml-1 border-2 border-slate-400 border-t-transparent rounded-full animate-spin align-middle"></span> : <>{props.quotaRemaining} dari {props.quotaLimit}</>}</p>
-      <div className={habis && !props.fileName ? 'opacity-50 pointer-events-none' : ''}>
-        <FileInput accept="video/*" fileName={props.fileName || ''} label="Klik untuk Pilih Video" hint="Video maks 50 MB. Format MP4, MOV, WebM, atau MKV." onChange={props.onFile} />
-      </div>
-      {habis ? <p className="text-xs text-red-600">Kuota habis. Gunakan link video di bawah.</p> : null}
-      <input className={props.inputCls} value={props.ytLink} onChange={props.onYtLink} aria-label="Link video YouTube" placeholder="Link video YouTube untuk tampilan (opsional)" />
-      <input className={props.inputCls} value={props.driveLink} onChange={props.onDriveLink} aria-label="Link Google Drive" placeholder="Link Google Drive untuk unduhan (opsional)" />
-    </div>
-  )
+function paksaKualitas(p) {
+  try { if (p && typeof p.setPlaybackQualityRange === 'function') p.setPlaybackQualityRange('720', '1080') } catch (e) {}
 }
-```
-
-## File: src/components/FilterBar.jsx
-```javascript
-import { useEffect, useState } from 'react'
-import { ICONS } from './icons.jsx'
-import { CustomSelect, CustomDateInput } from './controls.jsx'
-
-export function FilterSelect(props) {
-  return (
-    <CustomSelect
-      icon={props.icon}
-      value={props.value}
-      onChange={props.onChange}
-      options={props.options}
-      className="min-w-[190px]"
-      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
-    />
-  )
+function matikanSubtitel(p) {
+  try { if (p && typeof p.unloadModule === 'function') p.unloadModule('captions') } catch (e) {}
+  try { if (p && typeof p.setOption === 'function') p.setOption('captions', 'track', {}) } catch (e) {}
 }
 
-export function FilterDate(props) {
+function IkonPlay({ className }) { return <svg viewBox="0 0 24 24" fill="currentColor" className={className || 'h-5 w-5'}><path d="M8 5v14l11-7z" /></svg> }
+function IkonPause({ className }) { return <svg viewBox="0 0 24 24" fill="currentColor" className={className || 'h-5 w-5'}><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg> }
+function IkonSuara() {
   return (
-    <CustomDateInput
-      mode={props.mode || 'date'}
-      value={props.value}
-      onChange={props.onChange}
-      className="min-w-[170px]"
-      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
-    />
+    <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+      <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
+    </svg>
   )
 }
-
-export function TimeFilter(props) {
-  const f = props.filter
-  const set = props.set
+function IkonBisu() {
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <div className="time-toggle">
-        <button type="button" className={f.timeMode === 'bulan' ? 'active' : ''}
-          onClick={function () { set(Object.assign({}, f, { timeMode: 'bulan', bulan: '', dari: '', sampai: '' })) }}>Bulan</button>
-        <button type="button" className={f.timeMode === 'rentang' ? 'active' : ''}
-          onClick={function () { set(Object.assign({}, f, { timeMode: 'rentang', bulan: '', dari: '', sampai: '' })) }}>Rentang Waktu</button>
-      </div>
-      {f.timeMode === 'bulan'
-        ? <div key="bulan" className="anim-ganti-bulan flex flex-wrap items-center gap-2">
-<FilterDate mode="month" value={f.bulan} onChange={function (v) { set(Object.assign({}, f, { bulan: v })) }} />
-</div>
-        : <div key="rentang" className="anim-ganti-rentang flex flex-wrap items-center gap-2">
-            <FilterDate value={f.dari} onChange={function (v) { set(Object.assign({}, f, { dari: v })) }} />
-            <span className="text-slate-600 text-sm">sampai</span>
-            <FilterDate value={f.sampai} onChange={function (v) { set(Object.assign({}, f, { sampai: v })) }} />
-          </div>}
-    </div>
+    <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+      <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
+    </svg>
   )
 }
+function IkonPenuh() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg> }
+function IkonKecil() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" /></svg> }
+function IkonUlang() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></svg> }
 
-export function FilterBar(props) {
-  const [settled, setSettled] = useState(false)
+export default function PemutarVideo(props) {
+  const youtubeId = props.youtubeId
+  const [dimulai, setDimulai] = useState(false)
+  const [memutar, setMemutar] = useState(false)
+  const [buffer, setBuffer] = useState(false)
+  const [selesai, setSelesai] = useState(false)
+  const [gagal, setGagal] = useState(false)
+  const [waktu, setWaktu] = useState(0)
+  const [durasi, setDurasi] = useState(0)
+  const [volume, setVolume] = useState(100)
+  const [bisu, setBisu] = useState(false)
+  const [penuh, setPenuh] = useState(false)
+  const [sembunyi, setSembunyi] = useState(false)
+  const [thumbPakaiHq, setThumbPakaiHq] = useState(false)
+  const kotakRef = useRef(null)
+  const wadahRef = useRef(null)
+  const playerRef = useRef(null)
+  const timerSembunyi = useRef(null)
+
   useEffect(function () {
-    if (props.open) {
-      const t = setTimeout(function () { setSettled(true) }, 400)
-      return function () { clearTimeout(t) }
+    const iv = setInterval(function () {
+      const p = playerRef.current
+      if (p && p.getCurrentTime) {
+        setWaktu(p.getCurrentTime() || 0)
+        const d = p.getDuration ? p.getDuration() : 0
+        if (d) setDurasi(d)
+      }
+    }, 250)
+    return function () { clearInterval(iv) }
+  }, [])
+
+  useEffect(function () {
+    function saatPenuh() { setPenuh(Boolean(document.fullscreenElement)) }
+    document.addEventListener('fullscreenchange', saatPenuh)
+    return function () {
+      document.removeEventListener('fullscreenchange', saatPenuh)
+      if (timerSembunyi.current) clearTimeout(timerSembunyi.current)
+      if (playerRef.current && playerRef.current.destroy) {
+        try { playerRef.current.destroy() } catch (e) {}
+        playerRef.current = null
+      }
     }
-    setSettled(false)
-    return undefined
-  }, [props.open])
+  }, [])
+
+  function sedangMain() {
+    const p = playerRef.current
+    return Boolean(p && p.getPlayerState && window.YT && p.getPlayerState() === window.YT.PlayerState.PLAYING)
+  }
+
+  function resetTimerSembunyi() {
+    if (!dimulai) return
+    if (timerSembunyi.current) clearTimeout(timerSembunyi.current)
+    setSembunyi(false)
+    if (sedangMain()) {
+      timerSembunyi.current = setTimeout(function () { setSembunyi(true) }, 2500)
+    }
+  }
+
+  async function mulai() {
+    setDimulai(true)
+    setGagal(false)
+    try {
+      const YT = await muatApiYouTube()
+      if (!wadahRef.current) return
+      playerRef.current = new YT.Player(wadahRef.current, {
+        videoId: youtubeId,
+        playerVars: {
+          autoplay: 1, controls: 0, modestbranding: 1, rel: 0, fs: 0,
+          disablekb: 1, iv_load_policy: 3, playsinline: 1, autohide: 1,
+          showinfo: 0, cc_load_policy: 0, origin: window.location.origin
+        },
+        events: {
+          onReady: function (e) {
+            setDurasi(e.target.getDuration() || 0)
+            paksaKualitas(e.target)
+            matikanSubtitel(e.target)
+            e.target.playVideo()
+          },
+          onStateChange: function (e) {
+            const S = window.YT.PlayerState
+            if (e.data === S.PLAYING) {
+              setMemutar(true); setBuffer(false); setSelesai(false)
+              paksaKualitas(e.target); matikanSubtitel(e.target)
+              resetTimerSembunyi()
+            } else if (e.data === S.PAUSED) {
+              setMemutar(false); setBuffer(false); setSembunyi(false)
+            } else if (e.data === S.BUFFERING) {
+              setBuffer(true)
+            } else if (e.data === S.ENDED) {
+              setMemutar(false); setSelesai(true); setSembunyi(false)
+            }
+          },
+          onError: function () { setGagal(true); setBuffer(false); setMemutar(false) }
+        }
+      })
+    } catch (e) {
+      setGagal(true)
+    }
+  }
+
+  function jungkir() {
+    const p = playerRef.current
+    if (!p) return
+    if (sedangMain()) p.pauseVideo()
+    else p.playVideo()
+  }
+
+  function geser(ev) {
+    const p = playerRef.current
+    if (!p || !durasi) return
+    const nilai = Number(ev.target.value)
+    p.seekTo((nilai / 100) * durasi, true)
+    setWaktu((nilai / 100) * durasi)
+  }
+
+  function aturVolume(ev) {
+    const p = playerRef.current
+    const nilai = Number(ev.target.value)
+    setVolume(nilai)
+    if (!p) return
+    p.setVolume(nilai)
+    if (nilai === 0) { p.mute(); setBisu(true) }
+    else if (bisu) { p.unMute(); setBisu(false) }
+  }
+
+  function aturBisu() {
+    const p = playerRef.current
+    if (!p) return
+    if (bisu) { p.unMute(); p.setVolume(volume || 100); setBisu(false) }
+    else { p.mute(); setBisu(true) }
+  }
+
+  function aturPenuh() {
+    const el = kotakRef.current
+    if (!el) return
+    if (document.fullscreenElement) document.exitFullscreen()
+    else if (el.requestFullscreen) el.requestFullscreen()
+  }
+
+  const thumb = thumbPakaiHq
+    ? 'https://i.ytimg.com/vi/' + youtubeId + '/hqdefault.jpg'
+    : 'https://img.youtube.com/vi/' + youtubeId + '/maxresdefault.jpg'
+  const persen = durasi ? Math.min(100, (waktu / durasi) * 100) : 0
+  const kontrolSembunyi = dimulai && !gagal && sembunyi
+
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-4 lg:p-5 shadow-sm">
-      <div className="flex items-center justify-between gap-3">
-        <button onClick={props.onToggle}
-          className="xl:hidden flex items-center gap-2 px-4 py-2.5 rounded-2xl border border-slate-200 bg-slate-50 text-sm font-semibold text-slate-700 hover:bg-slate-100">
-          <span className="text-bsi-700">{ICONS.funnel}</span>
-          <span>Filter</span>
-          {props.activeCount > 0 ? (
-            <span className="inline-flex items-center justify-center h-6 min-w-6 px-2 rounded-full bg-bsi-800 text-white text-xs font-bold">{props.activeCount}</span>
-          ) : null}
-          <span className={'transition-transform duration-200 text-slate-600 ' + (props.open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
-        </button>
-        <div className="hidden xl:block text-sm text-slate-600">
-          {props.activeCount > 0
-            ? <span className="inline-flex items-center gap-2"><span className="text-bsi-700">{ICONS.funnel}</span><span><strong className="text-slate-900">{props.activeCount}</strong> filter aktif</span></span>
-            : <span className="inline-flex items-center gap-2"><span className="text-slate-600">{ICONS.funnel}</span><span>Belum ada filter aktif</span></span>}
+    <div
+      ref={kotakRef}
+      className={'pemutar-referensi group relative overflow-hidden rounded-2xl bg-black shadow-xl ' + (props.className || 'aspect-video w-full')}
+      style={{ cursor: kontrolSembunyi ? 'none' : 'default' }}
+      onMouseMove={resetTimerSembunyi}
+      onMouseLeave={function () { if (sedangMain()) { if (timerSembunyi.current) clearTimeout(timerSembunyi.current); setSembunyi(true) } }}
+    >
+      {/* Wadah player: setelah diisi YouTube, iframe diposisikan CSS dengan margin crop 70px */}
+      <div ref={wadahRef} className="h-full w-full" />
+
+      {/* Perisai penangkap klik */}
+      {dimulai && !selesai && !gagal ? (
+        <button type="button" aria-label="Putar atau Jeda Video" onClick={jungkir}
+          className="absolute inset-0 z-10 h-full w-full bg-transparent" style={{ cursor: kontrolSembunyi ? 'none' : 'default' }} />
+      ) : null}
+
+      {/* Poster awal dengan tombol putar minimalis */}
+      {!dimulai ? (
+        <div className="absolute inset-0 z-20">
+          <img src={thumb} alt={props.title || 'Pratinjau video'} onError={function () { setThumbPakaiHq(true) }}
+            className="absolute inset-0 h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+          <div className="absolute inset-0 grid place-items-center">
+            <button type="button" onClick={mulai} title="Putar Video"
+              className="grid h-12 w-12 place-items-center rounded-full border border-white/20 bg-black/50 text-white backdrop-blur-md transition hover:scale-110 hover:border-bsi-500 hover:bg-bsi-600">
+              <IkonPlay className="ml-0.5 h-5 w-5" />
+            </button>
+          </div>
+          {props.title ? <p className="absolute bottom-3 left-4 right-4 truncate text-sm font-semibold text-white drop-shadow-md">{props.title}</p> : null}
         </div>
-      </div>
-            <div className={'filter-wrap' + (props.open ? ' filter-wrap-buka' : '')}>
-        <div className={'filter-dalam' + (props.open && settled ? ' filter-dalam-santai' : '')}>
-          <div className="filter-isi flex flex-wrap items-center gap-3">
-            {props.children}
-            {props.activeCount > 0 ? (
-              <button onClick={props.onReset}
-                className="inline-flex items-center gap-2 rounded-2xl bg-red-50 border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100">
-                {ICONS.close}<span>Reset</span>
-              </button>
-            ) : null}
+      ) : null}
+
+      {/* Layar akhir dengan putar ulang */}
+      {selesai ? (
+        <div className="absolute inset-0 z-20 grid place-items-center bg-black/85 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-3">
+            <button type="button" title="Putar Ulang"
+              onClick={function () { const p = playerRef.current; if (p) { p.seekTo(0, true); p.playVideo() } setSelesai(false) }}
+              className="grid h-14 w-14 place-items-center rounded-full bg-gold-500 text-slate-900 shadow-lg transition hover:scale-105">
+              <IkonUlang />
+            </button>
+            <p className="text-xs font-semibold text-slate-200">Putar Ulang</p>
           </div>
         </div>
-      </div>
+      ) : null}
+
+      {/* Layar gagal */}
+      {gagal ? (
+        <div className="absolute inset-0 z-30 grid place-items-center bg-black/90">
+          <div className="flex flex-col items-center gap-2 px-6 text-center">
+            <p className="text-sm font-semibold text-slate-200">Video Tidak Dapat Dimuat</p>
+            <p className="text-xs text-slate-300">Periksa koneksi internet atau ketersediaan video.</p>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Panel kontrol overlay di atas video */}
+      {dimulai && !gagal ? (
+        <div className={'absolute inset-x-0 bottom-0 z-30 flex items-center gap-2 sm:gap-3 bg-gradient-to-t from-black/90 via-black/60 to-transparent px-3 sm:px-4 pb-3 pt-10 transition-opacity duration-300 ' + (kontrolSembunyi ? 'pointer-events-none opacity-0' : 'opacity-100')}>
+          <button type="button" onClick={jungkir} title={memutar ? 'Jeda' : 'Putar'}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-bsi-700 text-white transition hover:bg-bsi-600">
+            {memutar ? <IkonPause className="h-4 w-4" /> : <IkonPlay className="ml-0.5 h-4 w-4" />}
+          </button>
+          <input type="range" min="0" max="100" step="0.1" value={persen} onChange={geser} title="Geser Durasi"
+            className="pemutar-progress h-1.5 w-full cursor-pointer appearance-none rounded-full outline-none"
+            style={{ background: 'linear-gradient(to right, #166534 0%, #166534 ' + persen + '%, rgba(255,255,255,0.25) ' + persen + '%, rgba(255,255,255,0.25) 100%)' }} />
+          <span className="min-w-[64px] sm:min-w-[84px] shrink-0 text-center text-[10px] sm:text-[11px] font-semibold tabular-nums text-slate-200">{formatWaktu(waktu)} / {formatWaktu(durasi)}</span>
+          <button type="button" onClick={aturBisu} title={bisu ? 'Nyalakan Suara' : 'Bisukan'}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/10 text-white transition hover:bg-white/20">
+            {bisu ? <IkonBisu /> : <IkonSuara />}
+          </button>
+          <input type="range" min="0" max="100" value={bisu ? 0 : volume} onChange={aturVolume} title="Volume"
+            className="pemutar-volume hidden sm:block h-1 w-16 shrink-0 cursor-pointer appearance-none rounded-full outline-none"
+            style={{ background: 'linear-gradient(to right, #eab308 0%, #eab308 ' + (bisu ? 0 : volume) + '%, rgba(255,255,255,0.25) ' + (bisu ? 0 : volume) + '%, rgba(255,255,255,0.25) 100%)' }} />
+          {buffer ? <span className="inline-block h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-gold-500 border-t-transparent" /> : null}
+          <button type="button" onClick={aturPenuh} title={penuh ? 'Keluar Layar Penuh' : 'Layar Penuh'}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/10 text-white transition hover:bg-white/20">
+            {penuh ? <IkonKecil /> : <IkonPenuh />}
+          </button>
+        </div>
+      ) : null}
     </div>
   )
-}
-
-export function SortSelect(props) {
-  return (
-    <CustomSelect
-      icon={ICONS.sort}
-      value={props.value}
-      onChange={props.onChange}
-      options={[{ value: 'terbaru', label: 'Terbaru' }, { value: 'terlama', label: 'Terlama' }]}
-      className="min-w-[150px]"
-      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
-    />
-  )
-}
-export function countActiveFilters(o) {
-  let c = 0
-  for (const k in o) {
-    if (k === 'timeMode') continue
-    if (o[k]) c++
-  }
-  return c
 }
 ```
 
@@ -2676,6 +2279,403 @@ export default function Carousel(props) {
       {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} driveId={zoom.drive || null} onClose={function () { setZoom(null) }} /> : null}
     </>
   )
+}
+```
+
+## File: src/components/controls.jsx
+```javascript
+import { SelubungPanel } from './ui.jsx'
+import { useEffect, useRef, useState } from 'react'
+import { ICONS } from './icons.jsx'
+
+const BULAN_NAMA = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
+const BULAN_PENDEK = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
+const HARI_NAMA = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
+
+const defaultBtn = 'flex w-full items-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-bsi-500'
+
+function pad(n) {
+  return (n < 10 ? '0' : '') + n
+}
+
+function parseValue(value, mode) {
+  if (!value) return null
+  const p = String(value).split('-')
+  if (mode === 'month') {
+    if (p.length < 2) return null
+    const y = parseInt(p[0], 10)
+    const m = parseInt(p[1], 10) - 1
+    if (isNaN(y) || isNaN(m) || m < 0 || m > 11) return null
+    return { y: y, m: m }
+  }
+  if (p.length < 3) return null
+  const y = parseInt(p[0], 10)
+  const m = parseInt(p[1], 10) - 1
+  const d = parseInt(p[2], 10)
+  if (isNaN(y) || isNaN(m) || isNaN(d)) return null
+  return { y: y, m: m, d: d }
+}
+
+function useOutside(ref, open, setOpen) {
+  useEffect(function () {
+    if (!open) return undefined
+    function handler(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return function () { document.removeEventListener('mousedown', handler) }
+  }, [open])
+}
+
+export function CustomSelect(props) {
+  const [open, setOpen] = useState(false)
+  const boxRef = useRef(null)
+  useOutside(boxRef, open, setOpen)
+  const options = props.options || []
+  const current = options.find(function (o) { return o.value === props.value }) || null
+
+  return (
+    <div ref={boxRef} className={'relative ' + (props.className || '')}>
+      <button
+        type="button"
+        onClick={function () { setOpen(function (o) { return !o }) }}
+        className={(props.buttonCls || defaultBtn) + ' text-left'}
+      >
+        {props.icon ? <span className="shrink-0 text-slate-600">{props.icon}</span> : null}
+        <span className={'flex-1 truncate ' + (current ? 'text-slate-800' : 'text-slate-600')}>
+          {current ? current.label : (props.placeholder || 'Pilih')}
+        </span>
+        <span className={'shrink-0 text-slate-600 transition-transform duration-200 ' + (open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
+      </button>
+      <SelubungPanel open={open}>
+<div className="anim-modal absolute z-30 mt-2 max-h-64 w-full overflow-y-auto rounded-2xl border border-slate-200 bg-white py-1 shadow-xl">
+          {options.map(function (o) {
+            const active = o.value === props.value
+            return (
+              <button
+                type="button"
+                key={String(o.value)}
+                onClick={function () { props.onChange(o.value); setOpen(false) }}
+                className={'flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left text-sm ' + (active ? 'bg-bsi-800 text-white' : 'text-slate-700 hover:bg-slate-100')}
+              >
+                <span className="truncate">{o.label}</span>
+                {active ? <span className="shrink-0">{ICONS.check}</span> : null}
+              </button>
+            )
+          })}
+        </div>
+</SelubungPanel>
+    </div>
+  )
+}
+
+export function CustomDateInput(props) {
+  const mode = props.mode || 'date'
+  const [open, setOpen] = useState(false)
+  const [view, setView] = useState(function () {
+    const p = parseValue(props.value, mode)
+    const t = new Date()
+    return p ? { y: p.y, m: p.m } : { y: t.getFullYear(), m: t.getMonth() }
+  })
+  const boxRef = useRef(null)
+  useOutside(boxRef, open, setOpen)
+
+  const sel = parseValue(props.value, mode)
+  const today = new Date()
+
+  function toggle() {
+    if (!open) {
+      const p = parseValue(props.value, mode)
+      if (p) setView({ y: p.y, m: p.m })
+    }
+    setOpen(function (o) { return !o })
+  }
+
+  function shift(delta) {
+    setView(function (v) {
+      if (mode === 'month') return { y: v.y + delta, m: v.m }
+      let m = v.m + delta
+      let y = v.y
+      if (m < 0) { m = 11; y -= 1 }
+      if (m > 11) { m = 0; y += 1 }
+      return { y: y, m: m }
+    })
+  }
+
+  function pickDay(d) {
+    props.onChange(view.y + '-' + pad(view.m + 1) + '-' + pad(d))
+    setOpen(false)
+  }
+
+  function pickMonth(m) {
+    props.onChange(view.y + '-' + pad(m + 1))
+    setOpen(false)
+  }
+
+  function pickToday() {
+    const t = new Date()
+    if (mode === 'month') props.onChange(t.getFullYear() + '-' + pad(t.getMonth() + 1))
+    else props.onChange(t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate()))
+    setOpen(false)
+  }
+
+  const label = sel
+    ? (mode === 'month' ? BULAN_NAMA[sel.m] + ' ' + sel.y : sel.d + ' ' + BULAN_PENDEK[sel.m] + ' ' + sel.y)
+    : ''
+
+  const firstDay = new Date(view.y, view.m, 1).getDay()
+  const daysCount = new Date(view.y, view.m + 1, 0).getDate()
+  const cells = []
+  for (let i = 0; i < firstDay; i++) cells.push(null)
+  for (let d = 1; d <= daysCount; d++) cells.push(d)
+
+  return (
+    <div ref={boxRef} className={'relative ' + (props.className || '')}>
+      <button type="button" onClick={toggle} className={(props.buttonCls || defaultBtn) + ' text-left'}>
+        <span className="shrink-0 text-slate-600">{ICONS.calendar}</span>
+        <span className={'flex-1 truncate ' + (props.value ? 'text-slate-800' : 'text-slate-600')}>
+          {label || (mode === 'month' ? 'Pilih Bulan' : 'Pilih Tanggal')}
+        </span>
+        <span className={'shrink-0 text-slate-600 transition-transform duration-200 ' + (open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
+      </button>
+      <SelubungPanel open={open}>
+<div className="anim-modal absolute z-30 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
+          <div className="flex items-center justify-between">
+            <button type="button" onClick={function () { shift(-1) }} className="grid h-8 w-8 place-items-center rounded-lg text-slate-600 hover:bg-slate-100">&#8249;</button>
+            <p className="text-sm font-bold text-slate-800">
+              {mode === 'month' ? String(view.y) : BULAN_NAMA[view.m] + ' ' + view.y}
+            </p>
+            <button type="button" onClick={function () { shift(1) }} className="grid h-8 w-8 place-items-center rounded-lg text-slate-600 hover:bg-slate-100">&#8250;</button>
+          </div>
+
+          {mode === 'date' ? (
+            <div className="mt-3 grid grid-cols-7 gap-1 text-center">
+              {HARI_NAMA.map(function (h) {
+                return <span key={h} className="py-1 text-[11px] font-semibold text-slate-600">{h}</span>
+              })}
+              {cells.map(function (d, i) {
+                if (d === null) return <span key={'kosong' + i} />
+                const isSel = sel && sel.y === view.y && sel.m === view.m && sel.d === d
+                const isToday = today.getFullYear() === view.y && today.getMonth() === view.m && today.getDate() === d
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={function () { pickDay(d) }}
+                    className={'mx-auto grid h-8 w-8 place-items-center rounded-lg text-sm ' + (isSel ? 'bg-bsi-800 font-semibold text-white' : isToday ? 'font-bold text-bsi-700 ring-1 ring-bsi-500' : 'text-slate-700 hover:bg-slate-100')}
+                  >
+                    {d}
+                  </button>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {BULAN_NAMA.map(function (nama, m) {
+                const isSel = sel && sel.y === view.y && sel.m === m
+                const isNow = today.getFullYear() === view.y && today.getMonth() === m
+                return (
+                  <button
+                    key={nama}
+                    type="button"
+                    onClick={function () { pickMonth(m) }}
+                    className={'rounded-lg px-2 py-2 text-xs font-semibold ' + (isSel ? 'bg-bsi-800 text-white' : isNow ? 'text-bsi-700 ring-1 ring-bsi-500' : 'text-slate-700 hover:bg-slate-100')}
+                  >
+                    {nama}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
+            <button type="button" onClick={function () { props.onChange(''); setOpen(false) }} className="text-sm font-semibold text-slate-600 hover:text-red-600">Hapus</button>
+            <button type="button" onClick={pickToday} className="text-sm font-semibold text-bsi-700 hover:text-bsi-900">Hari Ini</button>
+          </div>
+        </div>
+</SelubungPanel>
+    </div>
+  )
+}
+
+export function FileInput(props) {
+  const inputRef = useRef(null)
+  return (
+    <div className={props.className || ''}>
+      <input
+        ref={inputRef}
+        type="file"
+        accept={props.accept || 'image/*,video/*'}
+        className="hidden"
+        onChange={function (e) {
+          if (props.onChange) props.onChange(e)
+          e.target.value = ''
+        }}
+      />
+      <button
+        type="button"
+        onClick={function () { inputRef.current.click() }}
+        className="flex w-full items-center gap-3 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-4 py-4 text-left transition hover:border-bsi-500 hover:bg-slate-100"
+      >
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-bsi-100 text-bsi-800">{ICONS.image}</span>
+        <span className="min-w-0 flex-1">
+          <span className={'block truncate text-sm font-semibold ' + (props.fileName ? 'text-slate-800' : 'text-slate-600')}>
+            {props.fileName || props.label || 'Klik untuk Pilih Foto atau Video'}
+          </span>
+          <span className="block text-xs text-slate-600">{props.hint || 'Foto JPG, PNG, atau HEIC otomatis dikonversi. Video maks 50 MB.'}</span>
+        </span>
+        {props.fileName ? <span className="shrink-0 text-xs font-semibold text-bsi-700">Ganti</span> : null}
+      </button>
+    </div>
+  )
+}
+export function ToggleModeMedia(props) {
+  const cls = function (aktif) {
+    return 'px-3 py-1.5 rounded-xl text-xs font-bold ' + (aktif ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700')
+  }
+  return (
+    <div className={props.className || 'flex gap-2'}>
+      <button type="button" onClick={function () { props.onChange('foto') }} className={cls(props.value !== 'video')}>Foto</button>
+      <button type="button" onClick={function () { props.onChange('video') }} className={cls(props.value === 'video')}>Video</button>
+    </div>
+  )
+}
+
+export function SumberVideo(props) {
+  const habis = props.quotaRemaining <= 0
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-semibold text-slate-600">Sisa kuota unggah video hari ini: {props.quotaLoading ? <span className="inline-block w-3 h-3 ml-1 border-2 border-slate-400 border-t-transparent rounded-full animate-spin align-middle"></span> : <>{props.quotaRemaining} dari {props.quotaLimit}</>}</p>
+      <div className={habis && !props.fileName ? 'opacity-50 pointer-events-none' : ''}>
+        <FileInput accept="video/*" fileName={props.fileName || ''} label="Klik untuk Pilih Video" hint="Video maks 50 MB. Format MP4, MOV, WebM, atau MKV." onChange={props.onFile} />
+      </div>
+      {habis ? <p className="text-xs text-red-600">Kuota habis. Gunakan tautan video di bawah.</p> : null}
+      <input className={props.inputCls} value={props.ytLink} onChange={props.onYtLink} aria-label="Tautan video YouTube" placeholder="Tautan video YouTube (opsional)" />
+      <input className={props.inputCls} value={props.driveLink} onChange={props.onDriveLink} aria-label="Tautan Google Drive" placeholder="Tautan Google Drive (opsional)" />
+    </div>
+  )
+}
+```
+
+## File: src/components/FilterBar.jsx
+```javascript
+import { useEffect, useState } from 'react'
+import { ICONS } from './icons.jsx'
+import { CustomSelect, CustomDateInput } from './controls.jsx'
+
+export function FilterSelect(props) {
+  return (
+    <CustomSelect
+      icon={props.icon}
+      value={props.value}
+      onChange={props.onChange}
+      options={props.options}
+      className="min-w-[190px]"
+      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+    />
+  )
+}
+
+export function FilterDate(props) {
+  return (
+    <CustomDateInput
+      mode={props.mode || 'date'}
+      value={props.value}
+      onChange={props.onChange}
+      className="min-w-[170px]"
+      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+    />
+  )
+}
+
+export function TimeFilter(props) {
+  const f = props.filter
+  const set = props.set
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <div className="time-toggle">
+        <button type="button" className={f.timeMode === 'bulan' ? 'active' : ''}
+          onClick={function () { set(Object.assign({}, f, { timeMode: 'bulan', bulan: '', dari: '', sampai: '' })) }}>Bulan</button>
+        <button type="button" className={f.timeMode === 'rentang' ? 'active' : ''}
+          onClick={function () { set(Object.assign({}, f, { timeMode: 'rentang', bulan: '', dari: '', sampai: '' })) }}>Rentang Waktu</button>
+      </div>
+      {f.timeMode === 'bulan'
+        ? <div key="bulan" className="anim-ganti-bulan flex flex-wrap items-center gap-2">
+<FilterDate mode="month" value={f.bulan} onChange={function (v) { set(Object.assign({}, f, { bulan: v })) }} />
+</div>
+        : <div key="rentang" className="anim-ganti-rentang flex flex-wrap items-center gap-2">
+            <FilterDate value={f.dari} onChange={function (v) { set(Object.assign({}, f, { dari: v })) }} />
+            <span className="text-slate-600 text-sm">sampai</span>
+            <FilterDate value={f.sampai} onChange={function (v) { set(Object.assign({}, f, { sampai: v })) }} />
+          </div>}
+    </div>
+  )
+}
+
+export function FilterBar(props) {
+  const [settled, setSettled] = useState(false)
+  useEffect(function () {
+    if (props.open) {
+      const t = setTimeout(function () { setSettled(true) }, 400)
+      return function () { clearTimeout(t) }
+    }
+    setSettled(false)
+    return undefined
+  }, [props.open])
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-4 lg:p-5 shadow-sm">
+      <div className="flex items-center justify-between gap-3">
+        <button onClick={props.onToggle}
+          className="xl:hidden flex items-center gap-2 px-4 py-2.5 rounded-2xl border border-slate-200 bg-slate-50 text-sm font-semibold text-slate-700 hover:bg-slate-100">
+          <span className="text-bsi-700">{ICONS.funnel}</span>
+          <span>Filter</span>
+          {props.activeCount > 0 ? (
+            <span className="inline-flex items-center justify-center h-6 min-w-6 px-2 rounded-full bg-bsi-800 text-white text-xs font-bold">{props.activeCount}</span>
+          ) : null}
+          <span className={'transition-transform duration-200 text-slate-600 ' + (props.open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
+        </button>
+        <div className="hidden xl:block text-sm text-slate-600">
+          {props.activeCount > 0
+            ? <span className="inline-flex items-center gap-2"><span className="text-bsi-700">{ICONS.funnel}</span><span><strong className="text-slate-900">{props.activeCount}</strong> filter aktif</span></span>
+            : <span className="inline-flex items-center gap-2"><span className="text-slate-600">{ICONS.funnel}</span><span>Belum ada filter aktif</span></span>}
+        </div>
+      </div>
+            <div className={'filter-wrap' + (props.open ? ' filter-wrap-buka' : '')}>
+        <div className={'filter-dalam' + (props.open && settled ? ' filter-dalam-santai' : '')}>
+          <div className="filter-isi flex flex-wrap items-center gap-3">
+            {props.children}
+            {props.activeCount > 0 ? (
+              <button onClick={props.onReset}
+                className="inline-flex items-center gap-2 rounded-2xl bg-red-50 border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100">
+                {ICONS.close}<span>Hapus Filter</span>
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function SortSelect(props) {
+  return (
+    <CustomSelect
+      icon={ICONS.sort}
+      value={props.value}
+      onChange={props.onChange}
+      options={[{ value: 'terbaru', label: 'Terbaru' }, { value: 'terlama', label: 'Terlama' }]}
+      className="min-w-[150px]"
+      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+    />
+  )
+}
+export function countActiveFilters(o) {
+  let c = 0
+  for (const k in o) {
+    if (k === 'timeMode') continue
+    if (o[k]) c++
+  }
+  return c
 }
 ```
 
@@ -3114,110 +3114,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 })()
 ```
 
-## File: src/pages/LoginPage.jsx
-```javascript
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { loginWithNim } from '../lib/auth.js'
-import { inputCls, labelCls, btnPrimary } from '../components/ui.jsx'
-import { EyeToggle, SizedIcon } from '../components/icons.jsx'
-
-function pesanErrorLogin(err) {
-  const pesan = String((err && err.message) || '')
-  const rendah = pesan.toLowerCase()
-  if (rendah.indexOf('invalid login credentials') !== -1) {
-    return 'NIM atau kode akses yang kamu masukkan tidak cocok dengan data kami. Periksa kembali penulisannya, pastikan tidak ada spasi berlebih, lalu coba lagi.'
-  }
-  if (rendah.indexOf('not confirmed') !== -1) {
-    return 'Akun untuk NIM ini belum diaktifkan. Hubungi admin tim magang untuk mengaktifkan akunmu terlebih dahulu.'
-  }
-  if (rendah.indexOf('too many requests') !== -1 || rendah.indexOf('try again after') !== -1 || rendah.indexOf('rate limit') !== -1) {
-    return 'Terlalu banyak percobaan masuk dalam waktu singkat demi keamanan. Tunggu sekitar satu menit, lalu coba lagi.'
-  }
-  if (rendah.indexOf('fetch') !== -1 || rendah.indexOf('network') !== -1 || rendah.indexOf('failed to load') !== -1 || (typeof navigator !== 'undefined' && !navigator.onLine)) {
-    return 'Tidak bisa terhubung ke server. Periksa koneksi internetmu, lalu coba lagi.'
-  }
-  if (rendah.indexOf('email') !== -1 && rendah.indexOf('format') !== -1) {
-    return 'Format NIM tidak terbaca. Masukkan NIM berupa angka tanpa spasi, contoh: 24070041.'
-  }
-  if (pesan) return 'Gagal masuk: ' + pesan + '. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
-  return 'Terjadi kesalahan tidak terduga saat masuk. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
-}
-export default function LoginPage() {
-  const navigate = useNavigate()
-  const [nim, setNim] = useState('')
-  const [kode, setKode] = useState('')
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [lihatKode, setLihatKode] = useState(false)
-
-  async function submit(e) {
-    e.preventDefault()
-    setBusy(true)
-    setError('')
-    try {
-  await loginWithNim(nim, kode)
-  navigate('/dashboard')
-} catch (err) {
-  setError(pesanErrorLogin(err))
-}
-    setBusy(false)
-  }
-
-  return (
-    <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr] items-start">
-      <div className="card-hover rounded-[2rem] bg-bsi-900 text-white p-5 sm:p-8 lg:p-10">
-        <span className="inline-flex px-3 py-1.5 rounded-full bg-white/10 text-[10px] font-semibold uppercase tracking-wide sm:px-4 sm:py-2 sm:text-xs">Area Intern</span>
-        <h1 className="mt-6 text-2xl sm:text-3xl lg:text-4xl font-black leading-tight">Masuk untuk Mengisi Logbook, Galeri, dan Daftar Hadir</h1>
-        <p className="mt-3 text-sm leading-relaxed text-white/80 sm:mt-4 sm:text-base">Halaman ini hanya digunakan oleh mahasiswa magang. Dosen pembimbing dan kaprodi tidak perlu login untuk melihat halaman publik.</p>
-      </div>
-      <div className="card-hover bg-white rounded-[2rem] border border-slate-200 shadow-sm p-5 sm:p-8 lg:p-10">
-        <h2 className="text-xl sm:text-2xl font-black text-slate-900">Login Mahasiswa Magang</h2>
-        {error ? (
-          <div className="mt-3 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-red-100 text-red-600">
-              <SizedIcon name="close" size={12} />
-            </span>
-            <div className="min-w-0">
-              <p className="font-bold">Gagal Masuk</p>
-              <p className="mt-1 leading-relaxed">{error}</p>
-            </div>
-          </div>
-        ) : null}
-        <form onSubmit={submit} className="mt-6 space-y-5">
-          <div>
-            <label className={labelCls}>NIM <span className="text-red-500">*</span></label>
-            <input className={inputCls} value={nim} onChange={function (e) { setNim(e.target.value) }} aria-label="NIM" placeholder="Contoh: 20260001" required />
-          </div>
-          <div>
-            <label className={labelCls}>Kode akses <span className="text-red-500">*</span></label>
-            <div className="relative mt-1.5">
-              <input
-                type={lihatKode ? 'text' : 'password'}
-                className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 pr-12 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
-                value={kode}
-                onChange={function (e) { setKode(e.target.value) }}
-                aria-label="Kode Akses" placeholder="Masukkan kode akses"
-                required
-              />
-              <button
-                type="button"
-                onClick={function () { setLihatKode(function (v) { return !v }) }}
-                title={lihatKode ? 'Sembunyikan Kode Akses' : 'Lihat Kode Akses'}
-                className="absolute right-2 top-0 bottom-0 my-auto grid h-9 w-9 place-items-center rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-600"
-              >
-                <EyeToggle open={lihatKode} size={18} />
-              </button>
-            </div>
-          </div>
-          <button type="submit" disabled={busy} className={btnPrimary}>{busy ? 'Memproses...' : 'Masuk ke Dashboard'}</button>
-        </form>
-      </div>
-    </section>
-  )
-}
-```
-
 ## File: src/App.jsx
 ```javascript
 import { SkeletonDashboard } from './components/Skeleton.jsx'
@@ -3282,286 +3178,106 @@ export default function App() {
 }
 ```
 
-## File: src/components/Layout.jsx
+## File: src/pages/LoginPage.jsx
 ```javascript
-import { Outlet, Link, NavLink, useNavigate } from 'react-router-dom'
-import { useTheme } from '../lib/theme.jsx'
-import { useAuth, logoutMahasiswa } from '../lib/auth.js'
-import { SizedIcon } from './icons.jsx'
-import { ConfirmModal } from './ui.jsx'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { loginWithNim } from '../lib/auth.js'
+import { inputCls, labelCls, btnPrimary } from '../components/ui.jsx'
+import { EyeToggle, SizedIcon } from '../components/icons.jsx'
 
-const LINKS = [
-  { to: '/', label: 'Beranda' },
-  { to: '/logbook', label: 'Logbook' },
-  { to: '/galeri', label: 'Galeri' },
-  { to: '/absen', label: 'Daftar Hadir' },
-  { to: '/dospem', label: 'Tim & Dospem' }
-]
-
-function MenuMobile(props) {
-  return (
-    <div className={'menu-mobile-wrap xl:hidden' + (props.open ? ' menu-mobile-buka' : '')}>
-      <div className="menu-mobile-dalam">
-        <div className="menu-mobile-isi border-t border-slate-200 bg-white px-4 py-4 space-y-2">
-          {props.children}
-        </div>
-      </div>
-    </div>
-  )
+function pesanErrorLogin(err) {
+  const pesan = String((err && err.message) || '')
+  const rendah = pesan.toLowerCase()
+  if (rendah.indexOf('invalid login credentials') !== -1) {
+    return 'NIM atau kode akses yang kamu masukkan tidak cocok dengan data kami. Periksa kembali penulisannya, pastikan tidak ada spasi berlebih, lalu coba lagi.'
+  }
+  if (rendah.indexOf('not confirmed') !== -1) {
+    return 'Akun untuk NIM ini belum diaktifkan. Hubungi admin tim magang untuk mengaktifkan akunmu terlebih dahulu.'
+  }
+  if (rendah.indexOf('too many requests') !== -1 || rendah.indexOf('try again after') !== -1 || rendah.indexOf('rate limit') !== -1) {
+    return 'Terlalu banyak percobaan masuk dalam waktu singkat demi keamanan. Tunggu sekitar satu menit, lalu coba lagi.'
+  }
+  if (rendah.indexOf('fetch') !== -1 || rendah.indexOf('network') !== -1 || rendah.indexOf('failed to load') !== -1 || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+    return 'Tidak bisa terhubung ke server. Periksa koneksi internetmu, lalu coba lagi.'
+  }
+  if (rendah.indexOf('email') !== -1 && rendah.indexOf('format') !== -1) {
+    return 'Format NIM tidak terbaca. Masukkan NIM berupa angka tanpa spasi, contoh: 24070041.'
+  }
+  if (pesan) return 'Gagal masuk: ' + pesan + '. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
+  return 'Terjadi kesalahan tidak terduga saat masuk. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
 }
-export default function Layout() {
-  const theme = useTheme()
-  const { mahasiswa } = useAuth()
-  const [open, setOpen] = useState(false)
-  const [konfirmasiKeluar, setKonfirmasiKeluar] = useState(false)
+export default function LoginPage() {
   const navigate = useNavigate()
-  function mintaKeluar(e) {
+  const [nim, setNim] = useState('')
+  const [kode, setKode] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [lihatKode, setLihatKode] = useState(false)
+
+  async function submit(e) {
     e.preventDefault()
-    setOpen(false)
-    setKonfirmasiKeluar(true)
-  }
-  async function benarKeluar() {
-    setKonfirmasiKeluar(false)
-    await logoutMahasiswa()
-    navigate('/')
-  }
-
-  const linkCls = function (active) {
-    return 'px-3 py-2 rounded-xl text-sm font-semibold ' + (active ? 'bg-bsi-900 text-white' : 'text-slate-600 hover:bg-slate-100')
-  }
-
-  const themeBtn = function (extra) {
-    return (
-      <button onClick={theme.toggle} className={'rounded-xl border border-slate-300 grid place-items-center hover:bg-slate-100 text-slate-700 ' + (extra || 'h-10 w-10')} title="Ganti Tema">
-        <SizedIcon name={theme.dark ? 'sun' : 'moon'} size={18} />
-      </button>
-    )
+    setBusy(true)
+    setError('')
+    try {
+  await loginWithNim(nim, kode)
+  navigate('/dashboard')
+} catch (err) {
+  setError(pesanErrorLogin(err))
+}
+    setBusy(false)
   }
 
   return (
-    <div className="flex flex-col min-h-screen">
-      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="h-16 flex items-center justify-between gap-4">
-            <Link to="/" className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-gradient-to-tr from-bsi-800 to-gold-500 text-white grid place-items-center font-black">BSI</div>
-              <div>
-                <p className="font-bold leading-none text-slate-900">Logbook Magang</p>
-                <p className="text-xs text-slate-600 mt-1">Bank Syariah Indonesia</p>
-              </div>
-            </Link>
-            <nav className="hidden xl:flex items-center gap-1">
-              {LINKS.map(function (l) {
-                return <NavLink key={l.to} to={l.to} end={l.to === '/'} className={function (s) { return linkCls(s.isActive) }}>{l.label}</NavLink>
-              })}
-            </nav>
-            <div className="hidden xl:flex items-center gap-3">
-              {themeBtn()}
-              {mahasiswa ? (
-                <>
-                  <Link to="/dashboard" className="px-4 py-2 rounded-xl bg-bsi-800 text-white text-sm font-semibold hover:bg-bsi-900">Dashboard</Link>
-                  <button type="button" onClick={mintaKeluar} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-100">Keluar</button>
-                </>
-              ) : (
-                <Link to="/login" className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-700">Masuk Intern</Link>
-              )}
-            </div>
-            <div className="flex xl:hidden items-center gap-2">
-              {themeBtn()}
-              <button onClick={function () { setOpen(function (o) { return !o }) }} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700">Menu</button>
+    <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr] items-start">
+      <div className="card-hover rounded-[2rem] bg-bsi-900 text-white p-5 sm:p-8 lg:p-10">
+        <span className="inline-flex px-3 py-1.5 rounded-full bg-white/10 text-[10px] font-semibold uppercase tracking-wide sm:px-4 sm:py-2 sm:text-xs">Khusus Peserta Magang</span>
+        <h1 className="mt-6 text-2xl sm:text-3xl lg:text-4xl font-black leading-tight">Masuk untuk Mengisi Logbook, Galeri, dan Daftar Hadir</h1>
+        <p className="mt-3 text-sm leading-relaxed text-white/80 sm:mt-4 sm:text-base">Halaman ini khusus mahasiswa magang. Dosen pembimbing dan kaprodi dapat melihat halaman umum tanpa masuk.</p>
+      </div>
+      <div className="card-hover bg-white rounded-[2rem] border border-slate-200 shadow-sm p-5 sm:p-8 lg:p-10">
+        <h2 className="text-xl sm:text-2xl font-black text-slate-900">Masuk Akun Magang</h2>
+        {error ? (
+          <div className="mt-3 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-red-100 text-red-600">
+              <SizedIcon name="close" size={12} />
+            </span>
+            <div className="min-w-0">
+              <p className="font-bold">Gagal Masuk</p>
+              <p className="mt-1 leading-relaxed">{error}</p>
             </div>
           </div>
-        </div>
-        <MenuMobile open={open}>
-            {LINKS.map(function (l) {
-              return <NavLink key={l.to} to={l.to} end={l.to === '/'} onClick={function () { setOpen(false) }} className={function (s) { return 'flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm ' + (s.isActive ? 'bg-bsi-100 text-bsi-900 font-bold ring-1 ring-bsi-200 dark:ring-bsi-500/40' : 'font-semibold text-slate-600 hover:bg-slate-100') }}>{function (s) { return <>{s.isActive ? <span className="h-2 w-2 shrink-0 rounded-full bg-current" /> : null}<span className="truncate">{l.label}</span></> }}</NavLink>
-            })}
-            {mahasiswa ? (
-              <>
-                <NavLink to="/dashboard" onClick={function () { setOpen(false) }} className={function (s) { return 'flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm font-semibold bg-bsi-800 text-white ' + (s.isActive ? 'ring-2 ring-gold-400' : '') }}>{function (s) { return <>{s.isActive ? <span className="h-2 w-2 shrink-0 rounded-full bg-gold-400" /> : null}<span className="truncate">Dashboard</span></> }}</NavLink>
-                <button type="button" onClick={mintaKeluar} className="block w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700">Keluar</button>
-              </>
-            ) : (
-              <Link to="/login" onClick={function () { setOpen(false) }} className="block px-4 py-3 rounded-xl bg-slate-900 text-white text-sm font-semibold">Masuk Intern</Link>
-            )}
-        </MenuMobile>
-      </header>
-
-      <main className="anim-page max-w-7xl mx-auto px-4 py-8 lg:py-10 flex-1 w-full">
-        <Outlet />
-      </main>
-
-      <footer className="footer-ramping border-t border-slate-200 bg-white">
-<div className="mx-auto max-w-7xl px-4 py-4 text-center">
-<p className="text-xs text-slate-600">© 2026 Tim Magang BSI</p>
-</div>
-</footer>
-<ConfirmModal
-  open={konfirmasiKeluar}
-  title="Keluar dari Akun?"
-  message="Sesi login kamu akan berakhir dan area intern tidak bisa diakses sampai kamu masuk lagi. Data yang sudah disimpan tetap aman."
-  confirmLabel="Ya, Keluar"
-  icon="user"
-  tone="netral"
-  onCancel={function () { setKonfirmasiKeluar(false) }}
-  onConfirm={benarKeluar}
-/>
-    </div>
-  )
-}
-```
-
-## File: src/pages/DospemPage.jsx
-```javascript
-import { urutkanTanggal } from '../lib/format.js'
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { supabase } from '../lib/supabase.js'
-import { EmptyState, Modal , Avatar } from '../components/ui.jsx'
-import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
-import { SkeletonLogbookCard, SkeletonPersonCard } from '../components/Skeleton.jsx'
-
-export default function DospemPage() {
-  const [logs, setLogs] = useState([])
-  const [people, setPeople] = useState([])
-  const [galCount, setGalCount] = useState(0)
-  const [hadirCount, setHadirCount] = useState(0)
-  const [galRows, setGalRows] = useState([])
-  const [hadirRows, setHadirRows] = useState([])
-  const [detail, setDetail] = useState(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(function () {
-    async function load() {
-      const l = await supabase
-        .from('logbooks')
-        .select('*, mahasiswa(*), logbook_items(*)')
-        .eq('status', 'publik')
-        .order('tanggal', { ascending: false })
-        .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
-      const p = await supabase.from('mahasiswa').select('id, nama, nim, prodi, foto_profil').order('nama')
-      const g = await supabase.from('galeri').select('id, mahasiswa_id')
-      const h = await supabase.from('daftar_hadir').select('id, mahasiswa_id, status')
-      setLogs(l.data || [])
-      setPeople(p.data || [])
-      setGalCount((g.data || []).length)
-      setGalRows(g.data || [])
-      setHadirCount((h.data || []).length)
-      setHadirRows(h.data || [])
-      setLoading(false)
-    }
-    load()
-  }, [])
-
-  return (
-    <div>
-      <section className="card-hover rounded-[2rem] bg-bsi-900 text-white p-5 sm:p-5 sm:p-8 lg:p-12">
-        <span className="inline-flex px-3 py-1.5 rounded-full bg-white/10 text-[10px] font-semibold uppercase tracking-wide sm:px-4 sm:py-2 sm:text-xs">Monitoring Dospem dan Kaprodi</span>
-        <h1 className="mt-6 text-2xl sm:text-2xl sm:text-3xl lg:text-5xl font-black max-w-3xl leading-tight">Ringkasan Kegiatan Magang Tim di Bank BSI</h1>
-        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-white/80 sm:mt-4 sm:text-base">Halaman ini dapat diakses tanpa login.</p>
-        <div className="mt-5 grid grid-cols-2 gap-2.5 sm:mt-8 sm:gap-4 xl:grid-cols-4">
-          {loading
-            ? [0, 1, 2, 3].map(function (i) {
-                return (
-                  <div key={i} className="rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5">
-                    <div className="skeleton skeleton-on-dark h-4 w-24"></div>
-                    <div className="skeleton skeleton-on-dark h-9 w-14 mt-2"></div>
-                  </div>
-                )
-              })
-            : [
-                <div key="mahasiswa" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Total Mahasiswa</p><p className="mt-1 text-2xl sm:text-3xl font-black">{people.length}</p></div>,
-                <div key="logbook" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Logbook Publik</p><p className="mt-1 text-2xl sm:text-3xl font-black">{logs.length}</p></div>,
-                <div key="galeri" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Media Galeri</p><p className="mt-1 text-2xl sm:text-3xl font-black">{galCount}</p></div>,
-                <div key="hadir" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Catatan Hadir</p><p className="mt-1 text-2xl sm:text-3xl font-black">{hadirCount}</p></div>
-              ]}
-        </div>
-        <div className="mt-6 flex flex-wrap gap-2 sm:mt-8 sm:gap-3">
-          <Link to="/logbook" className="px-4 py-2 rounded-xl bg-gold-500 text-slate-900 text-xs font-bold hover:bg-gold-400 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat Logbook</Link>
-          <Link to="/galeri" className="px-4 py-2 rounded-xl bg-white/10 text-white text-xs font-bold hover:bg-white/20 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat Galeri</Link>
-          <Link to="/absen" className="px-4 py-2 rounded-xl bg-white/10 text-white text-xs font-bold hover:bg-white/20 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat Daftar Hadir</Link>
-        </div>
-      </section>
-
-      <section className="mt-10">
-<h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Profil Tim Magang</h2>
-<p className="mt-2 max-w-3xl text-sm text-slate-600 sm:text-base">Seluruh mahasiswa magang beserta kontribusi logbook, media galeri, dan catatan kehadiran masing-masing.</p>
-<div className="grid-pusat-rapat mt-6">
-{loading
-? [0, 1, 2].map(function (i) { return <div key={i} className="kolom-kartu-rapat"><SkeletonPersonCard /></div> })
-: people.map(function (p) {
-const totalLog = logs.filter(function (x) { return x.mahasiswa_id === p.id }).length
-const totalGal = galRows.filter(function (x) { return x.mahasiswa_id === p.id }).length
-const totalHadir = hadirRows.filter(function (x) { return x.mahasiswa_id === p.id }).length
-return (
-<div key={p.id} className="kolom-kartu-rapat">
-<div className="card-hover rounded-3xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col h-full">
-<div className="flex items-center gap-4">
-<Avatar src={p.foto_profil || null} nama={p.nama} size="lg" />
-<div className="min-w-0 flex-1">
-<p className="truncate text-lg font-black text-slate-900">{p.nama}</p>
-<p className="truncate text-xs text-slate-600">NIM {p.nim}</p>
-{p.prodi ? <span className="mt-1.5 inline-flex px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold">{p.prodi}</span> : null}
-</div>
-</div>
-<div className="mt-4 grid grid-cols-2 gap-3">
-<div className="rounded-2xl bg-slate-50 p-3">
-<p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">Logbook</p>
-<p className="mt-0.5 text-xl font-black text-bsi-800">{totalLog}</p>
-</div>
-<div className="rounded-2xl bg-slate-50 p-3">
-<p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">Media</p>
-<p className="mt-0.5 text-xl font-black text-bsi-800">{totalGal}</p>
-</div>
-</div>
-<div className="mt-3 pt-3 border-t border-slate-100">
-<p className="text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">Rekap Kehadiran</p>
-<div className="grid grid-cols-3 gap-2">
-<div className="rounded-xl bg-emerald-50 p-2 text-center">
-<p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase">Masuk</p>
-<p className="text-base font-black text-emerald-700 dark:text-emerald-400">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Masuk' }).length}</p>
-</div>
-<div className="rounded-xl bg-amber-50 p-2 text-center">
-<p className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase">Izin</p>
-<p className="text-base font-black text-amber-700 dark:text-amber-400">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Izin' }).length}</p>
-</div>
-<div className="rounded-xl bg-red-50 p-2 text-center">
-<p className="text-[10px] font-bold text-red-600 dark:text-red-400 uppercase">Bolos</p>
-<p className="text-base font-black text-red-600 dark:text-red-400">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Bolos' }).length}</p>
-</div>
-</div>
-</div>
-</div>
- </div>
-)
-})}
-{!loading && !people.length ? <div className="w-full"><EmptyState title="Belum Ada Data Mahasiswa" desc="Profil tim akan tampil setelah mahasiswa terdaftar." /></div> : null}
-</div>
-</section>
-
-      <section className="mt-10">
-        <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Aktivitas yang Sudah Dipublikasikan</h2>
-        <div className="grid-pusat mt-6">
-          {loading
-            ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
-            : urutkanTanggal(logs, 'terbaru').slice(0, 6).map(function (l) {
-                return (
-                  <div key={l.id} className="kolom-kartu">
-                    <LogbookCard log={l} onDetail={function () { setDetail(l) }} />
-                  </div>
-                )
-              })}
-          {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum Ada Logbook Publik" desc="Logbook akan tampil setelah mahasiswa mengatur status siap dilihat." /></div> : null}
-        </div>
-        <div className="mt-8 flex justify-center">
-          <Link to="/logbook" className="rounded-xl bg-bsi-800 px-5 py-2.5 text-xs font-bold text-white hover:bg-bsi-900 sm:rounded-2xl sm:px-6 sm:py-3 sm:text-sm">Lihat Semua Logbook</Link>
-        </div>
-      </section>
-      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
-        {detail ? <LogbookDetail log={detail} /> : null}
-      </Modal>
-    </div>
+        ) : null}
+        <form onSubmit={submit} className="mt-6 space-y-5">
+          <div>
+            <label className={labelCls}>NIM <span className="text-red-500">*</span></label>
+            <input className={inputCls} value={nim} onChange={function (e) { setNim(e.target.value) }} aria-label="NIM" placeholder="Contoh: 20260001" required />
+          </div>
+          <div>
+            <label className={labelCls}>Kode akses <span className="text-red-500">*</span></label>
+            <div className="relative mt-1.5">
+              <input
+                type={lihatKode ? 'text' : 'password'}
+                className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 pr-12 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+                value={kode}
+                onChange={function (e) { setKode(e.target.value) }}
+                aria-label="Kode Akses" placeholder="Masukkan kode akses"
+                required
+              />
+              <button
+                type="button"
+                onClick={function () { setLihatKode(function (v) { return !v }) }}
+                title={lihatKode ? 'Sembunyikan Kode Akses' : 'Lihat Kode Akses'}
+                className="absolute right-2 top-0 bottom-0 my-auto grid h-9 w-9 place-items-center rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-600"
+              >
+                <EyeToggle open={lihatKode} size={18} />
+              </button>
+            </div>
+          </div>
+          <button type="submit" disabled={busy} className={btnPrimary}>{busy ? 'Memproses...' : 'Masuk'}</button>
+        </form>
+      </div>
+    </section>
   )
 }
 ```
@@ -3678,6 +3394,290 @@ export default function LogbookPage() {
 }
 ```
 
+## File: src/components/Layout.jsx
+```javascript
+import { Outlet, Link, NavLink, useNavigate } from 'react-router-dom'
+import { useTheme } from '../lib/theme.jsx'
+import { useAuth, logoutMahasiswa } from '../lib/auth.js'
+import { SizedIcon } from './icons.jsx'
+import { ConfirmModal } from './ui.jsx'
+import { useEffect, useState } from 'react'
+
+const LINKS = [
+  { to: '/', label: 'Beranda' },
+  { to: '/logbook', label: 'Logbook' },
+  { to: '/galeri', label: 'Galeri' },
+  { to: '/absen', label: 'Daftar Hadir' },
+  { to: '/dospem', label: 'Tim & Dospem' }
+]
+
+function MenuMobile(props) {
+  return (
+    <div className={'menu-mobile-wrap xl:hidden' + (props.open ? ' menu-mobile-buka' : '')}>
+      <div className="menu-mobile-dalam">
+        <div className="menu-mobile-isi border-t border-slate-200 bg-white px-4 py-4 space-y-2">
+          {props.children}
+        </div>
+      </div>
+    </div>
+  )
+}
+export default function Layout() {
+  const theme = useTheme()
+  const { mahasiswa } = useAuth()
+  const [open, setOpen] = useState(false)
+  const [konfirmasiKeluar, setKonfirmasiKeluar] = useState(false)
+  const navigate = useNavigate()
+  function mintaKeluar(e) {
+    e.preventDefault()
+    setOpen(false)
+    setKonfirmasiKeluar(true)
+  }
+  async function benarKeluar() {
+    setKonfirmasiKeluar(false)
+    await logoutMahasiswa()
+    navigate('/')
+  }
+
+  const linkCls = function (active) {
+    return 'px-3 py-2 rounded-xl text-sm font-semibold ' + (active ? 'bg-bsi-900 text-white' : 'text-slate-600 hover:bg-slate-100')
+  }
+
+  const themeBtn = function (extra) {
+    return (
+      <button onClick={theme.toggle} className={'rounded-xl border border-slate-300 grid place-items-center hover:bg-slate-100 text-slate-700 ' + (extra || 'h-10 w-10')} title="Ganti Tema">
+        <SizedIcon name={theme.dark ? 'sun' : 'moon'} size={18} />
+      </button>
+    )
+  }
+
+  return (
+    <div className="flex flex-col min-h-screen">
+      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="h-16 flex items-center justify-between gap-4">
+            <Link to="/" className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-2xl bg-gradient-to-tr from-bsi-800 to-gold-500 text-white grid place-items-center font-black">BSI</div>
+              <div>
+                <p className="font-bold leading-none text-slate-900">Logbook Magang</p>
+                <p className="text-xs text-slate-600 mt-1">Bank Syariah Indonesia</p>
+              </div>
+            </Link>
+            <nav className="hidden xl:flex items-center gap-1">
+              {LINKS.map(function (l) {
+                return <NavLink key={l.to} to={l.to} end={l.to === '/'} className={function (s) { return linkCls(s.isActive) }}>{l.label}</NavLink>
+              })}
+            </nav>
+            <div className="hidden xl:flex items-center gap-3">
+              {themeBtn()}
+              {mahasiswa ? (
+                <>
+                  <Link to="/dashboard" className="px-4 py-2 rounded-xl bg-bsi-800 text-white text-sm font-semibold hover:bg-bsi-900">Dashboard</Link>
+                  <button type="button" onClick={mintaKeluar} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-100">Keluar</button>
+                </>
+              ) : (
+                <Link to="/login" className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-700">Masuk Akun</Link>
+              )}
+            </div>
+            <div className="flex xl:hidden items-center gap-2">
+              {themeBtn()}
+              <button onClick={function () { setOpen(function (o) { return !o }) }} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700">Menu</button>
+            </div>
+          </div>
+        </div>
+        <MenuMobile open={open}>
+            {LINKS.map(function (l) {
+              return <NavLink key={l.to} to={l.to} end={l.to === '/'} onClick={function () { setOpen(false) }} className={function (s) { return 'flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm ' + (s.isActive ? 'bg-bsi-100 text-bsi-900 font-bold ring-1 ring-bsi-200 dark:ring-bsi-500/40' : 'font-semibold text-slate-600 hover:bg-slate-100') }}>{function (s) { return <>{s.isActive ? <span className="h-2 w-2 shrink-0 rounded-full bg-current" /> : null}<span className="truncate">{l.label}</span></> }}</NavLink>
+            })}
+            {mahasiswa ? (
+              <>
+                <NavLink to="/dashboard" onClick={function () { setOpen(false) }} className={function (s) { return 'flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm font-semibold bg-bsi-800 text-white ' + (s.isActive ? 'ring-2 ring-gold-400' : '') }}>{function (s) { return <>{s.isActive ? <span className="h-2 w-2 shrink-0 rounded-full bg-gold-400" /> : null}<span className="truncate">Dashboard</span></> }}</NavLink>
+                <button type="button" onClick={mintaKeluar} className="block w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700">Keluar</button>
+              </>
+            ) : (
+              <Link to="/login" onClick={function () { setOpen(false) }} className="block px-4 py-3 rounded-xl bg-slate-900 text-white text-sm font-semibold">Masuk Akun</Link>
+            )}
+        </MenuMobile>
+      </header>
+
+      <main className="anim-page max-w-7xl mx-auto px-4 py-8 lg:py-10 flex-1 w-full">
+        <Outlet />
+      </main>
+
+      <footer className="footer-ramping border-t border-slate-200 bg-white">
+<div className="mx-auto max-w-7xl px-4 py-4 text-center">
+<p className="text-xs text-slate-600">© 2026 Tim Magang BSI</p>
+</div>
+</footer>
+<ConfirmModal
+  open={konfirmasiKeluar}
+  title="Keluar dari Akun?"
+  message="Sesi login kamu akan berakhir dan area intern tidak bisa diakses sampai kamu masuk lagi. Data yang sudah disimpan tetap aman."
+  confirmLabel="Keluar"
+  icon="user"
+  tone="netral"
+  onCancel={function () { setKonfirmasiKeluar(false) }}
+  onConfirm={benarKeluar}
+/>
+    </div>
+  )
+}
+```
+
+## File: src/pages/DospemPage.jsx
+```javascript
+import { urutkanTanggal } from '../lib/format.js'
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { supabase } from '../lib/supabase.js'
+import { EmptyState, Modal , Avatar } from '../components/ui.jsx'
+import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
+import { SkeletonLogbookCard, SkeletonPersonCard } from '../components/Skeleton.jsx'
+
+export default function DospemPage() {
+  const [logs, setLogs] = useState([])
+  const [people, setPeople] = useState([])
+  const [galCount, setGalCount] = useState(0)
+  const [hadirCount, setHadirCount] = useState(0)
+  const [galRows, setGalRows] = useState([])
+  const [hadirRows, setHadirRows] = useState([])
+  const [detail, setDetail] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(function () {
+    async function load() {
+      const l = await supabase
+        .from('logbooks')
+        .select('*, mahasiswa(*), logbook_items(*)')
+        .eq('status', 'publik')
+        .order('tanggal', { ascending: false })
+        .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
+      const p = await supabase.from('mahasiswa').select('id, nama, nim, prodi, foto_profil').order('nama')
+      const g = await supabase.from('galeri').select('id, mahasiswa_id')
+      const h = await supabase.from('daftar_hadir').select('id, mahasiswa_id, status')
+      setLogs(l.data || [])
+      setPeople(p.data || [])
+      setGalCount((g.data || []).length)
+      setGalRows(g.data || [])
+      setHadirCount((h.data || []).length)
+      setHadirRows(h.data || [])
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  return (
+    <div>
+      <section className="card-hover rounded-[2rem] bg-bsi-900 text-white p-5 sm:p-5 sm:p-8 lg:p-12">
+        <span className="inline-flex px-3 py-1.5 rounded-full bg-white/10 text-[10px] font-semibold uppercase tracking-wide sm:px-4 sm:py-2 sm:text-xs">Untuk Dospem & Kaprodi</span>
+        <h1 className="mt-6 text-2xl sm:text-2xl sm:text-3xl lg:text-5xl font-black max-w-3xl leading-tight">Ringkasan Kegiatan Magang Tim di Bank BSI</h1>
+        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-white/80 sm:mt-4 sm:text-base">Halaman ini dapat diakses tanpa login.</p>
+        <div className="mt-5 grid grid-cols-2 gap-2.5 sm:mt-8 sm:gap-4 xl:grid-cols-4">
+          {loading
+            ? [0, 1, 2, 3].map(function (i) {
+                return (
+                  <div key={i} className="rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5">
+                    <div className="skeleton skeleton-on-dark h-4 w-24"></div>
+                    <div className="skeleton skeleton-on-dark h-9 w-14 mt-2"></div>
+                  </div>
+                )
+              })
+            : [
+                <div key="mahasiswa" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Total Mahasiswa</p><p className="mt-1 text-2xl sm:text-3xl font-black">{people.length}</p></div>,
+                <div key="logbook" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Logbook Publik</p><p className="mt-1 text-2xl sm:text-3xl font-black">{logs.length}</p></div>,
+                <div key="galeri" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Media Galeri</p><p className="mt-1 text-2xl sm:text-3xl font-black">{galCount}</p></div>,
+                <div key="hadir" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Catatan Hadir</p><p className="mt-1 text-2xl sm:text-3xl font-black">{hadirCount}</p></div>
+              ]}
+        </div>
+        <div className="mt-6 flex flex-wrap gap-2 sm:mt-8 sm:gap-3">
+          <Link to="/logbook" className="px-4 py-2 rounded-xl bg-gold-500 text-slate-900 text-xs font-bold hover:bg-gold-400 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat Logbook</Link>
+          <Link to="/galeri" className="px-4 py-2 rounded-xl bg-white/10 text-white text-xs font-bold hover:bg-white/20 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat Galeri</Link>
+          <Link to="/absen" className="px-4 py-2 rounded-xl bg-white/10 text-white text-xs font-bold hover:bg-white/20 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat Daftar Hadir</Link>
+        </div>
+      </section>
+
+      <section className="mt-10">
+<h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Profil Tim Magang</h2>
+<p className="mt-2 max-w-3xl text-sm text-slate-600 sm:text-base">Seluruh mahasiswa magang beserta kontribusi logbook, media galeri, dan catatan kehadiran masing-masing.</p>
+<div className="grid-pusat-rapat mt-6">
+{loading
+? [0, 1, 2].map(function (i) { return <div key={i} className="kolom-kartu-rapat"><SkeletonPersonCard /></div> })
+: people.map(function (p) {
+const totalLog = logs.filter(function (x) { return x.mahasiswa_id === p.id }).length
+const totalGal = galRows.filter(function (x) { return x.mahasiswa_id === p.id }).length
+const totalHadir = hadirRows.filter(function (x) { return x.mahasiswa_id === p.id }).length
+return (
+<div key={p.id} className="kolom-kartu-rapat">
+<div className="card-hover rounded-3xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col h-full">
+<div className="flex items-center gap-4">
+<Avatar src={p.foto_profil || null} nama={p.nama} size="lg" />
+<div className="min-w-0 flex-1">
+<p className="truncate text-lg font-black text-slate-900">{p.nama}</p>
+<p className="truncate text-xs text-slate-600">NIM {p.nim}</p>
+{p.prodi ? <span className="mt-1.5 inline-flex px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold">{p.prodi}</span> : null}
+</div>
+</div>
+<div className="mt-4 grid grid-cols-2 gap-3">
+<div className="rounded-2xl bg-slate-50 p-3">
+<p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">Logbook</p>
+<p className="mt-0.5 text-xl font-black text-bsi-800">{totalLog}</p>
+</div>
+<div className="rounded-2xl bg-slate-50 p-3">
+<p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">Media</p>
+<p className="mt-0.5 text-xl font-black text-bsi-800">{totalGal}</p>
+</div>
+</div>
+<div className="mt-3 pt-3 border-t border-slate-100">
+<p className="text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">Rekap Kehadiran</p>
+<div className="grid grid-cols-3 gap-2">
+<div className="rounded-xl bg-emerald-50 p-2 text-center">
+<p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase">Masuk</p>
+<p className="text-base font-black text-emerald-700 dark:text-emerald-400">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Masuk' }).length}</p>
+</div>
+<div className="rounded-xl bg-amber-50 p-2 text-center">
+<p className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase">Izin</p>
+<p className="text-base font-black text-amber-700 dark:text-amber-400">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Izin' }).length}</p>
+</div>
+<div className="rounded-xl bg-red-50 p-2 text-center">
+<p className="text-[10px] font-bold text-red-600 dark:text-red-400 uppercase">Bolos</p>
+<p className="text-base font-black text-red-600 dark:text-red-400">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Bolos' }).length}</p>
+</div>
+</div>
+</div>
+</div>
+ </div>
+)
+})}
+{!loading && !people.length ? <div className="w-full"><EmptyState title="Belum Ada Data Mahasiswa" desc="Profil tim akan tampil setelah mahasiswa terdaftar." /></div> : null}
+</div>
+</section>
+
+      <section className="mt-10">
+        <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Aktivitas yang Sudah Dibagikan</h2>
+        <div className="grid-pusat mt-6">
+          {loading
+            ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
+            : urutkanTanggal(logs, 'terbaru').slice(0, 6).map(function (l) {
+                return (
+                  <div key={l.id} className="kolom-kartu">
+                    <LogbookCard log={l} onDetail={function () { setDetail(l) }} />
+                  </div>
+                )
+              })}
+          {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum Ada Logbook Publik" desc="Logbook akan tampil setelah mahasiswa mengatur status siap dilihat." /></div> : null}
+        </div>
+        <div className="mt-8 flex justify-center">
+          <Link to="/logbook" className="rounded-xl bg-bsi-800 px-5 py-2.5 text-xs font-bold text-white hover:bg-bsi-900 sm:rounded-2xl sm:px-6 sm:py-3 sm:text-sm">Lihat Semua Logbook</Link>
+        </div>
+      </section>
+      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
+        {detail ? <LogbookDetail log={detail} /> : null}
+      </Modal>
+    </div>
+  )
+}
+```
+
 ## File: src/pages/AttendancePage.jsx
 ```javascript
 import { useEffect, useState } from 'react'
@@ -3752,7 +3752,7 @@ export default function AttendancePage() {
     <div>
       <section className="rounded-[2rem] bg-white border border-slate-200 p-5 sm:p-5 sm:p-8 lg:p-10 shadow-sm">
         <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-400">Daftar hadir</p>
-        <h1 className="mt-2 text-2xl sm:text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Monitoring Kehadiran Tim Magang</h1>
+        <h1 className="mt-2 text-2xl sm:text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Rekap Kehadiran Tim Magang</h1>
         <div className="mt-5 grid grid-cols-2 gap-2.5 sm:mt-8 sm:gap-4 xl:grid-cols-4">
           {loading
             ? [0, 1, 2, 3].map(function (i) { return <SkeletonStatCard key={i} /> })
@@ -3892,7 +3892,7 @@ export default function HomePage() {
               <Link to="/absen" className="px-4 py-2.5 rounded-xl bg-white/10 text-white text-sm font-bold hover:bg-white/20 sm:px-6 sm:py-3 sm:rounded-2xl sm:text-base">Daftar Hadir</Link>
               {mahasiswa
                 ? <Link to="/dashboard" className="px-4 py-2.5 rounded-xl bg-[#ffffff] text-[#135033] text-sm font-bold hover:bg-[#f1f5f9] sm:px-6 sm:py-3 sm:rounded-2xl sm:text-base">Buka Dashboard</Link>
-                : <Link to="/login" className="px-4 py-2.5 rounded-xl bg-[#ffffff] text-[#135033] text-sm font-bold hover:bg-[#f1f5f9] sm:px-6 sm:py-3 sm:rounded-2xl sm:text-base">Masuk Intern</Link>}
+                : <Link to="/login" className="px-4 py-2.5 rounded-xl bg-[#ffffff] text-[#135033] text-sm font-bold hover:bg-[#f1f5f9] sm:px-6 sm:py-3 sm:rounded-2xl sm:text-base">Masuk Akun</Link>}
             </div>
           </div>
         </div>
@@ -3925,7 +3925,7 @@ export default function HomePage() {
                   </div>
                 )
               })}
-          {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum Ada Logbook Publik" desc="Logbook yang sudah berstatus Published akan tampil di sini." /></div> : null}
+          {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum Ada Logbook Publik" desc="Logbook yang sudah dibagikan akan tampil di sini." /></div> : null}
         </div>
         <div className="mt-8 flex justify-center">
           <Link to="/logbook" className="rounded-xl bg-bsi-800 px-5 py-2.5 text-xs font-bold text-white hover:bg-bsi-900 sm:rounded-2xl sm:px-6 sm:py-3 sm:text-sm">Lihat Semua Logbook</Link>
@@ -4001,7 +4001,7 @@ export default function GalleryPage() {
       <section className="rounded-[2rem] bg-white border border-slate-200 p-5 sm:p-8 lg:p-10 shadow-sm">
         <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-400">Galeri dokumentasi</p>
         <h1 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Foto dan Video Kegiatan Magang</h1>
-        <p className="mt-2 text-sm text-slate-600 max-w-2xl sm:mt-3 sm:text-base">Setiap kartu mewakili satu kegiatan. Klik media untuk melihat detail.</p>
+        <p className="mt-2 text-sm text-slate-600 max-w-2xl sm:mt-3 sm:text-base">Setiap foto atau video mewakili satu kegiatan. Klik untuk melihat detail.</p>
       </section>
 
       <section className="mt-6">
@@ -4212,7 +4212,7 @@ export function GalleryCard(props) {
               <button onClick={props.onDelete} className={btnSmall + ' bg-red-50 text-red-700 hover:bg-red-100'}>Hapus</button>
             </div>
           ) : (
-            <span className="text-xs font-semibold text-bsi-800">Klik kartu untuk melihat detail</span>
+            <span className="text-xs font-semibold text-bsi-800">Klik untuk melihat detail</span>
           )}
         </div>
       </div>
@@ -4287,669 +4287,6 @@ export function AttendanceDetail(props) {
       <div className="detail-footer border-t border-slate-100 pt-4"><PersonChip mahasiswa={row.mahasiswa} /></div>
     </div>
   )
-}
-```
-
-## File: src/components/ui.jsx
-```javascript
-import { createPortal } from 'react-dom'
-import PemutarVideo from './PemutarVideo.jsx'
-import { drivePreviewUrl, driveDownloadUrl, driveThumbUrl } from '../lib/drive.js'
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
-import { SizedIcon } from './icons.jsx'
-function useBodyScrollLock(active) {
-  useEffect(function () {
-    if (!active) return undefined
-    const previous = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return function () {
-      document.body.style.overflow = previous
-    }
-  }, [active])
-}
-
-
-export const inputCls = 'mt-1.5 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-bsi-500'
-export const labelCls = 'text-sm font-semibold text-slate-700'
-export const btnPrimary = 'w-full rounded-xl bg-bsi-800 px-5 py-3 text-sm sm:rounded-2xl sm:px-6 sm:py-4 sm:text-base text-white font-bold hover:bg-bsi-900'
-export const btnSmall = 'px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-semibold'
-export const cardCls = 'card-hover bg-white rounded-3xl border border-slate-200 shadow-sm'
-
-export function StatCard(props) {
-  const rapat = props.rapat
-  const clsWadah = rapat ? ' p-3 sm:p-6' : ' p-4 sm:p-6'
-  const clsLabel = (rapat ? 'text-[11px] leading-snug sm:text-sm' : 'text-xs sm:text-sm') + ' text-slate-600'
-  const clsLabelRapat = 'text-[11px] leading-snug font-semibold text-slate-600 sm:hidden'
-  const clsValue = (rapat ? 'mt-1 text-xl sm:text-3xl' : 'mt-2 text-2xl sm:text-3xl') + ' font-black text-bsi-900'
-  const clsSub = (rapat ? 'hidden sm:block ' : '') + 'mt-1 text-[11px] leading-snug sm:text-xs text-slate-600'
-  return (
-    <div className={cardCls + clsWadah}>
-      {props.labelRapat ? <p className={clsLabelRapat}>{props.labelRapat}</p> : null}
-      <p className={clsLabel + (props.labelRapat ? ' hidden sm:block' : '')}>{props.label}</p>
-      <p className={clsValue}>{props.value}</p>
-      {props.sub ? <p className={clsSub}>{props.sub}</p> : null}
-    </div>
-  )
-}
-export function EmptyState(props) {
-  return (
-    <div className={cardCls + ' border-dashed p-10 text-center'}>
-      <div className="mx-auto h-14 w-14 rounded-2xl bg-slate-100 grid place-items-center text-slate-400">
-        <SizedIcon name={props.icon || 'file'} size={24} />
-      </div>
-      <h3 className="mt-4 text-lg font-bold text-slate-800">{props.title}</h3>
-      <p className="mt-2 text-sm text-slate-600 max-w-md mx-auto">{props.desc}</p>
-    </div>
-  )
-}
-
-export function StatusBadge(props) {
-  const publik = props.status === 'publik'
-  return (
-    <span className={'px-3 py-1 rounded-full text-xs font-semibold ' + (publik ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800')}>
-      {publik ? 'Published' : 'Draft'}
-    </span>
-  )
-}
-
-export function CategoryBadge(props) {
-  return <span className="px-3 py-1 rounded-full text-xs font-semibold bg-bsi-100 text-bsi-900">{props.value || 'Lainnya'}</span>
-}
-
-export function AttendanceBadge(props) {
-  const map = {
-    Masuk: 'bg-emerald-100 text-emerald-800',
-    Izin: 'bg-amber-100 text-amber-800',
-    Bolos: 'bg-red-100 text-red-700'
-  }
-  return <span className={'px-3 py-1 rounded-full text-xs font-semibold ' + (map[props.status] || 'bg-slate-100 text-slate-700')}>{props.status}</span>
-}
-
-export function Modal(props) {
-  const [tampil, setTampil] = useState(props.open)
-  const [tutup, setTutup] = useState(false)
-  const isiSimpan = useRef(null)
-  if (props.open) isiSimpan.current = props.children
-  useBodyScrollLock(!!props.open)
-  useEffect(function () {
-    if (props.open) {
-      setTampil(true)
-      setTutup(false)
-      return undefined
-    }
-    if (!tampil) return undefined
-    setTutup(true)
-    const t = setTimeout(function () {
-      setTampil(false)
-      setTutup(false)
-    }, 200)
-    return function () { clearTimeout(t) }
-  }, [props.open])
-  if (!tampil) return null
-  return (
-    <div className={'anim-overlay fixed inset-0 z-[60] overflow-y-auto overscroll-contain bg-slate-900/60 p-4' + (tutup ? ' modal-tutup' : '')} onClick={props.onClose}>
-      <div className="min-h-full flex items-center justify-center py-8">
-        <div className="anim-modal modal-detail w-full max-w-3xl rounded-[2rem] bg-white shadow-2xl max-h-[88vh] overflow-y-auto overscroll-contain" onClick={function (e) { e.stopPropagation() }}>
-          <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-            <p className="font-bold text-slate-900">{props.title || 'Detail'}</p>
-            <button onClick={props.onClose} aria-label="Tutup Detail" className="h-9 w-9 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 grid place-items-center">
-              <SizedIcon name="close" size={16} />
-            </button>
-          </div>
-          <div className="px-6 pt-6">{props.open ? props.children : isiSimpan.current}</div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export function AutoTextArea(props) {
-  const ref = useRef(null)
-
-  useEffect(function () {
-    const el = ref.current
-    if (!el) return
-    el.style.height = 'auto'
-    el.style.height = el.scrollHeight + 'px'
-  }, [props.value])
-
-  return (
-    <textarea
-      ref={ref}
-      className={props.className}
-      rows={props.rows || 2}
-      value={props.value}
-      placeholder={props.placeholder}
-      onChange={props.onChange}
-      disabled={props.disabled || false}
-    />
-  )
-}
-
-export function ConfirmModal(props) {
-const [tampil, setTampil] = useState(props.open)
-const propsSimpan = useRef(null)
-if (props.open) propsSimpan.current = props
-const p = props.open ? props : (propsSimpan.current || props)
-const tutup = tampil && !props.open
-useBodyScrollLock(!!props.open)
-useEffect(function () {
-if (props.open) { setTampil(true); return undefined }
-if (!tampil) return undefined
-const t = setTimeout(function () { setTampil(false) }, 200)
-return function () { clearTimeout(t) }
-}, [props.open, tampil])
-if (!tampil) return null
-return (
-<div className={'anim-overlay fixed inset-0 z-[70] overflow-y-auto overscroll-contain bg-slate-900/60 p-4' + (tutup ? ' modal-tutup' : '')} onClick={p.onCancel}>
-<div className="min-h-full flex items-center justify-center py-8">
-<div className="anim-modal w-full max-w-md rounded-[2rem] bg-white shadow-2xl" onClick={function (e) { e.stopPropagation() }}>
-<div className="p-6 space-y-4">
-<div className={'mx-auto h-14 w-14 ' + 'rounded-2xl grid place-items-center ' + ((p.tone || 'bahaya') === 'bahaya' ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600')}>
-<SizedIcon name={p.icon || 'trash'} size={24} />
-</div>
-<div className="text-center">
-<h3 className="text-xl font-black text-slate-900">{p.title || 'Hapus Data Ini?'}</h3>
-<p className="mt-2 text-sm text-slate-600">{p.message}</p>
-</div>
-<div className="grid grid-cols-2 gap-3">
-<button type="button" onClick={p.onCancel} className="rounded-2xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100">
-Batal
-</button>
-<button type="button" onClick={p.onConfirm} className={'rounded-2xl px-4 py-3 ' + 'text-sm font-bold text-white ' + ((p.tone || 'bahaya') === 'bahaya' ? 'bg-red-500 hover:bg-red-600' : 'bg-bsi-800 hover:bg-bsi-900')}>
-{p.confirmLabel || 'Ya, Hapus'}
-</button>
-</div>
-</div>
-</div>
-</div>
-</div>
-)
-}
-
-
-export function MediaDrive(props) {
-  const [gagal, setGagal] = useState(false)
-  useEffect(function () {
-    setGagal(false)
-  }, [props.driveId])
-  if (gagal) {
-    return (
-      <div className={'grid place-items-center bg-gradient-to-br from-slate-800 to-slate-900 ' + (props.className || 'absolute inset-0 h-full w-full')}>
-        <div className="flex flex-col items-center gap-2 text-slate-300">
-          <span className="grid h-12 w-12 place-items-center rounded-full bg-white/10">
-            <SizedIcon name="image" size={22} />
-          </span>
-          <p className="px-2 text-center text-[11px] font-semibold">Video Google Drive</p>
-        </div>
-      </div>
-    )
-  }
-  return (
-    <img
-      src={driveThumbUrl(props.driveId)}
-      alt={props.alt || 'Video Google Drive'}
-      onClick={props.onClick || undefined}
-      onError={function () { setGagal(true) }} loading="lazy" decoding="async"
-      className={(props.className || 'absolute inset-0 h-full w-full object-cover') + (props.onClick ? ' cursor-zoom-in' : '')}
-    />
-  )
-}
-export function Lightbox(props) {
-  useBodyScrollLock(true)
-  const [busyUnduh, setBusyUnduh] = useState(false)
-  const [tutup, setTutup] = useState(false)
-  const sedangTutup = useRef(false)
-  function mintaTutup() {
-    if (sedangTutup.current) return
-    sedangTutup.current = true
-    setTutup(true)
-    setTimeout(function () { props.onClose() }, 200)
-  }
-  useEffect(function () {
-    function onKey(e) {
-      if (e.key === 'Escape') mintaTutup()
-    }
-    document.addEventListener('keydown', onKey)
-    return function () { document.removeEventListener('keydown', onKey) }
-  }, [])
-  async function unduh() {
-    if (busyUnduh) return
-    setBusyUnduh(true)
-    if (props.driveId) {
-      try {
-        const nama = (props.title ? props.title.replace(/[\/\\:*?"<>|]/g, '').replace(/\s+/g, '-').substring(0, 60) : 'video-' + props.driveId) + '.mp4'
-        const a = document.createElement('a')
-        a.href = driveDownloadUrl(props.driveId)
-        a.download = nama
-        a.target = '_blank'
-        a.rel = 'noopener noreferrer'
-        a.style.display = 'none'
-        document.body.appendChild(a)
-        a.click()
-        setTimeout(function () { a.remove() }, 1000)
-      } catch (err) {
-        window.open(driveDownloadUrl(props.driveId), '_blank')
-      }
-      setBusyUnduh(false)
-      return
-    }
-    let nama = 'media'
-    try {
-      const urlAsli = new URL(props.src)
-      const ekstensi = urlAsli.pathname.split('.').pop().split('?')[0] || 'jpg'
-      if (props.title && props.title.trim()) {
-        const judulAman = props.title.trim().replace(/[\/\\:*?"<>|]/g, '').replace(/\s+/g, '-').substring(0, 60)
-        nama = judulAman + '.' + ekstensi
-      } else {
-        nama = urlAsli.pathname.split('/').pop() || ('media.' + ekstensi)
-      }
-    } catch (e) {
-      nama = (props.title || 'media') + '.jpg'
-    }
-    try {
-      const urlUnduh = props.src + (props.src.includes('?') ? '&' : '?') + 'unduh=1'
-      const res = await fetch(urlUnduh, { cache: 'no-store' })
-      if (!res.ok) throw new Error('status ' + res.status)
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = nama
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      setTimeout(function () { URL.revokeObjectURL(url) }, 2000)
-    } catch (err) {
-      window.open(props.src, '_blank')
-    }
-    setBusyUnduh(false)
-  }
-  const tombolUnduhTerlihat = !!props.driveId || !props.youtubeId
-  return createPortal(
-    <div className={'anim-overlay fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/95 p-4' + (tutup ? ' lightbox-tutup' : '')} onClick={mintaTutup}>
-      <div className="lightbox-isi relative w-full max-w-5xl" onClick={function (e) { e.stopPropagation() }}>
-        {props.youtubeId ? (
-          <PemutarVideo key={props.youtubeId} youtubeId={props.youtubeId} title={props.title || 'Video'} className="mx-auto aspect-video w-full rounded-2xl" />
-        ) : props.type === 'video' ? (
-          <video src={props.src} controls autoPlay className="mx-auto max-h-[85vh] w-full rounded-2xl bg-slate-900 object-contain" />
-        ) : (
-          <img
-            src={props.src}
-            alt={props.title || 'Media'}
-            onClick={mintaTutup}
-            className="mx-auto max-h-[85vh] w-auto max-w-full cursor-zoom-out rounded-2xl object-contain"
-          />
-        )}
-        {props.title ? <p className="mt-3 truncate text-center text-sm text-slate-300">{props.title}</p> : null}
-      </div>
-      <div className="absolute right-4 top-4 flex gap-2">
-        <button
-          type="button"
-          title={busyUnduh ? 'Menyiapkan Unduhan...' : (props.driveId ? 'Unduh Video dari Google Drive' : 'Unduh Media')}
-          onClick={unduh}
-          disabled={busyUnduh}
-          style={tombolUnduhTerlihat ? undefined : { display: 'none' }}
-          className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20 disabled:opacity-50"
-        >
-          <SizedIcon name="download" size={18} />
-        </button>
-        <button
-          type="button"
-          title="Tutup (Esc)"
-          onClick={mintaTutup}
-          className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
-        >
-          <SizedIcon name="close" size={18} />
-        </button>
-      </div>
-      <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-slate-400">
-        {props.driveId ? 'Video diputar dari YouTube, unduhan diambil dari Google Drive' : 'Klik media atau tekan Esc untuk menutup'}
-      </p>
-    </div>
-  , document.body)
-}
-export function ZoomableMedia(props) {
-  const [open, setOpen] = useState(false)
-  const isVideo = props.type === 'video'
-  return (
-    <div className={'relative group ' + (props.className || '')}>
-      <SmartFit
-        src={props.src}
-        type={props.type}
-        alt={props.title || 'Media'}
-        full={props.full || props.src}
-         controls={isVideo}
-        onClick={isVideo ? null : function (e) { e.stopPropagation(); setOpen(true) }}
-      />
-      <button
-        type="button"
-        title="Perbesar Media"
-        onClick={function (e) { e.stopPropagation(); setOpen(true) }}
-        className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100"
-      >
-        <SizedIcon name="expand" size={15} />
-      </button>
-      {open ? <Lightbox src={props.full || props.src} type={props.type} title={props.title} onClose={function () { setOpen(false) }} /> : null}
-    </div>
-  )
-}
-
-
-export function SmartFit(props) {
-  const [ratio, setRatio] = useState(null)
-  const [near, setNear] = useState(false)
-  const mediaRef = useRef(null)
-  const isVideo = props.type === 'video'
-  if (!isVideo && String(props.src || '').indexOf('i.ytimg.com') !== -1) {
-    return <MediaYouTube src={props.src} alt={props.alt} onClick={props.onClick} className="absolute inset-0 h-full w-full object-cover" />
-  }
-  useEffect(function () {
-    const el = mediaRef.current
-    if (!el) return undefined
-    if (typeof IntersectionObserver === 'undefined') {
-      setNear(true)
-      return undefined
-    }
-    const io = new IntersectionObserver(function (entries) {
-      for (let i = 0; i < entries.length; i++) {
-        if (entries[i].isIntersecting) {
-          setNear(true)
-          io.disconnect()
-          break
-        }
-      }
-    }, { rootMargin: '400px' })
-    io.observe(el)
-    return function () { io.disconnect() }
-  }, [])
-  function bacaUkuran(e) {
-    const el = e.target
-    const w = isVideo ? el.videoWidth : el.naturalWidth
-    const h = isVideo ? el.videoHeight : el.naturalHeight
-    if (w && h) setRatio(w / h)
-  }
-  function cadangkan(e) {
-    const el = e.currentTarget
-    const cad = props.full && props.full !== props.src ? props.full : props.src
-    if (cad && el.src !== cad) el.src = cad
-  }
-  const cover = ratio !== null && ratio > 1
-  const potret = ratio !== null && ratio <= 1
-  return (
-    <>
-      {potret && !isVideo ? (
-        <img src={props.src} alt="" aria-hidden="true" loading="lazy" decoding="async" onError={cadangkan} className="absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-xl" />
-      ) : null}
-      {isVideo ? (
-        <video
-          ref={mediaRef}
-          src={near ? props.src : undefined}
-          muted={props.controls ? false : true}
-          preload="metadata"
-          controls={props.controls || false}
-          onLoadedMetadata={bacaUkuran}
-          className={'absolute inset-0 h-full w-full ' + (cover ? 'object-cover' : 'object-contain')}
-        />
-      ) : (
-        <img
-          ref={mediaRef}
-          src={near ? props.src : undefined}
-          alt={props.alt || 'Media'}
-          loading="lazy"
-          decoding="async"
-          onLoad={bacaUkuran}
-          onError={cadangkan}
-          onClick={props.onClick || undefined}
-          className={'absolute inset-0 h-full w-full ' + (cover ? 'object-cover' : 'object-contain') + (props.onClick ? ' cursor-zoom-in' : '')}
-        />
-      )}
-    </>
-  )
-}
-
-export function MediaYouTube(props) {
-  const [status, setStatus] = useState('muat')
-  const [coba, setCoba] = useState(0)
-  useEffect(function () {
-    if (status !== 'tunggu') return undefined
-    const t = setTimeout(function () {
-      setCoba(function (c) { return c + 1 })
-      setStatus('muat')
-    }, 15000)
-    return function () { clearTimeout(t) }
-  }, [status])
-  if (status === 'tunggu' || status === 'habis') {
-    return (
-      <div className={'grid place-items-center bg-slate-800 ' + (props.className || 'absolute inset-0 h-full w-full')}>
-        <div className="flex flex-col items-center gap-2 text-slate-400">
-          <SizedIcon name="video" size={26} />
-          <p className="px-2 text-center text-[11px] font-semibold">{status === 'habis' ? 'Pratinjau Video Belum Siap' : 'Menyiapkan Pratinjau Video'}</p>
-        </div>
-      </div>
-    )
-  }
-  return (
-    <img
-      src={props.src + (coba > 0 ? (String(props.src).indexOf('?') === -1 ? '?' : '&') + 'r=' + coba : '')}
-      alt={props.alt || 'Pratinjau video'}
-      onClick={props.onClick || undefined}
-      onError={function () { setStatus(coba >= 3 ? 'habis' : 'tunggu') }}
-      onLoad={function () { setStatus('muat') }}
-      className={props.className || 'absolute inset-0 h-full w-full object-cover'}
-    />
-  )
-}
-
-export function TitikAnim() {
-
-  return (
-    <span className="titik-anim" aria-hidden="true">
-      <i></i>
-      <i></i>
-      <i></i>
-    </span>
-  )
-}
-export function LabelProses(props) {
-  const bersih = String(props.teks || '').replace(/\.{3}/g, '').replace(/\s+/g, ' ').trim()
-  return (
-    <span className="inline-flex items-center justify-center">
-      <span>{bersih}</span>
-      <TitikAnim />
-    </span>
-  )
-}
-
-export function Avatar(props) {
-  const ukuran = { sm: 36, md: 44, lg: 56, xl: 96, '2xl': 160 }
-  const px = ukuran[props.size] || 44
-  const radius = Math.round(px * 0.28) + 'px'
-  const nama = props.nama || ''
-  const kata = nama.trim().split(/\s+/)
-  const inisial = nama ? ((kata[0] ? kata[0].charAt(0) : '') + (kata[1] ? kata[1].charAt(0) : '')).toUpperCase() : '?'
-  const palet = ['#166534', '#15803d', '#a16207', '#ca8a04', '#334155', '#047857']
-  let hash = 0
-  for (let i = 0; i < nama.length; i++) hash = (hash * 31 + nama.charCodeAt(i)) >>> 0
-  const warna = palet[hash % palet.length]
-  const bisaKlik = typeof props.onClick === 'function'
-  const gaya = {
-    boxSizing: 'content-box',
-    display: 'inline-block',
-    width: px + 'px',
-    height: px + 'px',
-    padding: 0,
-    margin: 0,
-    borderRadius: radius,
-    overflow: 'hidden',
-    position: 'relative',
-    verticalAlign: 'middle',
-    flexShrink: 0,
-    background: props.src ? '#ffffff' : warna,
-    boxShadow: '0 1px 2px rgba(15, 23, 42, 0.10), 0 10px 28px rgba(15, 23, 42, 0.22)',
-    cursor: bisaKlik ? 'pointer' : 'default',
-    outline: 'none',
-    lineHeight: 0
-  }
-  const gayaFoto = {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-    objectPosition: 'center',
-    display: 'block',
-    borderRadius: radius
-  }
-  const gayaTeks = {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    color: '#ffffff',
-    fontWeight: 800,
-    fontSize: Math.round(px * 0.36) + 'px'
-  }
-  if (bisaKlik) {
-    return (
-      <button type="button" onClick={props.onClick} title={props.title} style={gaya}>
-        {props.src ? <img src={props.src} alt={nama || 'Foto profil'} style={gayaFoto} loading="lazy" decoding="async" /> : <span style={gayaTeks}>{inisial}</span>}
-      </button>
-    )
-  }
-  return (
-    <span style={gaya}>
-      {props.src ? <img src={props.src} alt={nama || 'Foto profil'} style={gayaFoto} loading="lazy" decoding="async" /> : <span style={gayaTeks}>{inisial}</span>}
-    </span>
-  )
-}
-
-export function Pagination(props) {
-  /* pagination-v2: tombol nomor halaman sesuai tema BSI */
-  const totalItems = props.totalItems || 0
-  const perPage = props.perPage || 10
-  const page = props.page || 1
-  const onPageChange = props.onPageChange || function () {}
-  const totalPages = Math.ceil(totalItems / perPage)
-  if (!totalItems) return null
-  const halaman = []
-  if (totalPages <= 7) {
-    for (let i = 1; i <= totalPages; i++) halaman.push(i)
-  } else {
-    for (let i = 1; i <= totalPages; i++) {
-      if (i === 1 || i === totalPages || (i >= page - 1 && i <= page + 1)) {
-        halaman.push(i)
-      } else if (halaman[halaman.length - 1] !== '...') {
-        halaman.push('...')
-      }
-    }
-  }
-  const clsAngka = 'grid h-10 min-w-10 place-items-center rounded-xl px-3 text-sm font-bold transition '
-  const clsNav = 'flex h-10 items-center rounded-xl px-4 text-sm font-semibold transition '
-  const clsNetral = 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 hover:text-bsi-800'
-  return (
-    <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
-      {totalPages > 1 ? (
-        <button
-          type="button"
-          disabled={page <= 1}
-          onClick={function () { onPageChange(page - 1) }}
-          className={clsNav + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}
-        >
-          Sebelumnya
-        </button>
-      ) : null}
-      {halaman.map(function (h, idx) {
-        if (h === '...') {
-          return <span key={'lompat' + idx} className="px-1 text-sm font-bold text-slate-600">...</span>
-        }
-        const aktif = h === page
-        return (
-          <button
-            key={'hal' + h}
-            type="button"
-            onClick={function () { onPageChange(h) }}
-            className={clsAngka + (aktif
-              ? 'bg-bsi-800 text-white shadow-lg shadow-bsi-900/25'
-              : clsNetral)}
-          >
-            {h}
-          </button>
-        )
-      })}
-      {totalPages > 1 ? (
-        <button
-          type="button"
-          disabled={page >= totalPages}
-          onClick={function () { onPageChange(page + 1) }}
-          className={clsNav + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}
-        >
-          Berikutnya
-        </button>
-      ) : null}
-    </div>
-  )
-}
-
-const ToastContext = createContext(null)
- export function ToastProvider(props) {
-  const [toasts, setToasts] = useState([])
-  function tutupToast(id) {
-    setToasts(function (prev) { return prev.map(function (t) { return t.id === id ? Object.assign({}, t, { tutup: true }) : t }) })
-    setTimeout(function () {
-      setToasts(function (prev) { return prev.filter(function (t) { return t.id !== id }) })
-    }, 240)
-  }
-  function tambahToast(tipe, pesan) {
-    const id = Date.now() + Math.random()
-    setToasts(function (prev) { return prev.concat([{ id: id, tipe: tipe, pesan: pesan, tutup: false }]) })
-    setTimeout(function () { tutupToast(id) }, 4000)
-  }
-  function toastSukses(pesan) { tambahToast('sukses', pesan) }
-  function toastGagal(pesan) { tambahToast('gagal', pesan) }
-  return (
-    <ToastContext.Provider value={{ sukses: toastSukses, gagal: toastGagal }}>
-      {props.children}
-      <div className="toast-wadah fixed z-[100] flex flex-col gap-2 pointer-events-none">
-        {toasts.map(function (t) {
-          const sukses = t.tipe === 'sukses'
-          return (
-            <div key={t.id} className={'toast-kartu pointer-events-auto flex items-center gap-3 ' + (sukses ? 'toast-sukses' : 'toast-gagal') + (t.tutup ? ' toast-keluar' : '')}>
-              <span className={'toast-ikon ' + (sukses ? 'toast-ikon-sukses' : 'toast-ikon-gagal')}>
-                <SizedIcon name={sukses ? 'check' : 'close'} size={15} />
-              </span>
-              <p className="toast-teks flex-1 text-sm font-semibold">{t.pesan}</p>
-              <button type="button" onClick={function () { tutupToast(t.id) }} title="Tutup Notifikasi"
-                className="toast-tutup grid h-7 w-7 shrink-0 place-items-center rounded-lg">
-                <SizedIcon name="close" size={13} />
-              </button>
-            </div>
-          )
-        })}
-      </div>
-    </ToastContext.Provider>
-  )
-}
-export function useToast() {
-   return useContext(ToastContext)
- }
-
-export function SelubungPanel(props) {
-  const [tampil, setTampil] = useState(props.open)
-  const tutup = tampil && !props.open
-  useEffect(function () {
-    if (props.open) { setTampil(true); return undefined }
-    if (!tampil) return undefined
-    const t = setTimeout(function () { setTampil(false) }, 180)
-    return function () { clearTimeout(t) }
-  }, [props.open, tampil])
-  if (!tampil) return null
-  return <div className={'selubung-panel' + (tutup ? ' panel-tutup' : '')}>{props.children}</div>
 }
 ```
 
@@ -5653,6 +4990,669 @@ button:active:not(:disabled), a:active, .clickable:active { transition-duration:
 }
 ```
 
+## File: src/components/ui.jsx
+```javascript
+import { createPortal } from 'react-dom'
+import PemutarVideo from './PemutarVideo.jsx'
+import { drivePreviewUrl, driveDownloadUrl, driveThumbUrl } from '../lib/drive.js'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { SizedIcon } from './icons.jsx'
+function useBodyScrollLock(active) {
+  useEffect(function () {
+    if (!active) return undefined
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return function () {
+      document.body.style.overflow = previous
+    }
+  }, [active])
+}
+
+
+export const inputCls = 'mt-1.5 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-bsi-500'
+export const labelCls = 'text-sm font-semibold text-slate-700'
+export const btnPrimary = 'w-full rounded-xl bg-bsi-800 px-5 py-3 text-sm sm:rounded-2xl sm:px-6 sm:py-4 sm:text-base text-white font-bold hover:bg-bsi-900'
+export const btnSmall = 'px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-semibold'
+export const cardCls = 'card-hover bg-white rounded-3xl border border-slate-200 shadow-sm'
+
+export function StatCard(props) {
+  const rapat = props.rapat
+  const clsWadah = rapat ? ' p-3 sm:p-6' : ' p-4 sm:p-6'
+  const clsLabel = (rapat ? 'text-[11px] leading-snug sm:text-sm' : 'text-xs sm:text-sm') + ' text-slate-600'
+  const clsLabelRapat = 'text-[11px] leading-snug font-semibold text-slate-600 sm:hidden'
+  const clsValue = (rapat ? 'mt-1 text-xl sm:text-3xl' : 'mt-2 text-2xl sm:text-3xl') + ' font-black text-bsi-900'
+  const clsSub = (rapat ? 'hidden sm:block ' : '') + 'mt-1 text-[11px] leading-snug sm:text-xs text-slate-600'
+  return (
+    <div className={cardCls + clsWadah}>
+      {props.labelRapat ? <p className={clsLabelRapat}>{props.labelRapat}</p> : null}
+      <p className={clsLabel + (props.labelRapat ? ' hidden sm:block' : '')}>{props.label}</p>
+      <p className={clsValue}>{props.value}</p>
+      {props.sub ? <p className={clsSub}>{props.sub}</p> : null}
+    </div>
+  )
+}
+export function EmptyState(props) {
+  return (
+    <div className={cardCls + ' border-dashed p-10 text-center'}>
+      <div className="mx-auto h-14 w-14 rounded-2xl bg-slate-100 grid place-items-center text-slate-400">
+        <SizedIcon name={props.icon || 'file'} size={24} />
+      </div>
+      <h3 className="mt-4 text-lg font-bold text-slate-800">{props.title}</h3>
+      <p className="mt-2 text-sm text-slate-600 max-w-md mx-auto">{props.desc}</p>
+    </div>
+  )
+}
+
+export function StatusBadge(props) {
+  const publik = props.status === 'publik'
+  return (
+    <span className={'px-3 py-1 rounded-full text-xs font-semibold ' + (publik ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800')}>
+      {publik ? 'Publik' : 'Draf'}
+    </span>
+  )
+}
+
+export function CategoryBadge(props) {
+  return <span className="px-3 py-1 rounded-full text-xs font-semibold bg-bsi-100 text-bsi-900">{props.value || 'Lainnya'}</span>
+}
+
+export function AttendanceBadge(props) {
+  const map = {
+    Masuk: 'bg-emerald-100 text-emerald-800',
+    Izin: 'bg-amber-100 text-amber-800',
+    Bolos: 'bg-red-100 text-red-700'
+  }
+  return <span className={'px-3 py-1 rounded-full text-xs font-semibold ' + (map[props.status] || 'bg-slate-100 text-slate-700')}>{props.status}</span>
+}
+
+export function Modal(props) {
+  const [tampil, setTampil] = useState(props.open)
+  const [tutup, setTutup] = useState(false)
+  const isiSimpan = useRef(null)
+  if (props.open) isiSimpan.current = props.children
+  useBodyScrollLock(!!props.open)
+  useEffect(function () {
+    if (props.open) {
+      setTampil(true)
+      setTutup(false)
+      return undefined
+    }
+    if (!tampil) return undefined
+    setTutup(true)
+    const t = setTimeout(function () {
+      setTampil(false)
+      setTutup(false)
+    }, 200)
+    return function () { clearTimeout(t) }
+  }, [props.open])
+  if (!tampil) return null
+  return (
+    <div className={'anim-overlay fixed inset-0 z-[60] overflow-y-auto overscroll-contain bg-slate-900/60 p-4' + (tutup ? ' modal-tutup' : '')} onClick={props.onClose}>
+      <div className="min-h-full flex items-center justify-center py-8">
+        <div className="anim-modal modal-detail w-full max-w-3xl rounded-[2rem] bg-white shadow-2xl max-h-[88vh] overflow-y-auto overscroll-contain" onClick={function (e) { e.stopPropagation() }}>
+          <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+            <p className="font-bold text-slate-900">{props.title || 'Detail'}</p>
+            <button onClick={props.onClose} aria-label="Tutup Detail" className="h-9 w-9 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 grid place-items-center">
+              <SizedIcon name="close" size={16} />
+            </button>
+          </div>
+          <div className="px-6 pt-6">{props.open ? props.children : isiSimpan.current}</div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function AutoTextArea(props) {
+  const ref = useRef(null)
+
+  useEffect(function () {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = el.scrollHeight + 'px'
+  }, [props.value])
+
+  return (
+    <textarea
+      ref={ref}
+      className={props.className}
+      rows={props.rows || 2}
+      value={props.value}
+      placeholder={props.placeholder}
+      onChange={props.onChange}
+      disabled={props.disabled || false}
+    />
+  )
+}
+
+export function ConfirmModal(props) {
+const [tampil, setTampil] = useState(props.open)
+const propsSimpan = useRef(null)
+if (props.open) propsSimpan.current = props
+const p = props.open ? props : (propsSimpan.current || props)
+const tutup = tampil && !props.open
+useBodyScrollLock(!!props.open)
+useEffect(function () {
+if (props.open) { setTampil(true); return undefined }
+if (!tampil) return undefined
+const t = setTimeout(function () { setTampil(false) }, 200)
+return function () { clearTimeout(t) }
+}, [props.open, tampil])
+if (!tampil) return null
+return (
+<div className={'anim-overlay fixed inset-0 z-[70] overflow-y-auto overscroll-contain bg-slate-900/60 p-4' + (tutup ? ' modal-tutup' : '')} onClick={p.onCancel}>
+<div className="min-h-full flex items-center justify-center py-8">
+<div className="anim-modal w-full max-w-md rounded-[2rem] bg-white shadow-2xl" onClick={function (e) { e.stopPropagation() }}>
+<div className="p-6 space-y-4">
+<div className={'mx-auto h-14 w-14 ' + 'rounded-2xl grid place-items-center ' + ((p.tone || 'bahaya') === 'bahaya' ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600')}>
+<SizedIcon name={p.icon || 'trash'} size={24} />
+</div>
+<div className="text-center">
+<h3 className="text-xl font-black text-slate-900">{p.title || 'Hapus Data Ini?'}</h3>
+<p className="mt-2 text-sm text-slate-600">{p.message}</p>
+</div>
+<div className="grid grid-cols-2 gap-3">
+<button type="button" onClick={p.onCancel} className="rounded-2xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100">
+Batal
+</button>
+<button type="button" onClick={p.onConfirm} className={'rounded-2xl px-4 py-3 ' + 'text-sm font-bold text-white ' + ((p.tone || 'bahaya') === 'bahaya' ? 'bg-red-500 hover:bg-red-600' : 'bg-bsi-800 hover:bg-bsi-900')}>
+{p.confirmLabel || 'Hapus'}
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+)
+}
+
+
+export function MediaDrive(props) {
+  const [gagal, setGagal] = useState(false)
+  useEffect(function () {
+    setGagal(false)
+  }, [props.driveId])
+  if (gagal) {
+    return (
+      <div className={'grid place-items-center bg-gradient-to-br from-slate-800 to-slate-900 ' + (props.className || 'absolute inset-0 h-full w-full')}>
+        <div className="flex flex-col items-center gap-2 text-slate-300">
+          <span className="grid h-12 w-12 place-items-center rounded-full bg-white/10">
+            <SizedIcon name="image" size={22} />
+          </span>
+          <p className="px-2 text-center text-[11px] font-semibold">Video Google Drive</p>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <img
+      src={driveThumbUrl(props.driveId)}
+      alt={props.alt || 'Video Google Drive'}
+      onClick={props.onClick || undefined}
+      onError={function () { setGagal(true) }} loading="lazy" decoding="async"
+      className={(props.className || 'absolute inset-0 h-full w-full object-cover') + (props.onClick ? ' cursor-zoom-in' : '')}
+    />
+  )
+}
+export function Lightbox(props) {
+  useBodyScrollLock(true)
+  const [busyUnduh, setBusyUnduh] = useState(false)
+  const [tutup, setTutup] = useState(false)
+  const sedangTutup = useRef(false)
+  function mintaTutup() {
+    if (sedangTutup.current) return
+    sedangTutup.current = true
+    setTutup(true)
+    setTimeout(function () { props.onClose() }, 200)
+  }
+  useEffect(function () {
+    function onKey(e) {
+      if (e.key === 'Escape') mintaTutup()
+    }
+    document.addEventListener('keydown', onKey)
+    return function () { document.removeEventListener('keydown', onKey) }
+  }, [])
+  async function unduh() {
+    if (busyUnduh) return
+    setBusyUnduh(true)
+    if (props.driveId) {
+      try {
+        const nama = (props.title ? props.title.replace(/[\/\\:*?"<>|]/g, '').replace(/\s+/g, '-').substring(0, 60) : 'video-' + props.driveId) + '.mp4'
+        const a = document.createElement('a')
+        a.href = driveDownloadUrl(props.driveId)
+        a.download = nama
+        a.target = '_blank'
+        a.rel = 'noopener noreferrer'
+        a.style.display = 'none'
+        document.body.appendChild(a)
+        a.click()
+        setTimeout(function () { a.remove() }, 1000)
+      } catch (err) {
+        window.open(driveDownloadUrl(props.driveId), '_blank')
+      }
+      setBusyUnduh(false)
+      return
+    }
+    let nama = 'media'
+    try {
+      const urlAsli = new URL(props.src)
+      const ekstensi = urlAsli.pathname.split('.').pop().split('?')[0] || 'jpg'
+      if (props.title && props.title.trim()) {
+        const judulAman = props.title.trim().replace(/[\/\\:*?"<>|]/g, '').replace(/\s+/g, '-').substring(0, 60)
+        nama = judulAman + '.' + ekstensi
+      } else {
+        nama = urlAsli.pathname.split('/').pop() || ('media.' + ekstensi)
+      }
+    } catch (e) {
+      nama = (props.title || 'media') + '.jpg'
+    }
+    try {
+      const urlUnduh = props.src + (props.src.includes('?') ? '&' : '?') + 'unduh=1'
+      const res = await fetch(urlUnduh, { cache: 'no-store' })
+      if (!res.ok) throw new Error('status ' + res.status)
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = nama
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(function () { URL.revokeObjectURL(url) }, 2000)
+    } catch (err) {
+      window.open(props.src, '_blank')
+    }
+    setBusyUnduh(false)
+  }
+  const tombolUnduhTerlihat = !!props.driveId || !props.youtubeId
+  return createPortal(
+    <div className={'anim-overlay fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/95 p-4' + (tutup ? ' lightbox-tutup' : '')} onClick={mintaTutup}>
+      <div className="lightbox-isi relative w-full max-w-5xl" onClick={function (e) { e.stopPropagation() }}>
+        {props.youtubeId ? (
+          <PemutarVideo key={props.youtubeId} youtubeId={props.youtubeId} title={props.title || 'Video'} className="mx-auto aspect-video w-full rounded-2xl" />
+        ) : props.type === 'video' ? (
+          <video src={props.src} controls autoPlay className="mx-auto max-h-[85vh] w-full rounded-2xl bg-slate-900 object-contain" />
+        ) : (
+          <img
+            src={props.src}
+            alt={props.title || 'Media'}
+            onClick={mintaTutup}
+            className="mx-auto max-h-[85vh] w-auto max-w-full cursor-zoom-out rounded-2xl object-contain"
+          />
+        )}
+        {props.title ? <p className="mt-3 truncate text-center text-sm text-slate-300">{props.title}</p> : null}
+      </div>
+      <div className="absolute right-4 top-4 flex gap-2">
+        <button
+          type="button"
+          title={busyUnduh ? 'Menyiapkan Unduhan...' : (props.driveId ? 'Unduh Video dari Google Drive' : 'Unduh Media')}
+          onClick={unduh}
+          disabled={busyUnduh}
+          style={tombolUnduhTerlihat ? undefined : { display: 'none' }}
+          className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20 disabled:opacity-50"
+        >
+          <SizedIcon name="download" size={18} />
+        </button>
+        <button
+          type="button"
+          title="Tutup (Esc)"
+          onClick={mintaTutup}
+          className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
+        >
+          <SizedIcon name="close" size={18} />
+        </button>
+      </div>
+      <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-slate-400">
+        {props.driveId ? 'Video diputar dari YouTube, unduhan diambil dari Google Drive' : 'Klik media atau tekan Esc untuk menutup'}
+      </p>
+    </div>
+  , document.body)
+}
+export function ZoomableMedia(props) {
+  const [open, setOpen] = useState(false)
+  const isVideo = props.type === 'video'
+  return (
+    <div className={'relative group ' + (props.className || '')}>
+      <SmartFit
+        src={props.src}
+        type={props.type}
+        alt={props.title || 'Media'}
+        full={props.full || props.src}
+         controls={isVideo}
+        onClick={isVideo ? null : function (e) { e.stopPropagation(); setOpen(true) }}
+      />
+      <button
+        type="button"
+        title="Perbesar Media"
+        onClick={function (e) { e.stopPropagation(); setOpen(true) }}
+        className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100"
+      >
+        <SizedIcon name="expand" size={15} />
+      </button>
+      {open ? <Lightbox src={props.full || props.src} type={props.type} title={props.title} onClose={function () { setOpen(false) }} /> : null}
+    </div>
+  )
+}
+
+
+export function SmartFit(props) {
+  const [ratio, setRatio] = useState(null)
+  const [near, setNear] = useState(false)
+  const mediaRef = useRef(null)
+  const isVideo = props.type === 'video'
+  if (!isVideo && String(props.src || '').indexOf('i.ytimg.com') !== -1) {
+    return <MediaYouTube src={props.src} alt={props.alt} onClick={props.onClick} className="absolute inset-0 h-full w-full object-cover" />
+  }
+  useEffect(function () {
+    const el = mediaRef.current
+    if (!el) return undefined
+    if (typeof IntersectionObserver === 'undefined') {
+      setNear(true)
+      return undefined
+    }
+    const io = new IntersectionObserver(function (entries) {
+      for (let i = 0; i < entries.length; i++) {
+        if (entries[i].isIntersecting) {
+          setNear(true)
+          io.disconnect()
+          break
+        }
+      }
+    }, { rootMargin: '400px' })
+    io.observe(el)
+    return function () { io.disconnect() }
+  }, [])
+  function bacaUkuran(e) {
+    const el = e.target
+    const w = isVideo ? el.videoWidth : el.naturalWidth
+    const h = isVideo ? el.videoHeight : el.naturalHeight
+    if (w && h) setRatio(w / h)
+  }
+  function cadangkan(e) {
+    const el = e.currentTarget
+    const cad = props.full && props.full !== props.src ? props.full : props.src
+    if (cad && el.src !== cad) el.src = cad
+  }
+  const cover = ratio !== null && ratio > 1
+  const potret = ratio !== null && ratio <= 1
+  return (
+    <>
+      {potret && !isVideo ? (
+        <img src={props.src} alt="" aria-hidden="true" loading="lazy" decoding="async" onError={cadangkan} className="absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-xl" />
+      ) : null}
+      {isVideo ? (
+        <video
+          ref={mediaRef}
+          src={near ? props.src : undefined}
+          muted={props.controls ? false : true}
+          preload="metadata"
+          controls={props.controls || false}
+          onLoadedMetadata={bacaUkuran}
+          className={'absolute inset-0 h-full w-full ' + (cover ? 'object-cover' : 'object-contain')}
+        />
+      ) : (
+        <img
+          ref={mediaRef}
+          src={near ? props.src : undefined}
+          alt={props.alt || 'Media'}
+          loading="lazy"
+          decoding="async"
+          onLoad={bacaUkuran}
+          onError={cadangkan}
+          onClick={props.onClick || undefined}
+          className={'absolute inset-0 h-full w-full ' + (cover ? 'object-cover' : 'object-contain') + (props.onClick ? ' cursor-zoom-in' : '')}
+        />
+      )}
+    </>
+  )
+}
+
+export function MediaYouTube(props) {
+  const [status, setStatus] = useState('muat')
+  const [coba, setCoba] = useState(0)
+  useEffect(function () {
+    if (status !== 'tunggu') return undefined
+    const t = setTimeout(function () {
+      setCoba(function (c) { return c + 1 })
+      setStatus('muat')
+    }, 15000)
+    return function () { clearTimeout(t) }
+  }, [status])
+  if (status === 'tunggu' || status === 'habis') {
+    return (
+      <div className={'grid place-items-center bg-slate-800 ' + (props.className || 'absolute inset-0 h-full w-full')}>
+        <div className="flex flex-col items-center gap-2 text-slate-400">
+          <SizedIcon name="video" size={26} />
+          <p className="px-2 text-center text-[11px] font-semibold">{status === 'habis' ? 'Pratinjau Video Belum Siap' : 'Menyiapkan Pratinjau Video'}</p>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <img
+      src={props.src + (coba > 0 ? (String(props.src).indexOf('?') === -1 ? '?' : '&') + 'r=' + coba : '')}
+      alt={props.alt || 'Pratinjau video'}
+      onClick={props.onClick || undefined}
+      onError={function () { setStatus(coba >= 3 ? 'habis' : 'tunggu') }}
+      onLoad={function () { setStatus('muat') }}
+      className={props.className || 'absolute inset-0 h-full w-full object-cover'}
+    />
+  )
+}
+
+export function TitikAnim() {
+
+  return (
+    <span className="titik-anim" aria-hidden="true">
+      <i></i>
+      <i></i>
+      <i></i>
+    </span>
+  )
+}
+export function LabelProses(props) {
+  const bersih = String(props.teks || '').replace(/\.{3}/g, '').replace(/\s+/g, ' ').trim()
+  return (
+    <span className="inline-flex items-center justify-center">
+      <span>{bersih}</span>
+      <TitikAnim />
+    </span>
+  )
+}
+
+export function Avatar(props) {
+  const ukuran = { sm: 36, md: 44, lg: 56, xl: 96, '2xl': 160 }
+  const px = ukuran[props.size] || 44
+  const radius = Math.round(px * 0.28) + 'px'
+  const nama = props.nama || ''
+  const kata = nama.trim().split(/\s+/)
+  const inisial = nama ? ((kata[0] ? kata[0].charAt(0) : '') + (kata[1] ? kata[1].charAt(0) : '')).toUpperCase() : '?'
+  const palet = ['#166534', '#15803d', '#a16207', '#ca8a04', '#334155', '#047857']
+  let hash = 0
+  for (let i = 0; i < nama.length; i++) hash = (hash * 31 + nama.charCodeAt(i)) >>> 0
+  const warna = palet[hash % palet.length]
+  const bisaKlik = typeof props.onClick === 'function'
+  const gaya = {
+    boxSizing: 'content-box',
+    display: 'inline-block',
+    width: px + 'px',
+    height: px + 'px',
+    padding: 0,
+    margin: 0,
+    borderRadius: radius,
+    overflow: 'hidden',
+    position: 'relative',
+    verticalAlign: 'middle',
+    flexShrink: 0,
+    background: props.src ? '#ffffff' : warna,
+    boxShadow: '0 1px 2px rgba(15, 23, 42, 0.10), 0 10px 28px rgba(15, 23, 42, 0.22)',
+    cursor: bisaKlik ? 'pointer' : 'default',
+    outline: 'none',
+    lineHeight: 0
+  }
+  const gayaFoto = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+    objectPosition: 'center',
+    display: 'block',
+    borderRadius: radius
+  }
+  const gayaTeks = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#ffffff',
+    fontWeight: 800,
+    fontSize: Math.round(px * 0.36) + 'px'
+  }
+  if (bisaKlik) {
+    return (
+      <button type="button" onClick={props.onClick} title={props.title} style={gaya}>
+        {props.src ? <img src={props.src} alt={nama || 'Foto profil'} style={gayaFoto} loading="lazy" decoding="async" /> : <span style={gayaTeks}>{inisial}</span>}
+      </button>
+    )
+  }
+  return (
+    <span style={gaya}>
+      {props.src ? <img src={props.src} alt={nama || 'Foto profil'} style={gayaFoto} loading="lazy" decoding="async" /> : <span style={gayaTeks}>{inisial}</span>}
+    </span>
+  )
+}
+
+export function Pagination(props) {
+  /* pagination-v2: tombol nomor halaman sesuai tema BSI */
+  const totalItems = props.totalItems || 0
+  const perPage = props.perPage || 10
+  const page = props.page || 1
+  const onPageChange = props.onPageChange || function () {}
+  const totalPages = Math.ceil(totalItems / perPage)
+  if (!totalItems) return null
+  const halaman = []
+  if (totalPages <= 7) {
+    for (let i = 1; i <= totalPages; i++) halaman.push(i)
+  } else {
+    for (let i = 1; i <= totalPages; i++) {
+      if (i === 1 || i === totalPages || (i >= page - 1 && i <= page + 1)) {
+        halaman.push(i)
+      } else if (halaman[halaman.length - 1] !== '...') {
+        halaman.push('...')
+      }
+    }
+  }
+  const clsAngka = 'grid h-10 min-w-10 place-items-center rounded-xl px-3 text-sm font-bold transition '
+  const clsNav = 'flex h-10 items-center rounded-xl px-4 text-sm font-semibold transition '
+  const clsNetral = 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 hover:text-bsi-800'
+  return (
+    <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
+      {totalPages > 1 ? (
+        <button
+          type="button"
+          disabled={page <= 1}
+          onClick={function () { onPageChange(page - 1) }}
+          className={clsNav + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}
+        >
+          Sebelumnya
+        </button>
+      ) : null}
+      {halaman.map(function (h, idx) {
+        if (h === '...') {
+          return <span key={'lompat' + idx} className="px-1 text-sm font-bold text-slate-600">...</span>
+        }
+        const aktif = h === page
+        return (
+          <button
+            key={'hal' + h}
+            type="button"
+            onClick={function () { onPageChange(h) }}
+            className={clsAngka + (aktif
+              ? 'bg-bsi-800 text-white shadow-lg shadow-bsi-900/25'
+              : clsNetral)}
+          >
+            {h}
+          </button>
+        )
+      })}
+      {totalPages > 1 ? (
+        <button
+          type="button"
+          disabled={page >= totalPages}
+          onClick={function () { onPageChange(page + 1) }}
+          className={clsNav + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}
+        >
+          Berikutnya
+        </button>
+      ) : null}
+    </div>
+  )
+}
+
+const ToastContext = createContext(null)
+ export function ToastProvider(props) {
+  const [toasts, setToasts] = useState([])
+  function tutupToast(id) {
+    setToasts(function (prev) { return prev.map(function (t) { return t.id === id ? Object.assign({}, t, { tutup: true }) : t }) })
+    setTimeout(function () {
+      setToasts(function (prev) { return prev.filter(function (t) { return t.id !== id }) })
+    }, 240)
+  }
+  function tambahToast(tipe, pesan) {
+    const id = Date.now() + Math.random()
+    setToasts(function (prev) { return prev.concat([{ id: id, tipe: tipe, pesan: pesan, tutup: false }]) })
+    setTimeout(function () { tutupToast(id) }, 4000)
+  }
+  function toastSukses(pesan) { tambahToast('sukses', pesan) }
+  function toastGagal(pesan) { tambahToast('gagal', pesan) }
+  return (
+    <ToastContext.Provider value={{ sukses: toastSukses, gagal: toastGagal }}>
+      {props.children}
+      <div className="toast-wadah fixed z-[100] flex flex-col gap-2 pointer-events-none">
+        {toasts.map(function (t) {
+          const sukses = t.tipe === 'sukses'
+          return (
+            <div key={t.id} className={'toast-kartu pointer-events-auto flex items-center gap-3 ' + (sukses ? 'toast-sukses' : 'toast-gagal') + (t.tutup ? ' toast-keluar' : '')}>
+              <span className={'toast-ikon ' + (sukses ? 'toast-ikon-sukses' : 'toast-ikon-gagal')}>
+                <SizedIcon name={sukses ? 'check' : 'close'} size={15} />
+              </span>
+              <p className="toast-teks flex-1 text-sm font-semibold">{t.pesan}</p>
+              <button type="button" onClick={function () { tutupToast(t.id) }} title="Tutup Notifikasi"
+                className="toast-tutup grid h-7 w-7 shrink-0 place-items-center rounded-lg">
+                <SizedIcon name="close" size={13} />
+              </button>
+            </div>
+          )
+        })}
+      </div>
+    </ToastContext.Provider>
+  )
+}
+export function useToast() {
+   return useContext(ToastContext)
+ }
+
+export function SelubungPanel(props) {
+  const [tampil, setTampil] = useState(props.open)
+  const tutup = tampil && !props.open
+  useEffect(function () {
+    if (props.open) { setTampil(true); return undefined }
+    if (!tampil) return undefined
+    const t = setTimeout(function () { setTampil(false) }, 180)
+    return function () { clearTimeout(t) }
+  }, [props.open, tampil])
+  if (!tampil) return null
+  return <div className={'selubung-panel' + (tutup ? ' panel-tutup' : '')}>{props.children}</div>
+}
+```
+
 ## File: src/pages/DashboardPage.jsx
 ```javascript
 import { SkeletonDashboard } from '../components/Skeleton.jsx'
@@ -5834,15 +5834,15 @@ export default function DashboardPage() {
      })
    }
    function cobaCancelEditLog() {
-     if (isLogbookDirty()) { bukaModalUnsaved('Buang Perubahan Logbook?', 'Perubahan pada logbook akan hilang dan tidak bisa dikembalikan. Yakin ingin membatalkan?', 'Ya, Buang', cancelEditLog); return }
+     if (isLogbookDirty()) { bukaModalUnsaved('Buang Perubahan Logbook?', 'Perubahan pada logbook akan hilang dan tidak bisa dikembalikan. Yakin ingin membatalkan?', 'Buang', cancelEditLog); return }
      cancelEditLog()
    }
    function cobaCancelEditGal() {
-     if (isGaleriDirty()) { bukaModalUnsaved('Buang Perubahan Galeri?', 'Perubahan pada media galeri akan hilang dan tidak bisa dikembalikan. Yakin ingin membatalkan?', 'Ya, Buang', cancelEditGal); return }
+     if (isGaleriDirty()) { bukaModalUnsaved('Buang Perubahan Galeri?', 'Perubahan pada media galeri akan hilang dan tidak bisa dikembalikan. Yakin ingin membatalkan?', 'Buang', cancelEditGal); return }
      cancelEditGal()
    }
    function cobaCancelEditHadir() {
-     if (isHadirDirty()) { bukaModalUnsaved('Buang Perubahan Kehadiran?', 'Perubahan pada daftar hadir akan hilang dan tidak bisa dikembalikan. Yakin ingin membatalkan?', 'Ya, Buang', cancelEditHadir); return }
+     if (isHadirDirty()) { bukaModalUnsaved('Buang Perubahan Kehadiran?', 'Perubahan pada daftar hadir akan hilang dan tidak bisa dikembalikan. Yakin ingin membatalkan?', 'Buang', cancelEditHadir); return }
      cancelEditHadir()
    }
    useEffect(function () {
@@ -5860,7 +5860,7 @@ export default function DashboardPage() {
        if (!href || href.indexOf('http') === 0 || href.indexOf('#') === 0 || a.target === '_blank') return
        e.preventDefault()
        e.mbsiDicegah = true
-       bukaModalUnsaved('Pindah Halaman?', 'Kamu punya perubahan yang belum disimpan. Yakin ingin meninggalkan halaman ini? Semua perubahan akan hilang.', 'Ya, Tinggalkan', function () { navigate(href); ulangAnimHalaman() })
+       bukaModalUnsaved('Pindah Halaman?', 'Kamu punya perubahan yang belum disimpan. Yakin ingin meninggalkan halaman ini? Semua perubahan akan hilang.', 'Tinggalkan', function () { navigate(href); ulangAnimHalaman() })
      }
      window.addEventListener('beforeunload', onBeforeUnload)
      document.addEventListener('click', onClickLink, true)
@@ -6020,7 +6020,7 @@ export default function DashboardPage() {
     function startEditLog(log) {
     if (isLogbookDirty()) {
       setKonfirmasiEdit({
-        judul: 'Timpa Draf Logbook?',
+        judul: 'Ganti Draf Logbook?',
         pesan: 'Isian form logbook yang belum disimpan akan hilang dan diganti dengan data logbook yang kamu pilih.',
         aksi: function () { lakukanStartEditLog(log) }
       })
@@ -6052,7 +6052,7 @@ export default function DashboardPage() {
     function startEditGal(g) {
     if (isGaleriDirty()) {
       setKonfirmasiEdit({
-        judul: 'Timpa Draf Galeri?',
+        judul: 'Ganti Draf Galeri?',
         pesan: 'Isian form galeri yang belum disimpan akan hilang dan diganti dengan data galeri yang kamu pilih.',
         aksi: function () { lakukanStartEditGal(g) }
       })
@@ -6082,7 +6082,7 @@ export default function DashboardPage() {
     function startEditHadir(h) {
     if (isHadirDirty()) {
       setKonfirmasiEdit({
-        judul: 'Timpa Draf Daftar Hadir?',
+        judul: 'Ganti Draf Daftar Hadir?',
         pesan: 'Isian form daftar hadir yang belum disimpan akan hilang dan diganti dengan data daftar hadir yang kamu pilih.',
         aksi: function () { lakukanStartEditHadir(h) }
       })
@@ -6336,7 +6336,7 @@ export default function DashboardPage() {
      function gantiTab(tabBaru) {
      if (tabBaru === tab) return
      if (isAnyFormDirty()) {
-       bukaModalUnsaved('Pindah Tab?', 'Kamu punya perubahan yang belum disimpan. Yakin ingin pindah tab? Semua perubahan akan hilang.', 'Ya, Pindah', function () {
+       bukaModalUnsaved('Pindah Tab?', 'Kamu punya perubahan yang belum disimpan. Yakin ingin pindah tab? Semua perubahan akan hilang.', 'Pindah', function () {
          cancelEditLog()
          cancelEditGal()
          cancelEditHadir()
@@ -6384,7 +6384,7 @@ export default function DashboardPage() {
             <h2 className="mt-4 text-xl font-black text-slate-900">{mahasiswa.nama}</h2>
             <p className="mt-1 text-sm text-slate-600">NIM {mahasiswa.nim}</p>
             <div className="mt-5 flex flex-wrap justify-center gap-2">
-              <button type="button" onClick={function () { if (showUploadFoto) { setShowUploadFoto(false); return } setFotoPreview(null); setFotoFile(null); setShowUploadFoto(true) }} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition">{mahasiswa.foto_profil ? 'Ganti Foto' : 'Upload Foto'}</button>
+              <button type="button" onClick={function () { if (showUploadFoto) { setShowUploadFoto(false); return } setFotoPreview(null); setFotoFile(null); setShowUploadFoto(true) }} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition">{mahasiswa.foto_profil ? 'Ganti Foto' : 'Unggah Foto'}</button>
               {mahasiswa.foto_profil ? <button type="button" onClick={hapusFotoProfilKu} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-red-50 text-red-700 hover:bg-red-100 transition">Hapus Foto</button> : null}
             </div>
             <div className={'unggah-foto-wrap w-full' + (showUploadFoto ? ' unggah-foto-buka' : '')}>
@@ -6398,7 +6398,7 @@ export default function DashboardPage() {
                     ) : fotoPreview ? <img src={fotoPreview} alt="Pratinjau foto profil" className="h-20 w-20 rounded-[28%] object-cover shadow-lg" /> : null}
                     <div className="min-w-0 flex-1">
                       <input type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/heif" onChange={pilihFotoProfil} aria-label="Pilih Foto Profil" className="block w-full text-sm text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-800 hover:file:bg-emerald-100" />
-                      <p className="mt-2 text-xs text-slate-600">Format JPG, PNG, WebP, atau HEIC iPhone. Otomatis dikonversi ke WebP ringan. Maksimal 5 MB.</p>
+                      <p className="mt-2 text-xs text-slate-600">Format JPG, PNG, atau HEIC. Ukuran maksimal 5 MB.</p>
                     </div>
                   </div>
                   <div className="mt-4 flex gap-2">
@@ -6448,7 +6448,7 @@ export default function DashboardPage() {
                 </div>
                 <div>
                   <label className={labelCls}>Status Tampil</label>
-                  <div className="mt-1.5"><CustomSelect value={form.status} onChange={function (v) { setForm(Object.assign({}, form, { status: v })) }} options={[{ value: 'draft', label: 'Draft' }, { value: 'publik', label: 'Published' }]} /></div>
+                  <div className="mt-1.5"><CustomSelect value={form.status} onChange={function (v) { setForm(Object.assign({}, form, { status: v })) }} options={[{ value: 'draft', label: 'Draf' }, { value: 'publik', label: 'Publik' }]} /></div>
                 </div>
               </div>
               <div>
@@ -6530,7 +6530,7 @@ export default function DashboardPage() {
             <h2 ref={refListLog} className="text-xl sm:text-2xl font-black text-slate-900 scroll-mt-24">Logbook Kamu</h2>
             <FilterBar open={logFilterOpen} onToggle={function () { setLogFilterOpen(function (o) { return !o }) }} activeCount={logFilterActive} onReset={function () { setLogFilter(LOG_INITIAL) }}>
               <FilterSelect icon={ICONS.tag} value={logFilter.kategori} onChange={function (v) { setLogFilter(Object.assign({}, logFilter, { kategori: v })) }} options={[{ value: '', label: 'Semua Kategori' }].concat(KATEGORI.map(function (k) { return { value: k, label: k } }))} />
-              <FilterSelect icon={ICONS.check} value={logFilter.status} onChange={function (v) { setLogFilter(Object.assign({}, logFilter, { status: v })) }} options={[{ value: '', label: 'Semua Status' }, { value: 'draft', label: 'Draft' }, { value: 'publik', label: 'Published' }]} />
+              <FilterSelect icon={ICONS.check} value={logFilter.status} onChange={function (v) { setLogFilter(Object.assign({}, logFilter, { status: v })) }} options={[{ value: '', label: 'Semua Status' }, { value: 'draft', label: 'Draf' }, { value: 'publik', label: 'Publik' }]} />
               <TimeFilter filter={logFilter} set={setLogFilter} />
               <SortSelect value={sort} onChange={setSort} />
             </FilterBar>
@@ -6620,7 +6620,7 @@ export default function DashboardPage() {
                 <div className="mt-1.5">
                   <CustomSelect placeholder="Pilih Kegiatan" value={galForm.kegiatan} onChange={function (v) { setGalForm(Object.assign({}, galForm, { kegiatan: v })) }} options={GALERI_KEGIATAN.map(function (k) { return { value: k, label: k } })} />
                 </div>
-                {editGalDerived ? <p className="mt-1 text-xs text-slate-600">Media ini berasal dari logbook. Perubahan judul, deskripsi, kegiatan, dan tanggal hanya memengaruhi galeri dan tidak akan ditimpa saat logbook disimpan.</p> : null}
+                {editGalDerived ? <p className="mt-1 text-xs text-slate-600">Media ini berasal dari logbook. Perubahan hanya berlaku di galeri dan tidak mengubah logbook aslinya.</p> : null}
               </div>
               <div><label className={labelCls}>Deskripsi (Opsional)</label><AutoTextArea className={inputCls} value={galForm.deskripsi} onChange={function (e) { setGalForm(Object.assign({}, galForm, { deskripsi: e.target.value })) }} aria-label="Deskripsi Media" placeholder="Tambahkan keterangan media." /></div>
               <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks={infoProses || 'Menyimpan'} /> : (editGalId ? 'Simpan Perubahan Media' : 'Unggah Media')}</button>
@@ -6673,7 +6673,7 @@ export default function DashboardPage() {
                   aria-label="Alasan atau Keterangan" placeholder={hadirForm.status === 'Masuk' ? 'Status Masuk tidak memerlukan alasan' : 'Contoh: Keperluan keluarga, sakit.'}
                   disabled={hadirForm.status === 'Masuk'}
                 />
-                {hadirForm.status === 'Masuk' ? <p className="mt-1 text-xs text-slate-600">Field ini hanya terisi untuk status Izin atau Bolos.</p> : null}
+                {hadirForm.status === 'Masuk' ? <p className="mt-1 text-xs text-slate-600">Alasan hanya diisi untuk status Izin atau Bolos.</p> : null}
               </div>
               <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks="Menyimpan" /> : (editHadirId ? 'Simpan Perubahan' : 'Simpan Daftar Hadir')}</button>
             </form>
@@ -6714,7 +6714,7 @@ export default function DashboardPage() {
           open={!!konfirmasiEdit}
           title={konfirmasiEdit ? konfirmasiEdit.judul : ''}
           message={konfirmasiEdit ? konfirmasiEdit.pesan : ''}
-          confirmLabel="Ya, Timpa"
+          confirmLabel="Ganti"
           icon="trash"
           tone="bahaya"
           onCancel={function () { setKonfirmasiEdit(null) }}
@@ -6724,7 +6724,7 @@ export default function DashboardPage() {
          open={!!unsavedModal}
          title={unsavedModal ? unsavedModal.title : ''}
          message={unsavedModal ? unsavedModal.message : ''}
-         confirmLabel={unsavedModal ? unsavedModal.confirmLabel : 'Ya'}
+         confirmLabel={unsavedModal ? unsavedModal.confirmLabel : 'Konfirmasi'}
          icon="trash"
          tone="bahaya"
          onCancel={unsavedModal ? unsavedModal.onCancel : function () { setUnsavedModal(null) }}
