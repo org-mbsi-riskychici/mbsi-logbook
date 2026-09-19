@@ -157,6 +157,15 @@ export default function DashboardPage() {
    function isAnyFormDirty() {
      return isLogbookDirty() || isGaleriDirty() || isHadirDirty()
    }
+   function ulangAnimHalaman() {
+     requestAnimationFrame(function () {
+       const el = document.querySelector('main.anim-page') || document.querySelector('.anim-page')
+       if (!el) return
+       el.style.animation = 'none'
+       void el.offsetWidth
+       el.style.animation = ''
+     })
+   }
    function bukaModalUnsaved(judul, pesan, labelConfirm, aksi) {
      setUnsavedModal({
        title: judul,
@@ -192,7 +201,8 @@ export default function DashboardPage() {
        const href = a.getAttribute('href') || ''
        if (!href || href.indexOf('http') === 0 || href.indexOf('#') === 0 || a.target === '_blank') return
        e.preventDefault()
-       bukaModalUnsaved('Pindah halaman?', 'Kamu punya perubahan yang belum disimpan. Yakin ingin meninggalkan halaman ini? Semua perubahan akan hilang.', 'Ya, Tinggalkan', function () { navigate(href) })
+       e.mbsiDicegah = true
+       bukaModalUnsaved('Pindah halaman?', 'Kamu punya perubahan yang belum disimpan. Yakin ingin meninggalkan halaman ini? Semua perubahan akan hilang.', 'Ya, Tinggalkan', function () { navigate(href); ulangAnimHalaman() })
      }
      window.addEventListener('beforeunload', onBeforeUnload)
      document.addEventListener('click', onClickLink, true)
