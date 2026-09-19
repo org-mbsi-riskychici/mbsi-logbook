@@ -546,13 +546,13 @@ export function Avatar(props) {
 }
 
 export function Pagination(props) {
-  /* pagination-v2: tombol nomor halaman sesuai tema BSI */
+  /* pagination-v3: nav ikon panah sebesar tombol nomor + elipsis ala web korporat */
   const totalItems = props.totalItems || 0
   const perPage = props.perPage || 10
   const page = props.page || 1
   const onPageChange = props.onPageChange || function () {}
   const totalPages = Math.ceil(totalItems / perPage)
-  if (!totalItems) return null
+  if (!totalItems || totalPages <= 1) return null
   const halaman = []
   if (totalPages <= 7) {
     for (let i = 1; i <= totalPages; i++) halaman.push(i)
@@ -565,24 +565,25 @@ export function Pagination(props) {
       }
     }
   }
-  const clsAngka = 'grid h-10 min-w-10 place-items-center rounded-xl px-3 text-sm font-bold transition '
-  const clsNav = 'flex h-10 items-center rounded-xl px-4 text-sm font-semibold transition '
+  const clsItem = 'grid h-8 min-w-8 place-items-center rounded-lg px-1.5 text-xs font-bold transition sm:h-10 sm:min-w-10 sm:rounded-xl sm:px-3 sm:text-sm '
   const clsNetral = 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 hover:text-bsi-800'
+  const panahKiri = <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 sm:h-5 sm:w-5" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+  const panahKanan = <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 sm:h-5 sm:w-5" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
   return (
-    <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
-      {totalPages > 1 ? (
-        <button
-          type="button"
-          disabled={page <= 1}
-          onClick={function () { onPageChange(page - 1) }}
-          className={clsNav + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}
-        >
-          Sebelumnya
-        </button>
-      ) : null}
+    <div className="mt-8 flex flex-wrap items-center justify-center gap-1 sm:gap-2">
+      <button
+        type="button"
+        disabled={page <= 1}
+        onClick={function () { onPageChange(page - 1) }}
+        aria-label="Sebelumnya"
+        title="Sebelumnya"
+        className={clsItem + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}
+      >
+        {panahKiri}
+      </button>
       {halaman.map(function (h, idx) {
         if (h === '...') {
-          return <span key={'lompat' + idx} className="px-1 text-sm font-bold text-slate-600">...</span>
+          return <span key={'lompat' + idx} className="px-0.5 text-xs font-bold text-slate-600 sm:px-1 sm:text-sm">...</span>
         }
         const aktif = h === page
         return (
@@ -590,7 +591,8 @@ export function Pagination(props) {
             key={'hal' + h}
             type="button"
             onClick={function () { onPageChange(h) }}
-            className={clsAngka + (aktif
+            aria-label={'Halaman ' + h}
+            className={clsItem + (aktif
               ? 'bg-bsi-800 text-white shadow-lg shadow-bsi-900/25'
               : clsNetral)}
           >
@@ -598,16 +600,16 @@ export function Pagination(props) {
           </button>
         )
       })}
-      {totalPages > 1 ? (
-        <button
-          type="button"
-          disabled={page >= totalPages}
-          onClick={function () { onPageChange(page + 1) }}
-          className={clsNav + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}
-        >
-          Berikutnya
-        </button>
-      ) : null}
+      <button
+        type="button"
+        disabled={page >= totalPages}
+        onClick={function () { onPageChange(page + 1) }}
+        aria-label="Berikutnya"
+        title="Berikutnya"
+        className={clsItem + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}
+      >
+        {panahKanan}
+      </button>
     </div>
   )
 }

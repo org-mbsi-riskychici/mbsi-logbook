@@ -87,11 +87,12 @@ supabase/
   schema.sql
 .env.example
 .gitignore
-fokus-refleksi.cjs
 index.html
 package.json
-perbaiki-animasi-refleksi.cjs
+pagination-ikon-panah.cjs
+pagination-mobile-nomor.cjs
 postcss.config.js
+rapikan-pagination.cjs
 README.md
 tailwind.config.js
 vercel.json
@@ -100,259 +101,335 @@ vite.config.js
 
 # Files
 
-## File: fokus-refleksi.cjs
+## File: pagination-ikon-panah.cjs
 ```javascript
 #!/usr/bin/env node
 /*
- * fokus-refleksi.cjs (v2 - toleran CRLF/Windows)
- * Membuat 3 kolom refleksi (Kendala/Solusi/Pembelajaran) di form logbook dashboard
- * berperilaku fokus-melebar: kolom difokuskan / sudah terisi -> melebar sepenuh baris,
- * kolom kosong lain turun ke bawah (grid 3 kolom), dengan animasi geser halus (FLIP).
- * Idempoten: aman dijalankan ulang; tidak menulis bila penanda sudah ada.
+ * pagination-ikon-panah.cjs
+ * Menulis ulang komponen Pagination di ui.jsx:
+ *  - Tombol Sebelumnya/Berikutnya menjadi ikon panah saja, ukurannya sama
+ *    dengan tombol nomor (h-8 di mobile, h-10 di desktop).
+ *  - Satu baris untuk semua ukuran layar (muat hingga 360px).
+ *  - Elipsis "..." otomatis saat total halaman > 7 (pola web korporat).
+ * Idempoten: aman dijalankan ulang.
  *
- * Pakai (dari root proyek):  node fokus-refleksi.cjs
+ * Pakai (dari root proyek):  node pagination-ikon-panah.cjs
  */
 const fs = require('fs')
 const path = require('path')
 
-function baca(rel) {
-  const p = path.resolve(process.cwd(), rel)
-  if (!fs.existsSync(p)) return null
-  const raw = fs.readFileSync(p, 'utf8')
-  const crlf = raw.includes('\r\n')
-  return { p: p, isi: crlf ? raw.replace(/\r\n/g, '\n') : raw, crlf: crlf }
-}
-function tulis(obj, isi) {
-  const keluar = obj.crlf ? isi.replace(/\n/g, '\r\n') : isi
-  fs.writeFileSync(obj.p + '.bak', fs.readFileSync(obj.p))
-  fs.writeFileSync(obj.p, keluar, 'utf8')
+const REL = path.join('src', 'components', 'ui.jsx')
+const p = path.resolve(process.cwd(), REL)
+if (!fs.existsSync(p)) { console.error('✗ File tidak ditemukan: ' + REL); process.exit(1) }
+
+const raw = fs.readFileSync(p, 'utf8')
+const crlf = raw.indexOf('\r\n') !== -1
+let isi = crlf ? raw.replace(/\r\n/g, '\n') : raw
+
+if (isi.indexOf('pagination-v3') !== -1) {
+  console.log('= Pagination ikon panah sudah terpasang, tidak ada yang diubah.')
+  process.exit(0)
 }
 
-const AUTO_BARU = [
-  'export function AutoTextArea(props) {',
-  '  const ref = useRef(null)',
-  '  useEffect(function () {',
-  '    const el = ref.current',
-  '    if (!el) return',
-  "    el.style.height = 'auto'",
-  "    el.style.height = el.scrollHeight + 'px'",
-  '  }, [props.value])',
-  '  useEffect(function () {',
-  '    const el = ref.current',
-  "    if (!el || typeof ResizeObserver === 'undefined') return undefined",
-  '    const ro = new ResizeObserver(function () {',
-  "      el.style.height = 'auto'",
-  "      el.style.height = el.scrollHeight + 'px'",
-  '    })',
-  '    ro.observe(el.parentElement || el)',
-  '    return function () { ro.disconnect() }',
-  '  }, [])',
+const rePag = /export function Pagination\(props\) \{[\s\S]*?\n\}\n(?=const ToastContext)/
+if (!rePag.test(isi)) {
+  console.error('✗ Fungsi Pagination tidak dikenali di ui.jsx.')
+  process.exit(1)
+}
+
+const BARU = [
+  'export function Pagination(props) {',
+  '  /* pagination-v3: nav ikon panah sebesar tombol nomor + elipsis ala web korporat */',
+  '  const totalItems = props.totalItems || 0',
+  '  const perPage = props.perPage || 10',
+  '  const page = props.page || 1',
+  '  const onPageChange = props.onPageChange || function () {}',
+  '  const totalPages = Math.ceil(totalItems / perPage)',
+  '  if (!totalItems || totalPages <= 1) return null',
+  '  const halaman = []',
+  '  if (totalPages <= 7) {',
+  '    for (let i = 1; i <= totalPages; i++) halaman.push(i)',
+  '  } else {',
+  '    for (let i = 1; i <= totalPages; i++) {',
+  '      if (i === 1 || i === totalPages || (i >= page - 1 && i <= page + 1)) {',
+  '        halaman.push(i)',
+  '      } else if (halaman[halaman.length - 1] !== \'...\') {',
+  "        halaman.push('...')",
+  '      }',
+  '    }',
+  '  }',
+  "  const clsItem = 'grid h-8 min-w-8 place-items-center rounded-lg px-1.5 text-xs font-bold transition sm:h-10 sm:min-w-10 sm:rounded-xl sm:px-3 sm:text-sm '",
+  "  const clsNetral = 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 hover:text-bsi-800'",
+  '  const panahKiri = <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 sm:h-5 sm:w-5" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>',
+  '  const panahKanan = <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 sm:h-5 sm:w-5" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>',
   '  return (',
-  '    <textarea',
-  '      ref={ref}',
-  '      className={props.className}',
-  '      rows={props.rows || 2}',
-  '      value={props.value}',
-  '      placeholder={props.placeholder}',
-  '      onChange={props.onChange}',
-  '      onFocus={props.onFocus}',
-  '      onBlur={props.onBlur}',
-  '      disabled={props.disabled || false}',
-  '    />',
+  '    <div className="mt-8 flex flex-wrap items-center justify-center gap-1 sm:gap-2">',
+  '      <button',
+  '        type="button"',
+  '        disabled={page <= 1}',
+  '        onClick={function () { onPageChange(page - 1) }}',
+  '        aria-label="Sebelumnya"',
+  '        title="Sebelumnya"',
+  "        className={clsItem + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}",
+  '      >',
+  '        {panahKiri}',
+  '      </button>',
+  '      {halaman.map(function (h, idx) {',
+  "        if (h === '...') {",
+  "          return <span key={'lompat' + idx} className=\"px-0.5 text-xs font-bold text-slate-600 sm:px-1 sm:text-sm\">...</span>",
+  '        }',
+  '        const aktif = h === page',
+  '        return (',
+  '          <button',
+  "            key={'hal' + h}",
+  '            type="button"',
+  '            onClick={function () { onPageChange(h) }}',
+  "            aria-label={'Halaman ' + h}",
+  '            className={clsItem + (aktif',
+  "              ? 'bg-bsi-800 text-white shadow-lg shadow-bsi-900/25'",
+  '              : clsNetral)}',
+  '          >',
+  '            {h}',
+  '          </button>',
+  '        )',
+  '      })}',
+  '      <button',
+  '        type="button"',
+  '        disabled={page >= totalPages}',
+  '        onClick={function () { onPageChange(page + 1) }}',
+  '        aria-label="Berikutnya"',
+  '        title="Berikutnya"',
+  "        className={clsItem + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}",
+  '      >',
+  '        {panahKanan}',
+  '      </button>',
+  '    </div>',
   '  )',
   '}',
   ''
 ].join('\n')
 
-const SISIP_STATE = [
-  '',
-  "   const [refleksiFokus, setRefleksiFokus] = useState('')",
-  '   const refleksiRefs = useRef({})',
-  '   const refleksiPrevRects = useRef(null)',
-  '   function rekamRefleksi() {',
-  '     const map = {}',
-  "     ;['kendala', 'solusi', 'pembelajaran'].forEach(function (k) {",
-  '       const el = refleksiRefs.current[k]',
-  '       if (el) map[k] = el.getBoundingClientRect()',
-  '     })',
-  '     refleksiPrevRects.current = map',
-  '   }',
-  '   const refleksiExpand = {',
-  "     kendala: refleksiFokus === 'kendala' || form.kendala.trim() !== '',",
-  "     solusi: refleksiFokus === 'solusi' || form.solusi.trim() !== '',",
-  "     pembelajaran: refleksiFokus === 'pembelajaran' || form.pembelajaran.trim() !== ''",
-  '   }',
-  "   const refleksiExpandKey = (refleksiExpand.kendala ? 'k' : '-') + (refleksiExpand.solusi ? 's' : '-') + (refleksiExpand.pembelajaran ? 'p' : '-')",
-  '   useLayoutEffect(function () {',
-  '     const prev = refleksiPrevRects.current',
-  '     refleksiPrevRects.current = null',
-  '     if (!prev) return',
-  "     ;['kendala', 'solusi', 'pembelajaran'].forEach(function (k) {",
-  '       const el = refleksiRefs.current[k]',
-  '       const old = prev[k]',
-  "       if (!el || !old || typeof el.animate !== 'function') return",
-  '       const now = el.getBoundingClientRect()',
-  '       const dx = old.left - now.left',
-  '       const dy = old.top - now.top',
-  '       const dw = old.width - now.width',
-  '       if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(dw) < 1) return',
-  '       el.animate([',
-  "         { transform: 'translate(' + dx + 'px,' + dy + 'px)', width: old.width + 'px' },",
-  "         { transform: 'translate(0,0)', width: now.width + 'px' }",
-  "       ], { duration: 320, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' })",
-  '     })',
-  "   }, [refleksiExpandKey])"
-].join('\n')
+isi = isi.replace(rePag, BARU)
 
-function kolomRefleksi(key, label, ind) {
-  return [
-    ind + '<div ref={function (el) { refleksiRefs.current.' + key + ' = el }} className={\'min-w-0 \' + (refleksiExpand.' + key + ' ? \'md:col-span-3 md:order-first\' : \'\')}>',
-    ind + '  <label className={labelCls}>' + label + '</label>',
-    ind + '  <AutoTextArea className={inputCls} value={form.' + key + '} onChange={function (e) { setForm(Object.assign({}, form, { ' + key + ": e.target.value })) }} aria-label=\"" + label + '" placeholder="Opsional"',
-    ind + '    onFocus={function () { rekamRefleksi(); setRefleksiFokus(\'' + key + '\') }} onBlur={function () { rekamRefleksi(); setRefleksiFokus(\'\') }} />',
-    ind + '</div>'
-  ].join('\n')
+if (isi.indexOf('pagination-v3') === -1 || isi.indexOf('aria-label="Berikutnya"') === -1) {
+  console.error('✗ Verifikasi gagal, file tidak ditulis.')
+  process.exit(1)
 }
 
-const masalah = []
-
-/* ---------- 1) ui.jsx: AutoTextArea + onFocus/onBlur + ResizeObserver ---------- */
-const relUi = path.join('src', 'components', 'ui.jsx')
-const ui = baca(relUi)
-if (!ui) { console.error('✗ File tidak ditemukan: ' + relUi); process.exit(1) }
-if (ui.isi.indexOf('ResizeObserver') !== -1 && ui.isi.indexOf('onFocus={props.onFocus}') !== -1) {
-  console.log('= ui.jsx sudah siap, dilewati.')
-} else {
-  const reAuto = /export function AutoTextArea\(props\) \{[\s\S]*?\n[ \t]*\}\n/
-  if (!reAuto.test(ui.isi)) {
-    masalah.push('ui.jsx: fungsi AutoTextArea tidak dikenali')
-  } else {
-    tulis(ui, ui.isi.replace(reAuto, AUTO_BARU))
-    console.log('✓ ui.jsx: AutoTextArea diperbarui (onFocus/onBlur + ResizeObserver).')
-  }
-}
-
-/* ---------- 2) DashboardPage.jsx ---------- */
-const relDash = path.join('src', 'pages', 'DashboardPage.jsx')
-const dash = baca(relDash)
-if (!dash) { console.error('✗ File tidak ditemukan: ' + relDash); process.exit(1) }
-let d = dash.isi
-
-if (d.indexOf('refleksiFokus') !== -1) {
-  console.log('= DashboardPage sudah siap, dilewati.')
-} else {
-  /* 2a. import useLayoutEffect */
-  if (d.indexOf('useLayoutEffect') === -1) {
-    const reImp = /import \{ useEffect, useRef, useState \} from 'react'/
-    if (!reImp.test(d)) masalah.push('DashboardPage: import react tidak dikenali')
-    else d = d.replace(reImp, "import { useEffect, useLayoutEffect, useRef, useState } from 'react'")
-  }
-  /* 2b. sisip state + refs + FLIP setelah state konfirmasiEdit */
-  const reState = /(\n[ \t]*const \[konfirmasiEdit, setKonfirmasiEdit\] = useState\(null\))/
-  if (!reState.test(d)) masalah.push('DashboardPage: state konfirmasiEdit tidak ditemukan')
-  else d = d.replace(reState, function (m) { return m + SISIP_STATE })
-  /* 2c. ganti grid 3 kolom refleksi dengan versi fokus-melebar */
-  const reGrid = /([ \t]*)<div className="grid gap-4 md:grid-cols-3">\s*(<div><label className=\{labelCls\}>Kendala<\/label>[\s\S]*?<\/div>)\s*(<div><label className=\{labelCls\}>Solusi<\/label>[\s\S]*?<\/div>)\s*(<div><label className=\{labelCls\}>Pembelajaran<\/label>[\s\S]*?<\/div>)\s*<\/div>/
-  if (!reGrid.test(d)) {
-    masalah.push('DashboardPage: grid refleksi 3 kolom tidak dikenali')
-  } else {
-    d = d.replace(reGrid, function (m, ind) {
-      return [
-        ind + '<div className="grid gap-4 md:grid-cols-3">',
-        kolomRefleksi('kendala', 'Kendala', ind),
-        kolomRefleksi('solusi', 'Solusi', ind),
-        kolomRefleksi('pembelajaran', 'Pembelajaran', ind),
-        ind + '</div>'
-      ].join('\n')
-    })
-  }
-  if (masalah.length) {
-    console.error('✗ GAGAL, DashboardPage tidak ditulis:')
-    masalah.forEach(function (x) { console.error('  - ' + x) })
-    process.exit(1)
-  }
-  tulis(dash, d)
-  console.log('✓ DashboardPage.jsx: kolom refleksi fokus-melebar terpasang.')
-}
-
-if (masalah.length) process.exit(1)
-console.log('')
-console.log('✓ SELESAI. Perilaku: klik/fokus salah satu kolom -> melebar sepenuh baris;')
-console.log('  kolom kosong lain turun ke bawah; kolom terisi tetap melebar;')
-console.log('  kosongkan lalu blur -> kembali ke grid 3 kolom. Animasi geser halus.')
+fs.writeFileSync(p + '.bak', raw, 'utf8')
+fs.writeFileSync(p, crlf ? isi.replace(/\n/g, '\r\n') : isi, 'utf8')
+console.log('✓ SELESAI: Pagination kini memakai ikon panah + elipsis (backup: ui.jsx.bak).')
+console.log('  - Nav panah sama besar dengan tombol nomor (mobile 32px, desktop 40px).')
+console.log('  - Satu baris rapi di semua layar; elipsis "..." muncul bila halaman > 7.')
 ```
 
-## File: perbaiki-animasi-refleksi.cjs
+## File: pagination-mobile-nomor.cjs
 ```javascript
 #!/usr/bin/env node
 /*
- * perbaiki-animasi-refleksi.cjs
- * Memperbaiki glitch animasi fokus-melebar pada kolom Kendala/Solusi/Pembelajaran:
- *  - Batalkan animasi FLIP yang masih berjalan sebelum animasi baru mulai
- *    (mencegah lebar tertahan panjang saat fokus pindah cepat).
- *  - Animasikan lebar + posisi sekaligus dengan easing lembut supaya
- *    pembesaran kolom terlihat dan tidak menimpa kolom tetangga.
+ * pagination-mobile-nomor.cjs
+ * Mengubah pagination mobile: menambah baris nomor halaman berukuran kecil
+ * (h-8, text-xs, dengan elipsis) di atas, dan tombol Sebelumnya/Berikutnya
+ * kecil proporsional (h-9, flex-1) di bawahnya. Desktop/tablet tidak berubah.
  * Idempoten: aman dijalankan ulang.
  *
- * Pakai (dari root proyek):  node perbaiki-animasi-refleksi.cjs
+ * Pakai (dari root proyek):  node pagination-mobile-nomor.cjs
  */
 const fs = require('fs')
 const path = require('path')
 
-const REL = path.join('src', 'pages', 'DashboardPage.jsx')
+const REL = path.join('src', 'components', 'ui.jsx')
 const p = path.resolve(process.cwd(), REL)
 if (!fs.existsSync(p)) { console.error('✗ File tidak ditemukan: ' + REL); process.exit(1) }
 
-let isi = fs.readFileSync(p, 'utf8')
-isi = isi.replace(/\r\n/g, '\n')
+const raw = fs.readFileSync(p, 'utf8')
+const crlf = raw.indexOf('\r\n') !== -1
+let isi = crlf ? raw.replace(/\r\n/g, '\n') : raw
 
-const LAMA = [
-  "       if (!el || !old || typeof el.animate !== 'function') return",
-  "       const now = el.getBoundingClientRect()",
-  "       const dx = old.left - now.left",
-  "       const dy = old.top - now.top",
-  "       const dw = old.width - now.width",
-  "       if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(dw) < 1) return",
-  "       el.animate([",
-  "         { transform: 'translate(' + dx + 'px,' + dy + 'px)', width: old.width + 'px' },",
-  "         { transform: 'translate(0,0)', width: now.width + 'px' }",
-  "       ], { duration: 320, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' })"
-].join('\n')
-
-const BARU = [
-  "       if (!el || !old || typeof el.animate !== 'function') return",
-  "       if (typeof el.getAnimations === 'function') {",
-  "         el.getAnimations().forEach(function (a) { a.cancel() })",
-  "       }",
-  "       const now = el.getBoundingClientRect()",
-  "       const dx = old.left - now.left",
-  "       const dy = old.top - now.top",
-  "       const dw = old.width - now.width",
-  "       if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(dw) < 1) return",
-  "       el.style.overflow = 'hidden'",
-  "       const anim = el.animate([",
-  "         { transform: 'translate(' + dx + 'px,' + dy + 'px)', width: old.width + 'px' },",
-  "         { transform: 'translate(0,0)', width: now.width + 'px' }",
-  "       ], { duration: 420, easing: 'cubic-bezier(0.4, 0, 0.2, 1)' })",
-  "       anim.onfinish = function () { el.style.overflow = '' }",
-  "       anim.oncancel = function () { el.style.overflow = '' }"
-].join('\n')
-
-if (isi.indexOf(BARU) !== -1) {
-  console.log('= Perbaikan animasi refleksi sudah terpasang, tidak ada yang diubah.')
+if (isi.indexOf('pagination-mobile-v2') !== -1) {
+  console.log('= Pagination mobile bernomor sudah terpasang, tidak ada yang diubah.')
   process.exit(0)
 }
-if (isi.indexOf(LAMA) === -1) {
-  console.error('✗ Pola animasi lama tidak ditemukan. Periksa blok useLayoutEffect refleksi di DashboardPage.jsx.')
+
+const reMobile = /<div className="flex items-center gap-3 sm:hidden">[\s\S]*?\n      <\/div>/
+if (!reMobile.test(isi)) {
+  console.error('✗ Blok pagination mobile (sm:hidden) tidak ditemukan di ui.jsx.')
   process.exit(1)
 }
 
-isi = isi.replace(LAMA, BARU)
-fs.writeFileSync(p + '.bak', fs.readFileSync(p, 'utf8'), 'utf8')
-fs.writeFileSync(p, isi, 'utf8')
-console.log('✓ SELESAI: animasi fokus-melebar diperbaiki.')
-console.log('  - Animasi lama dibatalkan sebelum animasi baru (tidak ada lebar tertahan).')
-console.log('  - Durasi 420ms dengan easing lembut; overflow dijaga supaya tidak menimpa tetangga.')
+const BARU = [
+  '      {/* pagination-mobile-v2: nomor halaman kecil di atas + prev/next proporsional di bawah */}',
+  '      <div className="space-y-2 sm:hidden">',
+  '        <div className="flex flex-wrap items-center justify-center gap-1">',
+  '        {halaman.map(function (h, idx) {',
+  "          if (h === '...') {",
+  "            return <span key={'lompat-m' + idx} className=\"px-0.5 text-xs font-bold text-slate-600\">...</span>",
+  '          }',
+  '          const aktif = h === page',
+  '          return (',
+  '            <button',
+  "              key={'hal-m' + h}",
+  '              type="button"',
+  '              onClick={function () { onPageChange(h) }}',
+  "              className={'grid h-8 min-w-8 place-items-center rounded-lg px-1.5 text-xs font-bold transition ' + (aktif",
+  "                ? 'bg-bsi-800 text-white shadow-md shadow-bsi-900/25'",
+  '                : clsNetral)}',
+  '            >',
+  '              {h}',
+  '            </button>',
+  '          )',
+  '        })}',
+  '        </div>',
+  '        <div className="flex gap-2">',
+  '          <button',
+  '            type="button"',
+  '            disabled={page <= 1}',
+  '            onClick={function () { onPageChange(page - 1) }}',
+  "            className={'flex h-9 flex-1 items-center justify-center rounded-lg px-2 text-xs font-semibold transition ' + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}",
+  '          >',
+  '            Sebelumnya',
+  '          </button>',
+  '          <button',
+  '            type="button"',
+  '            disabled={page >= totalPages}',
+  '            onClick={function () { onPageChange(page + 1) }}',
+  "            className={'flex h-9 flex-1 items-center justify-center rounded-lg px-2 text-xs font-semibold transition ' + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}",
+  '          >',
+  '            Berikutnya',
+  '          </button>',
+  '        </div>',
+  '      </div>'
+].join('\n')
+
+isi = isi.replace(reMobile, BARU)
+
+if (isi.indexOf('pagination-mobile-v2') === -1 || (isi.split('halaman.map').length - 1) !== 2) {
+  console.error('✗ Verifikasi gagal, file tidak ditulis.')
+  process.exit(1)
+}
+
+fs.writeFileSync(p + '.bak', raw, 'utf8')
+fs.writeFileSync(p, crlf ? isi.replace(/\n/g, '\r\n') : isi, 'utf8')
+console.log('✓ SELESAI: pagination mobile kini menampilkan nomor halaman kecil (backup: ui.jsx.bak).')
+console.log('  - Baris 1: nomor halaman + elipsis, tinggi 32px, teks xs, halaman aktif hijau.')
+console.log('  - Baris 2: Sebelumnya / Berikutnya kecil (36px) sama lebar.')
+console.log('  - Desktop/tablet (≥640px) tidak berubah.')
+```
+
+## File: rapikan-pagination.cjs
+```javascript
+#!/usr/bin/env node
+/*
+ * rapikan-pagination.cjs
+ * Merapikan pagination di layar kecil: mobile memakai baris proporsional
+ * (Sebelumnya + indikator X/Y + Berikutnya, flex-1) tanpa daftar nomor,
+ * sedangkan tablet/desktop tetap memakai daftar nomor ber-elipsis.
+ * Pagination juga disembunyikan bila hanya ada 1 halaman.
+ * Idempoten: aman dijalankan ulang.
+ *
+ * Pakai (dari root proyek):  node rapikan-pagination.cjs
+ */
+const fs = require('fs')
+const path = require('path')
+
+const REL = path.join('src', 'components', 'ui.jsx')
+const p = path.resolve(process.cwd(), REL)
+if (!fs.existsSync(p)) { console.error('✗ File tidak ditemukan: ' + REL); process.exit(1) }
+
+const raw = fs.readFileSync(p, 'utf8')
+const crlf = raw.indexOf('\r\n') !== -1
+let isi = crlf ? raw.replace(/\r\n/g, '\n') : raw
+
+if (isi.indexOf('pagination-mobile-v1') !== -1) {
+  console.log('= Pagination responsif sudah terpasang, tidak ada yang diubah.')
+  process.exit(0)
+}
+
+const reReturn = /return \(\s*<div className="mt-8 flex flex-wrap items-center justify-center gap-2">[\s\S]*?<\/div>\s*\)\s*\}/
+if (!reReturn.test(isi)) {
+  console.error('✗ Blok return Pagination tidak dikenali di ui.jsx.')
+  process.exit(1)
+}
+
+const BARU = [
+  '  if (totalPages <= 1) return null',
+  '  return (',
+  '    <div className="mt-8">',
+  '      {/* pagination-mobile-v1: layar kecil pakai prev/next proporsional + indikator, tanpa daftar nomor yang berantakan */}',
+  '      <div className="flex items-center gap-3 sm:hidden">',
+  '        <button',
+  '          type="button"',
+  '          disabled={page <= 1}',
+  '          onClick={function () { onPageChange(page - 1) }}',
+  "          className={clsNav + clsNetral + ' flex-1 justify-center disabled:cursor-not-allowed disabled:opacity-40'}",
+  '        >',
+  '          Sebelumnya',
+  '        </button>',
+  '        <span className="shrink-0 text-sm font-bold text-slate-600">{page} / {totalPages}</span>',
+  '        <button',
+  '          type="button"',
+  '          disabled={page >= totalPages}',
+  '          onClick={function () { onPageChange(page + 1) }}',
+  "          className={clsNav + clsNetral + ' flex-1 justify-center disabled:cursor-not-allowed disabled:opacity-40'}",
+  '        >',
+  '          Berikutnya',
+  '        </button>',
+  '      </div>',
+  '      {/* tablet & desktop: daftar nomor dengan elipsis */}',
+  '      <div className="hidden sm:flex flex-wrap items-center justify-center gap-2">',
+  '        <button',
+  '          type="button"',
+  '          disabled={page <= 1}',
+  '          onClick={function () { onPageChange(page - 1) }}',
+  "          className={clsNav + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}",
+  '        >',
+  '          Sebelumnya',
+  '        </button>',
+  '        {halaman.map(function (h, idx) {',
+  "          if (h === '...') {",
+  "            return <span key={'lompat' + idx} className=\"px-1 text-sm font-bold text-slate-600\">...</span>",
+  '          }',
+  '          const aktif = h === page',
+  '          return (',
+  '            <button',
+  "              key={'hal' + h}",
+  '              type="button"',
+  '              onClick={function () { onPageChange(h) }}',
+  '              className={clsAngka + (aktif',
+  "                ? 'bg-bsi-800 text-white shadow-lg shadow-bsi-900/25'",
+  '                : clsNetral)}',
+  '            >',
+  '              {h}',
+  '            </button>',
+  '          )',
+  '        })}',
+  '        <button',
+  '          type="button"',
+  '          disabled={page >= totalPages}',
+  '          onClick={function () { onPageChange(page + 1) }}',
+  "          className={clsNav + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}",
+  '        >',
+  '          Berikutnya',
+  '        </button>',
+  '      </div>',
+  '    </div>',
+  '  )',
+  '}'
+].join('\n')
+
+isi = isi.replace(reReturn, BARU)
+
+if (isi.indexOf('pagination-mobile-v1') === -1 || isi.indexOf('sm:hidden') === -1 || isi.indexOf('hidden sm:flex') === -1) {
+  console.error('✗ Verifikasi gagal, file tidak ditulis.')
+  process.exit(1)
+}
+
+fs.writeFileSync(p + '.bak', raw, 'utf8')
+fs.writeFileSync(p, crlf ? isi.replace(/\n/g, '\r\n') : isi, 'utf8')
+console.log('✓ SELESAI: pagination responsif terpasang di ui.jsx (backup: ui.jsx.bak).')
+console.log('  - Mobile (<640px): baris proporsional Sebelumnya | X / Y | Berikutnya, tanpa wrap.')
+console.log('  - Tablet/desktop: daftar nomor ber-elipsis seperti semula.')
+console.log('  - 1 halaman: pagination disembunyikan.')
 ```
 
 ## File: api/_lib/sesi.js
@@ -5774,9 +5851,53 @@ export function Pagination(props) {
   const clsAngka = 'grid h-10 min-w-10 place-items-center rounded-xl px-3 text-sm font-bold transition '
   const clsNav = 'flex h-10 items-center rounded-xl px-4 text-sm font-semibold transition '
   const clsNetral = 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 hover:text-bsi-800'
+    if (totalPages <= 1) return null
   return (
-    <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
-      {totalPages > 1 ? (
+    <div className="mt-8">
+      {/* pagination-mobile-v1: layar kecil pakai prev/next proporsional + indikator, tanpa daftar nomor yang berantakan */}
+            {/* pagination-mobile-v2: nomor halaman kecil di atas + prev/next proporsional di bawah */}
+      <div className="space-y-2 sm:hidden">
+        <div className="flex flex-wrap items-center justify-center gap-1">
+        {halaman.map(function (h, idx) {
+          if (h === '...') {
+            return <span key={'lompat-m' + idx} className="px-0.5 text-xs font-bold text-slate-600">...</span>
+          }
+          const aktif = h === page
+          return (
+            <button
+              key={'hal-m' + h}
+              type="button"
+              onClick={function () { onPageChange(h) }}
+              className={'grid h-8 min-w-8 place-items-center rounded-lg px-1.5 text-xs font-bold transition ' + (aktif
+                ? 'bg-bsi-800 text-white shadow-md shadow-bsi-900/25'
+                : clsNetral)}
+            >
+              {h}
+            </button>
+          )
+        })}
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={page <= 1}
+            onClick={function () { onPageChange(page - 1) }}
+            className={'flex h-9 flex-1 items-center justify-center rounded-lg px-2 text-xs font-semibold transition ' + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}
+          >
+            Sebelumnya
+          </button>
+          <button
+            type="button"
+            disabled={page >= totalPages}
+            onClick={function () { onPageChange(page + 1) }}
+            className={'flex h-9 flex-1 items-center justify-center rounded-lg px-2 text-xs font-semibold transition ' + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}
+          >
+            Berikutnya
+          </button>
+        </div>
+      </div>
+      {/* tablet & desktop: daftar nomor dengan elipsis */}
+      <div className="hidden sm:flex flex-wrap items-center justify-center gap-2">
         <button
           type="button"
           disabled={page <= 1}
@@ -5785,26 +5906,24 @@ export function Pagination(props) {
         >
           Sebelumnya
         </button>
-      ) : null}
-      {halaman.map(function (h, idx) {
-        if (h === '...') {
-          return <span key={'lompat' + idx} className="px-1 text-sm font-bold text-slate-600">...</span>
-        }
-        const aktif = h === page
-        return (
-          <button
-            key={'hal' + h}
-            type="button"
-            onClick={function () { onPageChange(h) }}
-            className={clsAngka + (aktif
-              ? 'bg-bsi-800 text-white shadow-lg shadow-bsi-900/25'
-              : clsNetral)}
-          >
-            {h}
-          </button>
-        )
-      })}
-      {totalPages > 1 ? (
+        {halaman.map(function (h, idx) {
+          if (h === '...') {
+            return <span key={'lompat' + idx} className="px-1 text-sm font-bold text-slate-600">...</span>
+          }
+          const aktif = h === page
+          return (
+            <button
+              key={'hal' + h}
+              type="button"
+              onClick={function () { onPageChange(h) }}
+              className={clsAngka + (aktif
+                ? 'bg-bsi-800 text-white shadow-lg shadow-bsi-900/25'
+                : clsNetral)}
+            >
+              {h}
+            </button>
+          )
+        })}
         <button
           type="button"
           disabled={page >= totalPages}
@@ -5813,7 +5932,7 @@ export function Pagination(props) {
         >
           Berikutnya
         </button>
-      ) : null}
+      </div>
     </div>
   )
 }
@@ -5973,13 +6092,29 @@ export default function DashboardPage() {
    const [refleksiFokus, setRefleksiFokus] = useState('')
    const refleksiRefs = useRef({})
    const refleksiPrevRects = useRef(null)
+   const refleksiCardAnim = useRef(null)
+   const refleksiBlurTimer = useRef(null)
    function rekamRefleksi() {
      const map = {}
-     ;['kendala', 'solusi', 'pembelajaran'].forEach(function (k) {
+     ;['kendala', 'solusi', 'pembelajaran', 'tombol'].forEach(function (k) {
        const el = refleksiRefs.current[k]
        if (el) map[k] = el.getBoundingClientRect()
      })
+     if (refFormLog.current) map.kartu = refFormLog.current.getBoundingClientRect()
      refleksiPrevRects.current = map
+   }
+   function fokusRefleksi(key) {
+     if (refleksiBlurTimer.current) { clearTimeout(refleksiBlurTimer.current); refleksiBlurTimer.current = null }
+     rekamRefleksi()
+     setRefleksiFokus(key)
+   }
+   function blurRefleksi() {
+     if (refleksiBlurTimer.current) clearTimeout(refleksiBlurTimer.current)
+     refleksiBlurTimer.current = setTimeout(function () {
+       refleksiBlurTimer.current = null
+       rekamRefleksi()
+       setRefleksiFokus('')
+     }, 0)
    }
    const refleksiExpand = {
      kendala: refleksiFokus === 'kendala' || form.kendala.trim() !== '',
@@ -5991,10 +6126,13 @@ export default function DashboardPage() {
      const prev = refleksiPrevRects.current
      refleksiPrevRects.current = null
      if (!prev) return
-     ;['kendala', 'solusi', 'pembelajaran'].forEach(function (k) {
+     ;['kendala', 'solusi', 'pembelajaran', 'tombol'].forEach(function (k) {
        const el = refleksiRefs.current[k]
        const old = prev[k]
        if (!el || !old || typeof el.animate !== 'function') return
+       if (typeof el.getAnimations === 'function') {
+         el.getAnimations().forEach(function (a) { a.cancel() })
+       }
        const now = el.getBoundingClientRect()
        const dx = old.left - now.left
        const dy = old.top - now.top
@@ -6003,8 +6141,29 @@ export default function DashboardPage() {
        el.animate([
          { transform: 'translate(' + dx + 'px,' + dy + 'px)', width: old.width + 'px' },
          { transform: 'translate(0,0)', width: now.width + 'px' }
-       ], { duration: 450, easing: 'cubic-bezier(0.4, 0, 0.2, 1)' })
+       ], { duration: 420, easing: 'cubic-bezier(0.4, 0, 0.2, 1)' })
      })
+     const kartu = refFormLog.current
+     const oldKartu = prev.kartu
+     if (kartu && oldKartu && typeof kartu.animate === 'function') {
+              kartu.querySelectorAll('textarea').forEach(function (t) {
+                t.style.height = 'auto'
+                t.style.height = t.scrollHeight + 'px'
+              })
+       const nowKartu = kartu.getBoundingClientRect()
+       const dh = nowKartu.height - oldKartu.height
+       if (Math.abs(dh) >= 1) {
+         if (refleksiCardAnim.current) refleksiCardAnim.current.cancel()
+         kartu.style.overflow = 'hidden'
+         const anim = kartu.animate([
+           { height: oldKartu.height + 'px' },
+           { height: nowKartu.height + 'px' }
+         ], { duration: 420, easing: 'cubic-bezier(0.4, 0, 0.2, 1)' })
+         refleksiCardAnim.current = anim
+         anim.onfinish = function () { kartu.style.overflow = ''; refleksiCardAnim.current = null }
+         anim.oncancel = function () { kartu.style.overflow = ''; refleksiCardAnim.current = null }
+       }
+     }
    }, [refleksiExpandKey])
   const [logFilter, setLogFilter] = useState(LOG_INITIAL)
   const [logFilterOpen, setLogFilterOpen] = useState(false)
@@ -6776,20 +6935,20 @@ export default function DashboardPage() {
               <div ref={function (el) { refleksiRefs.current.kendala = el }} className={'min-w-0 ' + (refleksiExpand.kendala ? 'md:col-span-3 md:order-first' : '')}>
                 <label className={labelCls}>Kendala</label>
                 <AutoTextArea className={inputCls} value={form.kendala} onChange={function (e) { setForm(Object.assign({}, form, { kendala: e.target.value })) }} aria-label="Kendala" placeholder="Opsional"
-                  onFocus={function () { rekamRefleksi(); setRefleksiFokus('kendala') }} onBlur={function () { rekamRefleksi(); setRefleksiFokus('') }} />
+                  onFocus={function () { fokusRefleksi('kendala') }} onBlur={blurRefleksi} />
               </div>
               <div ref={function (el) { refleksiRefs.current.solusi = el }} className={'min-w-0 ' + (refleksiExpand.solusi ? 'md:col-span-3 md:order-first' : '')}>
                 <label className={labelCls}>Solusi</label>
                 <AutoTextArea className={inputCls} value={form.solusi} onChange={function (e) { setForm(Object.assign({}, form, { solusi: e.target.value })) }} aria-label="Solusi" placeholder="Opsional"
-                  onFocus={function () { rekamRefleksi(); setRefleksiFokus('solusi') }} onBlur={function () { rekamRefleksi(); setRefleksiFokus('') }} />
+                  onFocus={function () { fokusRefleksi('solusi') }} onBlur={blurRefleksi} />
               </div>
               <div ref={function (el) { refleksiRefs.current.pembelajaran = el }} className={'min-w-0 ' + (refleksiExpand.pembelajaran ? 'md:col-span-3 md:order-first' : '')}>
                 <label className={labelCls}>Pembelajaran</label>
                 <AutoTextArea className={inputCls} value={form.pembelajaran} onChange={function (e) { setForm(Object.assign({}, form, { pembelajaran: e.target.value })) }} aria-label="Pembelajaran" placeholder="Opsional"
-                  onFocus={function () { rekamRefleksi(); setRefleksiFokus('pembelajaran') }} onBlur={function () { rekamRefleksi(); setRefleksiFokus('') }} />
+                  onFocus={function () { fokusRefleksi('pembelajaran') }} onBlur={blurRefleksi} />
               </div>
               </div>
-              <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks={infoProses || 'Menyimpan'} /> : (editLogId ? 'Simpan Perubahan' : 'Simpan Logbook')}</button>
+              <button ref={function (el) { refleksiRefs.current.tombol = el }} type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks={infoProses || 'Menyimpan'} /> : (editLogId ? 'Simpan Perubahan' : 'Simpan Logbook')}</button>
             </form>
           </div>
           <div className="space-y-5 min-w-0">

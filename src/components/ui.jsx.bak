@@ -111,14 +111,22 @@ export function Modal(props) {
 
 export function AutoTextArea(props) {
   const ref = useRef(null)
-
   useEffect(function () {
     const el = ref.current
     if (!el) return
     el.style.height = 'auto'
     el.style.height = el.scrollHeight + 'px'
   }, [props.value])
-
+  useEffect(function () {
+    const el = ref.current
+    if (!el || typeof ResizeObserver === 'undefined') return undefined
+    const ro = new ResizeObserver(function () {
+      el.style.height = 'auto'
+      el.style.height = el.scrollHeight + 'px'
+    })
+    ro.observe(el.parentElement || el)
+    return function () { ro.disconnect() }
+  }, [])
   return (
     <textarea
       ref={ref}
@@ -127,6 +135,8 @@ export function AutoTextArea(props) {
       value={props.value}
       placeholder={props.placeholder}
       onChange={props.onChange}
+      onFocus={props.onFocus}
+      onBlur={props.onBlur}
       disabled={props.disabled || false}
     />
   )
@@ -558,9 +568,53 @@ export function Pagination(props) {
   const clsAngka = 'grid h-10 min-w-10 place-items-center rounded-xl px-3 text-sm font-bold transition '
   const clsNav = 'flex h-10 items-center rounded-xl px-4 text-sm font-semibold transition '
   const clsNetral = 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 hover:text-bsi-800'
+    if (totalPages <= 1) return null
   return (
-    <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
-      {totalPages > 1 ? (
+    <div className="mt-8">
+      {/* pagination-mobile-v1: layar kecil pakai prev/next proporsional + indikator, tanpa daftar nomor yang berantakan */}
+            {/* pagination-mobile-v2: nomor halaman kecil di atas + prev/next proporsional di bawah */}
+      <div className="space-y-2 sm:hidden">
+        <div className="flex flex-wrap items-center justify-center gap-1">
+        {halaman.map(function (h, idx) {
+          if (h === '...') {
+            return <span key={'lompat-m' + idx} className="px-0.5 text-xs font-bold text-slate-600">...</span>
+          }
+          const aktif = h === page
+          return (
+            <button
+              key={'hal-m' + h}
+              type="button"
+              onClick={function () { onPageChange(h) }}
+              className={'grid h-8 min-w-8 place-items-center rounded-lg px-1.5 text-xs font-bold transition ' + (aktif
+                ? 'bg-bsi-800 text-white shadow-md shadow-bsi-900/25'
+                : clsNetral)}
+            >
+              {h}
+            </button>
+          )
+        })}
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={page <= 1}
+            onClick={function () { onPageChange(page - 1) }}
+            className={'flex h-9 flex-1 items-center justify-center rounded-lg px-2 text-xs font-semibold transition ' + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}
+          >
+            Sebelumnya
+          </button>
+          <button
+            type="button"
+            disabled={page >= totalPages}
+            onClick={function () { onPageChange(page + 1) }}
+            className={'flex h-9 flex-1 items-center justify-center rounded-lg px-2 text-xs font-semibold transition ' + clsNetral + ' disabled:cursor-not-allowed disabled:opacity-40'}
+          >
+            Berikutnya
+          </button>
+        </div>
+      </div>
+      {/* tablet & desktop: daftar nomor dengan elipsis */}
+      <div className="hidden sm:flex flex-wrap items-center justify-center gap-2">
         <button
           type="button"
           disabled={page <= 1}
@@ -569,26 +623,24 @@ export function Pagination(props) {
         >
           Sebelumnya
         </button>
-      ) : null}
-      {halaman.map(function (h, idx) {
-        if (h === '...') {
-          return <span key={'lompat' + idx} className="px-1 text-sm font-bold text-slate-600">...</span>
-        }
-        const aktif = h === page
-        return (
-          <button
-            key={'hal' + h}
-            type="button"
-            onClick={function () { onPageChange(h) }}
-            className={clsAngka + (aktif
-              ? 'bg-bsi-800 text-white shadow-lg shadow-bsi-900/25'
-              : clsNetral)}
-          >
-            {h}
-          </button>
-        )
-      })}
-      {totalPages > 1 ? (
+        {halaman.map(function (h, idx) {
+          if (h === '...') {
+            return <span key={'lompat' + idx} className="px-1 text-sm font-bold text-slate-600">...</span>
+          }
+          const aktif = h === page
+          return (
+            <button
+              key={'hal' + h}
+              type="button"
+              onClick={function () { onPageChange(h) }}
+              className={clsAngka + (aktif
+                ? 'bg-bsi-800 text-white shadow-lg shadow-bsi-900/25'
+                : clsNetral)}
+            >
+              {h}
+            </button>
+          )
+        })}
         <button
           type="button"
           disabled={page >= totalPages}
@@ -597,7 +649,7 @@ export function Pagination(props) {
         >
           Berikutnya
         </button>
-      ) : null}
+      </div>
     </div>
   )
 }
