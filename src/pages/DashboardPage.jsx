@@ -92,6 +92,7 @@ export default function DashboardPage() {
   const [itemMode, setItemMode] = useState({})
   const [galYtTitle, setGalYtTitle] = useState('')
   const [pendingDelete, setPendingDelete] = useState(null)
+  const [konfirmasiEdit, setKonfirmasiEdit] = useState(null)
   const [logFilter, setLogFilter] = useState(LOG_INITIAL)
   const [logFilterOpen, setLogFilterOpen] = useState(false)
   const [galFilter, setGalFilter] = useState(GAL_INITIAL)
@@ -359,7 +360,19 @@ export default function DashboardPage() {
     requestAnimationFrame(function () { if (ref && ref.current) ref.current.scrollIntoView({ behavior: 'smooth', block: 'start' }) })
   }
 
-  function startEditLog(log) {
+    function startEditLog(log) {
+    if (isLogbookDirty()) {
+      setKonfirmasiEdit({
+        judul: 'Timpa draf logbook?',
+        pesan: 'Isian form logbook yang belum disimpan akan hilang dan diganti dengan data logbook yang kamu pilih.',
+        aksi: function () { lakukanStartEditLog(log) }
+      })
+      return
+    }
+    lakukanStartEditLog(log)
+  }
+
+  function lakukanStartEditLog(log) {
     setEditLogId(log.id)
     setForm({
       tanggal: log.tanggal, unit: log.unit || '', kategori: log.kategori, judul: log.judul,
@@ -379,7 +392,19 @@ export default function DashboardPage() {
     setItems([newItem()])
   }
 
-  function startEditGal(g) {
+    function startEditGal(g) {
+    if (isGaleriDirty()) {
+      setKonfirmasiEdit({
+        judul: 'Timpa draf galeri?',
+        pesan: 'Isian form galeri yang belum disimpan akan hilang dan diganti dengan data galeri yang kamu pilih.',
+        aksi: function () { lakukanStartEditGal(g) }
+      })
+      return
+    }
+    lakukanStartEditGal(g)
+  }
+
+  function lakukanStartEditGal(g) {
     setEditGalId(g.id)
     setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_source === 'drive' ? driveThumbUrl(g.media_path) : (g.media_path || ''), oldPath: (g.media_source === 'youtube' || g.media_source === 'drive') ? '' : (g.media_path || ''), oldThumb: (g.media_source === 'youtube' || g.media_source === 'drive') ? '' : (g.media_thumb || ''), previewLoading: false })
     setGalMode((g.media_source === 'youtube' || g.media_source === 'drive') ? 'video' : (g.media_type === 'video' ? 'video' : 'foto'))
@@ -397,7 +422,19 @@ export default function DashboardPage() {
     setGalOldYt(null)
   }
 
-  function startEditHadir(h) {
+    function startEditHadir(h) {
+    if (isHadirDirty()) {
+      setKonfirmasiEdit({
+        judul: 'Timpa draf daftar hadir?',
+        pesan: 'Isian form daftar hadir yang belum disimpan akan hilang dan diganti dengan data daftar hadir yang kamu pilih.',
+        aksi: function () { lakukanStartEditHadir(h) }
+      })
+      return
+    }
+    lakukanStartEditHadir(h)
+  }
+
+  function lakukanStartEditHadir(h) {
     setEditHadirId(h.id)
     setHadirForm({ tanggal: h.tanggal, status: h.status, alasan: h.alasan || '' })
     gulirKeForm(refFormHadir)
@@ -1016,6 +1053,16 @@ export default function DashboardPage() {
         onCancel={function () { setPendingDelete(null) }}
         onConfirm={executeDelete}
       />
+        <ConfirmModal
+          open={!!konfirmasiEdit}
+          title={konfirmasiEdit ? konfirmasiEdit.judul : ''}
+          message={konfirmasiEdit ? konfirmasiEdit.pesan : ''}
+          confirmLabel="Ya, Timpa"
+          icon="trash"
+          tone="bahaya"
+          onCancel={function () { setKonfirmasiEdit(null) }}
+          onConfirm={function () { const aksi = konfirmasiEdit ? konfirmasiEdit.aksi : null; setKonfirmasiEdit(null); if (aksi) aksi() }}
+        />
        <ConfirmModal
          open={!!unsavedModal}
          title={unsavedModal ? unsavedModal.title : ''}

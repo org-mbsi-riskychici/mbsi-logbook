@@ -35,6 +35,9 @@ The content is organized as follows:
 # Directory Structure
 ```
 api/
+  _lib/
+    sesi.js
+    youtube.js
   r2/
     delete.js
     presign.js
@@ -77,7 +80,6 @@ src/
     HomePage.jsx
     LogbookPage.jsx
     LoginPage.jsx
-    TimPage.jsx
   App.jsx
   index.css
   main.jsx
@@ -88,6 +90,7 @@ supabase/
 .gitignore
 index.html
 package.json
+pasang-guard-edit.cjs
 postcss.config.js
 README.md
 tailwind.config.js
@@ -97,115 +100,203 @@ vite.config.js
 
 # Files
 
-## File: api/r2/delete.js
+## File: pasang-guard-edit.cjs
 ```javascript
-import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3'
-import { createClient } from '@supabase/supabase-js'
+#!/usr/bin/env node
+/*
+ * pasang-guard-edit.cjs
+ * Menambahkan modal konfirmasi sebelum tombol Edit menimpa form yang belum disimpan.
+ * Aman dijalankan ulang (idempoten) dan tidak menulis file bila penanda tidak cocok.
+ *
+ * Pakai (dari root proyek):  node pasang-guard-edit.cjs
+ */
+const fs = require('fs')
+const path = require('path')
 
-const s3 = new S3Client({
-  region: 'auto',
-  endpoint: 'https://' + process.env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
-  }
+const REL = path.join('src', 'pages', 'DashboardPage.jsx')
+const p = path.resolve(process.cwd(), REL)
+if (!fs.existsSync(p)) { console.error('✗ File tidak ditemukan: ' + REL); process.exit(1) }
+
+let isi = fs.readFileSync(p, 'utf8')
+isi = isi.replace(/\r\n/g, '\n')
+
+if (isi.indexOf('konfirmasiEdit') !== -1) {
+  console.log('= Guard tombol Edit sudah terpasang, tidak ada yang diubah.')
+  process.exit(0)
+}
+
+const masalah = []
+const adaGuardLama = isi.indexOf('function isLogbookDirty') !== -1
+const cekLog = adaGuardLama ? 'isLogbookDirty()' : 'logbookKotor()'
+const cekGal = adaGuardLama ? 'isGaleriDirty()' : 'galeriKotor()'
+const cekHadir = adaGuardLama ? 'isHadirDirty()' : 'hadirKotor()'
+
+const PEMERIKSA = [
+  'function logbookKotor() {',
+  '  if (editLogId) return true',
+  '  return !!(form.judul || form.kategori || form.unit || form.kendala || form.solusi || form.pembelajaran ||',
+  '    items.some(function (it) { return it.judul || it.deskripsi || it.hasil || it.file }))',
+  '}',
+  'function galeriKotor() {',
+  '  if (editGalId) return true',
+  '  return !!(galForm.judul || galForm.deskripsi || galForm.kegiatan || galForm.file || galYtLink || galDriveLink)',
+  '}',
+  'function hadirKotor() {',
+  '  if (editHadirId) return true',
+  '  return hadirForm.status !== \'Masuk\' || !!hadirForm.alasan',
+  '}',
+  ''
+].join('\n')
+
+function bungkus(nama, param, cek, judulDom) {
+  return [
+    'function ' + nama + '(' + param + ') {',
+    '  if (' + cek + ') {',
+    '    setKonfirmasiEdit({',
+    '      judul: \'Timpa draf ' + judulDom + '?\',',
+    '      pesan: \'Isian form ' + judulDom + ' yang belum disimpan akan hilang dan diganti dengan data ' + judulDom + ' yang kamu pilih.\',',
+    '      aksi: function () { lakukan' + nama.charAt(0).toUpperCase() + nama.slice(1) + '(' + param + ') }',
+    '    })',
+    '    return',
+    '  }',
+    '  lakukan' + nama.charAt(0).toUpperCase() + nama.slice(1) + '(' + param + ')',
+    '}',
+    ''
+  ].join('\n')
+}
+
+/* 1) state modal konfirmasi */
+const reState = /([ \t]*)const \[pendingDelete, setPendingDelete\] = useState\(null\)/
+if (!reState.test(isi)) masalah.push('state pendingDelete tidak ditemukan')
+
+/* 2) tiga fungsi startEdit */
+const reLog = /([ \t]*)function startEditLog\(log\) \{/
+const reGal = /([ \t]*)function startEditGal\(g\) \{/
+const reHad = /([ \t]*)function startEditHadir\(h\) \{/
+if (!reLog.test(isi)) masalah.push('function startEditLog tidak ditemukan')
+if (!reGal.test(isi)) masalah.push('function startEditGal tidak ditemukan')
+if (!reHad.test(isi)) masalah.push('function startEditHadir tidak ditemukan')
+
+/* 3) anchor ConfirmModal setelah modal hapus */
+const reModal = /([ \t]*)onConfirm=\{executeDelete\}\s*\n[ \t]*\/>/
+if (!reModal.test(isi)) masalah.push('ConfirmModal pendingDelete tidak ditemukan')
+
+if (masalah.length) {
+  console.error('✗ GAGAL, file tidak diubah. Penanda tidak cocok:')
+  masalah.forEach(function (x) { console.error('  - ' + x) })
+  process.exit(1)
+}
+
+isi = isi.replace(reState, function (m, ind) {
+  return m + '\n' + ind + 'const [konfirmasiEdit, setKonfirmasiEdit] = useState(null)'
 })
 
-export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
-  const authHeader = req.headers.authorization || ''
-  const token = authHeader.replace('Bearer ', '')
-  if (!token) return res.status(401).json({ error: 'Belum login' })
+isi = isi.replace(reLog, function (m, ind) {
+  const pemeriksa = adaGuardLama ? '' : PEMERIKSA.split('\n').map(function (l) { return l ? ind + l : '' }).join('\n') + '\n'
+  return pemeriksa + ind + bungkus('startEditLog', 'log', cekLog, 'logbook').split('\n').map(function (l) { return l ? ind + l : '' }).join('\n') + '\n' + ind + 'function lakukanStartEditLog(log) {'
+})
+isi = isi.replace(reGal, function (m, ind) {
+  return ind + bungkus('startEditGal', 'g', cekGal, 'galeri').split('\n').map(function (l) { return l ? ind + l : '' }).join('\n') + '\n' + ind + 'function lakukanStartEditGal(g) {'
+})
+isi = isi.replace(reHad, function (m, ind) {
+  return ind + bungkus('startEditHadir', 'h', cekHadir, 'daftar hadir').split('\n').map(function (l) { return l ? ind + l : '' }).join('\n') + '\n' + ind + 'function lakukanStartEditHadir(h) {'
+})
 
-  const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: authHeader } }
+isi = isi.replace(reModal, function (m, ind) {
+  const modal = [
+    '<ConfirmModal',
+    '  open={!!konfirmasiEdit}',
+    '  title={konfirmasiEdit ? konfirmasiEdit.judul : \'\'}',
+    '  message={konfirmasiEdit ? konfirmasiEdit.pesan : \'\'}',
+    '  confirmLabel="Ya, Timpa"',
+    '  icon="trash"',
+    '  tone="bahaya"',
+    '  onCancel={function () { setKonfirmasiEdit(null) }}',
+    '  onConfirm={function () { const aksi = konfirmasiEdit ? konfirmasiEdit.aksi : null; setKonfirmasiEdit(null); if (aksi) aksi() }}',
+    '/>'
+  ].map(function (l) { return ind + l }).join('\n')
+  return m + '\n' + modal
+})
+
+const cekAkhir = ['konfirmasiEdit', 'lakukanStartEditLog', 'lakukanStartEditGal', 'lakukanStartEditHadir', 'open={!!konfirmasiEdit}']
+const kurang = cekAkhir.filter(function (t) { return isi.indexOf(t) === -1 })
+if (kurang.length) { console.error('✗ Verifikasi gagal: ' + kurang.join(', ')); process.exit(1) }
+
+fs.writeFileSync(p + '.bak', fs.readFileSync(p, 'utf8'), 'utf8')
+fs.writeFileSync(p, isi, 'utf8')
+console.log('✓ SELESAI: konfirmasi tombol Edit terpasang di DashboardPage.jsx (backup: DashboardPage.jsx.bak)')
+console.log('  - Edit logbook, Edit galeri, dan Edit daftar hadir kini mengecek draf belum disimpan.')
+console.log('  - Bila form masih kosong/bersih, tombol Edit tetap langsung bekerja seperti biasa.')
+```
+
+## File: api/_lib/sesi.js
+```javascript
+import { createClient } from '@supabase/supabase-js'
+
+export async function cekSesi(env, authHeader) {
+  const header = authHeader || ''
+  const token = header.replace('Bearer ', '')
+  if (!token) return null
+  const supabase = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: header } }
   })
-  const check = await supabase.auth.getUser(token)
-  if (check.error || !check.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
+  const r = await supabase.auth.getUser(token)
+  return r.error || !r.data.user ? null : r.data.user
+}
 
-  const { key } = req.body || {}
-  if (!key) return res.status(400).json({ error: 'Key tidak ada' })
-  await s3.send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key }))
-  return res.status(200).json({ ok: true })
+export function bacaBody(req) {
+  return new Promise(function (resolve) {
+    let data = ''
+    req.on('data', function (c) { data += c })
+    req.on('end', function () {
+      try { resolve(JSON.parse(data || '{}')) } catch (e) { resolve({}) }
+    })
+  })
 }
 ```
 
-## File: api/r2/presign.js
+## File: api/_lib/youtube.js
 ```javascript
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
-import { createClient } from '@supabase/supabase-js'
+export const LIMIT_PER_PROJECT = 5
 
-const s3 = new S3Client({
-  region: 'auto',
-  endpoint: 'https://' + process.env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
-  }
-})
-
-export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
-  const authHeader = req.headers.authorization || ''
-  const token = authHeader.replace('Bearer ', '')
-  if (!token) return res.status(401).json({ error: 'Belum login' })
-
-  const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: authHeader } }
-  })
-  const check = await supabase.auth.getUser(token)
-  if (check.error || !check.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
-
-  const { filename, contentType, kind } = req.body || {}
-  if (!filename || !contentType || !kind) return res.status(400).json({ error: 'Payload tidak lengkap' })
-
-  const ext = (filename.split('.').pop() || 'bin').toLowerCase()
-  const key = kind + '/' + new Date().getFullYear() + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + ext
-
-  const uploadUrl = await getSignedUrl(
-    s3,
-    new PutObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key, ContentType: contentType }),
-    { expiresIn: 300 }
-  )
-  const publicUrl = process.env.R2_PUBLIC_BASE_URL + '/' + key
-  return res.status(200).json({ uploadUrl, publicUrl, key })
+export function ptToday() {
+  const now = new Date()
+  const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
+  const y = pt.getFullYear()
+  const m = String(pt.getMonth() + 1).padStart(2, '0')
+  const d = String(pt.getDate()).padStart(2, '0')
+  return y + '-' + m + '-' + d
 }
-```
 
-## File: api/youtube/verify.js
-```javascript
-import { createClient } from '@supabase/supabase-js'
-export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
-  const authHeader = req.headers.authorization || ''
-  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
-  const authClient = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
-  const chk = await authClient.auth.getUser()
-  if (chk.error || !chk.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
-  const { ref } = req.body || {}
-  if (!ref) return res.status(400).json({ error: 'Ref tidak ada' })
+export function daftarKredensial(env) {
+  const list = []
+  for (let n = 1; n <= 6; n++) {
+    const id = env['YOUTUBE_CLIENT_ID_' + n]
+    const secret = env['YOUTUBE_CLIENT_SECRET_' + n]
+    const refresh = env['YOUTUBE_REFRESH_TOKEN_' + n]
+    if (id && secret && refresh) list.push({ n: n, id: id, secret: secret, refresh: refresh })
+  }
+  if (!list.length && env.YOUTUBE_CLIENT_ID && env.YOUTUBE_CLIENT_SECRET && env.YOUTUBE_REFRESH_TOKEN) {
+    list.push({ n: 1, id: env.YOUTUBE_CLIENT_ID, secret: env.YOUTUBE_CLIENT_SECRET, refresh: env.YOUTUBE_REFRESH_TOKEN })
+  }
+  return list
+}
+
+const cacheToken = {}
+export async function getAccessToken(kred) {
+  const now = Date.now()
+  const c = cacheToken[kred.n]
+  if (c && c.expire > now + 60000) return c.token
   const params = new URLSearchParams()
-  params.set('client_id', process.env.YOUTUBE_CLIENT_ID || '')
-  params.set('client_secret', process.env.YOUTUBE_CLIENT_SECRET || '')
-  params.set('refresh_token', process.env.YOUTUBE_REFRESH_TOKEN || '')
+  params.set('client_id', kred.id)
+  params.set('client_secret', kred.secret)
+  params.set('refresh_token', kred.refresh)
   params.set('grant_type', 'refresh_token')
-  const tr = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
-  if (!tr.ok) return res.status(500).json({ error: 'Gagal refresh token YouTube' })
-  const tok = await tr.json()
-  const url = 'https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&forMine=true&order=date&maxResults=10&q=' + encodeURIComponent(ref)
-  const r = await fetch(url, { headers: { Authorization: 'Bearer ' + tok.access_token } })
-  if (!r.ok) return res.status(502).json({ error: 'Gagal memeriksa video di YouTube' })
+  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
+  if (!r.ok) throw new Error('refresh token project ' + kred.n + ' gagal (status ' + r.status + ')')
   const j = await r.json()
-  const items = j.items || []
-  const batas = Date.now() - 15 * 60 * 1000
-  const cocok = items.find(function (it) {
-    const desc = (it.snippet && it.snippet.description) || ''
-    const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
-    return desc.indexOf('REF ' + ref) === 0 && (isNaN(t) ? true : t >= batas)
-  }) || items[0]
-  if (!cocok) return res.status(404).json({ error: 'Video tidak ditemukan di channel' })
-  return res.status(200).json({ videoId: cocok.id && cocok.id.videoId })
+  cacheToken[kred.n] = { token: j.access_token, expire: now + (j.expires_in || 3600) * 1000 }
+  return j.access_token
 }
 ```
 
@@ -476,213 +567,96 @@ export default {
 }
 ```
 
-## File: api/youtube/latest.js
+## File: api/r2/delete.js
 ```javascript
-import { createClient } from '@supabase/supabase-js'
-const LIMIT_PER_PROJECT = 5
-function ptToday() {
-  const now = new Date()
-  const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
-  const y = pt.getFullYear()
-  const m = String(pt.getMonth() + 1).padStart(2, '0')
-  const d = String(pt.getDate()).padStart(2, '0')
-  return y + '-' + m + '-' + d
-}
-function daftarKredensial() {
-  const list = []
-  for (let n = 1; n <= 6; n++) {
-    const id = process.env['YOUTUBE_CLIENT_ID_' + n]
-    const secret = process.env['YOUTUBE_CLIENT_SECRET_' + n]
-    const refresh = process.env['YOUTUBE_REFRESH_TOKEN_' + n]
-    if (id && secret && refresh) list.push({ n: n, id: id, secret: secret, refresh: refresh })
+import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3'
+import { cekSesi } from '../_lib/sesi.js'
+
+const s3 = new S3Client({
+  region: 'auto',
+  endpoint: 'https://' + process.env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
   }
-  if (!list.length && process.env.YOUTUBE_CLIENT_ID && process.env.YOUTUBE_CLIENT_SECRET && process.env.YOUTUBE_REFRESH_TOKEN) {
-    list.push({ n: 1, id: process.env.YOUTUBE_CLIENT_ID, secret: process.env.YOUTUBE_CLIENT_SECRET, refresh: process.env.YOUTUBE_REFRESH_TOKEN })
+})
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const user = await cekSesi(process.env, req.headers.authorization)
+  if (!user) return res.status(401).json({ error: 'Sesi tidak valid' })
+  const { key } = req.body || {}
+  if (!key) return res.status(400).json({ error: 'Key tidak ada' })
+  await s3.send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key }))
+  return res.status(200).json({ ok: true })
+}
+```
+
+## File: api/r2/presign.js
+```javascript
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { cekSesi } from '../_lib/sesi.js'
+
+const s3 = new S3Client({
+  region: 'auto',
+  endpoint: 'https://' + process.env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
   }
-  return list
+})
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const user = await cekSesi(process.env, req.headers.authorization)
+  if (!user) return res.status(401).json({ error: 'Sesi tidak valid' })
+  const { filename, contentType, kind } = req.body || {}
+  if (!filename || !contentType || !kind) return res.status(400).json({ error: 'Payload tidak lengkap' })
+  const ext = (filename.split('.').pop() || 'bin').toLowerCase()
+  const key = kind + '/' + new Date().getFullYear() + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + ext
+  const uploadUrl = await getSignedUrl(
+    s3,
+    new PutObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key, ContentType: contentType }),
+    { expiresIn: 300 }
+  )
+  const publicUrl = process.env.R2_PUBLIC_BASE_URL + '/' + key
+  return res.status(200).json({ uploadUrl, publicUrl, key })
 }
-const cacheToken = {}
-async function getAccessToken(kred) {
-  const now = Date.now()
-  const c = cacheToken[kred.n]
-  if (c && c.expire > now + 60000) return c.token
-  const params = new URLSearchParams()
-  params.set('client_id', kred.id)
-  params.set('client_secret', kred.secret)
-  params.set('refresh_token', kred.refresh)
-  params.set('grant_type', 'refresh_token')
-  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
-  if (!r.ok) throw new Error('refresh token project ' + kred.n + ' gagal (status ' + r.status + ')')
-  const j = await r.json()
-  cacheToken[kred.n] = { token: j.access_token, expire: now + (j.expires_in || 3600) * 1000 }
-  return j.access_token
-}
+```
+
+## File: api/youtube/verify.js
+```javascript
+import { cekSesi } from '../_lib/sesi.js'
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
   const authHeader = req.headers.authorization || ''
   if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
-  const authClient = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
-  const chk = await authClient.auth.getUser()
-  if (chk.error || !chk.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
-  const kredensial = daftarKredensial()
-  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
-  let terakhir = ''
-  for (const kred of kredensial) {
-    let access
-    try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
-    const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&order=date&maxResults=5', { headers: { Authorization: 'Bearer ' + access } })
-    if (!r.ok) { terakhir = 'project ' + kred.n + ' status ' + r.status; continue }
-    const j = await r.json()
-    const items = j.items || []
-    const batas = Date.now() - 15 * 60 * 1000
-    const cocok = items.find(function (it) {
-      const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
-      return isNaN(t) ? false : t >= batas
-    })
-    if (!cocok) return res.status(404).json({ error: 'Video terbaru tidak ditemukan' })
-    return res.status(200).json({ videoId: cocok.id && cocok.id.videoId, project: kred.n })
-  }
-  return res.status(502).json({ error: 'Gagal memeriksa video terbaru: ' + terakhir })
-}
-```
-
-## File: api/youtube/quota.js
-```javascript
-import { createClient } from '@supabase/supabase-js'
-const LIMIT_PER_PROJECT = 5
-function ptToday() {
-  const now = new Date()
-  const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
-  const y = pt.getFullYear()
-  const m = String(pt.getMonth() + 1).padStart(2, '0')
-  const d = String(pt.getDate()).padStart(2, '0')
-  return y + '-' + m + '-' + d
-}
-function daftarKredensial() {
-  const list = []
-  for (let n = 1; n <= 6; n++) {
-    const id = process.env['YOUTUBE_CLIENT_ID_' + n]
-    const secret = process.env['YOUTUBE_CLIENT_SECRET_' + n]
-    const refresh = process.env['YOUTUBE_REFRESH_TOKEN_' + n]
-    if (id && secret && refresh) list.push({ n: n, id: id, secret: secret, refresh: refresh })
-  }
-  if (!list.length && process.env.YOUTUBE_CLIENT_ID && process.env.YOUTUBE_CLIENT_SECRET && process.env.YOUTUBE_REFRESH_TOKEN) {
-    list.push({ n: 1, id: process.env.YOUTUBE_CLIENT_ID, secret: process.env.YOUTUBE_CLIENT_SECRET, refresh: process.env.YOUTUBE_REFRESH_TOKEN })
-  }
-  return list
-}
-const cacheToken = {}
-async function getAccessToken(kred) {
-  const now = Date.now()
-  const c = cacheToken[kred.n]
-  if (c && c.expire > now + 60000) return c.token
+  const chkUser = await cekSesi(process.env, authHeader)
+  if (!chkUser) return res.status(401).json({ error: 'Sesi tidak valid' })
+  const { ref } = req.body || {}
+  if (!ref) return res.status(400).json({ error: 'Ref tidak ada' })
   const params = new URLSearchParams()
-  params.set('client_id', kred.id)
-  params.set('client_secret', kred.secret)
-  params.set('refresh_token', kred.refresh)
+  params.set('client_id', process.env.YOUTUBE_CLIENT_ID || '')
+  params.set('client_secret', process.env.YOUTUBE_CLIENT_SECRET || '')
+  params.set('refresh_token', process.env.YOUTUBE_REFRESH_TOKEN || '')
   params.set('grant_type', 'refresh_token')
-  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
-  if (!r.ok) throw new Error('refresh token project ' + kred.n + ' gagal (status ' + r.status + ')')
+  const tr = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
+  if (!tr.ok) return res.status(500).json({ error: 'Gagal refresh token YouTube' })
+  const tok = await tr.json()
+  const url = 'https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&forMine=true&order=date&maxResults=10&q=' + encodeURIComponent(ref)
+  const r = await fetch(url, { headers: { Authorization: 'Bearer ' + tok.access_token } })
+  if (!r.ok) return res.status(502).json({ error: 'Gagal memeriksa video di YouTube' })
   const j = await r.json()
-  cacheToken[kred.n] = { token: j.access_token, expire: now + (j.expires_in || 3600) * 1000 }
-  return j.access_token
-}
-export default async function handler(req, res) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method tidak diizinkan' })
-  const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
-  const today = ptToday()
-  const kredensial = daftarKredensial()
-  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
-  let usedTotal = 0
-  const perProject = []
-  for (const kred of kredensial) {
-    const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
-    const used = hit.count || 0
-    usedTotal += used
-    perProject.push({ project: kred.n, used: used, remaining: Math.max(0, LIMIT_PER_PROJECT - used) })
-  }
-  const limit = kredensial.length * LIMIT_PER_PROJECT
-  res.setHeader('Cache-Control', 'no-store')
-  return res.status(200).json({ limit: limit, used: usedTotal, remaining: Math.max(0, limit - usedTotal), perProject: perProject, ptDate: today })
-}
-```
-
-## File: api/youtube/session.js
-```javascript
-import { createClient } from '@supabase/supabase-js'
-const LIMIT_PER_PROJECT = 5
-function ptToday() {
-  const now = new Date()
-  const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
-  const y = pt.getFullYear()
-  const m = String(pt.getMonth() + 1).padStart(2, '0')
-  const d = String(pt.getDate()).padStart(2, '0')
-  return y + '-' + m + '-' + d
-}
-function daftarKredensial() {
-  const list = []
-  for (let n = 1; n <= 6; n++) {
-    const id = process.env['YOUTUBE_CLIENT_ID_' + n]
-    const secret = process.env['YOUTUBE_CLIENT_SECRET_' + n]
-    const refresh = process.env['YOUTUBE_REFRESH_TOKEN_' + n]
-    if (id && secret && refresh) list.push({ n: n, id: id, secret: secret, refresh: refresh })
-  }
-  if (!list.length && process.env.YOUTUBE_CLIENT_ID && process.env.YOUTUBE_CLIENT_SECRET && process.env.YOUTUBE_REFRESH_TOKEN) {
-    list.push({ n: 1, id: process.env.YOUTUBE_CLIENT_ID, secret: process.env.YOUTUBE_CLIENT_SECRET, refresh: process.env.YOUTUBE_REFRESH_TOKEN })
-  }
-  return list
-}
-const cacheToken = {}
-async function getAccessToken(kred) {
-  const now = Date.now()
-  const c = cacheToken[kred.n]
-  if (c && c.expire > now + 60000) return c.token
-  const params = new URLSearchParams()
-  params.set('client_id', kred.id)
-  params.set('client_secret', kred.secret)
-  params.set('refresh_token', kred.refresh)
-  params.set('grant_type', 'refresh_token')
-  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
-  if (!r.ok) throw new Error('refresh token project ' + kred.n + ' gagal (status ' + r.status + ')')
-  const j = await r.json()
-  cacheToken[kred.n] = { token: j.access_token, expire: now + (j.expires_in || 3600) * 1000 }
-  return j.access_token
-}
-export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
-  const authHeader = req.headers.authorization || ''
-  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
-  const authClient = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
-  const chk = await authClient.auth.getUser()
-  if (chk.error || !chk.data.user) return res.status(401).json({ error: 'Sesi tidak valid' })
-  const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
-  const today = ptToday()
-  const kredensial = daftarKredensial()
-  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
-  const body = req.body || {}
-  if (!body.title) return res.status(400).json({ error: 'Judul video wajib diisi' })
-  let terakhir = ''
-  for (const kred of kredensial) {
-    const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
-    if ((hit.count || 0) >= LIMIT_PER_PROJECT) { terakhir = 'project ' + kred.n + ' sudah penuh'; continue }
-    let access
-    try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
-    const meta = {
-      snippet: { title: String(body.title).slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
-      status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
-    }
-    const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
-      body: JSON.stringify(meta)
-    })
-    if (!init.ok) { terakhir = 'project ' + kred.n + ' ditolak Google (status ' + init.status + ')'; continue }
-    const sessionUri = init.headers.get('location')
-    if (!sessionUri) { terakhir = 'project ' + kred.n + ' tanpa lokasi upload'; continue }
-    await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: chk.data.user.id, project_id: kred.n })
-    return res.status(200).json({ sessionUri: sessionUri, project: kred.n })
-  }
-  return res.status(429).json({ error: 'Kuota harian semua project video sudah habis. Coba lagi besok atau gunakan link video eksternal.', detail: terakhir })
+  const items = j.items || []
+  const batas = Date.now() - 15 * 60 * 1000
+  const cocok = items.find(function (it) {
+    const desc = (it.snippet && it.snippet.description) || ''
+    const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
+    return desc.indexOf('REF ' + ref) === 0 && (isNaN(t) ? true : t >= batas)
+  }) || items[0]
+  if (!cocok) return res.status(404).json({ error: 'Video tidak ditemukan di channel' })
+  return res.status(200).json({ videoId: cocok.id && cocok.id.videoId })
 }
 ```
 
@@ -887,6 +861,106 @@ dist
 .env
 *.log
 .env.youtube-*
+```
+
+## File: api/youtube/latest.js
+```javascript
+import { createClient } from '@supabase/supabase-js'
+import { LIMIT_PER_PROJECT, ptToday, daftarKredensial, getAccessToken } from '../_lib/youtube.js'
+import { cekSesi } from '../_lib/sesi.js'
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const authHeader = req.headers.authorization || ''
+  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
+  const chkUser = await cekSesi(process.env, authHeader)
+  if (!chkUser) return res.status(401).json({ error: 'Sesi tidak valid' })
+  const kredensial = daftarKredensial(process.env)
+  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
+  let terakhir = ''
+  for (const kred of kredensial) {
+    let access
+    try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
+    const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&order=date&maxResults=5', { headers: { Authorization: 'Bearer ' + access } })
+    if (!r.ok) { terakhir = 'project ' + kred.n + ' status ' + r.status; continue }
+    const j = await r.json()
+    const items = j.items || []
+    const batas = Date.now() - 15 * 60 * 1000
+    const cocok = items.find(function (it) {
+      const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
+      return isNaN(t) ? false : t >= batas
+    })
+    if (!cocok) return res.status(404).json({ error: 'Video terbaru tidak ditemukan' })
+    return res.status(200).json({ videoId: cocok.id && cocok.id.videoId, project: kred.n })
+  }
+  return res.status(502).json({ error: 'Gagal memeriksa video terbaru: ' + terakhir })
+}
+```
+
+## File: api/youtube/quota.js
+```javascript
+import { createClient } from '@supabase/supabase-js'
+import { LIMIT_PER_PROJECT, ptToday, daftarKredensial, getAccessToken } from '../_lib/youtube.js'
+import { cekSesi } from '../_lib/sesi.js'
+export default async function handler(req, res) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+  const today = ptToday()
+  const kredensial = daftarKredensial(process.env)
+  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
+  let usedTotal = 0
+  const perProject = []
+  for (const kred of kredensial) {
+    const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
+    const used = hit.count || 0
+    usedTotal += used
+    perProject.push({ project: kred.n, used: used, remaining: Math.max(0, LIMIT_PER_PROJECT - used) })
+  }
+  const limit = kredensial.length * LIMIT_PER_PROJECT
+  res.setHeader('Cache-Control', 'no-store')
+  return res.status(200).json({ limit: limit, used: usedTotal, remaining: Math.max(0, limit - usedTotal), perProject: perProject, ptDate: today })
+}
+```
+
+## File: api/youtube/session.js
+```javascript
+import { createClient } from '@supabase/supabase-js'
+import { LIMIT_PER_PROJECT, ptToday, daftarKredensial, getAccessToken } from '../_lib/youtube.js'
+import { cekSesi } from '../_lib/sesi.js'
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const authHeader = req.headers.authorization || ''
+  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
+  const chkUser = await cekSesi(process.env, authHeader)
+  if (!chkUser) return res.status(401).json({ error: 'Sesi tidak valid' })
+  const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+  const today = ptToday()
+  const kredensial = daftarKredensial(process.env)
+  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
+  const body = req.body || {}
+  if (!body.title) return res.status(400).json({ error: 'Judul video wajib diisi' })
+  let terakhir = ''
+  for (const kred of kredensial) {
+    const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
+    if ((hit.count || 0) >= LIMIT_PER_PROJECT) { terakhir = 'project ' + kred.n + ' sudah penuh'; continue }
+    let access
+    try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
+    const meta = {
+      snippet: { title: String(body.title).slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
+      status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
+    }
+    const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
+      body: JSON.stringify(meta)
+    })
+    if (!init.ok) { terakhir = 'project ' + kred.n + ' ditolak Google (status ' + init.status + ')'; continue }
+    const sessionUri = init.headers.get('location')
+    if (!sessionUri) { terakhir = 'project ' + kred.n + ' tanpa lokasi upload'; continue }
+    await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: chkUser.id, project_id: kred.n })
+    return res.status(200).json({ sessionUri: sessionUri, project: kred.n })
+  }
+  return res.status(429).json({ error: 'Kuota harian semua project video sudah habis. Coba lagi besok atau gunakan link video eksternal.', detail: terakhir })
+}
 ```
 
 ## File: src/lib/auth.js
@@ -1476,6 +1550,246 @@ export function urutkanTanggal(list, mode) {
 }
 ```
 
+## File: src/components/Skeleton.jsx
+```javascript
+export function SkeletonLogbookCard() {
+  return (
+    <div className="card-hover flex h-full flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      {/* Media / carousel */}
+      <div className="skeleton aspect-video w-full rounded-2xl"></div>
+
+      {/* Badge kategori, unit, dan status */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-1.5">
+          <div className="skeleton h-6 w-24 rounded-full"></div>
+          <div className="skeleton h-6 w-20 rounded-full"></div>
+        </div>
+        <div className="skeleton h-6 w-20 rounded-full"></div>
+      </div>
+
+      {/* Tanggal, judul, dan daftar kegiatan */}
+      <div>
+        <div className="skeleton h-4 w-36 rounded-full"></div>
+        <div className="skeleton mt-2 h-6 w-4/5 rounded-full"></div>
+        <div className="skeleton mt-3 h-3 w-28 rounded-full"></div>
+        <div className="mt-2 space-y-1">
+          <div className="skeleton h-3 w-full rounded-full"></div>
+          <div className="skeleton h-3 w-2/3 rounded-full"></div>
+        </div>
+      </div>
+
+      {/* Footer: profil + tombol detail */}
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-4">
+        <div className="flex items-center gap-3">
+          <div className="skeleton h-11 w-11 shrink-0" style={{ borderRadius: '28%' }}></div>
+          <div className="space-y-1.5">
+            <div className="skeleton h-3.5 w-28 rounded-full"></div>
+            <div className="skeleton h-3 w-20 rounded-full"></div>
+          </div>
+        </div>
+        <div className="skeleton h-8 w-16 rounded-xl"></div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonGalleryCard() {
+  return (
+    <div className="card-hover flex h-full flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+      {/* Media menempel tepi atas sesuai GalleryCard asli */}
+      <div className="skeleton aspect-video w-full"></div>
+
+      <div className="flex flex-1 flex-col gap-3 p-5">
+        {/* Badge kegiatan dan tanggal */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap gap-1.5">
+            <div className="skeleton h-6 w-24 rounded-full"></div>
+            <div className="skeleton h-5 w-20 rounded-full"></div>
+          </div>
+          <div className="skeleton h-3 w-16 rounded-full"></div>
+        </div>
+
+        {/* Judul dan deskripsi */}
+        <div className="skeleton h-5 w-3/4 rounded-full"></div>
+        <div className="space-y-1.5">
+          <div className="skeleton h-3.5 w-full rounded-full"></div>
+          <div className="skeleton h-3.5 w-2/3 rounded-full"></div>
+        </div>
+
+        {/* Footer: profil + keterangan */}
+        <div className="mt-auto space-y-3 border-t border-slate-100 pt-3">
+          <div className="flex items-center gap-3">
+            <div className="skeleton h-11 w-11 shrink-0" style={{ borderRadius: '28%' }}></div>
+            <div className="space-y-1.5">
+              <div className="skeleton h-3.5 w-28 rounded-full"></div>
+              <div className="skeleton h-3 w-20 rounded-full"></div>
+            </div>
+          </div>
+          <div className="skeleton h-3 w-40 rounded-full"></div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonAttendanceCard() {
+  return (
+    <div className="card-hover flex h-full flex-col rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      {/* Tanggal + profil + badge status */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="skeleton h-4 w-40 rounded-full"></div>
+          <div className="mt-4 flex items-center gap-3">
+            <div className="skeleton h-11 w-11 shrink-0" style={{ borderRadius: '28%' }}></div>
+            <div className="space-y-1.5">
+              <div className="skeleton h-4 w-28 rounded-full"></div>
+              <div className="skeleton h-3 w-20 rounded-full"></div>
+            </div>
+          </div>
+        </div>
+        <div className="skeleton h-6 w-16 rounded-full"></div>
+      </div>
+
+      {/* Box alasan / keterangan */}
+      <div className="mt-4 flex-1 rounded-2xl bg-slate-50 p-4">
+        <div className="skeleton h-3 w-32 rounded-full"></div>
+        <div className="skeleton mt-2 h-3.5 w-3/4 rounded-full"></div>
+      </div>
+
+      {/* Tombol aksi */}
+      <div className="mt-4 flex gap-2">
+        <div className="skeleton h-8 w-16 rounded-xl"></div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonPersonCard() {
+  return (
+    <div className="card-hover flex h-full flex-col rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      {/* Profil mahasiswa */}
+      <div className="flex items-center gap-4">
+        <div className="skeleton h-14 w-14 shrink-0" style={{ borderRadius: '28%' }}></div>
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <div className="skeleton h-5 w-36 rounded-full"></div>
+          <div className="skeleton h-3 w-24 rounded-full"></div>
+          <div className="skeleton h-5 w-20 rounded-full"></div>
+        </div>
+      </div>
+
+      {/* Statistik logbook dan media */}
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <div className="rounded-2xl bg-slate-50 p-3">
+          <div className="skeleton h-3 w-16 rounded-full"></div>
+          <div className="skeleton mt-1.5 h-5 w-8 rounded-full"></div>
+        </div>
+        <div className="rounded-2xl bg-slate-50 p-3">
+          <div className="skeleton h-3 w-16 rounded-full"></div>
+          <div className="skeleton mt-1.5 h-5 w-8 rounded-full"></div>
+        </div>
+      </div>
+
+      {/* Rekap kehadiran */}
+      <div className="mt-3 border-t border-slate-100 pt-3">
+        <div className="skeleton h-3 w-24 rounded-full"></div>
+        <div className="mt-2 grid grid-cols-3 gap-2">
+          <div className="rounded-xl bg-slate-50 p-2">
+            <div className="skeleton h-3 w-full rounded-full"></div>
+            <div className="skeleton mx-auto mt-1.5 h-4 w-6 rounded-full"></div>
+          </div>
+          <div className="rounded-xl bg-slate-50 p-2">
+            <div className="skeleton h-3 w-full rounded-full"></div>
+            <div className="skeleton mx-auto mt-1.5 h-4 w-6 rounded-full"></div>
+          </div>
+          <div className="rounded-xl bg-slate-50 p-2">
+            <div className="skeleton h-3 w-full rounded-full"></div>
+            <div className="skeleton mx-auto mt-1.5 h-4 w-6 rounded-full"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonDashboard() {
+  return (
+    <div className="space-y-6">
+      {/* Header profil + tab */}
+      <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-8 lg:p-10">
+        <div className="flex flex-wrap items-center gap-4 sm:gap-6">
+          <div className="skeleton h-14 w-14 shrink-0 sm:h-24 sm:w-24" style={{ borderRadius: '28%' }}></div>
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="skeleton h-5 w-48 rounded-full sm:h-6"></div>
+            <div className="skeleton h-3.5 w-28 rounded-full"></div>
+            <div className="skeleton h-3.5 w-32 rounded-full"></div>
+          </div>
+        </div>
+        <div className="mt-6 flex flex-wrap gap-2 sm:mt-8">
+          <div className="skeleton h-9 w-24 rounded-2xl"></div>
+          <div className="skeleton h-9 w-20 rounded-2xl"></div>
+          <div className="skeleton h-9 w-28 rounded-2xl"></div>
+          <div className="skeleton h-9 w-20 rounded-2xl"></div>
+        </div>
+      </div>
+
+      {/* Form logbook + daftar logbook */}
+      <div className="grid items-start gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+        <div className="space-y-4 rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
+          <div className="skeleton h-6 w-48 rounded-full"></div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="skeleton h-11 w-full rounded-2xl"></div>
+            <div className="skeleton h-11 w-full rounded-2xl"></div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="skeleton h-11 w-full rounded-2xl"></div>
+            <div className="skeleton h-11 w-full rounded-2xl"></div>
+          </div>
+          <div className="skeleton h-11 w-full rounded-2xl"></div>
+          <div className="skeleton h-40 w-full rounded-2xl"></div>
+          <div className="skeleton h-11 w-full rounded-2xl"></div>
+        </div>
+        <div className="space-y-5">
+          <div className="skeleton h-6 w-32 rounded-full"></div>
+          <div className="skeleton h-12 w-full rounded-3xl"></div>
+          <div className="skeleton h-4 w-28 rounded-full"></div>
+          <div className="grid gap-5 md:grid-cols-2 kartu-grid">
+            <SkeletonLogbookCard />
+            <SkeletonLogbookCard />
+            <SkeletonLogbookCard />
+            <SkeletonLogbookCard />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonStatCard() {
+  return (
+    <div className="card-hover rounded-3xl border border-slate-200 bg-white p-3 shadow-sm sm:p-6">
+      <div className="skeleton h-3 w-3/4 rounded-full sm:h-4 sm:w-28"></div>
+      <div className="skeleton mt-1 h-6 w-1/2 rounded-full sm:mt-3 sm:h-9 sm:w-16"></div>
+      <div className="skeleton mt-2 h-3 w-36 rounded-full hidden sm:block"></div>
+    </div>
+  )
+}
+
+export function SkeletonChartRow() {
+  return (
+    <div className="card-hover rounded-[1.5rem] border border-slate-200 bg-white p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="space-y-1.5">
+          <div className="skeleton h-4 w-32 rounded-full"></div>
+          <div className="skeleton h-3 w-20 rounded-full"></div>
+        </div>
+        <div className="skeleton h-3 w-36 rounded-full"></div>
+      </div>
+      <div className="skeleton mt-4 h-4 w-full rounded-full"></div>
+    </div>
+  )
+}
+```
+
 ## File: src/lib/konversi.js
 ```javascript
 const MAKS_SISI_FULL = 2560
@@ -1573,6 +1887,13 @@ export async function pratinjauHeic(file) {
   }
 }
 
+export async function urlPratinjau(file) {
+  if (formatHeic(file)) {
+    const blob = await pratinjauHeic(file)
+    return URL.createObjectURL(blob || file)
+  }
+  return URL.createObjectURL(file)
+}
 /* foto-profil-webp: pipeline konversi foto profil, pola sama dengan alur media R2 */
 function muatGambarProfil(sumber) {
   return new Promise(function (resolve, reject) {
@@ -1588,12 +1909,10 @@ export async function siapkanFotoProfil(file, maksSisi, kualitas) {
   const sisi = maksSisi || 640
   const mutu = kualitas || 0.85
   let kerja = file
-  const tipe = String(file.type || '').toLowerCase()
-  if (tipe.indexOf('heic') !== -1 || tipe.indexOf('heif') !== -1) {
-    const mod = await import('heic2any')
-    const heicFn = mod.default || mod
-    const blob = await heicFn({ blob: file, toType: 'image/jpeg', quality: 0.92 })
-    kerja = new File([Array.isArray(blob) ? blob[0] : blob], (file.name || 'foto').replace(/\.(heic|heif)$/i, '.jpg'), { type: 'image/jpeg' })
+  if (formatHeic(file)) {
+    const jpeg = await heicKeJpeg(file)
+    if (!jpeg) throw new Error('File HEIC tidak bisa dibaca')
+    kerja = new File([jpeg], (file.name || 'foto').replace(/\.(heic|heif)$/i, '.jpg'), { type: 'image/jpeg' })
   }
   const muat = await muatGambarProfil(kerja)
   try {
@@ -1613,6 +1932,156 @@ export async function siapkanFotoProfil(file, maksSisi, kualitas) {
   } finally {
     URL.revokeObjectURL(muat.url)
   }
+}
+```
+
+## File: src/lib/logbook.js
+```javascript
+import { supabase } from './supabase.js'
+
+const EMPTY = '00000000-0000-0000-0000-000000000000'
+
+export async function syncGaleriFromLogbook(mahasiswaId, items, meta) {
+  const itemIds = items.map(function (i) { return i.id }).filter(Boolean)
+  const all = await supabase
+    .from('galeri')
+    .select('id, logbook_item_id')
+    .in('logbook_item_id', itemIds.length ? itemIds : [EMPTY])
+  const existing = new Map((all.data || []).map(function (g) { return [g.logbook_item_id, g.id] }))
+
+  for (const item of items) {
+    if (!item.id) continue
+    if (item.show_in_gallery && item.media_path) {
+      if (existing.has(item.id)) {
+        await supabase.from('galeri').update({
+          media_path: item.media_path,
+          media_type: item.media_type || 'foto',
+          media_thumb: item.media_thumb || null,
+        media_source: item.media_source || 'r2', youtube_id: item.youtube_id || null }).eq('id', existing.get(item.id))
+      } else {
+        await supabase.from('galeri').insert({
+          mahasiswa_id: mahasiswaId,
+          logbook_item_id: item.id,
+          judul: item.judul,
+          deskripsi: item.deskripsi || 'Dokumentasi kegiatan dari logbook harian.',
+          tanggal: meta.tanggal,
+          kegiatan: meta.kategori,
+          media_path: item.media_path,
+          media_type: item.media_type || 'foto',
+          media_thumb: item.media_thumb || null,
+        media_source: item.media_source || 'r2', youtube_id: item.youtube_id || null })
+      }
+    } else if (existing.has(item.id)) {
+      await supabase.from('galeri').delete().eq('id', existing.get(item.id))
+    }
+  }
+}
+```
+
+## File: src/lib/upload.js
+```javascript
+import { supabase } from './supabase.js'
+import { iniVideo, ekstensiFile, siapkanFoto } from './konversi.js'
+
+const MAKS_FOTO = 15 * 1024 * 1024
+const MAKS_VIDEO = 50 * 1024 * 1024
+
+async function getToken() {
+  const { data } = await supabase.auth.getSession()
+  return data.session ? data.session.access_token : ''
+}
+
+function namaDasar(nama) {
+  return String(nama || 'media').replace(/\.[^.]+$/, '')
+}
+
+function kirimDenganProgres(uploadUrl, blob, contentType, onProgres) {
+  return new Promise(function (resolve, reject) {
+    const xhr = new XMLHttpRequest()
+    xhr.open('PUT', uploadUrl)
+    xhr.setRequestHeader('Content-Type', contentType)
+    if (onProgres) {
+      xhr.upload.onprogress = function (e) {
+        if (e.lengthComputable) onProgres(e.loaded / e.total)
+      }
+    }
+    xhr.onload = function () {
+      if (xhr.status >= 200 && xhr.status < 300) resolve()
+      else reject(new Error('Gagal upload file ke R2 (status ' + xhr.status + ')'))
+    }
+    xhr.onerror = function () { reject(new Error('Gagal jaringan saat upload ke R2')) }
+    xhr.send(blob)
+  })
+}
+
+async function mintaIzin(token, filename, contentType, kind) {
+  const res = await fetch('/api/r2/presign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ filename: filename, contentType: contentType, kind: kind })
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error('Gagal membuat izin upload (status ' + res.status + '): ' + text)
+  }
+  return res.json()
+}
+
+export async function uploadMedia(file, kind, onInfo) {
+  const video = iniVideo(file)
+  if (video && file.size > MAKS_VIDEO) {
+    throw new Error('Video melebihi 50 MB. Potong dulu durasinya supaya upload cepat dan kuota aman.')
+  }
+  if (!video && file.size > MAKS_FOTO) {
+    throw new Error('Foto melebihi 15 MB. Pilih file dengan ukuran lebih kecil.')
+  }
+  let fullBlob = file
+  let fullType = file.type
+  let thumbBlob = null
+  if (!video) {
+    try {
+      const hasil = await siapkanFoto(file, onInfo)
+      fullBlob = hasil.fullBlob
+      fullType = hasil.fullType
+      thumbBlob = hasil.thumbBlob
+    } catch (e) {
+      throw new Error('Foto format .' + ekstensiFile(file) + ' tidak bisa diproses browser. Ubah dulu ke JPG atau PNG. Di iPhone: Settings, Camera, Formats, pilih Most Compatible.')
+    }
+  }
+  if (onInfo) onInfo('')
+  const token = await getToken()
+  const extFull = fullType === 'image/webp' ? 'webp' : (fullType === 'image/jpeg' ? 'jpg' : ekstensiFile(file))
+  const infoFull = await mintaIzin(token, namaDasar(file.name) + '.' + extFull, fullType, kind)
+  await kirimDenganProgres(infoFull.uploadUrl, fullBlob, fullType, function (p) {
+    if (onInfo) onInfo('Mengunggah ' + Math.round(p * 100) + '%')
+  })
+  let thumbUrl = null
+  if (thumbBlob) {
+    try {
+      const namaThumb = namaDasar(infoFull.key.split('/').pop()) + '.webp'
+      const infoThumb = await mintaIzin(token, namaThumb, 'image/webp', 'thumb/' + kind)
+      await kirimDenganProgres(infoThumb.uploadUrl, thumbBlob, 'image/webp', null)
+      thumbUrl = infoThumb.publicUrl
+    } catch (e) {
+      thumbUrl = null
+    }
+  }
+  console.log('[UPLOAD] File penuh: ' + infoFull.key + ' | Thumbnail: ' + (thumbUrl || 'tidak dibuat'))
+  return { path: infoFull.key, publicUrl: infoFull.publicUrl, thumbUrl: thumbUrl }
+}
+
+export async function deleteMedia(key) {
+  const token = await getToken()
+  const res = await fetch('/api/r2/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ key: key })
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error('Gagal hapus media di R2 (status ' + res.status + '): ' + text)
+  }
+  return res.json()
 }
 ```
 
@@ -1863,667 +2332,32 @@ export function FileInput(props) {
     </div>
   )
 }
-```
-
-## File: src/components/Skeleton.jsx
-```javascript
-export function SkeletonLogbookCard() {
+export function ToggleModeMedia(props) {
+  const cls = function (aktif) {
+    return 'px-3 py-1.5 rounded-xl text-xs font-bold ' + (aktif ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700')
+  }
   return (
-    <div className="card-hover flex h-full flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-      {/* Media / carousel */}
-      <div className="skeleton aspect-video w-full rounded-2xl"></div>
-
-      {/* Badge kategori, unit, dan status */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-1.5">
-          <div className="skeleton h-6 w-24 rounded-full"></div>
-          <div className="skeleton h-6 w-20 rounded-full"></div>
-        </div>
-        <div className="skeleton h-6 w-20 rounded-full"></div>
-      </div>
-
-      {/* Tanggal, judul, dan daftar kegiatan */}
-      <div>
-        <div className="skeleton h-4 w-36 rounded-full"></div>
-        <div className="skeleton mt-2 h-6 w-4/5 rounded-full"></div>
-        <div className="skeleton mt-3 h-3 w-28 rounded-full"></div>
-        <div className="mt-2 space-y-1">
-          <div className="skeleton h-3 w-full rounded-full"></div>
-          <div className="skeleton h-3 w-2/3 rounded-full"></div>
-        </div>
-      </div>
-
-      {/* Footer: profil + tombol detail */}
-      <div className="mt-auto flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-4">
-        <div className="flex items-center gap-3">
-          <div className="skeleton h-11 w-11 shrink-0" style={{ borderRadius: '28%' }}></div>
-          <div className="space-y-1.5">
-            <div className="skeleton h-3.5 w-28 rounded-full"></div>
-            <div className="skeleton h-3 w-20 rounded-full"></div>
-          </div>
-        </div>
-        <div className="skeleton h-8 w-16 rounded-xl"></div>
-      </div>
+    <div className={props.className || 'flex gap-2'}>
+      <button type="button" onClick={function () { props.onChange('foto') }} className={cls(props.value !== 'video')}>Foto</button>
+      <button type="button" onClick={function () { props.onChange('video') }} className={cls(props.value === 'video')}>Video</button>
     </div>
   )
 }
 
-export function SkeletonGalleryCard() {
+export function SumberVideo(props) {
+  const habis = props.quotaRemaining <= 0
   return (
-    <div className="card-hover flex h-full flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-      {/* Media menempel tepi atas sesuai GalleryCard asli */}
-      <div className="skeleton aspect-video w-full"></div>
-
-      <div className="flex flex-1 flex-col gap-3 p-5">
-        {/* Badge kegiatan dan tanggal */}
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap gap-1.5">
-            <div className="skeleton h-6 w-24 rounded-full"></div>
-            <div className="skeleton h-5 w-20 rounded-full"></div>
-          </div>
-          <div className="skeleton h-3 w-16 rounded-full"></div>
-        </div>
-
-        {/* Judul dan deskripsi */}
-        <div className="skeleton h-5 w-3/4 rounded-full"></div>
-        <div className="space-y-1.5">
-          <div className="skeleton h-3.5 w-full rounded-full"></div>
-          <div className="skeleton h-3.5 w-2/3 rounded-full"></div>
-        </div>
-
-        {/* Footer: profil + keterangan */}
-        <div className="mt-auto space-y-3 border-t border-slate-100 pt-3">
-          <div className="flex items-center gap-3">
-            <div className="skeleton h-11 w-11 shrink-0" style={{ borderRadius: '28%' }}></div>
-            <div className="space-y-1.5">
-              <div className="skeleton h-3.5 w-28 rounded-full"></div>
-              <div className="skeleton h-3 w-20 rounded-full"></div>
-            </div>
-          </div>
-          <div className="skeleton h-3 w-40 rounded-full"></div>
-        </div>
+    <div className="space-y-2">
+      <p className="text-xs font-semibold text-slate-600">Sisa kuota upload video hari ini: {props.quotaLoading ? <span className="inline-block w-3 h-3 ml-1 border-2 border-slate-400 border-t-transparent rounded-full animate-spin align-middle"></span> : <>{props.quotaRemaining} dari {props.quotaLimit}</>}</p>
+      <div className={habis && !props.fileName ? 'opacity-50 pointer-events-none' : ''}>
+        <FileInput accept="video/*" fileName={props.fileName || ''} label="Klik untuk pilih video" hint="Video maks 50 MB. Format MP4, MOV, WebM, atau MKV." onChange={props.onFile} />
       </div>
+      {habis ? <p className="text-xs text-red-600">Kuota habis. Gunakan link video di bawah.</p> : null}
+      <input className={props.inputCls} value={props.ytLink} onChange={props.onYtLink} aria-label="Link video YouTube" placeholder="Link video YouTube untuk tampilan (opsional)" />
+      <input className={props.inputCls} value={props.driveLink} onChange={props.onDriveLink} aria-label="Link Google Drive" placeholder="Link Google Drive untuk unduhan (opsional)" />
     </div>
   )
 }
-
-export function SkeletonAttendanceCard() {
-  return (
-    <div className="card-hover flex h-full flex-col rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-      {/* Tanggal + profil + badge status */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="skeleton h-4 w-40 rounded-full"></div>
-          <div className="mt-4 flex items-center gap-3">
-            <div className="skeleton h-11 w-11 shrink-0" style={{ borderRadius: '28%' }}></div>
-            <div className="space-y-1.5">
-              <div className="skeleton h-4 w-28 rounded-full"></div>
-              <div className="skeleton h-3 w-20 rounded-full"></div>
-            </div>
-          </div>
-        </div>
-        <div className="skeleton h-6 w-16 rounded-full"></div>
-      </div>
-
-      {/* Box alasan / keterangan */}
-      <div className="mt-4 flex-1 rounded-2xl bg-slate-50 p-4">
-        <div className="skeleton h-3 w-32 rounded-full"></div>
-        <div className="skeleton mt-2 h-3.5 w-3/4 rounded-full"></div>
-      </div>
-
-      {/* Tombol aksi */}
-      <div className="mt-4 flex gap-2">
-        <div className="skeleton h-8 w-16 rounded-xl"></div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonPersonCard() {
-  return (
-    <div className="card-hover flex h-full flex-col rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-      {/* Profil mahasiswa */}
-      <div className="flex items-center gap-4">
-        <div className="skeleton h-14 w-14 shrink-0" style={{ borderRadius: '28%' }}></div>
-        <div className="min-w-0 flex-1 space-y-1.5">
-          <div className="skeleton h-5 w-36 rounded-full"></div>
-          <div className="skeleton h-3 w-24 rounded-full"></div>
-          <div className="skeleton h-5 w-20 rounded-full"></div>
-        </div>
-      </div>
-
-      {/* Statistik logbook dan media */}
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <div className="rounded-2xl bg-slate-50 p-3">
-          <div className="skeleton h-3 w-16 rounded-full"></div>
-          <div className="skeleton mt-1.5 h-5 w-8 rounded-full"></div>
-        </div>
-        <div className="rounded-2xl bg-slate-50 p-3">
-          <div className="skeleton h-3 w-16 rounded-full"></div>
-          <div className="skeleton mt-1.5 h-5 w-8 rounded-full"></div>
-        </div>
-      </div>
-
-      {/* Rekap kehadiran */}
-      <div className="mt-3 border-t border-slate-100 pt-3">
-        <div className="skeleton h-3 w-24 rounded-full"></div>
-        <div className="mt-2 grid grid-cols-3 gap-2">
-          <div className="rounded-xl bg-slate-50 p-2">
-            <div className="skeleton h-3 w-full rounded-full"></div>
-            <div className="skeleton mx-auto mt-1.5 h-4 w-6 rounded-full"></div>
-          </div>
-          <div className="rounded-xl bg-slate-50 p-2">
-            <div className="skeleton h-3 w-full rounded-full"></div>
-            <div className="skeleton mx-auto mt-1.5 h-4 w-6 rounded-full"></div>
-          </div>
-          <div className="rounded-xl bg-slate-50 p-2">
-            <div className="skeleton h-3 w-full rounded-full"></div>
-            <div className="skeleton mx-auto mt-1.5 h-4 w-6 rounded-full"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonDashboard() {
-  return (
-    <div className="space-y-6">
-      {/* Header profil + tab */}
-      <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-8 lg:p-10">
-        <div className="flex flex-wrap items-center gap-4 sm:gap-6">
-          <div className="skeleton h-14 w-14 shrink-0 sm:h-24 sm:w-24" style={{ borderRadius: '28%' }}></div>
-          <div className="min-w-0 flex-1 space-y-2">
-            <div className="skeleton h-5 w-48 rounded-full sm:h-6"></div>
-            <div className="skeleton h-3.5 w-28 rounded-full"></div>
-            <div className="skeleton h-3.5 w-32 rounded-full"></div>
-          </div>
-        </div>
-        <div className="mt-6 flex flex-wrap gap-2 sm:mt-8">
-          <div className="skeleton h-9 w-24 rounded-2xl"></div>
-          <div className="skeleton h-9 w-20 rounded-2xl"></div>
-          <div className="skeleton h-9 w-28 rounded-2xl"></div>
-          <div className="skeleton h-9 w-20 rounded-2xl"></div>
-        </div>
-      </div>
-
-      {/* Form logbook + daftar logbook */}
-      <div className="grid items-start gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-        <div className="space-y-4 rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
-          <div className="skeleton h-6 w-48 rounded-full"></div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="skeleton h-11 w-full rounded-2xl"></div>
-            <div className="skeleton h-11 w-full rounded-2xl"></div>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="skeleton h-11 w-full rounded-2xl"></div>
-            <div className="skeleton h-11 w-full rounded-2xl"></div>
-          </div>
-          <div className="skeleton h-11 w-full rounded-2xl"></div>
-          <div className="skeleton h-40 w-full rounded-2xl"></div>
-          <div className="skeleton h-11 w-full rounded-2xl"></div>
-        </div>
-        <div className="space-y-5">
-          <div className="skeleton h-6 w-32 rounded-full"></div>
-          <div className="skeleton h-12 w-full rounded-3xl"></div>
-          <div className="skeleton h-4 w-28 rounded-full"></div>
-          <div className="grid gap-5 md:grid-cols-2 kartu-grid">
-            <SkeletonLogbookCard />
-            <SkeletonLogbookCard />
-            <SkeletonLogbookCard />
-            <SkeletonLogbookCard />
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonStatCard() {
-  return (
-    <div className="card-hover rounded-3xl border border-slate-200 bg-white p-3 shadow-sm sm:p-6">
-      <div className="skeleton h-3 w-3/4 rounded-full sm:h-4 sm:w-28"></div>
-      <div className="skeleton mt-1 h-6 w-1/2 rounded-full sm:mt-3 sm:h-9 sm:w-16"></div>
-      <div className="skeleton mt-2 h-3 w-36 rounded-full hidden sm:block"></div>
-    </div>
-  )
-}
-
-export function SkeletonChartRow() {
-  return (
-    <div className="card-hover rounded-[1.5rem] border border-slate-200 bg-white p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="space-y-1.5">
-          <div className="skeleton h-4 w-32 rounded-full"></div>
-          <div className="skeleton h-3 w-20 rounded-full"></div>
-        </div>
-        <div className="skeleton h-3 w-36 rounded-full"></div>
-      </div>
-      <div className="skeleton mt-4 h-4 w-full rounded-full"></div>
-    </div>
-  )
-}
-```
-
-## File: src/lib/logbook.js
-```javascript
-import { supabase } from './supabase.js'
-
-const EMPTY = '00000000-0000-0000-0000-000000000000'
-
-export async function syncGaleriFromLogbook(mahasiswaId, items, meta) {
-  const itemIds = items.map(function (i) { return i.id }).filter(Boolean)
-  const all = await supabase
-    .from('galeri')
-    .select('id, logbook_item_id')
-    .in('logbook_item_id', itemIds.length ? itemIds : [EMPTY])
-  const existing = new Map((all.data || []).map(function (g) { return [g.logbook_item_id, g.id] }))
-
-  for (const item of items) {
-    if (!item.id) continue
-    if (item.show_in_gallery && item.media_path) {
-      if (existing.has(item.id)) {
-        await supabase.from('galeri').update({
-          media_path: item.media_path,
-          media_type: item.media_type || 'foto',
-          media_thumb: item.media_thumb || null,
-        media_source: item.media_source || 'r2', youtube_id: item.youtube_id || null }).eq('id', existing.get(item.id))
-      } else {
-        await supabase.from('galeri').insert({
-          mahasiswa_id: mahasiswaId,
-          logbook_item_id: item.id,
-          judul: item.judul,
-          deskripsi: item.deskripsi || 'Dokumentasi kegiatan dari logbook harian.',
-          tanggal: meta.tanggal,
-          kegiatan: meta.kategori,
-          media_path: item.media_path,
-          media_type: item.media_type || 'foto',
-          media_thumb: item.media_thumb || null,
-        media_source: item.media_source || 'r2', youtube_id: item.youtube_id || null })
-      }
-    } else if (existing.has(item.id)) {
-      await supabase.from('galeri').delete().eq('id', existing.get(item.id))
-    }
-  }
-}
-```
-
-## File: src/lib/upload.js
-```javascript
-import { supabase } from './supabase.js'
-import { iniVideo, ekstensiFile, siapkanFoto } from './konversi.js'
-
-const MAKS_FOTO = 15 * 1024 * 1024
-const MAKS_VIDEO = 50 * 1024 * 1024
-
-async function getToken() {
-  const { data } = await supabase.auth.getSession()
-  return data.session ? data.session.access_token : ''
-}
-
-function namaDasar(nama) {
-  return String(nama || 'media').replace(/\.[^.]+$/, '')
-}
-
-function kirimDenganProgres(uploadUrl, blob, contentType, onProgres) {
-  return new Promise(function (resolve, reject) {
-    const xhr = new XMLHttpRequest()
-    xhr.open('PUT', uploadUrl)
-    xhr.setRequestHeader('Content-Type', contentType)
-    if (onProgres) {
-      xhr.upload.onprogress = function (e) {
-        if (e.lengthComputable) onProgres(e.loaded / e.total)
-      }
-    }
-    xhr.onload = function () {
-      if (xhr.status >= 200 && xhr.status < 300) resolve()
-      else reject(new Error('Gagal upload file ke R2 (status ' + xhr.status + ')'))
-    }
-    xhr.onerror = function () { reject(new Error('Gagal jaringan saat upload ke R2')) }
-    xhr.send(blob)
-  })
-}
-
-async function mintaIzin(token, filename, contentType, kind) {
-  const res = await fetch('/api/r2/presign', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify({ filename: filename, contentType: contentType, kind: kind })
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error('Gagal membuat izin upload (status ' + res.status + '): ' + text)
-  }
-  return res.json()
-}
-
-export async function uploadMedia(file, kind, onInfo) {
-  const video = iniVideo(file)
-  if (video && file.size > MAKS_VIDEO) {
-    throw new Error('Video melebihi 50 MB. Potong dulu durasinya supaya upload cepat dan kuota aman.')
-  }
-  if (!video && file.size > MAKS_FOTO) {
-    throw new Error('Foto melebihi 15 MB. Pilih file dengan ukuran lebih kecil.')
-  }
-  let fullBlob = file
-  let fullType = file.type
-  let thumbBlob = null
-  if (!video) {
-    try {
-      const hasil = await siapkanFoto(file, onInfo)
-      fullBlob = hasil.fullBlob
-      fullType = hasil.fullType
-      thumbBlob = hasil.thumbBlob
-    } catch (e) {
-      throw new Error('Foto format .' + ekstensiFile(file) + ' tidak bisa diproses browser. Ubah dulu ke JPG atau PNG. Di iPhone: Settings, Camera, Formats, pilih Most Compatible.')
-    }
-  }
-  if (onInfo) onInfo('')
-  const token = await getToken()
-  const extFull = fullType === 'image/webp' ? 'webp' : (fullType === 'image/jpeg' ? 'jpg' : ekstensiFile(file))
-  const infoFull = await mintaIzin(token, namaDasar(file.name) + '.' + extFull, fullType, kind)
-  await kirimDenganProgres(infoFull.uploadUrl, fullBlob, fullType, function (p) {
-    if (onInfo) onInfo('Mengunggah ' + Math.round(p * 100) + '%')
-  })
-  let thumbUrl = null
-  if (thumbBlob) {
-    try {
-      const namaThumb = namaDasar(infoFull.key.split('/').pop()) + '.webp'
-      const infoThumb = await mintaIzin(token, namaThumb, 'image/webp', 'thumb/' + kind)
-      await kirimDenganProgres(infoThumb.uploadUrl, thumbBlob, 'image/webp', null)
-      thumbUrl = infoThumb.publicUrl
-    } catch (e) {
-      thumbUrl = null
-    }
-  }
-  console.log('[UPLOAD] File penuh: ' + infoFull.key + ' | Thumbnail: ' + (thumbUrl || 'tidak dibuat'))
-  return { path: infoFull.key, publicUrl: infoFull.publicUrl, thumbUrl: thumbUrl }
-}
-
-export async function deleteMedia(key) {
-  const token = await getToken()
-  const res = await fetch('/api/r2/delete', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify({ key: key })
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error('Gagal hapus media di R2 (status ' + res.status + '): ' + text)
-  }
-  return res.json()
-}
-```
-
-## File: vite.config.js
-```javascript
-import { defineConfig, loadEnv } from 'vite'
-import react from '@vitejs/plugin-react'
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
-import { createClient } from '@supabase/supabase-js'
-
-function bacaBody(req) {
-  return new Promise(function (resolve) {
-    let data = ''
-    req.on('data', function (c) { data += c })
-    req.on('end', function () {
-      try { resolve(JSON.parse(data || '{}')) } catch (e) { resolve({}) }
-    })
-  })
-}
-
-function pluginApiR2(env) {
-  const s3 = new S3Client({
-    region: 'auto',
-    endpoint: 'https://' + env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
-    credentials: {
-      accessKeyId: env.R2_ACCESS_KEY_ID,
-      secretAccessKey: env.R2_SECRET_ACCESS_KEY
-    }
-  })
-
-  async function cekSesi(req) {
-    const authHeader = req.headers.authorization || ''
-    const token = authHeader.replace('Bearer ', '')
-    if (!token) return false
-    const supabase = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY, {
-      global: { headers: { Authorization: authHeader } }
-    })
-    const r = await supabase.auth.getUser(token)
-    return !r.error && !!r.data.user
-  }
-
-  // Bungkus middlewares agar bisa dipakai di dev dan preview
-  const setupMiddlewares = (server) => {
-    server.middlewares.use('/api/r2/presign', async function (req, res) {
-      if (req.method !== 'POST') {
-        res.statusCode = 405
-        res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
-        return
-      }
-      const ok = await cekSesi(req)
-      if (!ok) {
-        res.statusCode = 401
-        res.end(JSON.stringify({ error: 'Sesi tidak valid' }))
-        return
-      }
-      const body = await bacaBody(req)
-      const ext = String(body.filename || 'bin').split('.').pop().toLowerCase()
-      const key = body.kind + '/' + new Date().getFullYear() + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + ext
-      const uploadUrl = await getSignedUrl(
-        s3,
-        new PutObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: key, ContentType: body.contentType }),
-        { expiresIn: 300 }
-      )
-      res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({
-        uploadUrl: uploadUrl,
-        publicUrl: env.R2_PUBLIC_BASE_URL + '/' + key,
-        key: key
-      }))
-    })
-
-    server.middlewares.use('/api/r2/delete', async function (req, res) {
-      if (req.method !== 'POST') {
-        res.statusCode = 405
-        res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
-        return
-      }
-      const ok = await cekSesi(req)
-      if (!ok) {
-        res.statusCode = 401
-        res.end(JSON.stringify({ error: 'Sesi tidak valid' }))
-        return
-      }
-      const body = await bacaBody(req)
-      await s3.send(new DeleteObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: body.key }))
-      res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({ ok: true }))
-    })
-  }
-
-  return {
-    name: 'api-r2-dev',
-    configureServer: setupMiddlewares,
-    configurePreviewServer: setupMiddlewares
-  }
-}
-
-function pluginApiYoutube(env) {
-  const admin = createClient(env.VITE_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY)
-  const LIMIT_PER_PROJECT = 5
-  
-  function ptToday() {
-    const now = new Date()
-    const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
-    const y = pt.getFullYear()
-    const m = String(pt.getMonth() + 1).padStart(2, '0')
-    const d = String(pt.getDate()).padStart(2, '0')
-    return y + '-' + m + '-' + d
-  }
-  
-  function daftarKredensial() {
-    const list = []
-    for (let n = 1; n <= 6; n++) {
-      const id = env['YOUTUBE_CLIENT_ID_' + n]
-      const secret = env['YOUTUBE_CLIENT_SECRET_' + n]
-      const refresh = env['YOUTUBE_REFRESH_TOKEN_' + n]
-      if (id && secret && refresh) list.push({ n: n, id: id, secret: secret, refresh: refresh })
-    }
-    if (!list.length && env.YOUTUBE_CLIENT_ID && env.YOUTUBE_CLIENT_SECRET && env.YOUTUBE_REFRESH_TOKEN) {
-      list.push({ n: 1, id: env.YOUTUBE_CLIENT_ID, secret: env.YOUTUBE_CLIENT_SECRET, refresh: env.YOUTUBE_REFRESH_TOKEN })
-    }
-    return list
-  }
-  
-  const cacheToken = {}
-  async function getAccessToken(kred) {
-    const now = Date.now()
-    const c = cacheToken[kred.n]
-    if (c && c.expire > now + 60000) return c.token
-    const params = new URLSearchParams()
-    params.set('client_id', kred.id)
-    params.set('client_secret', kred.secret)
-    params.set('refresh_token', kred.refresh)
-    params.set('grant_type', 'refresh_token')
-    const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
-    if (!r.ok) throw new Error('refresh token project ' + kred.n + ' gagal (status ' + r.status + ')')
-    const j = await r.json()
-    cacheToken[kred.n] = { token: j.access_token, expire: now + (j.expires_in || 3600) * 1000 }
-    return j.access_token
-  }
-  
-  async function cekSesi(req) {
-    const authHeader = req.headers.authorization || ''
-    const token = authHeader.replace('Bearer ', '')
-    if (!token) return null
-    const supabase = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
-    const r = await supabase.auth.getUser(token)
-    return r.error ? null : r.data.user
-  }
-  
-  function kirim(res, code, obj) {
-    res.statusCode = code
-    res.setHeader('Content-Type', 'application/json')
-    res.end(JSON.stringify(obj))
-  }
-
-  // Bungkus middlewares agar bisa dipakai di dev dan preview
-  const setupMiddlewares = (server) => {
-    server.middlewares.use('/api/youtube/quota', async function (req, res) {
-      const today = ptToday()
-      const kredensial = daftarKredensial()
-      if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
-      let usedTotal = 0
-      const perProject = []
-      for (const kred of kredensial) {
-        const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
-        const used = hit.count || 0
-        usedTotal += used
-        perProject.push({ project: kred.n, used: used, remaining: Math.max(0, LIMIT_PER_PROJECT - used) })
-      }
-      const limit = kredensial.length * LIMIT_PER_PROJECT
-      res.setHeader('Cache-Control', 'no-store')
-      kirim(res, 200, { limit: limit, used: usedTotal, remaining: Math.max(0, limit - usedTotal), perProject: perProject, ptDate: today })
-    })
-
-    server.middlewares.use('/api/youtube/session', async function (req, res) {
-      if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
-      const user = await cekSesi(req)
-      if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
-      const today = ptToday()
-      const kredensial = daftarKredensial()
-      if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
-      const body = await bacaBody(req)
-      if (!body.title) { kirim(res, 400, { error: 'Judul video wajib diisi' }); return }
-      let terakhir = ''
-      for (const kred of kredensial) {
-        const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
-        if ((hit.count || 0) >= LIMIT_PER_PROJECT) { terakhir = 'project ' + kred.n + ' sudah penuh'; continue }
-        let access
-        try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
-        const meta = {
-          snippet: { title: String(body.title).slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
-          status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
-        }
-        const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
-          method: 'POST',
-          headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
-          body: JSON.stringify(meta)
-        })
-        if (!init.ok) { terakhir = 'project ' + kred.n + ' ditolak Google (status ' + init.status + ')'; continue }
-        const sessionUri = init.headers.get('location')
-        if (!sessionUri) { terakhir = 'project ' + kred.n + ' tanpa lokasi upload'; continue }
-        await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: user.id, project_id: kred.n })
-        kirim(res, 200, { sessionUri: sessionUri, project: kred.n })
-        return
-      }
-      kirim(res, 429, { error: 'Kuota harian semua project video sudah habis. Coba lagi besok atau gunakan link video eksternal.', detail: terakhir })
-    })
-
-    server.middlewares.use('/api/youtube/latest', async function (req, res) {
-      if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
-      const user = await cekSesi(req)
-      if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
-      const kredensial = daftarKredensial()
-      if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
-      let terakhir = ''
-      for (const kred of kredensial) {
-        let access
-        try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
-        const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&order=date&maxResults=5', { headers: { Authorization: 'Bearer ' + access } })
-        if (!r.ok) { terakhir = 'project ' + kred.n + ' status ' + r.status; continue }
-        const j = await r.json()
-        const items = j.items || []
-        const batas = Date.now() - 15 * 60 * 1000
-        const cocok = items.find(function (it) {
-          const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
-          return isNaN(t) ? false : t >= batas
-        })
-        if (!cocok) { kirim(res, 404, { error: 'Video terbaru tidak ditemukan' }); return }
-        kirim(res, 200, { videoId: cocok.id && cocok.id.videoId, project: kred.n })
-        return
-      }
-      kirim(res, 502, { error: 'Gagal memeriksa video terbaru: ' + terakhir })
-    })
-  }
-
-  return {
-    name: 'api-youtube-dev',
-    configureServer: setupMiddlewares,
-    configurePreviewServer: setupMiddlewares
-  }
-}
-
-export default defineConfig(function ({ mode }) {
-  const env = loadEnv(mode, process.cwd(), '')
-  return {
-    plugins: [react(), pluginApiR2(env), pluginApiYoutube(env)],
-    
-    // Konfigurasi agar bisa diakses lewat Network / IP lokal
-    server: {
-      host: true
-    },
-    preview: {
-      host: true
-    },
-    
-    build: {
-      chunkSizeWarningLimit: 1000,
-      rollupOptions: {
-        output: {
-          manualChunks: {
-            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-            'vendor-supabase': ['@supabase/supabase-js'],
-            'vendor-aws': ['@aws-sdk/client-s3', '@aws-sdk/s3-request-presigner'],
-            'vendor-media': ['heic2any']
-          }
-        }
-      }
-    }
-  }
-})
 ```
 
 ## File: src/components/Carousel.jsx
@@ -2774,226 +2608,205 @@ export function countActiveFilters(o) {
 }
 ```
 
-## File: src/main.jsx
+## File: vite.config.js
 ```javascript
-import React from 'react'
-import ReactDOM from 'react-dom/client'
-import App from './App.jsx'
-import './index.css'
+import { defineConfig, loadEnv } from 'vite'
+import react from '@vitejs/plugin-react'
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { createClient } from '@supabase/supabase-js'
+import { LIMIT_PER_PROJECT, ptToday, daftarKredensial, getAccessToken } from './api/_lib/youtube.js'
+import { cekSesi, bacaBody } from './api/_lib/sesi.js'
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-)
+function pluginApiR2(env) {
+  const s3 = new S3Client({
+    region: 'auto',
+    endpoint: 'https://' + env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
+    credentials: {
+      accessKeyId: env.R2_ACCESS_KEY_ID,
+      secretAccessKey: env.R2_SECRET_ACCESS_KEY
+    }
+  })
 
-/* ===== Indikator scrollbar auto hide, overlay tanpa menggeser layout ===== */
-;(function () {
-  if (typeof document === 'undefined') return
-  function pasang() {
-    if (document.getElementById('scroll-indicator')) return
-    const track = document.createElement('div')
-    track.id = 'scroll-indicator'
-    const thumb = document.createElement('div')
-    thumb.id = 'scroll-thumb'
-    track.appendChild(thumb)
-    document.body.appendChild(track)
-    let timer = null
-    let sumber = null
-    let watchdog = null
-    function stopWatchdog() {
-      if (watchdog) { clearInterval(watchdog); watchdog = null }
-    }
-    function mulaiWatchdog() {
-      if (watchdog) return
-      watchdog = setInterval(function () {
-        if (!track.classList.contains('aktif')) { stopWatchdog(); return }
-        if (sumber) {
-          if (!sumber.isConnected || sumber.scrollHeight - sumber.clientHeight <= 4) {
-            sembunyikan()
-            sumber = null
-            stopWatchdog()
-          }
-        } else if (document.documentElement.scrollHeight - window.innerHeight <= 4) {
-          sembunyikan()
-          stopWatchdog()
-        }
-      }, 90)
-    }
-    function sembunyikan() { track.classList.remove('aktif'); stopWatchdog() }
-    function tampilkan() {
-      track.classList.add('aktif')
-      if (timer) clearTimeout(timer)
-      timer = setTimeout(sembunyikan, 400)
-      mulaiWatchdog()
-    }
-    function ukur(el, adalahWindow, rect) {
-      const scrollTop = adalahWindow ? (window.scrollY || document.documentElement.scrollTop) : el.scrollTop
-      const scrollHeight = adalahWindow ? document.documentElement.scrollHeight : el.scrollHeight
-      const clientHeight = adalahWindow ? window.innerHeight : el.clientHeight
-      const selisih = scrollHeight - clientHeight
-      if (selisih <= 4) { sembunyikan(); return }
-      const ratio = clientHeight / scrollHeight
-      const trackTinggi = rect.height - 6
-      const thumbTinggi = Math.max(24, trackTinggi * ratio)
-      const maxTop = trackTinggi - thumbTinggi
-      let gerak = scrollTop / selisih
-      if (gerak < 0) gerak = 0
-      if (gerak > 1) gerak = 1
-      thumb.style.height = thumbTinggi + 'px'
-      thumb.style.transform = 'translateY(' + (3 + gerak * maxTop) + 'px)'
-      track.style.top = rect.top + 'px'
-      track.style.height = rect.height + 'px'
-      track.style.right = (window.innerWidth - rect.right + 2) + 'px'
-    }
-    function onScroll(e) {
-      const t = e.target
-      if (t === document || t === document.documentElement || t === window || !t || t.nodeType !== 1) {
-        sumber = null
-        ukur(null, true, { top: 0, height: window.innerHeight, right: window.innerWidth })
-      } else {
-        sumber = t
-        const r = t.getBoundingClientRect()
-        ukur(t, false, { top: r.top, height: r.height, right: r.right })
-      }
-      tampilkan()
-    }
-    window.addEventListener('scroll', onScroll, true)
-    document.addEventListener('scroll', onScroll, true)
-    window.addEventListener('resize', sembunyikan)
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pasang)
-  else pasang()
-})()
-
-/* ===== Pergeseran mulus isi filter saat mode waktu berganti (bayangan keluar plus FLIP) ===== */
-;(function () {
-  if (typeof document === 'undefined') return
-  function pasang() {
-    document.addEventListener('click', function (e) {
-      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-      const tombol = e.target && e.target.closest ? e.target.closest('.time-toggle button') : null
-      if (!tombol) return
-      if ((' ' + tombol.className + ' ').indexOf(' active ') !== -1) return
-      const toggle = tombol.closest('.time-toggle')
-      if (!toggle || !toggle.parentElement) return
-      if (window.innerWidth < 1280) return
-       const wadah = tombol.closest('.rounded-3xl') || toggle.parentElement.parentElement || toggle.parentElement
-      const cabang = toggle.parentElement.querySelector('.anim-ganti-bulan, .anim-ganti-rentang')
-      if (cabang) {
-        const r = cabang.getBoundingClientRect()
-        if (r.width > 0) {
-          const hantu = cabang.cloneNode(true)
-          hantu.style.position = 'fixed'
-          hantu.style.left = r.left + 'px'
-          hantu.style.top = r.top + 'px'
-          hantu.style.width = r.width + 'px'
-          hantu.style.height = r.height + 'px'
-          hantu.style.margin = '0'
-          hantu.style.zIndex = '45'
-          hantu.classList.add('hantu-cabang')
-          document.body.appendChild(hantu)
-          hantu.style.animation = 'none'
-          const turunan = hantu.querySelectorAll('*')
-          for (let i = 0; i < turunan.length; i++) turunan[i].style.animation = 'none'
-          const keBulan = !tombol.previousElementSibling
-          if (hantu.animate) {
-            hantu.animate([
-              { opacity: 1, transform: 'translateX(0)' },
-              { opacity: 0, transform: keBulan ? 'translateX(10px)' : 'translateX(-10px)' }
-            ], { duration: 180, easing: 'ease-in' }).onfinish = function () { if (hantu.parentNode) hantu.parentNode.removeChild(hantu) }
-          } else {
-            setTimeout(function () { if (hantu.parentNode) hantu.parentNode.removeChild(hantu) }, 200)
-          }
-        }
-      }
-      const snap = new Map()
-      const els = wadah.querySelectorAll('*')
-      for (let i = 0; i < els.length; i++) snap.set(els[i], els[i].getBoundingClientRect())
-      requestAnimationFrame(function () {
-        requestAnimationFrame(function () {
-          snap.forEach(function (rect, el) {
-            if (!el.isConnected || !el.animate) return
-            const r = el.getBoundingClientRect()
-            const dx = rect.left - r.left
-            const dy = rect.top - r.top
-            if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return
-            el.animate([
-              { transform: 'translate(' + dx + 'px, ' + dy + 'px)' },
-              { transform: 'translate(0, 0)' }
-            ], { duration: 320, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' })
-          })
-        })
-      })
-    }, true)
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pasang)
-  else pasang()
-})()
-
-/* ===== transisi-halaman-v1: picu ulang animasi saat pindah rute dan pindah halaman pagination ===== */
-;(function () {
-  if (typeof document === 'undefined') return
-  function ulangAnimasi(el) {
-    if (!el) return
-    el.style.animation = 'none'
-    void el.offsetWidth
-    el.style.animation = ''
-  }
-  function pasang() {
-    document.addEventListener('click', function (e) {
-      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-      const t = e.target
-      if (!t || !t.closest) return
-      const link = t.closest('a[href]')
-      if (link) {
-        const href = link.getAttribute('href') || ''
-        const eksternal = link.target === '_blank' || href.indexOf('http') === 0 || href.indexOf('#') === 0
-        if (!eksternal) {
-          requestAnimationFrame(function () {
-            requestAnimationFrame(function () {
-              ulangAnimasi(document.querySelector('main.anim-page') || document.querySelector('.anim-page'))
-            })
-          })
-        }
+  // Bungkus middlewares agar bisa dipakai di dev dan preview
+  const setupMiddlewares = (server) => {
+    server.middlewares.use('/api/r2/presign', async function (req, res) {
+      if (req.method !== 'POST') {
+        res.statusCode = 405
+        res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
         return
       }
-      const pag = t.closest('.mt-8.flex.flex-wrap.items-center.justify-center.gap-2')
-      if (pag && t.closest('button')) {
-        requestAnimationFrame(function () {
-          requestAnimationFrame(function () {
-            const grid = document.querySelectorAll('.grid-pusat, .grid-pusat-rapat, .kartu-grid')
-            for (let i = 0; i < grid.length; i++) {
-              const anak = grid[i].children
-              for (let j = 0; j < anak.length; j++) ulangAnimasi(anak[j])
-            }
-          })
-        })
+      const ok = await cekSesi(env, req.headers.authorization)
+      if (!ok) {
+        res.statusCode = 401
+        res.end(JSON.stringify({ error: 'Sesi tidak valid' }))
+        return
       }
-    }, true)
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pasang)
-  else pasang()
-})()
+      const body = await bacaBody(req)
+      const ext = String(body.filename || 'bin').split('.').pop().toLowerCase()
+      const key = body.kind + '/' + new Date().getFullYear() + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + ext
+      const uploadUrl = await getSignedUrl(
+        s3,
+        new PutObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: key, ContentType: body.contentType }),
+        { expiresIn: 300 }
+      )
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({
+        uploadUrl: uploadUrl,
+        publicUrl: env.R2_PUBLIC_BASE_URL + '/' + key,
+        key: key
+      }))
+    })
 
-/* ===== transisi-tema: aktifkan transisi pelan hanya pada momen pergantian mode ===== */
-;(function () {
-  if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return
-  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-  const akar = document.documentElement
-  let gelap = akar.classList.contains('dark')
-  let timer = null
-  const obs = new MutationObserver(function () {
-    const sekarang = akar.classList.contains('dark')
-    if (sekarang === gelap) return
-    gelap = sekarang
-    if (document.startViewTransition) return
-    akar.classList.add('theme-transition')
-    if (timer) clearTimeout(timer)
-    timer = setTimeout(function () { akar.classList.remove('theme-transition') }, 400)
-  })
-  obs.observe(akar, { attributes: true, attributeFilter: ['class'] })
-})()
+    server.middlewares.use('/api/r2/delete', async function (req, res) {
+      if (req.method !== 'POST') {
+        res.statusCode = 405
+        res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
+        return
+      }
+      const ok = await cekSesi(env, req.headers.authorization)
+      if (!ok) {
+        res.statusCode = 401
+        res.end(JSON.stringify({ error: 'Sesi tidak valid' }))
+        return
+      }
+      const body = await bacaBody(req)
+      await s3.send(new DeleteObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: body.key }))
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ ok: true }))
+    })
+  }
+
+  return {
+    name: 'api-r2-dev',
+    configureServer: setupMiddlewares,
+    configurePreviewServer: setupMiddlewares
+  }
+}
+
+function pluginApiYoutube(env) {
+  const admin = createClient(env.VITE_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY)
+  function kirim(res, code, obj) {
+    res.statusCode = code
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify(obj))
+  }
+
+  // Bungkus middlewares agar bisa dipakai di dev dan preview
+  const setupMiddlewares = (server) => {
+    server.middlewares.use('/api/youtube/quota', async function (req, res) {
+      const today = ptToday()
+      const kredensial = daftarKredensial(env)
+      if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
+      let usedTotal = 0
+      const perProject = []
+      for (const kred of kredensial) {
+        const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
+        const used = hit.count || 0
+        usedTotal += used
+        perProject.push({ project: kred.n, used: used, remaining: Math.max(0, LIMIT_PER_PROJECT - used) })
+      }
+      const limit = kredensial.length * LIMIT_PER_PROJECT
+      res.setHeader('Cache-Control', 'no-store')
+      kirim(res, 200, { limit: limit, used: usedTotal, remaining: Math.max(0, limit - usedTotal), perProject: perProject, ptDate: today })
+    })
+
+    server.middlewares.use('/api/youtube/session', async function (req, res) {
+      if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
+      const user = await cekSesi(env, req.headers.authorization)
+      if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
+      const today = ptToday()
+      const kredensial = daftarKredensial(env)
+      if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
+      const body = await bacaBody(req)
+      if (!body.title) { kirim(res, 400, { error: 'Judul video wajib diisi' }); return }
+      let terakhir = ''
+      for (const kred of kredensial) {
+        const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
+        if ((hit.count || 0) >= LIMIT_PER_PROJECT) { terakhir = 'project ' + kred.n + ' sudah penuh'; continue }
+        let access
+        try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
+        const meta = {
+          snippet: { title: String(body.title).slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
+          status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
+        }
+        const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
+          body: JSON.stringify(meta)
+        })
+        if (!init.ok) { terakhir = 'project ' + kred.n + ' ditolak Google (status ' + init.status + ')'; continue }
+        const sessionUri = init.headers.get('location')
+        if (!sessionUri) { terakhir = 'project ' + kred.n + ' tanpa lokasi upload'; continue }
+        await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: user.id, project_id: kred.n })
+        kirim(res, 200, { sessionUri: sessionUri, project: kred.n })
+        return
+      }
+      kirim(res, 429, { error: 'Kuota harian semua project video sudah habis. Coba lagi besok atau gunakan link video eksternal.', detail: terakhir })
+    })
+
+    server.middlewares.use('/api/youtube/latest', async function (req, res) {
+      if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
+      const user = await cekSesi(env, req.headers.authorization)
+      if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
+      const kredensial = daftarKredensial(env)
+      if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
+      let terakhir = ''
+      for (const kred of kredensial) {
+        let access
+        try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
+        const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&order=date&maxResults=5', { headers: { Authorization: 'Bearer ' + access } })
+        if (!r.ok) { terakhir = 'project ' + kred.n + ' status ' + r.status; continue }
+        const j = await r.json()
+        const items = j.items || []
+        const batas = Date.now() - 15 * 60 * 1000
+        const cocok = items.find(function (it) {
+          const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
+          return isNaN(t) ? false : t >= batas
+        })
+        if (!cocok) { kirim(res, 404, { error: 'Video terbaru tidak ditemukan' }); return }
+        kirim(res, 200, { videoId: cocok.id && cocok.id.videoId, project: kred.n })
+        return
+      }
+      kirim(res, 502, { error: 'Gagal memeriksa video terbaru: ' + terakhir })
+    })
+  }
+
+  return {
+    name: 'api-youtube-dev',
+    configureServer: setupMiddlewares,
+    configurePreviewServer: setupMiddlewares
+  }
+}
+
+export default defineConfig(function ({ mode }) {
+  const env = loadEnv(mode, process.cwd(), '')
+  return {
+    plugins: [react(), pluginApiR2(env), pluginApiYoutube(env)],
+    
+    // Konfigurasi agar bisa diakses lewat Network / IP lokal
+    server: {
+      host: true
+    },
+    preview: {
+      host: true
+    },
+    
+    build: {
+      chunkSizeWarningLimit: 1000,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+            'vendor-supabase': ['@supabase/supabase-js'],
+            'vendor-aws': ['@aws-sdk/client-s3', '@aws-sdk/s3-request-presigner'],
+            'vendor-media': ['heic2any']
+          }
+        }
+      }
+    }
+  }
+})
 ```
 
 ## File: src/components/icons.jsx
@@ -3312,130 +3125,227 @@ export default function LoginPage() {
 }
 ```
 
-## File: src/pages/TimPage.jsx
+## File: src/main.jsx
 ```javascript
-import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase.js'
-import { SkeletonPersonCard } from '../components/Skeleton.jsx'
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import App from './App.jsx'
+import './index.css'
 
-export default function TimPage() {
-  const [people, setPeople] = useState([])
-  const [logs, setLogs] = useState([])
-  const [galeri, setGaleri] = useState([])
-  const [loading, setLoading] = useState(true)
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+)
 
-  useEffect(function () {
-    async function load() {
-      const p = await supabase.from('mahasiswa').select('id, nama, nim, prodi, foto_profil').order('nama')
-      const l = await supabase.from('logbooks').select('id, mahasiswa_id, foto_profil').eq('status', 'publik')
-      const g = await supabase.from('galeri').select('id, mahasiswa_id, foto_profil')
-      setPeople(p.data || [])
-      setLogs(l.data || [])
-      setGaleri(g.data || [])
-      setLoading(false)
+/* ===== Indikator scrollbar auto hide, overlay tanpa menggeser layout ===== */
+;(function () {
+  if (typeof document === 'undefined') return
+  function pasang() {
+    if (document.getElementById('scroll-indicator')) return
+    const track = document.createElement('div')
+    track.id = 'scroll-indicator'
+    const thumb = document.createElement('div')
+    thumb.id = 'scroll-thumb'
+    track.appendChild(thumb)
+    document.body.appendChild(track)
+    let timer = null
+    let sumber = null
+    let watchdog = null
+    function stopWatchdog() {
+      if (watchdog) { clearInterval(watchdog); watchdog = null }
     }
-    load()
-  }, [])
+    function mulaiWatchdog() {
+      if (watchdog) return
+      watchdog = setInterval(function () {
+        if (!track.classList.contains('aktif')) { stopWatchdog(); return }
+        if (sumber) {
+          if (!sumber.isConnected || sumber.scrollHeight - sumber.clientHeight <= 4) {
+            sembunyikan()
+            sumber = null
+            stopWatchdog()
+          }
+        } else if (document.documentElement.scrollHeight - window.innerHeight <= 4) {
+          sembunyikan()
+          stopWatchdog()
+        }
+      }, 90)
+    }
+    function sembunyikan() { track.classList.remove('aktif'); stopWatchdog() }
+    function tampilkan() {
+      track.classList.add('aktif')
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(sembunyikan, 400)
+      mulaiWatchdog()
+    }
+    function ukur(el, adalahWindow, rect) {
+      const scrollTop = adalahWindow ? (window.scrollY || document.documentElement.scrollTop) : el.scrollTop
+      const scrollHeight = adalahWindow ? document.documentElement.scrollHeight : el.scrollHeight
+      const clientHeight = adalahWindow ? window.innerHeight : el.clientHeight
+      const selisih = scrollHeight - clientHeight
+      if (selisih <= 4) { sembunyikan(); return }
+      const ratio = clientHeight / scrollHeight
+      const trackTinggi = rect.height - 6
+      const thumbTinggi = Math.max(24, trackTinggi * ratio)
+      const maxTop = trackTinggi - thumbTinggi
+      let gerak = scrollTop / selisih
+      if (gerak < 0) gerak = 0
+      if (gerak > 1) gerak = 1
+      thumb.style.height = thumbTinggi + 'px'
+      thumb.style.transform = 'translateY(' + (3 + gerak * maxTop) + 'px)'
+      track.style.top = rect.top + 'px'
+      track.style.height = rect.height + 'px'
+      track.style.right = (window.innerWidth - rect.right + 2) + 'px'
+    }
+    function onScroll(e) {
+      const t = e.target
+      if (t === document || t === document.documentElement || t === window || !t || t.nodeType !== 1) {
+        sumber = null
+        ukur(null, true, { top: 0, height: window.innerHeight, right: window.innerWidth })
+      } else {
+        sumber = t
+        const r = t.getBoundingClientRect()
+        ukur(t, false, { top: r.top, height: r.height, right: r.right })
+      }
+      tampilkan()
+    }
+    window.addEventListener('scroll', onScroll, true)
+    document.addEventListener('scroll', onScroll, true)
+    window.addEventListener('resize', sembunyikan)
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pasang)
+  else pasang()
+})()
 
-  return (
-    <div>
-      <section className="card-hover rounded-[2rem] bg-white border border-slate-200 p-5 sm:p-8 lg:p-10 shadow-sm">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-400">Profil Mahasiswa</p>
-        <h1 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Mahasiswa magang Bank BSI</h1>
-      </section>
-      <section className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-        {loading
-          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <SkeletonPersonCard key={i} /> })
-          : people.map(function (p) {
-              const totalLog = logs.filter(function (l) { return l.mahasiswa_id === p.id }).length
-              const totalGal = galeri.filter(function (g) { return g.mahasiswa_id === p.id }).length
-              const initials = p.nama.split(' ').slice(0, 2).map(function (w) { return w.charAt(0) || '' }).join('').toUpperCase()
-              return (
-                <div key={p.id} className="card-hover bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
-                  <div className="flex items-center gap-4">
-                    <div className="h-14 w-14 rounded-3xl bg-bsi-800 text-white grid place-items-center text-xl font-black">{typeof p !== 'undefined' && p && p.foto_profil ? <img src={p.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : typeof m !== 'undefined' && m && m.foto_profil ? <img src={m.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : initials}</div>
-                    <div>
-                      <p className="text-lg font-bold text-slate-900">{p.nama}</p>
-                      <p className="text-sm text-slate-600">NIM {p.nim}</p>
-                      {p.prodi ? <span className="mt-1 inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-bsi-100 text-bsi-900">{p.prodi}</span> : null}
-                    </div>
-                  </div>
-                  <div className="mt-5 grid grid-cols-2 gap-3">
-                    <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-600">Logbook publik</p><p className="mt-1 text-xl sm:text-2xl font-black text-bsi-900">{totalLog}</p></div>
-                    <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-600">Media galeri</p><p className="mt-1 text-xl sm:text-2xl font-black text-bsi-900">{totalGal}</p></div>
-                  </div>
-                </div>
-              )
-            })}
-      </section>
-    </div>
-  )
-}
-```
+/* ===== Pergeseran mulus isi filter saat mode waktu berganti (bayangan keluar plus FLIP) ===== */
+;(function () {
+  if (typeof document === 'undefined') return
+  function pasang() {
+    document.addEventListener('click', function (e) {
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+      const tombol = e.target && e.target.closest ? e.target.closest('.time-toggle button') : null
+      if (!tombol) return
+      if ((' ' + tombol.className + ' ').indexOf(' active ') !== -1) return
+      const toggle = tombol.closest('.time-toggle')
+      if (!toggle || !toggle.parentElement) return
+      if (window.innerWidth < 1280) return
+       const wadah = tombol.closest('.rounded-3xl') || toggle.parentElement.parentElement || toggle.parentElement
+      const cabang = toggle.parentElement.querySelector('.anim-ganti-bulan, .anim-ganti-rentang')
+      if (cabang) {
+        const r = cabang.getBoundingClientRect()
+        if (r.width > 0) {
+          const hantu = cabang.cloneNode(true)
+          hantu.style.position = 'fixed'
+          hantu.style.left = r.left + 'px'
+          hantu.style.top = r.top + 'px'
+          hantu.style.width = r.width + 'px'
+          hantu.style.height = r.height + 'px'
+          hantu.style.margin = '0'
+          hantu.style.zIndex = '45'
+          hantu.classList.add('hantu-cabang')
+          document.body.appendChild(hantu)
+          hantu.style.animation = 'none'
+          const turunan = hantu.querySelectorAll('*')
+          for (let i = 0; i < turunan.length; i++) turunan[i].style.animation = 'none'
+          const keBulan = !tombol.previousElementSibling
+          if (hantu.animate) {
+            hantu.animate([
+              { opacity: 1, transform: 'translateX(0)' },
+              { opacity: 0, transform: keBulan ? 'translateX(10px)' : 'translateX(-10px)' }
+            ], { duration: 180, easing: 'ease-in' }).onfinish = function () { if (hantu.parentNode) hantu.parentNode.removeChild(hantu) }
+          } else {
+            setTimeout(function () { if (hantu.parentNode) hantu.parentNode.removeChild(hantu) }, 200)
+          }
+        }
+      }
+      const snap = new Map()
+      const els = wadah.querySelectorAll('*')
+      for (let i = 0; i < els.length; i++) snap.set(els[i], els[i].getBoundingClientRect())
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          snap.forEach(function (rect, el) {
+            if (!el.isConnected || !el.animate) return
+            const r = el.getBoundingClientRect()
+            const dx = rect.left - r.left
+            const dy = rect.top - r.top
+            if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return
+            el.animate([
+              { transform: 'translate(' + dx + 'px, ' + dy + 'px)' },
+              { transform: 'translate(0, 0)' }
+            ], { duration: 320, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' })
+          })
+        })
+      })
+    }, true)
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pasang)
+  else pasang()
+})()
 
-## File: src/App.jsx
-```javascript
-import { SkeletonDashboard } from './components/Skeleton.jsx'
-import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import { ThemeProvider } from './lib/theme.jsx'
- import { ToastProvider } from './components/ui.jsx'
-import { useAuth } from './lib/auth.js'
-import Layout from './components/Layout.jsx'
-import HomePage from './pages/HomePage.jsx'
-import LogbookPage from './pages/LogbookPage.jsx'
-import GalleryPage from './pages/GalleryPage.jsx'
-import AttendancePage from './pages/AttendancePage.jsx'
-import DospemPage from './pages/DospemPage.jsx'
-import TimPage from './pages/TimPage.jsx'
-import LoginPage from './pages/LoginPage.jsx'
-import DashboardPage from './pages/DashboardPage.jsx'
+/* ===== transisi-halaman-v1: picu ulang animasi saat pindah rute dan pindah halaman pagination ===== */
+;(function () {
+  if (typeof document === 'undefined') return
+  function ulangAnimasi(el) {
+    if (!el) return
+    el.style.animation = 'none'
+    void el.offsetWidth
+    el.style.animation = ''
+  }
+  function pasang() {
+    document.addEventListener('click', function (e) {
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+      const t = e.target
+      if (!t || !t.closest) return
+      const link = t.closest('a[href]')
+      if (link) {
+        const href = link.getAttribute('href') || ''
+        const eksternal = link.target === '_blank' || href.indexOf('http') === 0 || href.indexOf('#') === 0
+        if (!eksternal) {
+          requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+              if (e.mbsiDicegah) return
+              ulangAnimasi(document.querySelector('main.anim-page') || document.querySelector('.anim-page'))
+            })
+          })
+        }
+        return
+      }
+      const pag = t.closest('.mt-8.flex.flex-wrap.items-center.justify-center.gap-2')
+      if (pag && t.closest('button')) {
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            const grid = document.querySelectorAll('.grid-pusat, .grid-pusat-rapat, .kartu-grid')
+            for (let i = 0; i < grid.length; i++) {
+              const anak = grid[i].children
+              for (let j = 0; j < anak.length; j++) ulangAnimasi(anak[j])
+            }
+          })
+        })
+      }
+    }, true)
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pasang)
+  else pasang()
+})()
 
-function ScrollToTop() {
-  const { pathname } = useLocation()
-  useEffect(function () {
-    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
-  }, [pathname])
-  return null
-}
-function RequireAuth(props) {
-  const { mahasiswa, loading } = useAuth()
-  if (loading) return <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:py-8"><SkeletonDashboard /></div>
-  if (!mahasiswa) return <Navigate to="/login" replace />
-  return props.children
-}
-
-function RequireGuest(props) {
-  const { mahasiswa, loading } = useAuth()
-  if (loading) return <div className="grid min-h-[60vh] place-items-center"><div className="h-10 w-10 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div></div>
-  if (mahasiswa) return <Navigate to="/dashboard" replace />
-  return props.children
-}
-
-export default function App() {
-  return (
-    <ThemeProvider>
-      <ToastProvider>
-      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <ScrollToTop />
-        <Routes>
-          <Route element={<Layout />}>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/logbook" element={<LogbookPage />} />
-            <Route path="/galeri" element={<GalleryPage />} />
-            <Route path="/absen" element={<AttendancePage />} />
-            <Route path="/dospem" element={<DospemPage />} />
-            <Route path="/tim" element={<Navigate to="/dospem" replace />} />
-            <Route path="/login" element={<RequireGuest><LoginPage /></RequireGuest>} />
-            <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-      </ToastProvider>
-    </ThemeProvider>
-  )
-}
+/* ===== transisi-tema: aktifkan transisi pelan hanya pada momen pergantian mode ===== */
+;(function () {
+  if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  const akar = document.documentElement
+  let gelap = akar.classList.contains('dark')
+  let timer = null
+  const obs = new MutationObserver(function () {
+    const sekarang = akar.classList.contains('dark')
+    if (sekarang === gelap) return
+    gelap = sekarang
+    if (document.startViewTransition) return
+    akar.classList.add('theme-transition')
+    if (timer) clearTimeout(timer)
+    timer = setTimeout(function () { akar.classList.remove('theme-transition') }, 400)
+  })
+  obs.observe(akar, { attributes: true, attributeFilter: ['class'] })
+})()
 ```
 
 ## File: src/pages/DospemPage.jsx
@@ -3588,6 +3498,70 @@ return (
         {detail ? <LogbookDetail log={detail} /> : null}
       </Modal>
     </div>
+  )
+}
+```
+
+## File: src/App.jsx
+```javascript
+import { SkeletonDashboard } from './components/Skeleton.jsx'
+import { useEffect } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { ThemeProvider } from './lib/theme.jsx'
+ import { ToastProvider } from './components/ui.jsx'
+import { useAuth } from './lib/auth.js'
+import Layout from './components/Layout.jsx'
+import HomePage from './pages/HomePage.jsx'
+import LogbookPage from './pages/LogbookPage.jsx'
+import GalleryPage from './pages/GalleryPage.jsx'
+import AttendancePage from './pages/AttendancePage.jsx'
+import DospemPage from './pages/DospemPage.jsx'
+import LoginPage from './pages/LoginPage.jsx'
+import DashboardPage from './pages/DashboardPage.jsx'
+
+function ScrollToTop() {
+  const { pathname } = useLocation()
+  useEffect(function () {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+  }, [pathname])
+  return null
+}
+function RequireAuth(props) {
+  const { mahasiswa, loading } = useAuth()
+  if (loading) return <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:py-8"><SkeletonDashboard /></div>
+  if (!mahasiswa) return <Navigate to="/login" replace />
+  return props.children
+}
+
+function RequireGuest(props) {
+  const { mahasiswa, loading } = useAuth()
+  if (loading) return <div className="grid min-h-[60vh] place-items-center"><div className="h-10 w-10 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div></div>
+  if (mahasiswa) return <Navigate to="/dashboard" replace />
+  return props.children
+}
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <ToastProvider>
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ScrollToTop />
+        <Routes>
+          <Route element={<Layout />}>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/logbook" element={<LogbookPage />} />
+            <Route path="/galeri" element={<GalleryPage />} />
+            <Route path="/absen" element={<AttendancePage />} />
+            <Route path="/dospem" element={<DospemPage />} />
+            <Route path="/tim" element={<Navigate to="/dospem" replace />} />
+            <Route path="/login" element={<RequireGuest><LoginPage /></RequireGuest>} />
+            <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+      </ToastProvider>
+    </ThemeProvider>
   )
 }
 ```
@@ -4213,12 +4187,9 @@ function PersonChip(props) {
   const p = props.mahasiswa
   const nama = p ? p.nama : 'Mahasiswa'
   const nim = p ? p.nim : '-'
-  const prodi = p && p.prodi ? p.prodi : ''
-  const initials = nama.split(' ').slice(0, 2).map(function (w) { return w.charAt(0) || '' }).join('').toUpperCase()
   return (
     <div className="flex items-center gap-3">
-      <div className={'rounded-2xl bg-bsi-800 text-white grid place-items-center font-bold ' + (props.size === 'sm' ? 'h-9 w-9 text-xs' : 'h-11 w-11')}>
-        {typeof p !== 'undefined' && p && p.foto_profil ? <img src={p.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : typeof m !== 'undefined' && m && m.foto_profil ? <img src={m.foto_profil} alt="Foto profil" className="h-full w-full rounded-[28%] object-cover" /> : initials}</div>
+      <Avatar src={p && p.foto_profil ? p.foto_profil : null} nama={nama} size={props.size === 'sm' ? 'sm' : 'md'} />
       <div>
         <p className="font-semibold text-slate-900">{nama}</p>
         <p className="text-xs text-slate-600">NIM {nim}</p>
@@ -4226,7 +4197,6 @@ function PersonChip(props) {
     </div>
   )
 }
-
 function ActionButtons(props) {
   return (
     <div className="flex flex-wrap gap-2">
@@ -4414,8 +4384,7 @@ export function AttendanceCard(props) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm text-slate-600 pb-4">{formatTanggal(row.tanggal)}</p>
-          <div className="flex items-center gap-3"><Avatar src={props.row && props.row.mahasiswa && props.row.mahasiswa.foto_profil ? props.row.mahasiswa.foto_profil : null} nama={props.row && props.row.mahasiswa ? props.row.mahasiswa.nama : 'Mahasiswa'} size="md" /><div className="min-w-0 flex-1"><p className="mt-1 font-bold text-slate-900">{row.mahasiswa ? row.mahasiswa.nama : 'Mahasiswa'}</p>
-          <p className="text-xs text-slate-600">NIM {row.mahasiswa ? row.mahasiswa.nim : '-'}</p></div></div>
+          <PersonChip mahasiswa={row.mahasiswa} />
         </div>
         <AttendanceBadge status={row.status} />
       </div>
@@ -5125,12 +5094,10 @@ export function SelubungPanel(props) {
 @keyframes overlayFade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes modalPop { from { opacity: 0; transform: scale(.95) translateY(16px); } to { opacity: 1; transform: scale(1) translateY(0); } }
 @keyframes toastSlide { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes filterSlide { from { opacity: 0; max-height: 0; } to { opacity: 1; max-height: 600px; } }
 .anim-page { animation: appFadeUp .35s ease; }
 .anim-toast { animation: toastSlide .35s ease; }
 .anim-overlay { animation: overlayFade .25s ease; }
 .anim-modal { animation: modalPop .3s cubic-bezier(.16,1,.3,1); }
-.anim-filter { animation: filterSlide .3s ease; }
 
 /* ===== Komponen umum ===== */
 body { transition: background-color .3s ease, color .3s ease; }
@@ -5289,24 +5256,7 @@ textarea {
   30% { opacity: 1; transform: translateY(-1px) scale(1); }
 }
 
-.pemutar-bungkus iframe {
-  pointer-events: none;
-  border: 0;
-  background: transparent;
-}
 
-/* Pemutar video referensi: iframe cropping & slider custom */
-.pemutar-referensi iframe {
-  pointer-events: none;
-  border: 0;
-  background: transparent;
-}
-.pemutar-referensi:fullscreen {
-  border-radius: 0;
-  max-width: none;
-  width: 100vw;
-  height: 100vh;
-}
 .pemutar-progress::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
@@ -5348,25 +5298,6 @@ textarea {
   box-shadow: 0 1px 3px rgba(0,0,0,0.4);
 }
 
-/* pusat-pemutar-v3: iframe mengisi wadah persis, layar penuh menengahkan video */
-.pemutar-referensi iframe {
-  pointer-events: none;
-  border: 0;
-  background: transparent;
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 100% !important;
-  height: 100% !important;
-}
-.pemutar-referensi:fullscreen {
-  aspect-ratio: auto !important;
-  width: 100vw !important;
-  height: 100vh !important;
-  max-width: none !important;
-  border-radius: 0 !important;
-  background: #000;
-}
 
 /* pusat-pemutar-v4: margin crop 70px menyembunyikan seluruh chrome bawaan YouTube */
 .pemutar-referensi iframe {
@@ -5586,16 +5517,6 @@ html { scroll-behavior: smooth; }
 .panel-tutup .anim-modal, .panel-tutup .anim-filter { animation: panelOut 0.18s ease-in forwards; }
 
 /* ganti-mode-waktu: animasi halus saat berpindah antara pilihan bulan dan rentang waktu */
-@keyframes gantiBulan {
-from { opacity: 0; transform: translateX(-10px) scale(0.98); }
-to { opacity: 1; transform: translateX(0) scale(1); }
-}
-@keyframes gantiRentang {
-from { opacity: 0; transform: translateX(10px) scale(0.98); }
-to { opacity: 1; transform: translateX(0) scale(1); }
-}
-.anim-ganti-bulan { animation: gantiBulan 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
-.anim-ganti-rentang { animation: gantiRentang 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
 
 /* mode-smooth-v2: easing lebih lembut untuk masuk, bayangan cabang untuk keluar, tetangga bergeser mulus */
 @keyframes gantiBulan {
@@ -5866,6 +5787,7 @@ button:active:not(:disabled), a:active, .clickable:active { transition-duration:
 ```javascript
 import { SkeletonDashboard } from '../components/Skeleton.jsx'
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../lib/auth.js'
 import { uploadMedia, deleteMedia } from '../lib/upload.js'
@@ -5873,15 +5795,12 @@ import { syncGaleriFromLogbook } from '../lib/logbook.js'
 import { parseYouTubeId, ytThumb, fetchYouTubeQuota, unggahVideoYouTube } from '../lib/youtube.js'
 import { parseDriveId, driveThumbUrl, driveViewUrl } from '../lib/drive.js'
 import { uploadFotoProfil, updateFotoProfilMahasiswa, hapusFotoProfil } from '../lib/profil.js'
-import { Avatar } from '../components/ui.jsx'
-import { supabase as sbClient } from '../lib/supabase.js'
-import { pratinjauHeic, formatHeic } from '../lib/konversi.js'
-import { LabelProses } from '../components/ui.jsx'
+import { urlPratinjau } from '../lib/konversi.js'
 import { todayInput, detectMediaType, matchesDateFilters, urutkanTanggal } from '../lib/format.js'
 import { KATEGORI, UNIT, GALERI_KEGIATAN } from '../lib/constants.js'
-import { EmptyState, Modal, ConfirmModal, inputCls, labelCls, btnPrimary, btnSmall, AutoTextArea, Pagination, useToast } from '../components/ui.jsx'
+import { Avatar, LabelProses, EmptyState, Modal, ConfirmModal, inputCls, labelCls, btnPrimary, btnSmall, AutoTextArea, Pagination, useToast } from '../components/ui.jsx'
 import { LogbookCard, LogbookDetail, GalleryCard, GalleryDetail, AttendanceCard, AttendanceDetail } from '../components/cards.jsx'
-import { CustomSelect, CustomDateInput, FileInput } from '../components/controls.jsx'
+import { CustomSelect, CustomDateInput, FileInput, ToggleModeMedia, SumberVideo } from '../components/controls.jsx'
 import { SizedIcon, ICONS } from '../components/icons.jsx'
 import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
 
@@ -5898,6 +5817,11 @@ function buatPelaporUpload(setInfo, nomor, total) {
     }
     setInfo(awalan + pesan)
   }
+}
+
+function catatPemakaianKuota(setYtQuota) {
+  setYtQuota(function (q) { return Object.assign({}, q, { used: q.used + 1, remaining: Math.max(0, q.remaining - 1) }) })
+  fetchYouTubeQuota().then(setYtQuota)
 }
 
 const LOG_INITIAL = { kategori: '', status: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
@@ -5931,17 +5855,13 @@ export default function DashboardPage() {
   const [galeri, setGaleri] = useState([])
   const [hadir, setHadir] = useState([])
   const [detail, setDetail] = useState(null)
-
   const [form, setForm] = useState({ tanggal: todayInput(), unit: '', kategori: '', judul: '', kendala: '', solusi: '', pembelajaran: '', status: 'draft' })
   const [items, setItems] = useState([newItem()])
   const [editLogId, setEditLogId] = useState(null)
-
   const [galForm, setGalForm] = useState({ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false })
   const [editGalId, setEditGalId] = useState(null)
-
   const [hadirForm, setHadirForm] = useState({ tanggal: todayInput(), status: 'Masuk', alasan: '' })
   const [editHadirId, setEditHadirId] = useState(null)
-
   const [busy, setBusy] = useState(false)
   const [infoProses, setInfoProses] = useState('')
   const [ytQuota, setYtQuota] = useState({ limit: 6, used: 0, remaining: 6 })
@@ -5954,12 +5874,12 @@ export default function DashboardPage() {
   const [, setVersiFoto] = useState(0)
   const [galMode, setGalMode] = useState('foto')
   const [galYtLink, setGalYtLink] = useState('')
-   const [galDriveLink, setGalDriveLink] = useState('')
+  const [galDriveLink, setGalDriveLink] = useState('')
   const [galOldYt, setGalOldYt] = useState(null)
   const [itemMode, setItemMode] = useState({})
   const [galYtTitle, setGalYtTitle] = useState('')
   const [pendingDelete, setPendingDelete] = useState(null)
-
+  const [konfirmasiEdit, setKonfirmasiEdit] = useState(null)
   const [logFilter, setLogFilter] = useState(LOG_INITIAL)
   const [logFilterOpen, setLogFilterOpen] = useState(false)
   const [galFilter, setGalFilter] = useState(GAL_INITIAL)
@@ -5967,15 +5887,15 @@ export default function DashboardPage() {
   const [hadirFilter, setHadirFilter] = useState(HADIR_INITIAL)
   const [hadirFilterOpen, setHadirFilterOpen] = useState(false)
   const [sort, setSort] = useState('terbaru')
-   const [logPage, setLogPage] = useState(1)
-   const [galPage, setGalPage] = useState(1)
-   const [hadirPage, setHadirPage] = useState(1)
-   const refListLog = useRef(null)
-const refFormLog = useRef(null)
-const refFormGal = useRef(null)
-const refFormHadir = useRef(null)
-   const refListGal = useRef(null)
-   const refListHadir = useRef(null)
+  const [logPage, setLogPage] = useState(1)
+  const [galPage, setGalPage] = useState(1)
+  const [hadirPage, setHadirPage] = useState(1)
+  const refListLog = useRef(null)
+  const refFormLog = useRef(null)
+  const refFormGal = useRef(null)
+  const refFormHadir = useRef(null)
+  const refListGal = useRef(null)
+  const refListHadir = useRef(null)
 
   async function refresh() {
     if (!mahasiswa) return
@@ -6000,17 +5920,92 @@ const refFormHadir = useRef(null)
     return function () { clearInterval(iv) }
   }, [mahasiswa])
 
-   useEffect(function () {
-     setLogPage(1)
-     setGalPage(1)
-     setHadirPage(1)
-   }, [logFilter, galFilter, hadirFilter, sort])
+  useEffect(function () {
+    setLogPage(1)
+    setGalPage(1)
+    setHadirPage(1)
+  }, [logFilter, galFilter, hadirFilter, sort])
 
+   /* ===== proteksi-unsaved-v1: cegah kehilangan draf saat pindah tab/halaman, batal edit, atau tutup tab ===== */
+   const [unsavedModal, setUnsavedModal] = useState(null)
+   const navigate = useNavigate()
+   function isLogbookDirty() {
+     if (editLogId) return true
+     return !!(form.judul || form.kategori || form.unit || form.kendala || form.solusi || form.pembelajaran ||
+       items.some(function (it) { return it.judul || it.deskripsi || it.hasil || it.file }))
+   }
+   function isGaleriDirty() {
+     if (editGalId) return true
+     return !!(galForm.judul || galForm.deskripsi || galForm.kegiatan || galForm.file || galYtLink || galDriveLink)
+   }
+   function isHadirDirty() {
+     if (editHadirId) return true
+     return hadirForm.status !== 'Masuk' || !!hadirForm.alasan
+   }
+   function isAnyFormDirty() {
+     return isLogbookDirty() || isGaleriDirty() || isHadirDirty()
+   }
+   function ulangAnimHalaman() {
+     requestAnimationFrame(function () {
+       const el = document.querySelector('main.anim-page') || document.querySelector('.anim-page')
+       if (!el) return
+       el.style.animation = 'none'
+       void el.offsetWidth
+       el.style.animation = ''
+     })
+   }
+   function bukaModalUnsaved(judul, pesan, labelConfirm, aksi) {
+     setUnsavedModal({
+       title: judul,
+       message: pesan,
+       confirmLabel: labelConfirm,
+       onConfirm: function () { setUnsavedModal(null); aksi() },
+       onCancel: function () { setUnsavedModal(null) }
+     })
+   }
+   function cobaCancelEditLog() {
+     if (isLogbookDirty()) { bukaModalUnsaved('Buang perubahan logbook?', 'Perubahan pada logbook akan hilang dan tidak bisa dikembalikan. Yakin ingin membatalkan?', 'Ya, Buang', cancelEditLog); return }
+     cancelEditLog()
+   }
+   function cobaCancelEditGal() {
+     if (isGaleriDirty()) { bukaModalUnsaved('Buang perubahan galeri?', 'Perubahan pada media galeri akan hilang dan tidak bisa dikembalikan. Yakin ingin membatalkan?', 'Ya, Buang', cancelEditGal); return }
+     cancelEditGal()
+   }
+   function cobaCancelEditHadir() {
+     if (isHadirDirty()) { bukaModalUnsaved('Buang perubahan kehadiran?', 'Perubahan pada daftar hadir akan hilang dan tidak bisa dikembalikan. Yakin ingin membatalkan?', 'Ya, Buang', cancelEditHadir); return }
+     cancelEditHadir()
+   }
+   useEffect(function () {
+     function onBeforeUnload(e) {
+       if (!isAnyFormDirty()) return
+       e.preventDefault()
+       e.returnValue = ''
+     }
+     function onClickLink(e) {
+       if (!isAnyFormDirty()) return
+       const t = e.target
+       const a = t && t.closest ? t.closest('a[href]') : null
+       if (!a) return
+       const href = a.getAttribute('href') || ''
+       if (!href || href.indexOf('http') === 0 || href.indexOf('#') === 0 || a.target === '_blank') return
+       e.preventDefault()
+       e.mbsiDicegah = true
+       bukaModalUnsaved('Pindah halaman?', 'Kamu punya perubahan yang belum disimpan. Yakin ingin meninggalkan halaman ini? Semua perubahan akan hilang.', 'Ya, Tinggalkan', function () { navigate(href); ulangAnimHalaman() })
+     }
+     window.addEventListener('beforeunload', onBeforeUnload)
+     document.addEventListener('click', onClickLink, true)
+     return function () {
+       window.removeEventListener('beforeunload', onBeforeUnload)
+       document.removeEventListener('click', onClickLink, true)
+     }
+   })
   if (loading || !mahasiswa) {
     return <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:py-8"><SkeletonDashboard /></div>
   }
+
   function getItemMode(i) { return itemMode[i] || 'foto' }
   function setItemModeAt(i, mode) { setItemMode(function (p) { const n = Object.assign({}, p); n[i] = mode; return n }) }
+  
   function patchItem(i, patch) {
     setItems(function (prev) {
       return prev.map(function (it, idx) { return idx === i ? Object.assign({}, it, patch) : it })
@@ -6019,14 +6014,9 @@ const refFormHadir = useRef(null)
 
   async function onItemFile(i, file) {
     if (!file) return
-    if (formatHeic(file)) {
-      patchItem(i, { file: file, preview: '', previewLoading: true })
-      const blob = await pratinjauHeic(file)
-      const preview = blob ? URL.createObjectURL(blob) : URL.createObjectURL(file)
-      patchItem(i, { preview: preview, previewLoading: false })
-    } else {
-      patchItem(i, { file: file, preview: URL.createObjectURL(file), previewLoading: false })
-    }
+    patchItem(i, { file: file, preview: '', previewLoading: true })
+    const preview = await urlPratinjau(file)
+    patchItem(i, { preview: preview, previewLoading: false })
   }
 
   function removeItemFile(i) {
@@ -6034,22 +6024,15 @@ const refFormHadir = useRef(null)
   }
 
   function keyDariUrl(url) {
-    try {
-      return new URL(url).pathname.slice(1)
-    } catch (e) {
-      return ''
-    }
+    try { return new URL(url).pathname.slice(1) } catch (e) { return '' }
   }
 
   async function hapusMediaR2(url) {
     if (String(url || '').indexOf('i.ytimg.com') !== -1 || String(url || '').indexOf('youtube') !== -1) return
-     if (String(url || '').indexOf('drive.google.com') !== -1 || String(url || '').indexOf('drive.usercontent.google.com') !== -1) return
-     if (!/^https?:\/\//.test(String(url || ''))) return
+    if (String(url || '').indexOf('drive.google.com') !== -1 || String(url || '').indexOf('drive.usercontent.google.com') !== -1) return
+    if (!/^https?:\/\//.test(String(url || ''))) return
     const key = keyDariUrl(url)
-    if (!key) {
-      console.warn('URL media tidak valid, dilewati:', url)
-      return
-    }
+    if (!key) { console.warn('URL media tidak valid, dilewati:', url); return }
     try {
       await deleteMedia(key)
       console.log('Media R2 terhapus:', key)
@@ -6061,74 +6044,55 @@ const refFormHadir = useRef(null)
   async function submitLogbook(e) {
     e.preventDefault()
     setBusy(true)
-     const menambahLog = !editLogId
+    const menambahLog = !editLogId
     try {
       const clean = []
       const totalUpload = items.reduce(function (n, x) { return n + (x.judul.trim() && x.file ? 1 : 0) }, 0)
       let nomorUpload = 0
       if (totalUpload > 1) setInfoProses('Mengunggah ' + totalUpload + ' file media sekaligus')
+      
       for (let i = 0; i < items.length; i++) {
         const it = items[i]
         if (!it.judul.trim()) continue
-        let mediaPath = null
-        let mediaType = null
-        let mediaThumb = null
+        let mediaPath = null, mediaType = null, mediaThumb = null
         let mediaSource = it.oldSource || 'r2'
         let youtubeId = it.oldYtId || null
+        
         if (it.mode === 'video' && it.ytLink && !it.file) {
           const id = parseYouTubeId(it.ytLink)
           if (!id) { toast.gagal('Link video tidak valid pada kegiatan ' + (i + 1) + '.'); setBusy(false); return }
-          mediaSource = 'youtube'
-          youtubeId = id
-          mediaPath = ytThumb(id)
-          mediaThumb = ytThumb(id)
-          mediaType = 'video'
+          mediaSource = 'youtube'; youtubeId = id; mediaPath = ytThumb(id); mediaThumb = ytThumb(id); mediaType = 'video'
         } else if (it.mode === 'video' && it.file) {
           if (ytQuota.remaining <= 0) { toast.gagal('Kuota upload video hari ini sudah habis. Gunakan link video.'); setBusy(false); return }
           nomorUpload += 1
-      const lapor = buatPelaporUpload(setInfoProses, nomorUpload, totalUpload)
-      lapor('')
-      const hasilYt = await unggahVideoYouTube(it.file, it.judul || 'Dokumentasi Magang', function (p) { lapor('Mengunggah video ' + Math.round(p * 100) + '%') })
-          mediaSource = 'youtube'
-          youtubeId = hasilYt.videoId
-          mediaPath = ytThumb(hasilYt.videoId)
-          mediaThumb = ytThumb(hasilYt.videoId)
-          mediaType = 'video'
-          setYtQuota(function (q) { return Object.assign({}, q, { used: q.used + 1, remaining: Math.max(0, q.remaining - 1) }) })
-          fetchYouTubeQuota().then(setYtQuota)
+          const lapor = buatPelaporUpload(setInfoProses, nomorUpload, totalUpload)
+          lapor('')
+          const hasilYt = await unggahVideoYouTube(it.file, it.judul || 'Dokumentasi Magang', function (p) { lapor('Mengunggah video ' + Math.round(p * 100) + '%') })
+          mediaSource = 'youtube'; youtubeId = hasilYt.videoId; mediaPath = ytThumb(hasilYt.videoId); mediaThumb = ytThumb(hasilYt.videoId); mediaType = 'video'
+          catatPemakaianKuota(setYtQuota)
         } else if (it.file) {
           nomorUpload += 1
-      const lapor = buatPelaporUpload(setInfoProses, nomorUpload, totalUpload)
-      lapor('')
-      const up = await uploadMedia(it.file, 'logbook', lapor)
-          mediaPath = up.publicUrl
-          mediaType = it.file.type.indexOf('video') === 0 ? 'video' : 'foto'
-          mediaThumb = up.thumbUrl || null
-          mediaSource = 'r2'
-          youtubeId = null
+          const lapor = buatPelaporUpload(setInfoProses, nomorUpload, totalUpload)
+          lapor('')
+          const up = await uploadMedia(it.file, 'logbook', lapor)
+          mediaPath = up.publicUrl; mediaType = it.file.type.indexOf('video') === 0 ? 'video' : 'foto'; mediaThumb = up.thumbUrl || null; mediaSource = 'r2'; youtubeId = null
         } else if (it.mode === 'video' && !it.file && !it.ytLink && it.oldYtId) {
-          mediaSource = 'youtube'
-          youtubeId = it.oldYtId
-          mediaPath = ytThumb(it.oldYtId)
-          mediaThumb = ytThumb(it.oldYtId)
-          mediaType = 'video'
+          mediaSource = 'youtube'; youtubeId = it.oldYtId; mediaPath = ytThumb(it.oldYtId); mediaThumb = ytThumb(it.oldYtId); mediaType = 'video'
         } else if (it.oldPath) {
-          mediaPath = it.oldPath
-          mediaType = detectMediaType(it.oldPath)
-          mediaThumb = it.oldThumb || null
-          mediaSource = 'r2'
-          youtubeId = null
+          mediaPath = it.oldPath; mediaType = detectMediaType(it.oldPath); mediaThumb = it.oldThumb || null; mediaSource = 'r2'; youtubeId = null
         }
+        
         let driveIdLog = null
-         if (it.mode === 'video' && it.driveLink) {
-           driveIdLog = parseDriveId(it.driveLink)
-           if (!driveIdLog) { toast.gagal('Link Google Drive tidak valid pada kegiatan ' + (i + 1) + '.'); setBusy(false); return }
-         }
-         clean.push({ judul: it.judul.trim(), deskripsi: it.deskripsi.trim(), hasil: it.hasil.trim(), media_path: mediaPath, media_type: mediaType, media_thumb: mediaThumb, media_source: mediaSource, youtube_id: youtubeId, drive_id: driveIdLog, show_in_gallery: it.show && !!mediaPath })
+        if (it.mode === 'video' && it.driveLink) {
+          driveIdLog = parseDriveId(it.driveLink)
+          if (!driveIdLog) { toast.gagal('Link Google Drive tidak valid pada kegiatan ' + (i + 1) + '.'); setBusy(false); return }
+        }
+        clean.push({ judul: it.judul.trim(), deskripsi: it.deskripsi.trim(), hasil: it.hasil.trim(), media_path: mediaPath, media_type: mediaType, media_thumb: mediaThumb, media_source: mediaSource, youtube_id: youtubeId, drive_id: driveIdLog, show_in_gallery: it.show && !!mediaPath })
       }
+      
       setInfoProses('')
       if (!clean.length) { toast.gagal('Tambahkan minimal satu kegiatan dengan judul.'); setBusy(false); return }
-
+      
       let logId = editLogId
       let oldUrls = []
       if (editLogId) {
@@ -6151,29 +6115,27 @@ const refFormHadir = useRef(null)
         }).select().single()
         logId = ins.data.id
       }
-
+      
       const rows = clean.map(function (c, idx) {
         return { logbook_id: logId, urutan: idx + 1, judul: c.judul, deskripsi: c.deskripsi, hasil: c.hasil, media_path: c.media_path, media_type: c.media_type, media_thumb: c.media_thumb, media_source: c.media_source, youtube_id: c.youtube_id, drive_id: c.drive_id, show_in_gallery: c.show_in_gallery }
       })
       const insItems = await supabase.from('logbook_items').insert(rows).select()
       await syncGaleriFromLogbook(mahasiswa.id, insItems.data || [], { tanggal: form.tanggal, kategori: form.kategori })
-
+      
       const newUrls = []
       clean.forEach(function (c) {
         if (c.media_source === 'youtube') return
         if (c.media_path) newUrls.push(c.media_path)
         if (c.media_thumb) newUrls.push(c.media_thumb)
       })
-      for (const u of oldUrls) {
-        if (newUrls.indexOf(u) === -1) await hapusMediaR2(u)
-      }
-
+      for (const u of oldUrls) { if (newUrls.indexOf(u) === -1) await hapusMediaR2(u) }
+      
       setEditLogId(null)
       setForm({ tanggal: todayInput(), unit: '', kategori: '', judul: '', kendala: '', solusi: '', pembelajaran: '', status: 'draft' })
       setItems([newItem()])
       await refresh()
-       if (menambahLog) setLogPage(1)
-       toast.sukses(menambahLog ? 'Logbook berhasil disimpan' : 'Logbook berhasil diperbarui')
+      if (menambahLog) setLogPage(1)
+      toast.sukses(menambahLog ? 'Logbook berhasil disimpan' : 'Logbook berhasil diperbarui')
     } catch (err) {
       toast.gagal('Gagal menyimpan logbook: ' + err.message)
     }
@@ -6182,11 +6144,22 @@ const refFormHadir = useRef(null)
   }
 
   function gulirKeForm(ref) {
-requestAnimationFrame(function () {
-if (ref && ref.current) ref.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
-})
-}
-function startEditLog(log) {
+    requestAnimationFrame(function () { if (ref && ref.current) ref.current.scrollIntoView({ behavior: 'smooth', block: 'start' }) })
+  }
+
+    function startEditLog(log) {
+    if (isLogbookDirty()) {
+      setKonfirmasiEdit({
+        judul: 'Timpa draf logbook?',
+        pesan: 'Isian form logbook yang belum disimpan akan hilang dan diganti dengan data logbook yang kamu pilih.',
+        aksi: function () { lakukanStartEditLog(log) }
+      })
+      return
+    }
+    lakukanStartEditLog(log)
+  }
+
+  function lakukanStartEditLog(log) {
     setEditLogId(log.id)
     setForm({
       tanggal: log.tanggal, unit: log.unit || '', kategori: log.kategori, judul: log.judul,
@@ -6206,12 +6179,24 @@ function startEditLog(log) {
     setItems([newItem()])
   }
 
-  function startEditGal(g) {
+    function startEditGal(g) {
+    if (isGaleriDirty()) {
+      setKonfirmasiEdit({
+        judul: 'Timpa draf galeri?',
+        pesan: 'Isian form galeri yang belum disimpan akan hilang dan diganti dengan data galeri yang kamu pilih.',
+        aksi: function () { lakukanStartEditGal(g) }
+      })
+      return
+    }
+    lakukanStartEditGal(g)
+  }
+
+  function lakukanStartEditGal(g) {
     setEditGalId(g.id)
     setGalForm({ judul: g.judul, deskripsi: g.deskripsi || '', tanggal: g.tanggal, kegiatan: g.kegiatan, file: null, preview: g.media_source === 'drive' ? driveThumbUrl(g.media_path) : (g.media_path || ''), oldPath: (g.media_source === 'youtube' || g.media_source === 'drive') ? '' : (g.media_path || ''), oldThumb: (g.media_source === 'youtube' || g.media_source === 'drive') ? '' : (g.media_thumb || ''), previewLoading: false })
     setGalMode((g.media_source === 'youtube' || g.media_source === 'drive') ? 'video' : (g.media_type === 'video' ? 'video' : 'foto'))
     setGalYtLink(g.media_source === 'youtube' && g.youtube_id ? 'https://youtu.be/' + g.youtube_id : '')
-     setGalDriveLink(g.drive_id ? driveViewUrl(g.drive_id) : '')
+    setGalDriveLink(g.drive_id ? driveViewUrl(g.drive_id) : '')
     setGalOldYt(g.youtube_id || null)
     gulirKeForm(refFormGal)
   }
@@ -6219,12 +6204,24 @@ function startEditLog(log) {
   function cancelEditGal() {
     setEditGalId(null)
     setGalForm({ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false })
-     setGalMode('foto')
-     setGalYtLink('')
-     setGalOldYt(null)
+    setGalMode('foto')
+    setGalYtLink('')
+    setGalOldYt(null)
   }
 
-  function startEditHadir(h) {
+    function startEditHadir(h) {
+    if (isHadirDirty()) {
+      setKonfirmasiEdit({
+        judul: 'Timpa draf daftar hadir?',
+        pesan: 'Isian form daftar hadir yang belum disimpan akan hilang dan diganti dengan data daftar hadir yang kamu pilih.',
+        aksi: function () { lakukanStartEditHadir(h) }
+      })
+      return
+    }
+    lakukanStartEditHadir(h)
+  }
+
+  function lakukanStartEditHadir(h) {
     setEditHadirId(h.id)
     setHadirForm({ tanggal: h.tanggal, status: h.status, alasan: h.alasan || '' })
     gulirKeForm(refFormHadir)
@@ -6235,77 +6232,49 @@ function startEditLog(log) {
     setHadirForm({ tanggal: todayInput(), status: 'Masuk', alasan: '' })
   }
 
-  function deleteLog(log) {
-    setPendingDelete({ type: 'log', data: log })
-  }
+  function deleteLog(log) { setPendingDelete({ type: 'log', data: log }) }
 
   async function submitGaleri(e) {
     e.preventDefault()
     setBusy(true)
-     const menambahGal = !editGalId
+    const menambahGal = !editGalId
     try {
-      let mediaPath = ''
-      let mediaType = ''
-      let mediaThumb = null
+      let mediaPath = '', mediaType = '', mediaThumb = null
       let mediaSource = galOldYt ? 'youtube' : 'r2'
       let youtubeId = galOldYt || null
+      
       if (galMode === 'video' && galYtLink && !galForm.file) {
         const id = parseYouTubeId(galYtLink)
         if (!id) { toast.gagal('Link video tidak valid.'); setBusy(false); return }
-        mediaSource = 'youtube'
-        youtubeId = id
-        mediaPath = ytThumb(id)
-        mediaThumb = ytThumb(id)
-        mediaType = 'video'
+        mediaSource = 'youtube'; youtubeId = id; mediaPath = ytThumb(id); mediaThumb = ytThumb(id); mediaType = 'video'
       } else if (galMode === 'video' && galForm.file) {
         if (ytQuota.remaining <= 0) { toast.gagal('Kuota upload video hari ini sudah habis. Gunakan link video.'); setBusy(false); return }
         const hasilYt = await unggahVideoYouTube(galForm.file, galForm.judul || ('Dokumentasi ' + galForm.tanggal), function (p) { setInfoProses('Mengunggah video ' + Math.round(p * 100) + '%') })
-        mediaSource = 'youtube'
-        youtubeId = hasilYt.videoId
-        mediaPath = ytThumb(hasilYt.videoId)
-        mediaThumb = ytThumb(hasilYt.videoId)
-        mediaType = 'video'
-        setYtQuota(function (q) { return Object.assign({}, q, { used: q.used + 1, remaining: Math.max(0, q.remaining - 1) }) })
-        fetchYouTubeQuota().then(setYtQuota)
+        mediaSource = 'youtube'; youtubeId = hasilYt.videoId; mediaPath = ytThumb(hasilYt.videoId); mediaThumb = ytThumb(hasilYt.videoId); mediaType = 'video'
+        catatPemakaianKuota(setYtQuota)
       } else if (galForm.file) {
         const up = await uploadMedia(galForm.file, 'galeri', function (pesan) { setInfoProses(pesan) })
-        mediaPath = up.publicUrl
-        mediaType = galForm.file.type.indexOf('video') === 0 ? 'video' : 'foto'
-        mediaThumb = up.thumbUrl || null
-        mediaSource = 'r2'
-        youtubeId = null
+        mediaPath = up.publicUrl; mediaType = galForm.file.type.indexOf('video') === 0 ? 'video' : 'foto'; mediaThumb = up.thumbUrl || null; mediaSource = 'r2'; youtubeId = null
       } else if (galMode === 'video' && !galForm.file && !galYtLink && galOldYt) {
-        mediaSource = 'youtube'
-        youtubeId = galOldYt
-        mediaPath = ytThumb(galOldYt)
-        mediaThumb = ytThumb(galOldYt)
-        mediaType = 'video'
+        mediaSource = 'youtube'; youtubeId = galOldYt; mediaPath = ytThumb(galOldYt); mediaThumb = ytThumb(galOldYt); mediaType = 'video'
       } else if (galForm.oldPath) {
-        mediaPath = galForm.oldPath
-        mediaType = detectMediaType(galForm.oldPath)
-        mediaThumb = galForm.oldThumb || null
-        mediaSource = 'r2'
-        youtubeId = null
+        mediaPath = galForm.oldPath; mediaType = detectMediaType(galForm.oldPath); mediaThumb = galForm.oldThumb || null; mediaSource = 'r2'; youtubeId = null
       }
+      
       if (!mediaPath) { toast.gagal('Galeri wajib memiliki media. Pilih file foto atau video terlebih dahulu.'); setBusy(false); return }
+      
       let driveIdGal = null
       if (galMode === 'video' && galDriveLink) {
         driveIdGal = parseDriveId(galDriveLink)
         if (!driveIdGal) { toast.gagal('Link Google Drive tidak valid.'); setBusy(false); return }
       }
+      
       const payload = {
-        mahasiswa_id: mahasiswa.id,
-        judul: galForm.judul || ('Dokumentasi ' + galForm.tanggal),
-        deskripsi: galForm.deskripsi,
-        tanggal: galForm.tanggal,
-        kegiatan: galForm.kegiatan || 'Lainnya',
-        media_path: mediaPath,
-        media_type: mediaType,
-        media_thumb: mediaThumb,
-        media_source: mediaSource,
-        youtube_id: youtubeId,
-        drive_id: driveIdGal
+        mahasiswa_id: mahasiswa.id, judul: galForm.judul || ('Dokumentasi ' + galForm.tanggal), deskripsi: galForm.deskripsi,
+        tanggal: galForm.tanggal, kegiatan: galForm.kegiatan || 'Lainnya', media_path: mediaPath, media_type: mediaType,
+        media_thumb: mediaThumb, media_source: mediaSource, youtube_id: youtubeId, drive_id: driveIdGal
       }
+      
       let oldGalUrls = []
       if (editGalId) {
         const existing = galeri.find(function (g) { return g.id === editGalId })
@@ -6317,14 +6286,15 @@ function startEditLog(log) {
         await supabase.from('galeri').insert(payload)
       }
       for (const u of oldGalUrls) await hapusMediaR2(u)
+      
       setEditGalId(null)
       setGalForm({ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false })
-     setGalMode('foto')
-     setGalYtLink('')
-     setGalOldYt(null)
+      setGalMode('foto')
+      setGalYtLink('')
+      setGalOldYt(null)
       await refresh()
-       if (menambahGal) setGalPage(1)
-       toast.sukses(menambahGal ? 'Media galeri berhasil disimpan' : 'Media galeri berhasil diperbarui')
+      if (menambahGal) setGalPage(1)
+      toast.sukses(menambahGal ? 'Media galeri berhasil disimpan' : 'Media galeri berhasil diperbarui')
     } catch (err) {
       toast.gagal('Gagal menyimpan galeri: ' + err.message)
     }
@@ -6332,27 +6302,21 @@ function startEditLog(log) {
     setBusy(false)
   }
 
-  function deleteGaleri(item) {
-    setPendingDelete({ type: 'gal', data: item })
+  function deleteGaleri(item) { setPendingDelete({ type: 'gal', data: item }) }
+
+  async function pilihFotoProfil(e) {
+    const f = e.target.files[0]
+    if (!f) return
+    if (f.size > 5 * 1024 * 1024) { toast.gagal('Ukuran foto maksimal 5 MB.'); e.target.value = ''; return }
+    if (fotoPreview && String(fotoPreview).indexOf('blob:') === 0) URL.revokeObjectURL(fotoPreview)
+    setFotoFile(f)
+    setPreviewLoadingFoto(true)
+    setFotoPreview(null)
+    const url = await urlPratinjau(f)
+    setFotoPreview(url)
+    setPreviewLoadingFoto(false)
   }
 
-    async function pilihFotoProfil(e) {
-      const f = e.target.files[0]
-      if (!f) return
-      if (f.size > 5 * 1024 * 1024) { toast.gagal('Ukuran foto maksimal 5 MB.'); e.target.value = ''; return }
-      if (fotoPreview && String(fotoPreview).indexOf('blob:') === 0) URL.revokeObjectURL(fotoPreview)
-      setFotoFile(f)
-      if (formatHeic(f)) {
-        setPreviewLoadingFoto(true)
-        setFotoPreview(null)
-        const blob = await pratinjauHeic(f)
-        setFotoPreview(blob ? URL.createObjectURL(blob) : URL.createObjectURL(f))
-        setPreviewLoadingFoto(false)
-      } else {
-        setFotoPreview(URL.createObjectURL(f))
-        setPreviewLoadingFoto(false)
-      }
-    }
   async function simpanFotoProfil() {
     if (!fotoFile) { toast.gagal('Pilih file foto terlebih dahulu.'); return }
     setUploadingFoto(true)
@@ -6369,6 +6333,7 @@ function startEditLog(log) {
     }
     setUploadingFoto(false)
   }
+
   async function hapusFotoProfilKu() {
     if (!window.confirm('Hapus foto profil saat ini?')) return
     try {
@@ -6381,10 +6346,11 @@ function startEditLog(log) {
       toast.gagal('Gagal menghapus foto profil: ' + err.message)
     }
   }
-async function submitHadir(e) {
+
+  async function submitHadir(e) {
     e.preventDefault()
     setBusy(true)
-     const menambahHadir = !editHadirId
+    const menambahHadir = !editHadirId
     const payload = { mahasiswa_id: mahasiswa.id, tanggal: hadirForm.tanggal, status: hadirForm.status, alasan: hadirForm.status === 'Masuk' ? '' : hadirForm.alasan }
     if (editHadirId) {
       await supabase.from('daftar_hadir').update(payload).eq('id', editHadirId)
@@ -6395,78 +6361,38 @@ async function submitHadir(e) {
     setEditHadirId(null)
     setHadirForm({ tanggal: todayInput(), status: 'Masuk', alasan: '' })
     await refresh()
-     if (menambahHadir) setHadirPage(1)
-     toast.sukses(menambahHadir ? 'Daftar hadir berhasil disimpan' : 'Daftar hadir berhasil diperbarui')
+    if (menambahHadir) setHadirPage(1)
+    toast.sukses(menambahHadir ? 'Daftar hadir berhasil disimpan' : 'Daftar hadir berhasil diperbarui')
     setInfoProses('')
     setBusy(false)
   }
 
-  function deleteHadir(row) {
-    setPendingDelete({ type: 'hadir', data: row })
-  }
+  function deleteHadir(row) { setPendingDelete({ type: 'hadir', data: row }) }
 
   function confirmInfo() {
     if (!pendingDelete) return null
-    if (pendingDelete.type === 'media-item') {
-      return {
-        title: 'Hapus gambar?',
-        message: 'Lampiran gambar pada kegiatan ini akan dibatalkan. Kamu bisa memilih file lain setelahnya.'
-      }
-    }
-    if (pendingDelete.type === 'media-gal') {
-      return {
-        title: 'Hapus gambar?',
-        message: 'Lampiran gambar pada form galeri akan dibatalkan. Kamu bisa memilih file lain setelahnya.'
-      }
-    }
-    if (pendingDelete.type === 'kegiatan') {
-      return {
-        title: 'Hapus kegiatan?',
-        message: 'Kegiatan ' + (pendingDelete.data + 1) + 
-          ' beserta isi formulir dan lampiran yang belum disimpan ' +
-          'akan dibuang. Tindakan ini tidak bisa dibatalkan.'
-      }
-    }
-    if (pendingDelete.type === 'log') {
-      return {
-        title: 'Hapus logbook?',
-        message: 'Logbook "' + pendingDelete.data.judul + '" beserta seluruh rincian kegiatannya akan dihapus permanen. Media galeri yang terhubung dari logbook ini juga ikut terhapus.'
-      }
-    }
+    if (pendingDelete.type === 'media-item') return { title: 'Hapus gambar?', message: 'Lampiran gambar pada kegiatan ini akan dibatalkan. Kamu bisa memilih file lain setelahnya.' }
+    if (pendingDelete.type === 'media-gal') return { title: 'Hapus gambar?', message: 'Lampiran gambar pada form galeri akan dibatalkan. Kamu bisa memilih file lain setelahnya.' }
+    if (pendingDelete.type === 'kegiatan') return { title: 'Hapus kegiatan?', message: 'Kegiatan ' + (pendingDelete.data + 1) + ' beserta isi formulir dan lampiran yang belum disimpan akan dibuang. Tindakan ini tidak bisa dibatalkan.' }
+    if (pendingDelete.type === 'log') return { title: 'Hapus logbook?', message: 'Logbook "' + pendingDelete.data.judul + '" beserta seluruh rincian kegiatannya akan dihapus permanen. Media galeri yang terhubung dari logbook ini juga ikut terhapus.' }
     if (pendingDelete.type === 'gal') {
-      const extra = pendingDelete.data.logbook_item_id
-        ? ' Media ini berasal dari logbook, jadi logbook asalnya tidak ikut terhapus. Centang tampilan galeri pada kegiatan logbook akan dimatikan dan bisa dinyalakan lagi kapan saja.'
-        : ''
-      return {
-        title: 'Hapus media galeri?',
-        message: 'Media "' + pendingDelete.data.judul + '" akan dihapus permanen dari galeri kamu.' + extra
-      }
+      const extra = pendingDelete.data.logbook_item_id ? ' Media ini berasal dari logbook, jadi logbook asalnya tidak ikut terhapus. Centang tampilan galeri pada kegiatan logbook akan dimatikan dan bisa dinyalakan lagi kapan saja.' : ''
+      return { title: 'Hapus media galeri?', message: 'Media "' + pendingDelete.data.judul + '" akan dihapus permanen dari galeri kamu.' + extra }
     }
-    return {
-      title: 'Hapus catatan hadir?',
-      message: 'Catatan kehadiran tanggal ' + pendingDelete.data.tanggal + ' dengan status ' + pendingDelete.data.status + ' akan dihapus permanen.'
-    }
+    return { title: 'Hapus catatan hadir?', message: 'Catatan kehadiran tanggal ' + pendingDelete.data.tanggal + ' dengan status ' + pendingDelete.data.status + ' akan dihapus permanen.' }
   }
 
   async function executeDelete() {
     if (!pendingDelete) return
     const target = pendingDelete
     setPendingDelete(null)
-    if (target.type === 'media-item') {
-      removeItemFile(target.data)
-      return
-    }
-    if (target.type === 'media-gal') {
-      setGalForm(function (g) { return Object.assign({}, g, { file: null, preview: '', oldPath: '' }) })
-      return
-    }
+    if (target.type === 'media-item') { removeItemFile(target.data); return }
+    if (target.type === 'media-gal') { setGalForm(function (g) { return Object.assign({}, g, { file: null, preview: '', oldPath: '' }) }); return }
     if (target.type === 'kegiatan') {
       const buang = items[target.data]
       const pratinjau = buang && buang.preview ? String(buang.preview) : ''
       if (pratinjau.indexOf('blob:') === 0) URL.revokeObjectURL(pratinjau)
-      setItems(function (p) {
-        return p.filter(function (x, idx) { return idx !== target.data })
-      })
+      setItems(function (p) { return p.filter(function (x, idx) { return idx !== target.data }) })
       toast.sukses('Kegiatan ' + (target.data + 1) + ' dihapus')
       return
     }
@@ -6515,41 +6441,44 @@ async function submitHadir(e) {
   })
   const sortedHadir = urutkanTanggal(filteredHadir, sort)
   const hadirFilterActive = countActiveFilters(hadirFilter)
-   const logTotal = filteredLogs.length
-   const logTotalPages = Math.max(1, Math.ceil(logTotal / PER_PAGE_DASH))
-   const logPageAman = Math.min(logPage, logTotalPages)
-   const paginatedLogs = sortedLogs.slice((logPageAman - 1) * PER_PAGE_DASH, logPageAman * PER_PAGE_DASH)
-   const galTotal = filteredGaleri.length
-   const galTotalPages = Math.max(1, Math.ceil(galTotal / PER_PAGE_DASH))
-   const galPageAman = Math.min(galPage, galTotalPages)
-   const paginatedGaleri = sortedGaleri.slice((galPageAman - 1) * PER_PAGE_DASH, galPageAman * PER_PAGE_DASH)
-   const hadirTotal = filteredHadir.length
-   const hadirTotalPages = Math.max(1, Math.ceil(hadirTotal / PER_PAGE_DASH))
-   const hadirPageAman = Math.min(hadirPage, hadirTotalPages)
-   const paginatedHadir = sortedHadir.slice((hadirPageAman - 1) * PER_PAGE_DASH, hadirPageAman * PER_PAGE_DASH)
-   function gantiHalamanLog(p) {
-     setLogPage(p)
-     if (refListLog.current) refListLog.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
-   }
-   function gantiHalamanGal(p) {
-     setGalPage(p)
-     if (refListGal.current) refListGal.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
-   }
-   function gantiHalamanHadir(p) {
-     setHadirPage(p)
-     if (refListHadir.current) refListHadir.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
-   }
+
+  const logTotal = filteredLogs.length
+  const logTotalPages = Math.max(1, Math.ceil(logTotal / PER_PAGE_DASH))
+  const logPageAman = Math.min(logPage, logTotalPages)
+  const paginatedLogs = sortedLogs.slice((logPageAman - 1) * PER_PAGE_DASH, logPageAman * PER_PAGE_DASH)
+
+  const galTotal = filteredGaleri.length
+  const galTotalPages = Math.max(1, Math.ceil(galTotal / PER_PAGE_DASH))
+  const galPageAman = Math.min(galPage, galTotalPages)
+  const paginatedGaleri = sortedGaleri.slice((galPageAman - 1) * PER_PAGE_DASH, galPageAman * PER_PAGE_DASH)
+
+  const hadirTotal = filteredHadir.length
+  const hadirTotalPages = Math.max(1, Math.ceil(hadirTotal / PER_PAGE_DASH))
+  const hadirPageAman = Math.min(hadirPage, hadirTotalPages)
+  const paginatedHadir = sortedHadir.slice((hadirPageAman - 1) * PER_PAGE_DASH, hadirPageAman * PER_PAGE_DASH)
+
+  function gantiHalamanLog(p) { setLogPage(p); if (refListLog.current) refListLog.current.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
+  function gantiHalamanGal(p) { setGalPage(p); if (refListGal.current) refListGal.current.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
+  function gantiHalamanHadir(p) { setHadirPage(p); if (refListHadir.current) refListHadir.current.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
 
   const editGalDerived = editGalId ? ((galeri.find(function (g) { return g.id === editGalId }) || {}).logbook_item_id || null) : null
-
-    function gantiTab(tabBaru) {
-    if (tabBaru !== tab) {
-      cancelEditLog()
-      cancelEditGal()
-      cancelEditHadir()
-      setTab(tabBaru)
-    }
-  }
+  
+     function gantiTab(tabBaru) {
+     if (tabBaru === tab) return
+     if (isAnyFormDirty()) {
+       bukaModalUnsaved('Pindah tab?', 'Kamu punya perubahan yang belum disimpan. Yakin ingin pindah tab? Semua perubahan akan hilang.', 'Ya, Pindah', function () {
+         cancelEditLog()
+         cancelEditGal()
+         cancelEditHadir()
+         setTab(tabBaru)
+       })
+       return
+     }
+     cancelEditLog()
+     cancelEditGal()
+     cancelEditHadir()
+     setTab(tabBaru)
+   }
 
   const tabCls = function (t) {
     return 'px-4 py-2.5 rounded-xl text-xs sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm font-bold ' + (tab === t ? 'bg-bsi-800 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200')
@@ -6561,119 +6490,104 @@ async function submitHadir(e) {
         <div className="flex flex-wrap items-center justify-between gap-4 sm:gap-6">
           <div>
             <div className="flex flex-wrap items-center gap-4 sm:gap-6">
-<div className="avatar-kepala-dash"><Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl" onClick={function () { gantiTab('profil') }} title="Kelola foto profil" /></div>
-<div className="min-w-0 flex-1">
-            <h1 className="truncate text-lg sm:text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">{mahasiswa.nama}</h1>
-            <p className="text-sm text-slate-600">NIM {mahasiswa.nim}</p>
-{mahasiswa.prodi ? <p className="truncate text-sm text-slate-600">{mahasiswa.prodi}</p> : null}
+              <div className="avatar-kepala-dash"><Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl" onClick={function () { gantiTab('profil') }} title="Kelola foto profil" /></div>
+              <div className="min-w-0 flex-1">
+                <h1 className="truncate text-lg sm:text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">{mahasiswa.nama}</h1>
+                <p className="text-sm text-slate-600">NIM {mahasiswa.nim}</p>
+                {mahasiswa.prodi ? <p className="truncate text-sm text-slate-600">{mahasiswa.prodi}</p> : null}
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 sm:mt-8">
+            <button onClick={function () { gantiTab('logbook') }} className={tabCls('logbook')}>Logbook</button>
+            <button onClick={function () { gantiTab('galeri') }} className={tabCls('galeri')}>Galeri</button>
+            <button onClick={function () { gantiTab('absen') }} className={tabCls('absen')}>Daftar Hadir</button>
+            <button onClick={function () { gantiTab('profil') }} className={tabCls('profil')}>Profil</button>
           </div>
         </div>
-        </div>
-<div className="flex flex-wrap gap-2 sm:mt-8">
-          <button onClick={function () { gantiTab('logbook') }} className={tabCls('logbook')}>Logbook</button>
-          <button onClick={function () { gantiTab('galeri') }} className={tabCls('galeri')}>Galeri</button>
-          <button onClick={function () { gantiTab('absen') }} className={tabCls('absen')}>Daftar Hadir</button>
-<button onClick={function () { gantiTab('profil') }} className={tabCls('profil')}>Profil</button>
-        </div>
-      
-</div></section>
+      </section>
 
       {tab === 'profil' ? (
-<section className="anim-tab mt-8 grid gap-6 lg:grid-cols-[0.85fr_1.15fr] items-start">
-<div className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 shadow-sm flex flex-col items-center text-center">
-<div className="avatar-profil-tab"><Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="2xl" /></div>
-<h2 className="mt-4 text-xl font-black text-slate-900">{mahasiswa.nama}</h2>
-<p className="mt-1 text-sm text-slate-600">NIM {mahasiswa.nim}</p>
-<div className="mt-5 flex flex-wrap justify-center gap-2">
-<button type="button" onClick={function () { if (showUploadFoto) { setShowUploadFoto(false); return } setFotoPreview(null); setFotoFile(null); setShowUploadFoto(true) }} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition">{mahasiswa.foto_profil ? 'Ganti Foto' : 'Upload Foto'}</button>
-{mahasiswa.foto_profil ? <button type="button" onClick={hapusFotoProfilKu} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-red-50 text-red-700 hover:bg-red-100 transition">Hapus Foto</button> : null}
-</div>
-<div className={'unggah-foto-wrap w-full' + (showUploadFoto ? ' unggah-foto-buka' : '')}>
-<div className="unggah-foto-dalam">
-<div className="unggah-foto-isi mt-5 w-full border-t border-slate-200 pt-5 text-left">
-<div className="flex flex-wrap items-start gap-4">
-{previewLoadingFoto ? (
-  <div className="h-20 w-20 rounded-[28%] bg-slate-100 flex items-center justify-center">
-    <div className="h-6 w-6 rounded-full border-2 border-bsi-500 border-t-transparent animate-spin"></div>
-  </div>
-) : fotoPreview ? <img src={fotoPreview} alt="Pratinjau foto profil" className="h-20 w-20 rounded-[28%] object-cover shadow-lg" /> : null}
-<div className="min-w-0 flex-1">
-<input type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/heif" onChange={pilihFotoProfil} aria-label="Pilih foto profil" className="block w-full text-sm text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-800 hover:file:bg-emerald-100" />
-<p className="mt-2 text-xs text-slate-600">Format JPG, PNG, WebP, atau HEIC iPhone. Otomatis dikonversi ke WebP ringan. Maksimal 5 MB.</p>
-</div>
-</div>
-<div className="mt-4 flex gap-2">
-<button type="button" onClick={simpanFotoProfil} disabled={uploadingFoto || !fotoFile} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition disabled:opacity-50">{uploadingFoto ? 'Mengunggah...' : 'Simpan Foto'}</button>
-<button type="button" onClick={function () { setShowUploadFoto(false) }} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition">Batal</button>
-</div>
-</div>
-</div>
-</div>
-</div>
-<div className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 shadow-sm">
-<h2 className="text-lg font-black text-slate-900">Ringkasan aktivitas magang</h2>
-<div className="stats-profil-grid mt-4 grid grid-cols-3 gap-2">
-<div className="rounded-xl bg-slate-50 p-2 text-center"><p className="text-[10px] font-bold text-slate-600 uppercase tracking-wide">Logbook</p><p className="text-base font-black text-bsi-800">{typeof logs !== 'undefined' ? logs.length : 0}</p></div>
-<div className="rounded-xl bg-slate-50 p-2 text-center"><p className="text-[10px] font-bold text-slate-600 uppercase tracking-wide">Media</p><p className="text-base font-black text-bsi-800">{typeof galeri !== 'undefined' ? galeri.length : 0}</p></div>
-<div className="rounded-xl bg-slate-50 p-2 text-center"><p className="text-[10px] font-bold text-slate-600 uppercase tracking-wide">Kehadiran</p><p className="text-base font-black text-bsi-800">{typeof hadir !== 'undefined' ? hadir.length : 0}</p></div>
-</div>
-<div className="mt-6 space-y-2 border-t border-slate-100 pt-4 text-sm text-slate-600">
-<p>Foto profil tampil otomatis di kartu kamu pada halaman publik, logbook, galeri, dan daftar hadir.</p>
-<p>Gunakan foto dengan pencahayaan baik dan wajah terlihat jelas agar mudah dikenali dosen pembimbing.</p>
-<p>Klik foto pada kartu header kapan saja untuk kembali ke halaman ini dan memperbarui foto.</p>
-</div>
-</div>
-</section>
-) : null}
+        <section className="anim-tab mt-8 grid gap-6 lg:grid-cols-[0.85fr_1.15fr] items-start">
+          <div className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 shadow-sm flex flex-col items-center text-center">
+            <div className="avatar-profil-tab"><Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="2xl" /></div>
+            <h2 className="mt-4 text-xl font-black text-slate-900">{mahasiswa.nama}</h2>
+            <p className="mt-1 text-sm text-slate-600">NIM {mahasiswa.nim}</p>
+            <div className="mt-5 flex flex-wrap justify-center gap-2">
+              <button type="button" onClick={function () { if (showUploadFoto) { setShowUploadFoto(false); return } setFotoPreview(null); setFotoFile(null); setShowUploadFoto(true) }} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition">{mahasiswa.foto_profil ? 'Ganti Foto' : 'Upload Foto'}</button>
+              {mahasiswa.foto_profil ? <button type="button" onClick={hapusFotoProfilKu} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-red-50 text-red-700 hover:bg-red-100 transition">Hapus Foto</button> : null}
+            </div>
+            <div className={'unggah-foto-wrap w-full' + (showUploadFoto ? ' unggah-foto-buka' : '')}>
+              <div className="unggah-foto-dalam">
+                <div className="unggah-foto-isi mt-5 w-full border-t border-slate-200 pt-5 text-left">
+                  <div className="flex flex-wrap items-start gap-4">
+                    {previewLoadingFoto ? (
+                      <div className="h-20 w-20 rounded-[28%] bg-slate-100 flex items-center justify-center">
+                        <div className="h-6 w-6 rounded-full border-2 border-bsi-500 border-t-transparent animate-spin"></div>
+                      </div>
+                    ) : fotoPreview ? <img src={fotoPreview} alt="Pratinjau foto profil" className="h-20 w-20 rounded-[28%] object-cover shadow-lg" /> : null}
+                    <div className="min-w-0 flex-1">
+                      <input type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/heif" onChange={pilihFotoProfil} aria-label="Pilih foto profil" className="block w-full text-sm text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-800 hover:file:bg-emerald-100" />
+                      <p className="mt-2 text-xs text-slate-600">Format JPG, PNG, WebP, atau HEIC iPhone. Otomatis dikonversi ke WebP ringan. Maksimal 5 MB.</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 flex gap-2">
+                    <button type="button" onClick={simpanFotoProfil} disabled={uploadingFoto || !fotoFile} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition disabled:opacity-50">{uploadingFoto ? 'Mengunggah...' : 'Simpan Foto'}</button>
+                    <button type="button" onClick={function () { setShowUploadFoto(false) }} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition">Batal</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 shadow-sm">
+            <h2 className="text-lg font-black text-slate-900">Ringkasan aktivitas magang</h2>
+            <div className="stats-profil-grid mt-4 grid grid-cols-3 gap-2">
+              <div className="rounded-xl bg-slate-50 p-2 text-center"><p className="text-[10px] font-bold text-slate-600 uppercase tracking-wide">Logbook</p><p className="text-base font-black text-bsi-800">{typeof logs !== 'undefined' ? logs.length : 0}</p></div>
+              <div className="rounded-xl bg-slate-50 p-2 text-center"><p className="text-[10px] font-bold text-slate-600 uppercase tracking-wide">Media</p><p className="text-base font-black text-bsi-800">{typeof galeri !== 'undefined' ? galeri.length : 0}</p></div>
+              <div className="rounded-xl bg-slate-50 p-2 text-center"><p className="text-[10px] font-bold text-slate-600 uppercase tracking-wide">Kehadiran</p><p className="text-base font-black text-bsi-800">{typeof hadir !== 'undefined' ? hadir.length : 0}</p></div>
+            </div>
+            <div className="mt-6 space-y-2 border-t border-slate-100 pt-4 text-sm text-slate-600">
+              <p>Foto profil tampil otomatis di kartu kamu pada halaman publik, logbook, galeri, dan daftar hadir.</p>
+              <p>Gunakan foto dengan pencahayaan baik dan wajah terlihat jelas agar mudah dikenali dosen pembimbing.</p>
+              <p>Klik foto pada kartu header kapan saja untuk kembali ke halaman ini dan memperbarui foto.</p>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
-{tab === 'logbook' ? (
+      {tab === 'logbook' ? (
         <section className="anim-tab mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
           <div ref={refFormLog} className={'card-hover scroll-mt-24 bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editLogId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
-            <ModeIndicator edit={!!editLogId} onCancel={cancelEditLog} />
+            <ModeIndicator edit={!!editLogId} onCancel={cobaCancelEditLog} />
             <h2 className="mt-3 text-xl sm:text-2xl font-black text-slate-900">{editLogId ? 'Ubah logbook harian' : 'Tambah logbook harian'}</h2>
             <form onSubmit={submitLogbook} className="mt-6 space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label className={labelCls}>Tanggal <span className="text-red-500">*</span></label>
-                  <div className="mt-1.5">
-                    <CustomDateInput value={form.tanggal} onChange={function (v) { setForm(Object.assign({}, form, { tanggal: v })) }} />
-                  </div>
+                  <div className="mt-1.5"><CustomDateInput value={form.tanggal} onChange={function (v) { setForm(Object.assign({}, form, { tanggal: v })) }} /></div>
                 </div>
                 <div>
                   <label className={labelCls}>Unit utama</label>
-                  <div className="mt-1.5">
-                    <CustomSelect placeholder="Pilih unit" value={form.unit}
-                      onChange={function (v) { setForm(Object.assign({}, form, { unit: v })) }}
-                      options={UNIT.map(function (u) { return { value: u, label: u } })} />
-                  </div>
+                  <div className="mt-1.5"><CustomSelect placeholder="Pilih unit" value={form.unit} onChange={function (v) { setForm(Object.assign({}, form, { unit: v })) }} options={UNIT.map(function (u) { return { value: u, label: u } })} /></div>
                 </div>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label className={labelCls}>Kategori utama <span className="text-red-500">*</span></label>
-                  <div className="mt-1.5">
-                    <CustomSelect placeholder="Pilih kategori" value={form.kategori}
-                      onChange={function (v) { setForm(Object.assign({}, form, { kategori: v })) }}
-                      options={KATEGORI.map(function (k) { return { value: k, label: k } })} />
-                  </div>
+                  <div className="mt-1.5"><CustomSelect placeholder="Pilih kategori" value={form.kategori} onChange={function (v) { setForm(Object.assign({}, form, { kategori: v })) }} options={KATEGORI.map(function (k) { return { value: k, label: k } })} /></div>
                 </div>
                 <div>
                   <label className={labelCls}>Status tampil</label>
-                  <div className="mt-1.5">
-                    <CustomSelect value={form.status}
-                      onChange={function (v) { setForm(Object.assign({}, form, { status: v })) }}
-                      options={[{ value: 'draft', label: 'Draft' }, { value: 'publik', label: 'Published' }]} />
-                  </div>
+                  <div className="mt-1.5"><CustomSelect value={form.status} onChange={function (v) { setForm(Object.assign({}, form, { status: v })) }} options={[{ value: 'draft', label: 'Draft' }, { value: 'publik', label: 'Published' }]} /></div>
                 </div>
               </div>
               <div>
                 <label className={labelCls}>Ringkasan hari ini <span className="text-red-500">*</span></label>
                 <input required className={inputCls} value={form.judul} onChange={function (e) { setForm(Object.assign({}, form, { judul: e.target.value })) }} aria-label="Ringkasan hari ini" placeholder="Contoh: Kegiatan harian di divisi Back Office" />
               </div>
-
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-semibold text-slate-700">Rincian kegiatan hari ini <span className="text-red-500">*</span></p>
+                  <p className="text-sm font-semibold text-slate-700">Rincian kegiatan hari ini <span className="text-red-500">*</span></p>
                 </div>
                 {items.map(function (it, i) {
                   return (
@@ -6685,6 +6599,7 @@ async function submitHadir(e) {
                       <input className={inputCls} value={it.judul} onChange={function (e) { patchItem(i, { judul: e.target.value }) }} aria-label="Judul kegiatan" placeholder="Judul kegiatan" />
                       <AutoTextArea className={inputCls} value={it.deskripsi} onChange={function (e) { patchItem(i, { deskripsi: e.target.value }) }} aria-label="Deskripsi kegiatan" placeholder="Deskripsi singkat kegiatan" />
                       <input className={inputCls} value={it.hasil} onChange={function (e) { patchItem(i, { hasil: e.target.value }) }} aria-label="Hasil kegiatan" placeholder="Hasil (opsional)" />
+                      
                       {it.previewLoading ? (
                         <div className="rounded-2xl border border-slate-200 bg-slate-100 aspect-video grid place-items-center">
                           <div className="flex flex-col items-center gap-3">
@@ -6693,36 +6608,37 @@ async function submitHadir(e) {
                           </div>
                         </div>
                       ) : null}
+                      
                       {it.preview ? (
                         <div className="relative rounded-2xl overflow-hidden aspect-video bg-slate-900">
                           {it.file && it.file.type.indexOf('video') === 0
                             ? <video src={it.preview} controls playsInline preload="metadata" className="absolute inset-0 h-full w-full object-contain" />
                             : <img src={it.preview} alt="Pratinjau" className="absolute inset-0 h-full w-full object-contain" />}
-                          <button type="button" onClick={function () { setPendingDelete({ type: 'media-item', data: i }) }} title="Hapus gambar"
-                            className="absolute top-2 right-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-red-500 text-white hover:bg-red-600">
+                          <button type="button" onClick={function () { setPendingDelete({ type: 'media-item', data: i }) }} title="Hapus gambar" className="absolute top-2 right-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-red-500 text-white hover:bg-red-600">
                             <SizedIcon name="close" size={14} />
                           </button>
                         </div>
                       ) : null}
-                      <div className="flex gap-2">
-                        <button type="button" onClick={function () { patchItem(i, { mode: 'foto' }) }} className={'px-3 py-1.5 rounded-xl text-xs font-bold ' + (it.mode !== 'video' ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700')}>Foto</button>
-                        <button type="button" onClick={function () { patchItem(i, { mode: 'video' }) }} className={'px-3 py-1.5 rounded-xl text-xs font-bold ' + (it.mode === 'video' ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700')}>Video</button>
-                      </div>
+                      
+                      <ToggleModeMedia value={it.mode} onChange={function (m) { patchItem(i, { mode: m }) }} />
+                      
                       {it.mode === 'video' ? (
-                        <div className="space-y-2">
-                          <p className="text-xs font-semibold text-slate-600">Sisa kuota upload video hari ini: {ytQuotaLoading ? <span className="inline-block w-3 h-3 ml-1 border-2 border-slate-400 border-t-transparent rounded-full animate-spin align-middle"></span> : <>{ytQuota.remaining} dari {ytQuota.limit}</>}</p>
-                          <div className={ytQuota.remaining <= 0 && !it.file ? 'opacity-50 pointer-events-none' : ''}>
-                            <FileInput accept="video/*" fileName={it.file ? it.file.name : ''} label="Klik untuk pilih video" hint="Video maks 50 MB. Format MP4, MOV, WebM, atau MKV."
-                              onChange={function (e) { onItemFile(i, e.target.files[0]) }} />
-                          </div>
-                          {ytQuota.remaining <= 0 ? <p className="text-xs text-red-600">Kuota habis. Gunakan link video di bawah.</p> : null}
-                          <input className={inputCls} value={it.ytLink} onChange={function (e) { patchItem(i, { ytLink: e.target.value }) }} aria-label="Link video YouTube" placeholder="Link video YouTube untuk tampilan (opsional)" />
-                          <input className={inputCls} value={it.driveLink} onChange={function (e) { patchItem(i, { driveLink: e.target.value }) }} aria-label="Link Google Drive" placeholder="Link Google Drive untuk unduhan (opsional)" />
-                        </div>
+                        <SumberVideo
+                          inputCls={inputCls}
+                          quotaRemaining={ytQuota.remaining}
+                          quotaLimit={ytQuota.limit}
+                          quotaLoading={ytQuotaLoading}
+                          fileName={it.file ? it.file.name : ''}
+                          onFile={function (e) { onItemFile(i, e.target.files[0]) }}
+                          ytLink={it.ytLink}
+                          onYtLink={function (e) { patchItem(i, { ytLink: e.target.value }) }}
+                          driveLink={it.driveLink}
+                          onDriveLink={function (e) { patchItem(i, { driveLink: e.target.value }) }}
+                        />
                       ) : (
-                        <FileInput accept="image/*" fileName={it.file ? it.file.name : ''} label="Klik untuk pilih foto" hint="Foto JPG, PNG, atau HEIC otomatis dikonversi ke WebP."
-                          onChange={function (e) { onItemFile(i, e.target.files[0]) }} />
+                        <FileInput accept="image/*" fileName={it.file ? it.file.name : ''} label="Klik untuk pilih foto" hint="Foto JPG, PNG, atau HEIC otomatis dikonversi ke WebP." onChange={function (e) { onItemFile(i, e.target.files[0]) }} />
                       )}
+                      
                       <label className={'flex items-start gap-3 rounded-2xl border p-3 cursor-pointer w-full ' + (it.preview ? (it.show ? 'border-gold-500 bg-gold-500/5' : 'border-slate-200') : 'border-slate-200 bg-slate-50 opacity-50 cursor-not-allowed')}>
                         <input type="checkbox" disabled={!it.preview} checked={it.show} onChange={function (e) { patchItem(i, { show: e.target.checked }) }} className="mt-0.5 h-4 w-4 rounded accent-bsi-800" />
                         <span className="text-sm font-semibold text-slate-800">Tampilkan kegiatan ini di galeri</span>
@@ -6732,39 +6648,30 @@ async function submitHadir(e) {
                 })}
                 <button type="button" onClick={function () { setItems(function (p) { return p.concat([newItem()]) }); toast.sukses('Kegiatan ' + (items.length + 1) + ' ditambahkan') }} className={'flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-bsi-500 hover:bg-slate-100 hover:text-bsi-900'}>+ Tambah kegiatan</button>
               </div>
-
               <div className="grid gap-4 md:grid-cols-3">
                 <div><label className={labelCls}>Kendala</label><AutoTextArea className={inputCls} value={form.kendala} onChange={function (e) { setForm(Object.assign({}, form, { kendala: e.target.value })) }} aria-label="Kendala" placeholder="Opsional" /></div>
                 <div><label className={labelCls}>Solusi</label><AutoTextArea className={inputCls} value={form.solusi} onChange={function (e) { setForm(Object.assign({}, form, { solusi: e.target.value })) }} aria-label="Solusi" placeholder="Opsional" /></div>
                 <div><label className={labelCls}>Pembelajaran</label><AutoTextArea className={inputCls} value={form.pembelajaran} onChange={function (e) { setForm(Object.assign({}, form, { pembelajaran: e.target.value })) }} aria-label="Pembelajaran" placeholder="Opsional" /></div>
               </div>
-
               <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks={infoProses || 'Menyimpan'} /> : (editLogId ? 'Simpan perubahan' : 'Simpan logbook')}</button>
             </form>
           </div>
-
           <div className="space-y-5 min-w-0">
             <h2 ref={refListLog} className="text-xl sm:text-2xl font-black text-slate-900 scroll-mt-24">Logbook kamu</h2>
-            <FilterBar open={logFilterOpen} onToggle={function () { setLogFilterOpen(function (o) { return !o }) }} activeCount={logFilterActive}
-              onReset={function () { setLogFilter(LOG_INITIAL) }}>
-              <FilterSelect icon={ICONS.tag} value={logFilter.kategori} onChange={function (v) { setLogFilter(Object.assign({}, logFilter, { kategori: v })) }}
-                options={[{ value: '', label: 'Semua kategori' }].concat(KATEGORI.map(function (k) { return { value: k, label: k } }))} />
-              <FilterSelect icon={ICONS.check} value={logFilter.status} onChange={function (v) { setLogFilter(Object.assign({}, logFilter, { status: v })) }}
-                options={[{ value: '', label: 'Semua status' }, { value: 'draft', label: 'Draft' }, { value: 'publik', label: 'Published' }]} />
+            <FilterBar open={logFilterOpen} onToggle={function () { setLogFilterOpen(function (o) { return !o }) }} activeCount={logFilterActive} onReset={function () { setLogFilter(LOG_INITIAL) }}>
+              <FilterSelect icon={ICONS.tag} value={logFilter.kategori} onChange={function (v) { setLogFilter(Object.assign({}, logFilter, { kategori: v })) }} options={[{ value: '', label: 'Semua kategori' }].concat(KATEGORI.map(function (k) { return { value: k, label: k } }))} />
+              <FilterSelect icon={ICONS.check} value={logFilter.status} onChange={function (v) { setLogFilter(Object.assign({}, logFilter, { status: v })) }} options={[{ value: '', label: 'Semua status' }, { value: 'draft', label: 'Draft' }, { value: 'publik', label: 'Published' }]} />
               <TimeFilter filter={logFilter} set={setLogFilter} />
               <SortSelect value={sort} onChange={setSort} />
             </FilterBar>
             <p className="text-sm text-slate-600">Total {filteredLogs.length} logbook{logTotalPages > 1 ? ' • Halaman ' + logPageAman + ' dari ' + logTotalPages : ''}</p>
             <div className="grid gap-5 md:grid-cols-2 kartu-grid">
               {paginatedLogs.map(function (l) {
-                return <LogbookCard key={l.id} log={l} isOwner
-                  onDetail={function () { setDetail({ type: 'log', data: l }) }}
-                  onEdit={function () { startEditLog(l) }}
-                  onDelete={function () { deleteLog(l) }} />
+                return <LogbookCard key={l.id} log={l} isOwner onDetail={function () { setDetail({ type: 'log', data: l }) }} onEdit={function () { startEditLog(l) }} onDelete={function () { deleteLog(l) }} />
               })}
             </div>
             {!filteredLogs.length ? <EmptyState title={logs.length ? 'Logbook tidak ditemukan' : 'Belum ada logbook'} desc={logs.length ? 'Coba reset filter atau pilih filter lain.' : 'Tambahkan logbook harian pertama kamu.'} /> : null}
-             <Pagination totalItems={logTotal} perPage={PER_PAGE_DASH} page={logPageAman} onPageChange={gantiHalamanLog} />
+            <Pagination totalItems={logTotal} perPage={PER_PAGE_DASH} page={logPageAman} onPageChange={gantiHalamanLog} />
           </div>
         </section>
       ) : null}
@@ -6772,48 +6679,45 @@ async function submitHadir(e) {
       {tab === 'galeri' ? (
         <section className="anim-tab mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
           <div ref={refFormGal} className={'card-hover scroll-mt-24 bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editGalId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
-            <ModeIndicator edit={!!editGalId} onCancel={cancelEditGal} />
+            <ModeIndicator edit={!!editGalId} onCancel={cobaCancelEditGal} />
             <h2 className="mt-3 text-xl sm:text-2xl font-black text-slate-900">{editGalId ? 'Ubah media galeri' : 'Tambah media galeri'}</h2>
             <form onSubmit={submitGaleri} className="mt-6 space-y-4">
               <div>
                 <label className={labelCls}>Jenis media {editGalId ? null : <span className="text-red-500">*</span>}</label>
-                <div className="mt-1.5 flex gap-2">
-                  <button type="button" onClick={function () { setGalMode('foto') }} className={'px-3 py-1.5 rounded-xl text-xs font-bold ' + (galMode !== 'video' ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700')}>Foto</button>
-                  <button type="button" onClick={function () { setGalMode('video') }} className={'px-3 py-1.5 rounded-xl text-xs font-bold ' + (galMode === 'video' ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700')}>Video</button>
-                </div>
+                <ToggleModeMedia className="mt-1.5 flex gap-2" value={galMode} onChange={setGalMode} />
                 <div className="mt-1.5">
                   {galMode === 'video' ? (
-                    <div className="space-y-2">
-                      <p className="text-xs font-semibold text-slate-600">Sisa kuota upload video hari ini: {ytQuotaLoading ? <span className="inline-block w-3 h-3 ml-1 border-2 border-slate-400 border-t-transparent rounded-full animate-spin align-middle"></span> : <>{ytQuota.remaining} dari {ytQuota.limit}</>}</p>
-                      <div className={ytQuota.remaining <= 0 && !galForm.file ? 'opacity-50 pointer-events-none' : ''}>
-                        <FileInput accept="video/*" fileName={galForm.file ? galForm.file.name : ''} label="Klik untuk pilih video" hint="Video maks 50 MB. Format MP4, MOV, WebM, atau MKV."
-                          onChange={function (e) {
-                            const f = e.target.files[0]
-                            if (!f) return
-                            setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: URL.createObjectURL(f), previewLoading: false }) })
-                          }} />
-                      </div>
-                      {ytQuota.remaining <= 0 ? <p className="text-xs text-red-600">Kuota habis. Gunakan link video di bawah.</p> : null}
-                      <input className={inputCls} value={galYtLink} onChange={function (e) { setGalYtLink(e.target.value) }} aria-label="Link video YouTube" placeholder="Link video YouTube untuk tampilan (opsional)" />
-                       <input className={inputCls} value={galDriveLink} onChange={function (e) { setGalDriveLink(e.target.value) }} aria-label="Link Google Drive" placeholder="Link Google Drive untuk unduhan (opsional)" />
-                    </div>
+                    <SumberVideo
+                      inputCls={inputCls}
+                      quotaRemaining={ytQuota.remaining}
+                      quotaLimit={ytQuota.limit}
+                      quotaLoading={ytQuotaLoading}
+                      fileName={galForm.file ? galForm.file.name : ''}
+                      onFile={async function (e) {
+                        const f = e.target.files[0]
+                        if (!f) return
+                        setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: '', previewLoading: true }) })
+                        const preview = await urlPratinjau(f)
+                        setGalForm(function (g) { return Object.assign({}, g, { preview: preview, previewLoading: false }) })
+                      }}
+                      ytLink={galYtLink}
+                      onYtLink={function (e) { setGalYtLink(e.target.value) }}
+                      driveLink={galDriveLink}
+                      onDriveLink={function (e) { setGalDriveLink(e.target.value) }}
+                    />
                   ) : (
                     <FileInput accept="image/*" fileName={galForm.file ? galForm.file.name : ''} label="Klik untuk pilih foto" hint="Foto JPG, PNG, atau HEIC otomatis dikonversi ke WebP."
                       onChange={async function (e) {
                         const f = e.target.files[0]
                         if (!f) return
-                        if (formatHeic(f)) {
-                          setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: '', previewLoading: true }) })
-                          const blob = await pratinjauHeic(f)
-                          const preview = blob ? URL.createObjectURL(blob) : URL.createObjectURL(f)
-                          setGalForm(function (g) { return Object.assign({}, g, { preview: preview, previewLoading: false }) })
-                        } else {
-                          setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: URL.createObjectURL(f), previewLoading: false }) })
-                        }
+                        setGalForm(function (g) { return Object.assign({}, g, { file: f, preview: '', previewLoading: true }) })
+                        const preview = await urlPratinjau(f)
+                        setGalForm(function (g) { return Object.assign({}, g, { preview: preview, previewLoading: false }) })
                       }} />
                   )}
                 </div>
               </div>
+              
               {galForm.previewLoading ? (
                 <div className="rounded-2xl border border-slate-200 bg-slate-100 aspect-video grid place-items-center">
                   <div className="flex flex-col items-center gap-3">
@@ -6822,32 +6726,29 @@ async function submitHadir(e) {
                   </div>
                 </div>
               ) : null}
+              
               {galForm.preview ? (
                 <div className="relative rounded-2xl overflow-hidden aspect-video bg-slate-900">
                   {galForm.file && galForm.file.type.indexOf('video') === 0
                     ? <video src={galForm.preview} controls playsInline preload="metadata" className="absolute inset-0 h-full w-full object-contain" />
                     : <img src={galForm.preview} alt="Pratinjau" className="absolute inset-0 h-full w-full object-contain" />}
-                  <button type="button" onClick={function () { setPendingDelete({ type: 'media-gal' }) }} title="Hapus gambar"
-                    className="absolute top-2 right-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-red-500 text-white hover:bg-red-600">
+                  <button type="button" onClick={function () { setPendingDelete({ type: 'media-gal' }) }} title="Hapus gambar" className="absolute top-2 right-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-red-500 text-white hover:bg-red-600">
                     <SizedIcon name="close" size={14} />
                   </button>
                 </div>
               ) : null}
+              
               <div className="grid gap-4 sm:grid-cols-2">
                 <div><label className={labelCls}>Judul (opsional)</label><input className={inputCls} value={galForm.judul} onChange={function (e) { setGalForm(Object.assign({}, galForm, { judul: e.target.value })) }} aria-label="Judul media" placeholder="Kosongkan untuk judul otomatis" /></div>
                 <div>
                   <label className={labelCls}>Tanggal (opsional)</label>
-                  <div className="mt-1.5">
-                    <CustomDateInput value={galForm.tanggal} onChange={function (v) { setGalForm(Object.assign({}, galForm, { tanggal: v })) }} />
-                  </div>
+                  <div className="mt-1.5"><CustomDateInput value={galForm.tanggal} onChange={function (v) { setGalForm(Object.assign({}, galForm, { tanggal: v })) }} /></div>
                 </div>
               </div>
               <div>
                 <label className={labelCls}>Kegiatan (opsional)</label>
                 <div className="mt-1.5">
-                  <CustomSelect placeholder="Pilih kegiatan" value={galForm.kegiatan}
-                    onChange={function (v) { setGalForm(Object.assign({}, galForm, { kegiatan: v })) }}
-                    options={GALERI_KEGIATAN.map(function (k) { return { value: k, label: k } })} />
+                  <CustomSelect placeholder="Pilih kegiatan" value={galForm.kegiatan} onChange={function (v) { setGalForm(Object.assign({}, galForm, { kegiatan: v })) }} options={GALERI_KEGIATAN.map(function (k) { return { value: k, label: k } })} />
                 </div>
                 {editGalDerived ? <p className="mt-1 text-xs text-slate-600">Media ini berasal dari logbook. Perubahan judul, deskripsi, kegiatan, dan tanggal hanya memengaruhi galeri dan tidak akan ditimpa saat logbook disimpan.</p> : null}
               </div>
@@ -6855,25 +6756,18 @@ async function submitHadir(e) {
               <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks={infoProses || 'Menyimpan'} /> : (editGalId ? 'Simpan perubahan media' : 'Unggah media')}</button>
             </form>
           </div>
-
           <div className="space-y-5 min-w-0">
             <h2 ref={refListGal} className="text-xl sm:text-2xl font-black text-slate-900 scroll-mt-24">Galeri kamu</h2>
-            <FilterBar open={galFilterOpen} onToggle={function () { setGalFilterOpen(function (o) { return !o }) }} activeCount={galFilterActive}
-              onReset={function () { setGalFilter(GAL_INITIAL) }}>
-              <FilterSelect icon={ICONS.tag} value={galFilter.kegiatan} onChange={function (v) { setGalFilter(Object.assign({}, galFilter, { kegiatan: v })) }}
-                options={[{ value: '', label: 'Semua kegiatan' }].concat(GALERI_KEGIATAN.map(function (k) { return { value: k, label: k } }))} />
-              <FilterSelect icon={ICONS.image} value={galFilter.tipe} onChange={function (v) { setGalFilter(Object.assign({}, galFilter, { tipe: v })) }}
-                options={[{ value: '', label: 'Semua media' }, { value: 'foto', label: 'Foto' }, { value: 'video', label: 'Video' }]} />
+            <FilterBar open={galFilterOpen} onToggle={function () { setGalFilterOpen(function (o) { return !o }) }} activeCount={galFilterActive} onReset={function () { setGalFilter(GAL_INITIAL) }}>
+              <FilterSelect icon={ICONS.tag} value={galFilter.kegiatan} onChange={function (v) { setGalFilter(Object.assign({}, galFilter, { kegiatan: v })) }} options={[{ value: '', label: 'Semua kegiatan' }].concat(GALERI_KEGIATAN.map(function (k) { return { value: k, label: k } }))} />
+              <FilterSelect icon={ICONS.image} value={galFilter.tipe} onChange={function (v) { setGalFilter(Object.assign({}, galFilter, { tipe: v })) }} options={[{ value: '', label: 'Semua media' }, { value: 'foto', label: 'Foto' }, { value: 'video', label: 'Video' }]} />
               <TimeFilter filter={galFilter} set={setGalFilter} />
               <SortSelect value={sort} onChange={setSort} />
             </FilterBar>
             <p className="text-sm text-slate-600">Total {filteredGaleri.length} media{galTotalPages > 1 ? ' • Halaman ' + galPageAman + ' dari ' + galTotalPages : ''}</p>
             <div className="grid gap-5 md:grid-cols-2 kartu-grid">
               {paginatedGaleri.map(function (g) {
-                return <GalleryCard key={g.id} item={g} isOwner
-                  onDetail={function () { setDetail({ type: 'gal', data: g }) }}
-                  onEdit={function () { startEditGal(g) }}
-                  onDelete={function () { deleteGaleri(g) }} />
+                return <GalleryCard key={g.id} item={g} isOwner onDetail={function () { setDetail({ type: 'gal', data: g }) }} onEdit={function () { startEditGal(g) }} onDelete={function () { deleteGaleri(g) }} />
               })}
               {!filteredGaleri.length ? <EmptyState icon="camera" title={galeri.length ? 'Media tidak ditemukan' : 'Belum ada media galeri'} desc={galeri.length ? 'Coba reset filter atau pilih filter lain.' : 'Unggah foto atau video pertama kamu.'} /> : null}
             </div>
@@ -6885,22 +6779,18 @@ async function submitHadir(e) {
       {tab === 'absen' ? (
         <section className="anim-tab mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
           <div ref={refFormHadir} className={'card-hover scroll-mt-24 bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editHadirId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
-            <ModeIndicator edit={!!editHadirId} onCancel={cancelEditHadir} />
+            <ModeIndicator edit={!!editHadirId} onCancel={cobaCancelEditHadir} />
             <h2 className="mt-3 text-xl sm:text-2xl font-black text-slate-900">{editHadirId ? 'Ubah daftar hadir' : 'Isi daftar hadir'}</h2>
             <form onSubmit={submitHadir} className="mt-6 space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label className={labelCls}>Tanggal <span className="text-red-500">*</span></label>
-                  <div className="mt-1.5">
-                    <CustomDateInput value={hadirForm.tanggal} onChange={function (v) { setHadirForm(Object.assign({}, hadirForm, { tanggal: v })) }} />
-                  </div>
+                  <div className="mt-1.5"><CustomDateInput value={hadirForm.tanggal} onChange={function (v) { setHadirForm(Object.assign({}, hadirForm, { tanggal: v })) }} /></div>
                 </div>
                 <div>
                   <label className={labelCls}>Status kehadiran <span className="text-red-500">*</span></label>
                   <div className="mt-1.5">
-                    <CustomSelect value={hadirForm.status}
-                      onChange={function (v) { setHadirForm(Object.assign({}, hadirForm, { status: v, alasan: v === 'Masuk' ? '' : hadirForm.alasan })) }}
-                      options={[{ value: 'Masuk', label: 'Masuk' }, { value: 'Izin', label: 'Izin' }, { value: 'Bolos', label: 'Bolos' }]} />
+                    <CustomSelect value={hadirForm.status} onChange={function (v) { setHadirForm(Object.assign({}, hadirForm, { status: v, alasan: v === 'Masuk' ? '' : hadirForm.alasan })) }} options={[{ value: 'Masuk', label: 'Masuk' }, { value: 'Izin', label: 'Izin' }, { value: 'Bolos', label: 'Bolos' }]} />
                   </div>
                 </div>
               </div>
@@ -6918,27 +6808,21 @@ async function submitHadir(e) {
               <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks="Menyimpan" /> : (editHadirId ? 'Simpan perubahan' : 'Simpan daftar hadir')}</button>
             </form>
           </div>
-
           <div className="space-y-5 min-w-0">
             <h2 ref={refListHadir} className="text-xl sm:text-2xl font-black text-slate-900 scroll-mt-24">Daftar hadir kamu</h2>
-            <FilterBar open={hadirFilterOpen} onToggle={function () { setHadirFilterOpen(function (o) { return !o }) }} activeCount={hadirFilterActive}
-              onReset={function () { setHadirFilter(HADIR_INITIAL) }}>
-              <FilterSelect icon={ICONS.check} value={hadirFilter.status} onChange={function (v) { setHadirFilter(Object.assign({}, hadirFilter, { status: v })) }}
-                options={[{ value: '', label: 'Semua status' }, { value: 'Masuk', label: 'Masuk' }, { value: 'Izin', label: 'Izin' }, { value: 'Bolos', label: 'Bolos' }]} />
+            <FilterBar open={hadirFilterOpen} onToggle={function () { setHadirFilterOpen(function (o) { return !o }) }} activeCount={hadirFilterActive} onReset={function () { setHadirFilter(HADIR_INITIAL) }}>
+              <FilterSelect icon={ICONS.check} value={hadirFilter.status} onChange={function (v) { setHadirFilter(Object.assign({}, hadirFilter, { status: v })) }} options={[{ value: '', label: 'Semua status' }, { value: 'Masuk', label: 'Masuk' }, { value: 'Izin', label: 'Izin' }, { value: 'Bolos', label: 'Bolos' }]} />
               <TimeFilter filter={hadirFilter} set={setHadirFilter} />
               <SortSelect value={sort} onChange={setHadirFilterOpen && setSort ? setSort : setSort} />
             </FilterBar>
             <p className="text-sm text-slate-600">Total {filteredHadir.length} catatan{hadirTotalPages > 1 ? ' • Halaman ' + hadirPageAman + ' dari ' + hadirTotalPages : ''}</p>
             <div className="grid gap-5 md:grid-cols-2 kartu-grid">
-            {paginatedHadir.map(function (h) {
-              return <AttendanceCard key={h.id} row={h} isOwner
-                onDetail={function () { setDetail({ type: 'hadir', data: h }) }}
-                onEdit={function () { startEditHadir(h) }}
-                onDelete={function () { deleteHadir(h) }} />
-            })}
+              {paginatedHadir.map(function (h) {
+                return <AttendanceCard key={h.id} row={h} isOwner onDetail={function () { setDetail({ type: 'hadir', data: h }) }} onEdit={function () { startEditHadir(h) }} onDelete={function () { deleteHadir(h) }} />
+              })}
             </div>
             {!filteredHadir.length ? <EmptyState icon="clipboard" title={hadir.length ? 'Catatan tidak ditemukan' : 'Belum ada data kehadiran'} desc={hadir.length ? 'Coba reset filter atau pilih filter lain.' : 'Isi daftar hadir pertama kamu.'} /> : null}
-             <Pagination totalItems={hadirTotal} perPage={PER_PAGE_DASH} page={hadirPageAman} onPageChange={gantiHalamanHadir} />
+            <Pagination totalItems={hadirTotal} perPage={PER_PAGE_DASH} page={hadirPageAman} onPageChange={gantiHalamanHadir} />
           </div>
         </section>
       ) : null}
@@ -6948,14 +6832,34 @@ async function submitHadir(e) {
         {detail && detail.type === 'gal' ? <GalleryDetail item={detail.data} /> : null}
         {detail && detail.type === 'hadir' ? <AttendanceDetail row={detail.data} /> : null}
       </Modal>
-
+      
       <ConfirmModal
-open={!!pendingDelete}
-title={pendingDelete && confirmInfo() ? confirmInfo().title : ''}
-message={pendingDelete && confirmInfo() ? confirmInfo().message : ''}
-onCancel={function () { setPendingDelete(null) }}
-onConfirm={executeDelete}
-/>
+        open={!!pendingDelete}
+        title={pendingDelete && confirmInfo() ? confirmInfo().title : ''}
+        message={pendingDelete && confirmInfo() ? confirmInfo().message : ''}
+        onCancel={function () { setPendingDelete(null) }}
+        onConfirm={executeDelete}
+      />
+        <ConfirmModal
+          open={!!konfirmasiEdit}
+          title={konfirmasiEdit ? konfirmasiEdit.judul : ''}
+          message={konfirmasiEdit ? konfirmasiEdit.pesan : ''}
+          confirmLabel="Ya, Timpa"
+          icon="trash"
+          tone="bahaya"
+          onCancel={function () { setKonfirmasiEdit(null) }}
+          onConfirm={function () { const aksi = konfirmasiEdit ? konfirmasiEdit.aksi : null; setKonfirmasiEdit(null); if (aksi) aksi() }}
+        />
+       <ConfirmModal
+         open={!!unsavedModal}
+         title={unsavedModal ? unsavedModal.title : ''}
+         message={unsavedModal ? unsavedModal.message : ''}
+         confirmLabel={unsavedModal ? unsavedModal.confirmLabel : 'Ya'}
+         icon="trash"
+         tone="bahaya"
+         onCancel={unsavedModal ? unsavedModal.onCancel : function () { setUnsavedModal(null) }}
+         onConfirm={unsavedModal ? unsavedModal.onConfirm : function () { setUnsavedModal(null) }}
+       />
     </div>
   )
 }
