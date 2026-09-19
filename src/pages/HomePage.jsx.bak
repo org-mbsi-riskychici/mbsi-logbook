@@ -47,7 +47,7 @@ export default function HomePage() {
               <Link to="/absen" className="px-4 py-2.5 rounded-xl bg-white/10 text-white text-sm font-bold hover:bg-white/20 sm:px-6 sm:py-3 sm:rounded-2xl sm:text-base">Daftar Hadir</Link>
               {mahasiswa
                 ? <Link to="/dashboard" className="px-4 py-2.5 rounded-xl bg-[#ffffff] text-[#135033] text-sm font-bold hover:bg-[#f1f5f9] sm:px-6 sm:py-3 sm:rounded-2xl sm:text-base">Buka Dashboard</Link>
-                : <Link to="/login" className="px-4 py-2.5 rounded-xl bg-[#ffffff] text-[#135033] text-sm font-bold hover:bg-[#f1f5f9] sm:px-6 sm:py-3 sm:rounded-2xl sm:text-base">Masuk Akun</Link>}
+                : <Link to="/login" className="px-4 py-2.5 rounded-xl bg-[#ffffff] text-[#135033] text-sm font-bold hover:bg-[#f1f5f9] sm:px-6 sm:py-3 sm:rounded-2xl sm:text-base">Masuk Intern</Link>}
             </div>
           </div>
         </div>
@@ -80,7 +80,7 @@ export default function HomePage() {
                   </div>
                 )
               })}
-          {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum Ada Logbook Publik" desc="Logbook yang sudah dibagikan akan tampil di sini." /></div> : null}
+          {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum Ada Logbook Publik" desc="Logbook yang sudah berstatus Published akan tampil di sini." /></div> : null}
         </div>
         <div className="mt-8 flex justify-center">
           <Link to="/logbook" className="rounded-xl bg-bsi-800 px-5 py-2.5 text-xs font-bold text-white hover:bg-bsi-900 sm:rounded-2xl sm:px-6 sm:py-3 sm:text-sm">Lihat Semua Logbook</Link>

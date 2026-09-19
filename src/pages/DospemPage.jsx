@@ -41,7 +41,7 @@ export default function DospemPage() {
   return (
     <div>
       <section className="card-hover rounded-[2rem] bg-bsi-900 text-white p-5 sm:p-5 sm:p-8 lg:p-12">
-        <span className="inline-flex px-3 py-1.5 rounded-full bg-white/10 text-[10px] font-semibold uppercase tracking-wide sm:px-4 sm:py-2 sm:text-xs">Monitoring Dospem dan Kaprodi</span>
+        <span className="inline-flex px-3 py-1.5 rounded-full bg-white/10 text-[10px] font-semibold uppercase tracking-wide sm:px-4 sm:py-2 sm:text-xs">Untuk Dospem & Kaprodi</span>
         <h1 className="mt-6 text-2xl sm:text-2xl sm:text-3xl lg:text-5xl font-black max-w-3xl leading-tight">Ringkasan Kegiatan Magang Tim di Bank BSI</h1>
         <p className="mt-3 max-w-3xl text-sm leading-relaxed text-white/80 sm:mt-4 sm:text-base">Halaman ini dapat diakses tanpa login.</p>
         <div className="mt-5 grid grid-cols-2 gap-2.5 sm:mt-8 sm:gap-4 xl:grid-cols-4">
@@ -125,7 +125,7 @@ return (
 </section>
 
       <section className="mt-10">
-        <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Aktivitas yang Sudah Dipublikasikan</h2>
+        <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Aktivitas yang Sudah Dibagikan</h2>
         <div className="grid-pusat mt-6">
           {loading
             ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })

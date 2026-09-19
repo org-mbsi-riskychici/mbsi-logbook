@@ -86,7 +86,7 @@ export function FilterBar(props) {
             {props.activeCount > 0 ? (
               <button onClick={props.onReset}
                 className="inline-flex items-center gap-2 rounded-2xl bg-red-50 border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100">
-                {ICONS.close}<span>Hapus Filter</span>
+                {ICONS.close}<span>Reset</span>
               </button>
             ) : null}
           </div>

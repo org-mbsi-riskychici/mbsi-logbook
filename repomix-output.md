@@ -90,9 +90,7 @@ supabase/
 .gitignore
 index.html
 package.json
-pasang-guard-edit.cjs
 postcss.config.js
-rapikan-judul.cjs
 README.md
 tailwind.config.js
 vercel.json
@@ -100,216 +98,6 @@ vite.config.js
 ```
 
 # Files
-
-## File: rapikan-judul.cjs
-```javascript
-#!/usr/bin/env node
-/*
- * rapikan-judul.cjs
- * Menerapkan Title Case hanya pada elemen UI yang sesuai (judul, label, tombol,
- * badge, opsi, judul modal/empty state, tooltip label). Kalimat deskriptif,
- * pesan, dan placeholder tetap sentence case.
- * Idempoten: aman dijalankan ulang; string dipetakan eksak lengkap dengan
- * tanda petik/pagarnya sehingga tidak akan mengenai bagian kalimat lain.
- *
- * Pakai (dari root proyek):  node rapikan-judul.cjs
- */
-const fs = require('fs')
-const path = require('path')
-
-const PETA = [
-  // ===== Judul halaman & seksi (JSX text) =====
-  ['>Catatan kegiatan magang<', '>Catatan Kegiatan Magang<'],
-  ['>Foto dan video kegiatan magang<', '>Foto dan Video Kegiatan Magang<'],
-  ['>Monitoring kehadiran tim magang<', '>Monitoring Kehadiran Tim Magang<'],
-  ['>Ringkasan kegiatan magang tim di Bank BSI<', '>Ringkasan Kegiatan Magang Tim di Bank BSI<'],
-  ['>Profil tim magang<', '>Profil Tim Magang<'],
-  ['>Aktivitas yang sudah dipublikasikan<', '>Aktivitas yang Sudah Dipublikasikan<'],
-  ['>Logbook terbaru tim<', '>Logbook Terbaru Tim<'],
-  ['>Lihat semua logbook<', '>Lihat Semua Logbook<'],
-  ['>Lihat logbook<', '>Lihat Logbook<'],
-  ['>Lihat galeri<', '>Lihat Galeri<'],
-  ['>Lihat daftar hadir<', '>Lihat Daftar Hadir<'],
-  ['>Logbook kamu<', '>Logbook Kamu<'],
-  ['>Galeri kamu<', '>Galeri Kamu<'],
-  ['>Daftar hadir kamu<', '>Daftar Hadir Kamu<'],
-  ['>Rincian kegiatan<', '>Rincian Kegiatan<'],
-  ['>Refleksi harian<', '>Refleksi Harian<'],
-  ['>Alasan atau keterangan<', '>Alasan atau Keterangan<'],
-  ['>Detail daftar hadir<', '>Detail Daftar Hadir<'],
-  ['>Grafik kehadiran per mahasiswa<', '>Grafik Kehadiran per Mahasiswa<'],
-  ['>Daftar kehadiran sesuai filter<', '>Daftar Kehadiran sesuai Filter<'],
-  ['>Masuk untuk mengisi logbook, galeri, dan daftar hadir<', '>Masuk untuk Mengisi Logbook, Galeri, dan Daftar Hadir<'],
-  ['>Login mahasiswa magang<', '>Login Mahasiswa Magang<'],
-  ['>Gagal masuk<', '>Gagal Masuk<'],
-  ['>Ringkasan aktivitas magang<', '>Ringkasan Aktivitas Magang<'],
-  ['>Tampilkan kegiatan ini di galeri<', '>Tampilkan Kegiatan Ini di Galeri<'],
-  ['>+ Tambah kegiatan<', '>+ Tambah Kegiatan<'],
-  ['>Putar ulang<', '>Putar Ulang<'],
-  ['>Video tidak dapat dimuat<', '>Video Tidak Dapat Dimuat<'],
-  ['>Menyiapkan pratinjau video<', '>Menyiapkan Pratinjau Video<'],
-  ['>Pratinjau video belum siap<', '>Pratinjau Video Belum Siap<'],
-  ['>Hari ini<', '>Hari Ini<'],
-  ['>Di galeri<', '>Di Galeri<'],
-  ['>Dari logbook<', '>Dari Logbook<'],
-  ['>Masuk ke dashboard<', '>Masuk ke Dashboard<'],
-  // ===== Label form (JSX text) =====
-  ['>Unit utama<', '>Unit Utama<'],
-  ['>Kategori utama<', '>Kategori Utama<'],
-  ['>Status tampil<', '>Status Tampil<'],
-  ['>Ringkasan hari ini<', '>Ringkasan Hari Ini<'],
-  ['>Rincian kegiatan hari ini<', '>Rincian Kegiatan Hari Ini<'],
-  ['>Jenis media ', '>Jenis Media '],
-  ['>Judul (opsional)<', '>Judul (Opsional)<'],
-  ['>Tanggal (opsional)<', '>Tanggal (Opsional)<'],
-  ['>Kegiatan (opsional)<', '>Kegiatan (Opsional)<'],
-  ['>Deskripsi (opsional)<', '>Deskripsi (Opsional)<'],
-  ['>Status kehadiran<', '>Status Kehadiran<'],
-  // ===== Label statistik (prop & JSX text) =====
-  ['label="Total mahasiswa magang"', 'label="Total Mahasiswa Magang"'],
-  ['sub="Mahasiswa terdaftar dalam tim"', 'sub="Mahasiswa Terdaftar dalam Tim"'],
-  ['label="Total logbook publik"', 'label="Total Logbook Publik"'],
-  ['sub="Catatan kegiatan harian"', 'sub="Catatan Kegiatan Harian"'],
-  ['label="Total media galeri"', 'label="Total Media Galeri"'],
-  ['sub="Foto dan video dokumentasi"', 'sub="Foto dan Video Dokumentasi"'],
-  ['label="Total catatan hadir"', 'label="Total Catatan Hadir"'],
-  ['sub="Sesuai filter aktif"', 'sub="Sesuai Filter Aktif"'],
-  ['sub="Mahasiswa hadir"', 'sub="Mahasiswa Hadir"'],
-  ['sub="Dengan keterangan"', 'sub="Dengan Keterangan"'],
-  ['sub="Tanpa keterangan"', 'sub="Tanpa Keterangan"'],
-  ['>Total mahasiswa<', '>Total Mahasiswa<'],
-  ['>Logbook publik<', '>Logbook Publik<'],
-  ['>Media galeri<', '>Media Galeri<'],
-  ['>Catatan hadir<', '>Catatan Hadir<'],
-  // ===== Opsi dropdown & placeholder pilih =====
-  ["'Semua mahasiswa'", "'Semua Mahasiswa'"],
-  ["'Semua kategori'", "'Semua Kategori'"],
-  ["'Semua status'", "'Semua Status'"],
-  ["'Semua kegiatan'", "'Semua Kegiatan'"],
-  ["'Semua media'", "'Semua Media'"],
-  ['placeholder="Pilih unit"', 'placeholder="Pilih Unit"'],
-  ['placeholder="Pilih kategori"', 'placeholder="Pilih Kategori"'],
-  ['placeholder="Pilih kegiatan"', 'placeholder="Pilih Kegiatan"'],
-  ["'Pilih bulan'", "'Pilih Bulan'"],
-  ["'Pilih tanggal'", "'Pilih Tanggal'"],
-  // ===== Judul modal / konfirmasi / empty state =====
-  ['title="Logbook tidak ditemukan"', 'title="Logbook Tidak Ditemukan"'],
-  ['title="Belum ada logbook"', 'title="Belum Ada Logbook"'],
-  ['title="Belum ada media galeri"', 'title="Belum Ada Media Galeri"'],
-  ['title="Media tidak ditemukan"', 'title="Media Tidak Ditemukan"'],
-  ['title="Belum ada data kehadiran"', 'title="Belum Ada Data Kehadiran"'],
-  ['title="Catatan tidak ditemukan"', 'title="Catatan Tidak Ditemukan"'],
-  ['title="Belum ada data mahasiswa"', 'title="Belum Ada Data Mahasiswa"'],
-  ['title="Belum ada logbook publik"', 'title="Belum Ada Logbook Publik"'],
-  ['title="Keluar dari akun?"', 'title="Keluar dari Akun?"'],
-  ["'Hapus gambar?'", "'Hapus Gambar?'"],
-  ["'Hapus kegiatan?'", "'Hapus Kegiatan?'"],
-  ["'Hapus logbook?'", "'Hapus Logbook?'"],
-  ["'Hapus media galeri?'", "'Hapus Media Galeri?'"],
-  ["'Hapus catatan hadir?'", "'Hapus Catatan Hadir?'"],
-  ["'Pindah tab?'", "'Pindah Tab?'"],
-  ["'Pindah halaman?'", "'Pindah Halaman?'"],
-  ["'Buang perubahan logbook?'", "'Buang Perubahan Logbook?'"],
-  ["'Buang perubahan galeri?'", "'Buang Perubahan Galeri?'"],
-  ["'Buang perubahan kehadiran?'", "'Buang Perubahan Kehadiran?'"],
-  ["'Timpa draf logbook?'", "'Timpa Draf Logbook?'"],
-  ["'Timpa draf galeri?'", "'Timpa Draf Galeri?'"],
-  ["'Timpa draf daftar hadir?'", "'Timpa Draf Daftar Hadir?'"],
-  ["'Hapus data ini?'", "'Hapus Data Ini?'"],
-  // ===== Judul form dashboard (ternary) & tombol submit =====
-  ["'Ubah logbook harian'", "'Ubah Logbook Harian'"],
-  ["'Tambah logbook harian'", "'Tambah Logbook Harian'"],
-  ["'Ubah media galeri'", "'Ubah Media Galeri'"],
-  ["'Tambah media galeri'", "'Tambah Media Galeri'"],
-  ["'Ubah daftar hadir'", "'Ubah Daftar Hadir'"],
-  ["'Isi daftar hadir'", "'Isi Daftar Hadir'"],
-  ["'Simpan perubahan media'", "'Simpan Perubahan Media'"],
-  ["'Simpan perubahan'", "'Simpan Perubahan'"],
-  ["'Simpan logbook'", "'Simpan Logbook'"],
-  ["'Unggah media'", "'Unggah Media'"],
-  ["'Simpan daftar hadir'", "'Simpan Daftar Hadir'"],
-  // ===== Badge, label file, teks kontrol =====
-  ["'Unit belum diisi'", "'Unit Belum Diisi'"],
-  ['label="Klik untuk pilih foto"', 'label="Klik untuk Pilih Foto"'],
-  ['label="Klik untuk pilih video"', 'label="Klik untuk Pilih Video"'],
-  ["'Klik untuk pilih foto atau video'", "'Klik untuk Pilih Foto atau Video'"],
-  // ===== Tooltip / aria-label berupa label =====
-  ['title="Kelola foto profil"', 'title="Kelola Foto Profil"'],
-  ['title="Hapus gambar"', 'title="Hapus Gambar"'],
-  ['title="Perbesar media"', 'title="Perbesar Media"'],
-  ['title="Putar video"', 'title="Putar Video"'],
-  ['title="Putar ulang"', 'title="Putar Ulang"'],
-  ['title="Geser durasi"', 'title="Geser Durasi"'],
-  ['title="Nyalakan suara"', 'title="Nyalakan Suara"'],
-  ['title="Layar penuh"', 'title="Layar Penuh"'],
-  ['title="Keluar layar penuh"', 'title="Keluar Layar Penuh"'],
-  ['title="Tutup detail"', 'title="Tutup Detail"'],
-  ['title="Tutup notifikasi"', 'title="Tutup Notifikasi"'],
-  ['title="Unduh media"', 'title="Unduh Media"'],
-  ['title="Unduh video dari Google Drive"', 'title="Unduh Video dari Google Drive"'],
-  ['title="Ganti tema"', 'title="Ganti Tema"'],
-  ['title="Lihat kode akses"', 'title="Lihat Kode Akses"'],
-  ['title="Sembunyikan kode akses"', 'title="Sembunyikan Kode Akses"'],
-  ['aria-label="Ringkasan hari ini"', 'aria-label="Ringkasan Hari Ini"'],
-  ['aria-label="Judul kegiatan"', 'aria-label="Judul Kegiatan"'],
-  ['aria-label="Deskripsi kegiatan"', 'aria-label="Deskripsi Kegiatan"'],
-  ['aria-label="Hasil (opsional)"', 'aria-label="Hasil (Opsional)"'],
-  ['aria-label="Judul media"', 'aria-label="Judul Media"'],
-  ['aria-label="Deskripsi media"', 'aria-label="Deskripsi Media"'],
-  ['aria-label="Alasan atau keterangan"', 'aria-label="Alasan atau Keterangan"'],
-  ['aria-label="Pilih foto profil"', 'aria-label="Pilih Foto Profil"'],
-  ['aria-label="Kode akses"', 'aria-label="Kode Akses"'],
-  ['aria-label="Putar atau jeda video"', 'aria-label="Putar atau Jeda Video"']
-]
-
-function daftarFile(dir, hasil) {
-  for (const nama of fs.readdirSync(dir)) {
-    const p = path.join(dir, nama)
-    const st = fs.statSync(p)
-    if (st.isDirectory()) daftarFile(p, hasil)
-    else if (/\.(jsx|js)$/.test(nama)) hasil.push(p)
-  }
-  return hasil
-}
-
-function main() {
-  const root = path.resolve(process.cwd(), 'src')
-  if (!fs.existsSync(root)) { console.error('✗ Folder src tidak ditemukan.'); process.exit(1) }
-  const files = daftarFile(root, [])
-  let total = 0
-  const terpakai = new Set()
-  for (const f of files) {
-    let isi = fs.readFileSync(f, 'utf8')
-    const asli = isi
-    for (let i = 0; i < PETA.length; i++) {
-      const [lama, baru] = PETA[i]
-      if (isi.indexOf(lama) !== -1) {
-        isi = isi.split(lama).join(baru)
-        total++
-        terpakai.add(i)
-      }
-    }
-    if (isi !== asli) {
-      fs.writeFileSync(f, isi, 'utf8')
-      console.log('  ✓ ' + path.relative(process.cwd(), f))
-    }
-  }
-  const sisa = PETA.filter(function (_, i) { return !terpakai.has(i) }).map(function (p) { return p[0] })
-  console.log('')
-  console.log('✓ SELESAI: ' + total + ' kelompok string diperbarui ke Title Case.')
-  if (sisa.length) {
-    console.log('! String berikut tidak ditemukan (mungkin sudah diterapkan atau penulisannya berbeda):')
-    sisa.forEach(function (s) { console.log('   - ' + s) })
-  }
-  console.log('')
-  console.log('Yang SENGAJA tidak diubah (tetap sentence case):')
-  console.log('  - kalimat deskripsi/paragraf, pesan toast & error, placeholder contoh,')
-  console.log('    teks hint panjang, dan isi llms.txt/robots.txt.')
-  console.log('Cek cepat: npm run dev, lalu lihat judul halaman, label form, dan tombol.')
-}
-
-main()
-```
 
 ## File: api/_lib/sesi.js
 ```javascript
@@ -609,135 +397,6 @@ R2_ACCESS_KEY_ID=
 R2_SECRET_ACCESS_KEY=
 R2_BUCKET_NAME=mbsi-media
 R2_PUBLIC_BASE_URL=
-```
-
-## File: pasang-guard-edit.cjs
-```javascript
-#!/usr/bin/env node
-/*
- * pasang-guard-edit.cjs
- * Menambahkan modal konfirmasi sebelum tombol Edit menimpa form yang belum disimpan.
- * Aman dijalankan ulang (idempoten) dan tidak menulis file bila penanda tidak cocok.
- *
- * Pakai (dari root proyek):  node pasang-guard-edit.cjs
- */
-const fs = require('fs')
-const path = require('path')
-
-const REL = path.join('src', 'pages', 'DashboardPage.jsx')
-const p = path.resolve(process.cwd(), REL)
-if (!fs.existsSync(p)) { console.error('✗ File tidak ditemukan: ' + REL); process.exit(1) }
-
-let isi = fs.readFileSync(p, 'utf8')
-isi = isi.replace(/\r\n/g, '\n')
-
-if (isi.indexOf('konfirmasiEdit') !== -1) {
-  console.log('= Guard tombol Edit sudah terpasang, tidak ada yang diubah.')
-  process.exit(0)
-}
-
-const masalah = []
-const adaGuardLama = isi.indexOf('function isLogbookDirty') !== -1
-const cekLog = adaGuardLama ? 'isLogbookDirty()' : 'logbookKotor()'
-const cekGal = adaGuardLama ? 'isGaleriDirty()' : 'galeriKotor()'
-const cekHadir = adaGuardLama ? 'isHadirDirty()' : 'hadirKotor()'
-
-const PEMERIKSA = [
-  'function logbookKotor() {',
-  '  if (editLogId) return true',
-  '  return !!(form.judul || form.kategori || form.unit || form.kendala || form.solusi || form.pembelajaran ||',
-  '    items.some(function (it) { return it.judul || it.deskripsi || it.hasil || it.file }))',
-  '}',
-  'function galeriKotor() {',
-  '  if (editGalId) return true',
-  '  return !!(galForm.judul || galForm.deskripsi || galForm.kegiatan || galForm.file || galYtLink || galDriveLink)',
-  '}',
-  'function hadirKotor() {',
-  '  if (editHadirId) return true',
-  '  return hadirForm.status !== \'Masuk\' || !!hadirForm.alasan',
-  '}',
-  ''
-].join('\n')
-
-function bungkus(nama, param, cek, judulDom) {
-  return [
-    'function ' + nama + '(' + param + ') {',
-    '  if (' + cek + ') {',
-    '    setKonfirmasiEdit({',
-    '      judul: \'Timpa draf ' + judulDom + '?\',',
-    '      pesan: \'Isian form ' + judulDom + ' yang belum disimpan akan hilang dan diganti dengan data ' + judulDom + ' yang kamu pilih.\',',
-    '      aksi: function () { lakukan' + nama.charAt(0).toUpperCase() + nama.slice(1) + '(' + param + ') }',
-    '    })',
-    '    return',
-    '  }',
-    '  lakukan' + nama.charAt(0).toUpperCase() + nama.slice(1) + '(' + param + ')',
-    '}',
-    ''
-  ].join('\n')
-}
-
-/* 1) state modal konfirmasi */
-const reState = /([ \t]*)const \[pendingDelete, setPendingDelete\] = useState\(null\)/
-if (!reState.test(isi)) masalah.push('state pendingDelete tidak ditemukan')
-
-/* 2) tiga fungsi startEdit */
-const reLog = /([ \t]*)function startEditLog\(log\) \{/
-const reGal = /([ \t]*)function startEditGal\(g\) \{/
-const reHad = /([ \t]*)function startEditHadir\(h\) \{/
-if (!reLog.test(isi)) masalah.push('function startEditLog tidak ditemukan')
-if (!reGal.test(isi)) masalah.push('function startEditGal tidak ditemukan')
-if (!reHad.test(isi)) masalah.push('function startEditHadir tidak ditemukan')
-
-/* 3) anchor ConfirmModal setelah modal hapus */
-const reModal = /([ \t]*)onConfirm=\{executeDelete\}\s*\n[ \t]*\/>/
-if (!reModal.test(isi)) masalah.push('ConfirmModal pendingDelete tidak ditemukan')
-
-if (masalah.length) {
-  console.error('✗ GAGAL, file tidak diubah. Penanda tidak cocok:')
-  masalah.forEach(function (x) { console.error('  - ' + x) })
-  process.exit(1)
-}
-
-isi = isi.replace(reState, function (m, ind) {
-  return m + '\n' + ind + 'const [konfirmasiEdit, setKonfirmasiEdit] = useState(null)'
-})
-
-isi = isi.replace(reLog, function (m, ind) {
-  const pemeriksa = adaGuardLama ? '' : PEMERIKSA.split('\n').map(function (l) { return l ? ind + l : '' }).join('\n') + '\n'
-  return pemeriksa + ind + bungkus('startEditLog', 'log', cekLog, 'logbook').split('\n').map(function (l) { return l ? ind + l : '' }).join('\n') + '\n' + ind + 'function lakukanStartEditLog(log) {'
-})
-isi = isi.replace(reGal, function (m, ind) {
-  return ind + bungkus('startEditGal', 'g', cekGal, 'galeri').split('\n').map(function (l) { return l ? ind + l : '' }).join('\n') + '\n' + ind + 'function lakukanStartEditGal(g) {'
-})
-isi = isi.replace(reHad, function (m, ind) {
-  return ind + bungkus('startEditHadir', 'h', cekHadir, 'daftar hadir').split('\n').map(function (l) { return l ? ind + l : '' }).join('\n') + '\n' + ind + 'function lakukanStartEditHadir(h) {'
-})
-
-isi = isi.replace(reModal, function (m, ind) {
-  const modal = [
-    '<ConfirmModal',
-    '  open={!!konfirmasiEdit}',
-    '  title={konfirmasiEdit ? konfirmasiEdit.judul : \'\'}',
-    '  message={konfirmasiEdit ? konfirmasiEdit.pesan : \'\'}',
-    '  confirmLabel="Ya, Timpa"',
-    '  icon="trash"',
-    '  tone="bahaya"',
-    '  onCancel={function () { setKonfirmasiEdit(null) }}',
-    '  onConfirm={function () { const aksi = konfirmasiEdit ? konfirmasiEdit.aksi : null; setKonfirmasiEdit(null); if (aksi) aksi() }}',
-    '/>'
-  ].map(function (l) { return ind + l }).join('\n')
-  return m + '\n' + modal
-})
-
-const cekAkhir = ['konfirmasiEdit', 'lakukanStartEditLog', 'lakukanStartEditGal', 'lakukanStartEditHadir', 'open={!!konfirmasiEdit}']
-const kurang = cekAkhir.filter(function (t) { return isi.indexOf(t) === -1 })
-if (kurang.length) { console.error('✗ Verifikasi gagal: ' + kurang.join(', ')); process.exit(1) }
-
-fs.writeFileSync(p + '.bak', fs.readFileSync(p, 'utf8'), 'utf8')
-fs.writeFileSync(p, isi, 'utf8')
-console.log('✓ SELESAI: konfirmasi tombol Edit terpasang di DashboardPage.jsx (backup: DashboardPage.jsx.bak)')
-console.log('  - Edit logbook, Edit galeri, dan Edit daftar hadir kini mengecek draf belum disimpan.')
-console.log('  - Bila form masih kosong/bersih, tombol Edit tetap langsung bekerja seperti biasa.')
 ```
 
 ## File: postcss.config.js
@@ -1405,6 +1064,73 @@ Buat user Auth dengan pola email NIM@mbsi.local dan isi tabel mahasiswa beserta 
 Push ke GitHub, import di Vercel, salin isi .env.local ke Environment Variables Vercel.
 ```
 
+## File: src/lib/format.js
+```javascript
+export function formatTanggal(s) {
+  if (!s) return 'Tanggal belum diisi'
+  const d = new Date(s + 'T00:00:00')
+  if (Number.isNaN(d.getTime())) return s
+  return d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+export function formatTanggalShort(s) {
+  if (!s) return ''
+  const d = new Date(s + 'T00:00:00')
+  if (Number.isNaN(d.getTime())) return s
+  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+export function todayInput() {
+  const d = new Date()
+  const m = ('0' + (d.getMonth() + 1)).slice(-2)
+  const day = ('0' + d.getDate()).slice(-2)
+  return d.getFullYear() + '-' + m + '-' + day
+}
+
+export function detectMediaType(u) {
+  const ext = String(u || '').split('?')[0].split('.').pop().toLowerCase()
+  return ['mp4', 'webm', 'ogg', 'mov', 'm4v'].indexOf(ext) !== -1 ? 'video' : 'foto'
+}
+
+export function matchesDateFilters(dateString, f) {
+  if (!dateString) return false
+  if (f.timeMode === 'bulan') {
+    if (f.bulan) {
+      if (f.bulan.length === 7) return dateString.slice(0, 7) === f.bulan
+      const p = dateString.split('-')
+      if (p.length < 2 || p[1] !== f.bulan) return false
+    }
+  } else if (f.timeMode === 'rentang') {
+    if (f.dari && dateString < f.dari) return false
+    if (f.sampai && dateString > f.sampai) return false
+  }
+  return true
+}
+export function waktuUrut(x) {
+  if (!x) return 0
+  const src = x.created_at || x.updated_at || ''
+  if (!src) return 0
+  const t = new Date(src).getTime()
+  return isNaN(t) ? 0 : t
+}
+export function urutkanTanggal(list, mode) {
+  const arr = (list || []).slice()
+  arr.sort(function (a, b) {
+    const ta = new Date(a.tanggal + 'T00:00:00').getTime()
+    const tb = new Date(b.tanggal + 'T00:00:00').getTime()
+    if (ta !== tb) return mode === 'terlama' ? ta - tb : tb - ta
+    const ca = waktuUrut(a)
+    const cb = waktuUrut(b)
+    if (ca !== cb) return mode === 'terlama' ? ca - cb : cb - ca
+    const ia = a.id || ''
+    const ib = b.id || ''
+    if (ia !== ib) return ia < ib ? (mode === 'terlama' ? -1 : 1) : (mode === 'terlama' ? 1 : -1)
+    return 0
+  })
+  return arr
+}
+```
+
 ## File: src/components/PemutarVideo.jsx
 ```javascript
 import { useEffect, useRef, useState } from 'react'
@@ -1675,7 +1401,7 @@ export default function PemutarVideo(props) {
             className="pemutar-progress h-1.5 w-full cursor-pointer appearance-none rounded-full outline-none"
             style={{ background: 'linear-gradient(to right, #166534 0%, #166534 ' + persen + '%, rgba(255,255,255,0.25) ' + persen + '%, rgba(255,255,255,0.25) 100%)' }} />
           <span className="min-w-[64px] sm:min-w-[84px] shrink-0 text-center text-[10px] sm:text-[11px] font-semibold tabular-nums text-slate-200">{formatWaktu(waktu)} / {formatWaktu(durasi)}</span>
-          <button type="button" onClick={aturBisu} title={bisu ? 'Nyalakan suara' : 'Bisukan'}
+          <button type="button" onClick={aturBisu} title={bisu ? 'Nyalakan Suara' : 'Bisukan'}
             className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/10 text-white transition hover:bg-white/20">
             {bisu ? <IkonBisu /> : <IkonSuara />}
           </button>
@@ -1683,7 +1409,7 @@ export default function PemutarVideo(props) {
             className="pemutar-volume hidden sm:block h-1 w-16 shrink-0 cursor-pointer appearance-none rounded-full outline-none"
             style={{ background: 'linear-gradient(to right, #eab308 0%, #eab308 ' + (bisu ? 0 : volume) + '%, rgba(255,255,255,0.25) ' + (bisu ? 0 : volume) + '%, rgba(255,255,255,0.25) 100%)' }} />
           {buffer ? <span className="inline-block h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-gold-500 border-t-transparent" /> : null}
-          <button type="button" onClick={aturPenuh} title={penuh ? 'Keluar layar penuh' : 'Layar penuh'}
+          <button type="button" onClick={aturPenuh} title={penuh ? 'Keluar Layar Penuh' : 'Layar Penuh'}
             className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/10 text-white transition hover:bg-white/20">
             {penuh ? <IkonKecil /> : <IkonPenuh />}
           </button>
@@ -1691,73 +1417,6 @@ export default function PemutarVideo(props) {
       ) : null}
     </div>
   )
-}
-```
-
-## File: src/lib/format.js
-```javascript
-export function formatTanggal(s) {
-  if (!s) return 'Tanggal belum diisi'
-  const d = new Date(s + 'T00:00:00')
-  if (Number.isNaN(d.getTime())) return s
-  return d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-}
-
-export function formatTanggalShort(s) {
-  if (!s) return ''
-  const d = new Date(s + 'T00:00:00')
-  if (Number.isNaN(d.getTime())) return s
-  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
-}
-
-export function todayInput() {
-  const d = new Date()
-  const m = ('0' + (d.getMonth() + 1)).slice(-2)
-  const day = ('0' + d.getDate()).slice(-2)
-  return d.getFullYear() + '-' + m + '-' + day
-}
-
-export function detectMediaType(u) {
-  const ext = String(u || '').split('?')[0].split('.').pop().toLowerCase()
-  return ['mp4', 'webm', 'ogg', 'mov', 'm4v'].indexOf(ext) !== -1 ? 'video' : 'foto'
-}
-
-export function matchesDateFilters(dateString, f) {
-  if (!dateString) return false
-  if (f.timeMode === 'bulan') {
-    if (f.bulan) {
-      if (f.bulan.length === 7) return dateString.slice(0, 7) === f.bulan
-      const p = dateString.split('-')
-      if (p.length < 2 || p[1] !== f.bulan) return false
-    }
-  } else if (f.timeMode === 'rentang') {
-    if (f.dari && dateString < f.dari) return false
-    if (f.sampai && dateString > f.sampai) return false
-  }
-  return true
-}
-export function waktuUrut(x) {
-  if (!x) return 0
-  const src = x.created_at || x.updated_at || ''
-  if (!src) return 0
-  const t = new Date(src).getTime()
-  return isNaN(t) ? 0 : t
-}
-export function urutkanTanggal(list, mode) {
-  const arr = (list || []).slice()
-  arr.sort(function (a, b) {
-    const ta = new Date(a.tanggal + 'T00:00:00').getTime()
-    const tb = new Date(b.tanggal + 'T00:00:00').getTime()
-    if (ta !== tb) return mode === 'terlama' ? ta - tb : tb - ta
-    const ca = waktuUrut(a)
-    const cb = waktuUrut(b)
-    if (ca !== cb) return mode === 'terlama' ? ca - cb : cb - ca
-    const ia = a.id || ''
-    const ib = b.id || ''
-    if (ia !== ib) return ia < ib ? (mode === 'terlama' ? -1 : 1) : (mode === 'terlama' ? 1 : -1)
-    return 0
-  })
-  return arr
 }
 ```
 
@@ -2571,132 +2230,6 @@ export function SumberVideo(props) {
 }
 ```
 
-## File: src/components/Carousel.jsx
-```javascript
-import { useEffect, useRef, useState } from 'react'
-import { SizedIcon } from './icons.jsx'
-import { Lightbox, SmartFit, MediaDrive } from './ui.jsx'
-
-export default function Carousel(props) {
-  const slides = props.slides || []
-  const autoMs = props.autoMs || 4000
-  const [idx, setIdx] = useState(0)
-  const [paused, setPaused] = useState(false)
-  const [zoom, setZoom] = useState(null)
-  const trackRef = useRef(null)
-  const touchX = useRef(0)
-  const moved = useRef(false)
-
-  useEffect(function () {
-    if (slides.length < 2 || paused) return undefined
-    const t = setInterval(function () {
-      setIdx(function (i) { return (i + 1) % slides.length })
-    }, autoMs)
-    return function () { clearInterval(t) }
-  }, [slides.length, paused, autoMs])
-
-  useEffect(function () {
-    if (trackRef.current) trackRef.current.style.transform = 'translateX(-' + (idx * 100) + '%)'
-  }, [idx])
-
-  if (!slides.length) return null
-
-  if (slides.length === 1) {
-    const s = slides[0]
-    return (
-      <>
-        <div className="relative group rounded-2xl overflow-hidden aspect-video bg-slate-900">
-          {s.drive ? (
-            <MediaDrive driveId={s.drive} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} className="absolute inset-0 h-full w-full object-cover cursor-zoom-in" />
-          ) : (
-            <SmartFit src={s.src} full={s.full} type={s.type} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} />
-          )}
-          <button type="button" title="Perbesar Media" onClick={function () { setZoom(s) }}
-            className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
-            <SizedIcon name="expand" size={15} />
-          </button>
-        </div>
-        {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} driveId={zoom.drive || null} onClose={function () { setZoom(null) }} /> : null}
-      </>
-    )
-  }
-
-  return (
-    <>
-      <div
-        className="media-carousel group"
-        onMouseEnter={function () { setPaused(true) }}
-        onMouseLeave={function () { setPaused(false) }}
-        onTouchStart={function (e) { touchX.current = e.touches[0].clientX; moved.current = false }}
-        onTouchEnd={function (e) {
-          const dx = e.changedTouches[0].clientX - touchX.current
-          if (Math.abs(dx) > 40) {
-            moved.current = true
-            setIdx(function (i) { return (i + (dx < 0 ? 1 : -1) + slides.length) % slides.length })
-          }
-        }}
-      >
-        <div ref={trackRef} className="carousel-track">
-          {slides.map(function (s, i) {
-            return (
-              <div key={i} className="carousel-slide">
-                {s.drive ? (
-                  <MediaDrive driveId={s.drive} alt={s.title || 'Media'} onClick={function () { if (moved.current) { moved.current = false; return } setZoom(s) }} className="absolute inset-0 h-full w-full object-cover cursor-zoom-in" />
-                ) : (
-                <SmartFit
-                  src={s.src}
-                  full={s.full}
-                   type={s.type}
-                  alt={s.title || 'Media'}
-                  onClick={function () {
-                    if (moved.current) { moved.current = false; return }
-                    setZoom(s)
-                  }}
-                />
-                )}
-                <button type="button" title="Perbesar Media" onClick={function (e) { e.stopPropagation(); setZoom(s) }}
-                  className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
-                  <SizedIcon name="expand" size={15} />
-                </button>
-                {s.title ? (
-                  <span className="absolute bottom-2 left-2 z-10 px-2 py-1 rounded-lg bg-black/60 text-white text-xs max-w-[85%] truncate">
-                    {s.title}
-                  </span>
-                ) : null}
-              </div>
-            )
-          })}
-        </div>
-        <button
-          onClick={function () { setIdx(function (i) { return (i - 1 + slides.length) % slides.length }) }}
-          className="absolute left-2 top-0 bottom-0 my-auto z-10 h-8 w-8 rounded-full bg-black/40 text-white grid place-items-center opacity-100 xl:opacity-0 xl:group-hover:opacity-100 hover:bg-black/60"
-        >
-          &#8249;
-        </button>
-        <button
-          onClick={function () { setIdx(function (i) { return (i + 1) % slides.length }) }}
-          className="absolute right-2 top-0 bottom-0 my-auto z-10 h-8 w-8 rounded-full bg-black/40 text-white grid place-items-center opacity-100 xl:opacity-0 xl:group-hover:opacity-100 hover:bg-black/60"
-        >
-          &#8250;
-        </button>
-        <div className="absolute bottom-2 right-2 z-10 flex gap-1.5">
-          {slides.map(function (s, i) {
-            return (
-              <button
-                key={i}
-                onClick={function () { setIdx(i) }} aria-label={'Ke slide ' + (i + 1)}
-                className={'carousel-dot h-2 w-2 rounded-full transition-all ' + (i === idx ? 'bg-white' : 'bg-white/40')}
-              />
-            )
-          })}
-        </div>
-      </div>
-      {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} driveId={zoom.drive || null} onClose={function () { setZoom(null) }} /> : null}
-    </>
-  )
-}
-```
-
 ## File: src/components/FilterBar.jsx
 ```javascript
 import { useEffect, useState } from 'react'
@@ -3020,6 +2553,132 @@ export default defineConfig(function ({ mode }) {
 })
 ```
 
+## File: src/components/Carousel.jsx
+```javascript
+import { useEffect, useRef, useState } from 'react'
+import { SizedIcon } from './icons.jsx'
+import { Lightbox, SmartFit, MediaDrive } from './ui.jsx'
+
+export default function Carousel(props) {
+  const slides = props.slides || []
+  const autoMs = props.autoMs || 4000
+  const [idx, setIdx] = useState(0)
+  const [paused, setPaused] = useState(false)
+  const [zoom, setZoom] = useState(null)
+  const trackRef = useRef(null)
+  const touchX = useRef(0)
+  const moved = useRef(false)
+
+  useEffect(function () {
+    if (slides.length < 2 || paused) return undefined
+    const t = setInterval(function () {
+      setIdx(function (i) { return (i + 1) % slides.length })
+    }, autoMs)
+    return function () { clearInterval(t) }
+  }, [slides.length, paused, autoMs])
+
+  useEffect(function () {
+    if (trackRef.current) trackRef.current.style.transform = 'translateX(-' + (idx * 100) + '%)'
+  }, [idx])
+
+  if (!slides.length) return null
+
+  if (slides.length === 1) {
+    const s = slides[0]
+    return (
+      <>
+        <div className="relative group rounded-2xl overflow-hidden aspect-video bg-slate-900">
+          {s.drive ? (
+            <MediaDrive driveId={s.drive} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} className="absolute inset-0 h-full w-full object-cover cursor-zoom-in" />
+          ) : (
+            <SmartFit src={s.src} full={s.full} type={s.type} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} />
+          )}
+          <button type="button" title="Perbesar Media" onClick={function () { setZoom(s) }}
+            className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
+            <SizedIcon name="expand" size={15} />
+          </button>
+        </div>
+        {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} driveId={zoom.drive || null} onClose={function () { setZoom(null) }} /> : null}
+      </>
+    )
+  }
+
+  return (
+    <>
+      <div
+        className="media-carousel group"
+        onMouseEnter={function () { setPaused(true) }}
+        onMouseLeave={function () { setPaused(false) }}
+        onTouchStart={function (e) { touchX.current = e.touches[0].clientX; moved.current = false }}
+        onTouchEnd={function (e) {
+          const dx = e.changedTouches[0].clientX - touchX.current
+          if (Math.abs(dx) > 40) {
+            moved.current = true
+            setIdx(function (i) { return (i + (dx < 0 ? 1 : -1) + slides.length) % slides.length })
+          }
+        }}
+      >
+        <div ref={trackRef} className="carousel-track">
+          {slides.map(function (s, i) {
+            return (
+              <div key={i} className="carousel-slide">
+                {s.drive ? (
+                  <MediaDrive driveId={s.drive} alt={s.title || 'Media'} onClick={function () { if (moved.current) { moved.current = false; return } setZoom(s) }} className="absolute inset-0 h-full w-full object-cover cursor-zoom-in" />
+                ) : (
+                <SmartFit
+                  src={s.src}
+                  full={s.full}
+                   type={s.type}
+                  alt={s.title || 'Media'}
+                  onClick={function () {
+                    if (moved.current) { moved.current = false; return }
+                    setZoom(s)
+                  }}
+                />
+                )}
+                <button type="button" title="Perbesar Media" onClick={function (e) { e.stopPropagation(); setZoom(s) }}
+                  className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
+                  <SizedIcon name="expand" size={15} />
+                </button>
+                {s.title ? (
+                  <span className="absolute bottom-2 left-2 z-10 px-2 py-1 rounded-lg bg-black/60 text-white text-xs max-w-[85%] truncate">
+                    {s.title}
+                  </span>
+                ) : null}
+              </div>
+            )
+          })}
+        </div>
+        <button
+          onClick={function () { setIdx(function (i) { return (i - 1 + slides.length) % slides.length }) }}
+          className="absolute left-2 top-0 bottom-0 my-auto z-10 h-8 w-8 rounded-full bg-black/40 text-white grid place-items-center opacity-100 xl:opacity-0 xl:group-hover:opacity-100 hover:bg-black/60"
+        >
+          &#8249;
+        </button>
+        <button
+          onClick={function () { setIdx(function (i) { return (i + 1) % slides.length }) }}
+          className="absolute right-2 top-0 bottom-0 my-auto z-10 h-8 w-8 rounded-full bg-black/40 text-white grid place-items-center opacity-100 xl:opacity-0 xl:group-hover:opacity-100 hover:bg-black/60"
+        >
+          &#8250;
+        </button>
+        <div className="absolute bottom-2 right-2 z-10 flex gap-1.5">
+          {slides.map(function (s, i) {
+            return (
+              <button
+                key={i}
+                onClick={function () { setIdx(i) }} aria-label={'Ke slide ' + (i + 1)}
+                className={'carousel-dot h-2 w-2 rounded-full transition-all ' + (i === idx ? 'bg-white' : 'bg-white/40')}
+              />
+            )
+          })}
+        </div>
+      </div>
+      {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} driveId={zoom.drive || null} onClose={function () { setZoom(null) }} /> : null}
+    </>
+  )
+}
+```
+
 ## File: src/components/icons.jsx
 ```javascript
 function svg(inner, size) {
@@ -3228,110 +2887,6 @@ export function EyeToggle(props) {
       <circle cx="12" cy="12" r="3" className="eye-pupil" />
       <line x1="2" y1="2" x2="22" y2="22" className="eye-slash" />
     </svg>
-  )
-}
-```
-
-## File: src/pages/LoginPage.jsx
-```javascript
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { loginWithNim } from '../lib/auth.js'
-import { inputCls, labelCls, btnPrimary } from '../components/ui.jsx'
-import { EyeToggle, SizedIcon } from '../components/icons.jsx'
-
-function pesanErrorLogin(err) {
-  const pesan = String((err && err.message) || '')
-  const rendah = pesan.toLowerCase()
-  if (rendah.indexOf('invalid login credentials') !== -1) {
-    return 'NIM atau kode akses yang kamu masukkan tidak cocok dengan data kami. Periksa kembali penulisannya, pastikan tidak ada spasi berlebih, lalu coba lagi.'
-  }
-  if (rendah.indexOf('not confirmed') !== -1) {
-    return 'Akun untuk NIM ini belum diaktifkan. Hubungi admin tim magang untuk mengaktifkan akunmu terlebih dahulu.'
-  }
-  if (rendah.indexOf('too many requests') !== -1 || rendah.indexOf('try again after') !== -1 || rendah.indexOf('rate limit') !== -1) {
-    return 'Terlalu banyak percobaan masuk dalam waktu singkat demi keamanan. Tunggu sekitar satu menit, lalu coba lagi.'
-  }
-  if (rendah.indexOf('fetch') !== -1 || rendah.indexOf('network') !== -1 || rendah.indexOf('failed to load') !== -1 || (typeof navigator !== 'undefined' && !navigator.onLine)) {
-    return 'Tidak bisa terhubung ke server. Periksa koneksi internetmu, lalu coba lagi.'
-  }
-  if (rendah.indexOf('email') !== -1 && rendah.indexOf('format') !== -1) {
-    return 'Format NIM tidak terbaca. Masukkan NIM berupa angka tanpa spasi, contoh: 24070041.'
-  }
-  if (pesan) return 'Gagal masuk: ' + pesan + '. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
-  return 'Terjadi kesalahan tidak terduga saat masuk. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
-}
-export default function LoginPage() {
-  const navigate = useNavigate()
-  const [nim, setNim] = useState('')
-  const [kode, setKode] = useState('')
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [lihatKode, setLihatKode] = useState(false)
-
-  async function submit(e) {
-    e.preventDefault()
-    setBusy(true)
-    setError('')
-    try {
-  await loginWithNim(nim, kode)
-  navigate('/dashboard')
-} catch (err) {
-  setError(pesanErrorLogin(err))
-}
-    setBusy(false)
-  }
-
-  return (
-    <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr] items-start">
-      <div className="card-hover rounded-[2rem] bg-bsi-900 text-white p-5 sm:p-8 lg:p-10">
-        <span className="inline-flex px-3 py-1.5 rounded-full bg-white/10 text-[10px] font-semibold uppercase tracking-wide sm:px-4 sm:py-2 sm:text-xs">Area Intern</span>
-        <h1 className="mt-6 text-2xl sm:text-3xl lg:text-4xl font-black leading-tight">Masuk untuk Mengisi Logbook, Galeri, dan Daftar Hadir</h1>
-        <p className="mt-3 text-sm leading-relaxed text-white/80 sm:mt-4 sm:text-base">Halaman ini hanya digunakan oleh mahasiswa magang. Dosen pembimbing dan kaprodi tidak perlu login untuk melihat halaman publik.</p>
-      </div>
-      <div className="card-hover bg-white rounded-[2rem] border border-slate-200 shadow-sm p-5 sm:p-8 lg:p-10">
-        <h2 className="text-xl sm:text-2xl font-black text-slate-900">Login Mahasiswa Magang</h2>
-        {error ? (
-          <div className="mt-3 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-red-100 text-red-600">
-              <SizedIcon name="close" size={12} />
-            </span>
-            <div className="min-w-0">
-              <p className="font-bold">Gagal Masuk</p>
-              <p className="mt-1 leading-relaxed">{error}</p>
-            </div>
-          </div>
-        ) : null}
-        <form onSubmit={submit} className="mt-6 space-y-5">
-          <div>
-            <label className={labelCls}>NIM <span className="text-red-500">*</span></label>
-            <input className={inputCls} value={nim} onChange={function (e) { setNim(e.target.value) }} aria-label="NIM" placeholder="Contoh: 20260001" required />
-          </div>
-          <div>
-            <label className={labelCls}>Kode akses <span className="text-red-500">*</span></label>
-            <div className="relative mt-1.5">
-              <input
-                type={lihatKode ? 'text' : 'password'}
-                className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 pr-12 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
-                value={kode}
-                onChange={function (e) { setKode(e.target.value) }}
-                aria-label="Kode Akses" placeholder="Masukkan kode akses"
-                required
-              />
-              <button
-                type="button"
-                onClick={function () { setLihatKode(function (v) { return !v }) }}
-                title={lihatKode ? 'Sembunyikan kode akses' : 'Lihat kode akses'}
-                className="absolute right-2 top-0 bottom-0 my-auto grid h-9 w-9 place-items-center rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-600"
-              >
-                <EyeToggle open={lihatKode} size={18} />
-              </button>
-            </div>
-          </div>
-          <button type="submit" disabled={busy} className={btnPrimary}>{busy ? 'Memproses...' : 'Masuk ke dashboard'}</button>
-        </form>
-      </div>
-    </section>
   )
 }
 ```
@@ -3559,156 +3114,106 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 })()
 ```
 
-## File: src/pages/DospemPage.jsx
+## File: src/pages/LoginPage.jsx
 ```javascript
-import { urutkanTanggal } from '../lib/format.js'
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { supabase } from '../lib/supabase.js'
-import { EmptyState, Modal , Avatar } from '../components/ui.jsx'
-import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
-import { SkeletonLogbookCard, SkeletonPersonCard } from '../components/Skeleton.jsx'
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { loginWithNim } from '../lib/auth.js'
+import { inputCls, labelCls, btnPrimary } from '../components/ui.jsx'
+import { EyeToggle, SizedIcon } from '../components/icons.jsx'
 
-export default function DospemPage() {
-  const [logs, setLogs] = useState([])
-  const [people, setPeople] = useState([])
-  const [galCount, setGalCount] = useState(0)
-  const [hadirCount, setHadirCount] = useState(0)
-  const [galRows, setGalRows] = useState([])
-  const [hadirRows, setHadirRows] = useState([])
-  const [detail, setDetail] = useState(null)
-  const [loading, setLoading] = useState(true)
+function pesanErrorLogin(err) {
+  const pesan = String((err && err.message) || '')
+  const rendah = pesan.toLowerCase()
+  if (rendah.indexOf('invalid login credentials') !== -1) {
+    return 'NIM atau kode akses yang kamu masukkan tidak cocok dengan data kami. Periksa kembali penulisannya, pastikan tidak ada spasi berlebih, lalu coba lagi.'
+  }
+  if (rendah.indexOf('not confirmed') !== -1) {
+    return 'Akun untuk NIM ini belum diaktifkan. Hubungi admin tim magang untuk mengaktifkan akunmu terlebih dahulu.'
+  }
+  if (rendah.indexOf('too many requests') !== -1 || rendah.indexOf('try again after') !== -1 || rendah.indexOf('rate limit') !== -1) {
+    return 'Terlalu banyak percobaan masuk dalam waktu singkat demi keamanan. Tunggu sekitar satu menit, lalu coba lagi.'
+  }
+  if (rendah.indexOf('fetch') !== -1 || rendah.indexOf('network') !== -1 || rendah.indexOf('failed to load') !== -1 || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+    return 'Tidak bisa terhubung ke server. Periksa koneksi internetmu, lalu coba lagi.'
+  }
+  if (rendah.indexOf('email') !== -1 && rendah.indexOf('format') !== -1) {
+    return 'Format NIM tidak terbaca. Masukkan NIM berupa angka tanpa spasi, contoh: 24070041.'
+  }
+  if (pesan) return 'Gagal masuk: ' + pesan + '. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
+  return 'Terjadi kesalahan tidak terduga saat masuk. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
+}
+export default function LoginPage() {
+  const navigate = useNavigate()
+  const [nim, setNim] = useState('')
+  const [kode, setKode] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [lihatKode, setLihatKode] = useState(false)
 
-  useEffect(function () {
-    async function load() {
-      const l = await supabase
-        .from('logbooks')
-        .select('*, mahasiswa(*), logbook_items(*)')
-        .eq('status', 'publik')
-        .order('tanggal', { ascending: false })
-        .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
-      const p = await supabase.from('mahasiswa').select('id, nama, nim, prodi, foto_profil').order('nama')
-      const g = await supabase.from('galeri').select('id, mahasiswa_id')
-      const h = await supabase.from('daftar_hadir').select('id, mahasiswa_id, status')
-      setLogs(l.data || [])
-      setPeople(p.data || [])
-      setGalCount((g.data || []).length)
-      setGalRows(g.data || [])
-      setHadirCount((h.data || []).length)
-      setHadirRows(h.data || [])
-      setLoading(false)
-    }
-    load()
-  }, [])
+  async function submit(e) {
+    e.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+  await loginWithNim(nim, kode)
+  navigate('/dashboard')
+} catch (err) {
+  setError(pesanErrorLogin(err))
+}
+    setBusy(false)
+  }
 
   return (
-    <div>
-      <section className="card-hover rounded-[2rem] bg-bsi-900 text-white p-5 sm:p-5 sm:p-8 lg:p-12">
-        <span className="inline-flex px-3 py-1.5 rounded-full bg-white/10 text-[10px] font-semibold uppercase tracking-wide sm:px-4 sm:py-2 sm:text-xs">Monitoring Dospem dan Kaprodi</span>
-        <h1 className="mt-6 text-2xl sm:text-2xl sm:text-3xl lg:text-5xl font-black max-w-3xl leading-tight">Ringkasan Kegiatan Magang Tim di Bank BSI</h1>
-        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-white/80 sm:mt-4 sm:text-base">Halaman ini dapat diakses tanpa login.</p>
-        <div className="mt-5 grid grid-cols-2 gap-2.5 sm:mt-8 sm:gap-4 xl:grid-cols-4">
-          {loading
-            ? [0, 1, 2, 3].map(function (i) {
-                return (
-                  <div key={i} className="rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5">
-                    <div className="skeleton skeleton-on-dark h-4 w-24"></div>
-                    <div className="skeleton skeleton-on-dark h-9 w-14 mt-2"></div>
-                  </div>
-                )
-              })
-            : [
-                <div key="mahasiswa" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Total Mahasiswa</p><p className="mt-1 text-2xl sm:text-3xl font-black">{people.length}</p></div>,
-                <div key="logbook" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Logbook Publik</p><p className="mt-1 text-2xl sm:text-3xl font-black">{logs.length}</p></div>,
-                <div key="galeri" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Media Galeri</p><p className="mt-1 text-2xl sm:text-3xl font-black">{galCount}</p></div>,
-                <div key="hadir" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Catatan Hadir</p><p className="mt-1 text-2xl sm:text-3xl font-black">{hadirCount}</p></div>
-              ]}
-        </div>
-        <div className="mt-6 flex flex-wrap gap-2 sm:mt-8 sm:gap-3">
-          <Link to="/logbook" className="px-4 py-2 rounded-xl bg-gold-500 text-slate-900 text-xs font-bold hover:bg-gold-400 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat Logbook</Link>
-          <Link to="/galeri" className="px-4 py-2 rounded-xl bg-white/10 text-white text-xs font-bold hover:bg-white/20 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat Galeri</Link>
-          <Link to="/absen" className="px-4 py-2 rounded-xl bg-white/10 text-white text-xs font-bold hover:bg-white/20 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat Daftar Hadir</Link>
-        </div>
-      </section>
-
-      <section className="mt-10">
-<h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Profil Tim Magang</h2>
-<p className="mt-2 max-w-3xl text-sm text-slate-600 sm:text-base">Seluruh mahasiswa magang beserta kontribusi logbook, media galeri, dan catatan kehadiran masing-masing.</p>
-<div className="grid-pusat-rapat mt-6">
-{loading
-? [0, 1, 2].map(function (i) { return <div key={i} className="kolom-kartu-rapat"><SkeletonPersonCard /></div> })
-: people.map(function (p) {
-const totalLog = logs.filter(function (x) { return x.mahasiswa_id === p.id }).length
-const totalGal = galRows.filter(function (x) { return x.mahasiswa_id === p.id }).length
-const totalHadir = hadirRows.filter(function (x) { return x.mahasiswa_id === p.id }).length
-return (
-<div key={p.id} className="kolom-kartu-rapat">
-<div className="card-hover rounded-3xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col h-full">
-<div className="flex items-center gap-4">
-<Avatar src={p.foto_profil || null} nama={p.nama} size="lg" />
-<div className="min-w-0 flex-1">
-<p className="truncate text-lg font-black text-slate-900">{p.nama}</p>
-<p className="truncate text-xs text-slate-600">NIM {p.nim}</p>
-{p.prodi ? <span className="mt-1.5 inline-flex px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold">{p.prodi}</span> : null}
-</div>
-</div>
-<div className="mt-4 grid grid-cols-2 gap-3">
-<div className="rounded-2xl bg-slate-50 p-3">
-<p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">Logbook</p>
-<p className="mt-0.5 text-xl font-black text-bsi-800">{totalLog}</p>
-</div>
-<div className="rounded-2xl bg-slate-50 p-3">
-<p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">Media</p>
-<p className="mt-0.5 text-xl font-black text-bsi-800">{totalGal}</p>
-</div>
-</div>
-<div className="mt-3 pt-3 border-t border-slate-100">
-<p className="text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">Rekap Kehadiran</p>
-<div className="grid grid-cols-3 gap-2">
-<div className="rounded-xl bg-emerald-50 p-2 text-center">
-<p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase">Masuk</p>
-<p className="text-base font-black text-emerald-700">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Masuk' }).length}</p>
-</div>
-<div className="rounded-xl bg-amber-50 p-2 text-center">
-<p className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase">Izin</p>
-<p className="text-base font-black text-amber-700">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Izin' }).length}</p>
-</div>
-<div className="rounded-xl bg-red-50 p-2 text-center">
-<p className="text-[10px] font-bold text-red-600 uppercase">Bolos</p>
-<p className="text-base font-black text-red-700">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Bolos' }).length}</p>
-</div>
-</div>
-</div>
-</div>
- </div>
-)
-})}
-{!loading && !people.length ? <div className="w-full"><EmptyState title="Belum Ada Data Mahasiswa" desc="Profil tim akan tampil setelah mahasiswa terdaftar." /></div> : null}
-</div>
-</section>
-
-      <section className="mt-10">
-        <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Aktivitas yang Sudah Dipublikasikan</h2>
-        <div className="grid-pusat mt-6">
-          {loading
-            ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
-            : urutkanTanggal(logs, 'terbaru').slice(0, 6).map(function (l) {
-                return (
-                  <div key={l.id} className="kolom-kartu">
-                    <LogbookCard log={l} onDetail={function () { setDetail(l) }} />
-                  </div>
-                )
-              })}
-          {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum Ada Logbook Publik" desc="Logbook akan tampil setelah mahasiswa mengatur status siap dilihat." /></div> : null}
-        </div>
-        <div className="mt-8 flex justify-center">
-          <Link to="/logbook" className="rounded-xl bg-bsi-800 px-5 py-2.5 text-xs font-bold text-white hover:bg-bsi-900 sm:rounded-2xl sm:px-6 sm:py-3 sm:text-sm">Lihat Semua Logbook</Link>
-        </div>
-      </section>
-      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
-        {detail ? <LogbookDetail log={detail} /> : null}
-      </Modal>
-    </div>
+    <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr] items-start">
+      <div className="card-hover rounded-[2rem] bg-bsi-900 text-white p-5 sm:p-8 lg:p-10">
+        <span className="inline-flex px-3 py-1.5 rounded-full bg-white/10 text-[10px] font-semibold uppercase tracking-wide sm:px-4 sm:py-2 sm:text-xs">Area Intern</span>
+        <h1 className="mt-6 text-2xl sm:text-3xl lg:text-4xl font-black leading-tight">Masuk untuk Mengisi Logbook, Galeri, dan Daftar Hadir</h1>
+        <p className="mt-3 text-sm leading-relaxed text-white/80 sm:mt-4 sm:text-base">Halaman ini hanya digunakan oleh mahasiswa magang. Dosen pembimbing dan kaprodi tidak perlu login untuk melihat halaman publik.</p>
+      </div>
+      <div className="card-hover bg-white rounded-[2rem] border border-slate-200 shadow-sm p-5 sm:p-8 lg:p-10">
+        <h2 className="text-xl sm:text-2xl font-black text-slate-900">Login Mahasiswa Magang</h2>
+        {error ? (
+          <div className="mt-3 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-red-100 text-red-600">
+              <SizedIcon name="close" size={12} />
+            </span>
+            <div className="min-w-0">
+              <p className="font-bold">Gagal Masuk</p>
+              <p className="mt-1 leading-relaxed">{error}</p>
+            </div>
+          </div>
+        ) : null}
+        <form onSubmit={submit} className="mt-6 space-y-5">
+          <div>
+            <label className={labelCls}>NIM <span className="text-red-500">*</span></label>
+            <input className={inputCls} value={nim} onChange={function (e) { setNim(e.target.value) }} aria-label="NIM" placeholder="Contoh: 20260001" required />
+          </div>
+          <div>
+            <label className={labelCls}>Kode akses <span className="text-red-500">*</span></label>
+            <div className="relative mt-1.5">
+              <input
+                type={lihatKode ? 'text' : 'password'}
+                className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 pr-12 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+                value={kode}
+                onChange={function (e) { setKode(e.target.value) }}
+                aria-label="Kode Akses" placeholder="Masukkan kode akses"
+                required
+              />
+              <button
+                type="button"
+                onClick={function () { setLihatKode(function (v) { return !v }) }}
+                title={lihatKode ? 'Sembunyikan Kode Akses' : 'Lihat Kode Akses'}
+                className="absolute right-2 top-0 bottom-0 my-auto grid h-9 w-9 place-items-center rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-600"
+              >
+                <EyeToggle open={lihatKode} size={18} />
+              </button>
+            </div>
+          </div>
+          <button type="submit" disabled={busy} className={btnPrimary}>{busy ? 'Memproses...' : 'Masuk ke Dashboard'}</button>
+        </form>
+      </div>
+    </section>
   )
 }
 ```
@@ -3902,6 +3407,160 @@ export default function Layout() {
   onCancel={function () { setKonfirmasiKeluar(false) }}
   onConfirm={benarKeluar}
 />
+    </div>
+  )
+}
+```
+
+## File: src/pages/DospemPage.jsx
+```javascript
+import { urutkanTanggal } from '../lib/format.js'
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { supabase } from '../lib/supabase.js'
+import { EmptyState, Modal , Avatar } from '../components/ui.jsx'
+import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
+import { SkeletonLogbookCard, SkeletonPersonCard } from '../components/Skeleton.jsx'
+
+export default function DospemPage() {
+  const [logs, setLogs] = useState([])
+  const [people, setPeople] = useState([])
+  const [galCount, setGalCount] = useState(0)
+  const [hadirCount, setHadirCount] = useState(0)
+  const [galRows, setGalRows] = useState([])
+  const [hadirRows, setHadirRows] = useState([])
+  const [detail, setDetail] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(function () {
+    async function load() {
+      const l = await supabase
+        .from('logbooks')
+        .select('*, mahasiswa(*), logbook_items(*)')
+        .eq('status', 'publik')
+        .order('tanggal', { ascending: false })
+        .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
+      const p = await supabase.from('mahasiswa').select('id, nama, nim, prodi, foto_profil').order('nama')
+      const g = await supabase.from('galeri').select('id, mahasiswa_id')
+      const h = await supabase.from('daftar_hadir').select('id, mahasiswa_id, status')
+      setLogs(l.data || [])
+      setPeople(p.data || [])
+      setGalCount((g.data || []).length)
+      setGalRows(g.data || [])
+      setHadirCount((h.data || []).length)
+      setHadirRows(h.data || [])
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  return (
+    <div>
+      <section className="card-hover rounded-[2rem] bg-bsi-900 text-white p-5 sm:p-5 sm:p-8 lg:p-12">
+        <span className="inline-flex px-3 py-1.5 rounded-full bg-white/10 text-[10px] font-semibold uppercase tracking-wide sm:px-4 sm:py-2 sm:text-xs">Monitoring Dospem dan Kaprodi</span>
+        <h1 className="mt-6 text-2xl sm:text-2xl sm:text-3xl lg:text-5xl font-black max-w-3xl leading-tight">Ringkasan Kegiatan Magang Tim di Bank BSI</h1>
+        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-white/80 sm:mt-4 sm:text-base">Halaman ini dapat diakses tanpa login.</p>
+        <div className="mt-5 grid grid-cols-2 gap-2.5 sm:mt-8 sm:gap-4 xl:grid-cols-4">
+          {loading
+            ? [0, 1, 2, 3].map(function (i) {
+                return (
+                  <div key={i} className="rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5">
+                    <div className="skeleton skeleton-on-dark h-4 w-24"></div>
+                    <div className="skeleton skeleton-on-dark h-9 w-14 mt-2"></div>
+                  </div>
+                )
+              })
+            : [
+                <div key="mahasiswa" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Total Mahasiswa</p><p className="mt-1 text-2xl sm:text-3xl font-black">{people.length}</p></div>,
+                <div key="logbook" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Logbook Publik</p><p className="mt-1 text-2xl sm:text-3xl font-black">{logs.length}</p></div>,
+                <div key="galeri" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Media Galeri</p><p className="mt-1 text-2xl sm:text-3xl font-black">{galCount}</p></div>,
+                <div key="hadir" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Catatan Hadir</p><p className="mt-1 text-2xl sm:text-3xl font-black">{hadirCount}</p></div>
+              ]}
+        </div>
+        <div className="mt-6 flex flex-wrap gap-2 sm:mt-8 sm:gap-3">
+          <Link to="/logbook" className="px-4 py-2 rounded-xl bg-gold-500 text-slate-900 text-xs font-bold hover:bg-gold-400 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat Logbook</Link>
+          <Link to="/galeri" className="px-4 py-2 rounded-xl bg-white/10 text-white text-xs font-bold hover:bg-white/20 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat Galeri</Link>
+          <Link to="/absen" className="px-4 py-2 rounded-xl bg-white/10 text-white text-xs font-bold hover:bg-white/20 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat Daftar Hadir</Link>
+        </div>
+      </section>
+
+      <section className="mt-10">
+<h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Profil Tim Magang</h2>
+<p className="mt-2 max-w-3xl text-sm text-slate-600 sm:text-base">Seluruh mahasiswa magang beserta kontribusi logbook, media galeri, dan catatan kehadiran masing-masing.</p>
+<div className="grid-pusat-rapat mt-6">
+{loading
+? [0, 1, 2].map(function (i) { return <div key={i} className="kolom-kartu-rapat"><SkeletonPersonCard /></div> })
+: people.map(function (p) {
+const totalLog = logs.filter(function (x) { return x.mahasiswa_id === p.id }).length
+const totalGal = galRows.filter(function (x) { return x.mahasiswa_id === p.id }).length
+const totalHadir = hadirRows.filter(function (x) { return x.mahasiswa_id === p.id }).length
+return (
+<div key={p.id} className="kolom-kartu-rapat">
+<div className="card-hover rounded-3xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col h-full">
+<div className="flex items-center gap-4">
+<Avatar src={p.foto_profil || null} nama={p.nama} size="lg" />
+<div className="min-w-0 flex-1">
+<p className="truncate text-lg font-black text-slate-900">{p.nama}</p>
+<p className="truncate text-xs text-slate-600">NIM {p.nim}</p>
+{p.prodi ? <span className="mt-1.5 inline-flex px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold">{p.prodi}</span> : null}
+</div>
+</div>
+<div className="mt-4 grid grid-cols-2 gap-3">
+<div className="rounded-2xl bg-slate-50 p-3">
+<p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">Logbook</p>
+<p className="mt-0.5 text-xl font-black text-bsi-800">{totalLog}</p>
+</div>
+<div className="rounded-2xl bg-slate-50 p-3">
+<p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">Media</p>
+<p className="mt-0.5 text-xl font-black text-bsi-800">{totalGal}</p>
+</div>
+</div>
+<div className="mt-3 pt-3 border-t border-slate-100">
+<p className="text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">Rekap Kehadiran</p>
+<div className="grid grid-cols-3 gap-2">
+<div className="rounded-xl bg-emerald-50 p-2 text-center">
+<p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase">Masuk</p>
+<p className="text-base font-black text-emerald-700 dark:text-emerald-400">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Masuk' }).length}</p>
+</div>
+<div className="rounded-xl bg-amber-50 p-2 text-center">
+<p className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase">Izin</p>
+<p className="text-base font-black text-amber-700 dark:text-amber-400">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Izin' }).length}</p>
+</div>
+<div className="rounded-xl bg-red-50 p-2 text-center">
+<p className="text-[10px] font-bold text-red-600 dark:text-red-400 uppercase">Bolos</p>
+<p className="text-base font-black text-red-600 dark:text-red-400">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Bolos' }).length}</p>
+</div>
+</div>
+</div>
+</div>
+ </div>
+)
+})}
+{!loading && !people.length ? <div className="w-full"><EmptyState title="Belum Ada Data Mahasiswa" desc="Profil tim akan tampil setelah mahasiswa terdaftar." /></div> : null}
+</div>
+</section>
+
+      <section className="mt-10">
+        <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Aktivitas yang Sudah Dipublikasikan</h2>
+        <div className="grid-pusat mt-6">
+          {loading
+            ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
+            : urutkanTanggal(logs, 'terbaru').slice(0, 6).map(function (l) {
+                return (
+                  <div key={l.id} className="kolom-kartu">
+                    <LogbookCard log={l} onDetail={function () { setDetail(l) }} />
+                  </div>
+                )
+              })}
+          {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum Ada Logbook Publik" desc="Logbook akan tampil setelah mahasiswa mengatur status siap dilihat." /></div> : null}
+        </div>
+        <div className="mt-8 flex justify-center">
+          <Link to="/logbook" className="rounded-xl bg-bsi-800 px-5 py-2.5 text-xs font-bold text-white hover:bg-bsi-900 sm:rounded-2xl sm:px-6 sm:py-3 sm:text-sm">Lihat Semua Logbook</Link>
+        </div>
+      </section>
+      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
+        {detail ? <LogbookDetail log={detail} /> : null}
+      </Modal>
     </div>
   )
 }
@@ -4733,7 +4392,7 @@ export function Modal(props) {
         <div className="anim-modal modal-detail w-full max-w-3xl rounded-[2rem] bg-white shadow-2xl max-h-[88vh] overflow-y-auto overscroll-contain" onClick={function (e) { e.stopPropagation() }}>
           <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
             <p className="font-bold text-slate-900">{props.title || 'Detail'}</p>
-            <button onClick={props.onClose} aria-label="Tutup detail" className="h-9 w-9 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 grid place-items-center">
+            <button onClick={props.onClose} aria-label="Tutup Detail" className="h-9 w-9 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 grid place-items-center">
               <SizedIcon name="close" size={16} />
             </button>
           </div>
@@ -4927,7 +4586,7 @@ export function Lightbox(props) {
       <div className="absolute right-4 top-4 flex gap-2">
         <button
           type="button"
-          title={busyUnduh ? 'Menyiapkan unduhan...' : (props.driveId ? 'Unduh video dari Google Drive' : 'Unduh media')}
+          title={busyUnduh ? 'Menyiapkan Unduhan...' : (props.driveId ? 'Unduh Video dari Google Drive' : 'Unduh Media')}
           onClick={unduh}
           disabled={busyUnduh}
           style={tombolUnduhTerlihat ? undefined : { display: 'none' }}
@@ -5065,7 +4724,7 @@ export function MediaYouTube(props) {
       <div className={'grid place-items-center bg-slate-800 ' + (props.className || 'absolute inset-0 h-full w-full')}>
         <div className="flex flex-col items-center gap-2 text-slate-400">
           <SizedIcon name="video" size={26} />
-          <p className="px-2 text-center text-[11px] font-semibold">{status === 'habis' ? 'Pratinjau video belum siap' : 'Menyiapkan pratinjau video'}</p>
+          <p className="px-2 text-center text-[11px] font-semibold">{status === 'habis' ? 'Pratinjau Video Belum Siap' : 'Menyiapkan Pratinjau Video'}</p>
         </div>
       </div>
     )
@@ -6784,7 +6443,7 @@ export default function DashboardPage() {
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label className={labelCls}>Kategori utama <span className="text-red-500">*</span></label>
+                  <label className={labelCls}>Kategori Utama <span className="text-red-500">*</span></label>
                   <div className="mt-1.5"><CustomSelect placeholder="Pilih Kategori" value={form.kategori} onChange={function (v) { setForm(Object.assign({}, form, { kategori: v })) }} options={KATEGORI.map(function (k) { return { value: k, label: k } })} /></div>
                 </div>
                 <div>
@@ -6793,12 +6452,12 @@ export default function DashboardPage() {
                 </div>
               </div>
               <div>
-                <label className={labelCls}>Ringkasan hari ini <span className="text-red-500">*</span></label>
+                <label className={labelCls}>Ringkasan Hari Ini <span className="text-red-500">*</span></label>
                 <input required className={inputCls} value={form.judul} onChange={function (e) { setForm(Object.assign({}, form, { judul: e.target.value })) }} aria-label="Ringkasan Hari Ini" placeholder="Contoh: Kegiatan harian di divisi Back Office" />
               </div>
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm font-semibold text-slate-700">Rincian kegiatan hari ini <span className="text-red-500">*</span></p>
+                  <p className="text-sm font-semibold text-slate-700">Rincian Kegiatan Hari Ini <span className="text-red-500">*</span></p>
                 </div>
                 {items.map(function (it, i) {
                   return (
@@ -6881,7 +6540,7 @@ export default function DashboardPage() {
                 return <LogbookCard key={l.id} log={l} isOwner onDetail={function () { setDetail({ type: 'log', data: l }) }} onEdit={function () { startEditLog(l) }} onDelete={function () { deleteLog(l) }} />
               })}
             </div>
-            {!filteredLogs.length ? <EmptyState title={logs.length ? 'Logbook tidak ditemukan' : 'Belum ada logbook'} desc={logs.length ? 'Coba reset filter atau pilih filter lain.' : 'Tambahkan logbook harian pertama kamu.'} /> : null}
+            {!filteredLogs.length ? <EmptyState title={logs.length ? 'Logbook Tidak Ditemukan' : 'Belum Ada Logbook'} desc={logs.length ? 'Coba reset filter atau pilih filter lain.' : 'Tambahkan logbook harian pertama kamu.'} /> : null}
             <Pagination totalItems={logTotal} perPage={PER_PAGE_DASH} page={logPageAman} onPageChange={gantiHalamanLog} />
           </div>
         </section>
@@ -6980,7 +6639,7 @@ export default function DashboardPage() {
               {paginatedGaleri.map(function (g) {
                 return <GalleryCard key={g.id} item={g} isOwner onDetail={function () { setDetail({ type: 'gal', data: g }) }} onEdit={function () { startEditGal(g) }} onDelete={function () { deleteGaleri(g) }} />
               })}
-              {!filteredGaleri.length ? <EmptyState icon="camera" title={galeri.length ? 'Media tidak ditemukan' : 'Belum ada media galeri'} desc={galeri.length ? 'Coba reset filter atau pilih filter lain.' : 'Unggah foto atau video pertama kamu.'} /> : null}
+              {!filteredGaleri.length ? <EmptyState icon="camera" title={galeri.length ? 'Media Tidak Ditemukan' : 'Belum Ada Media Galeri'} desc={galeri.length ? 'Coba reset filter atau pilih filter lain.' : 'Unggah foto atau video pertama kamu.'} /> : null}
             </div>
             <Pagination totalItems={galTotal} perPage={PER_PAGE_DASH} page={galPageAman} onPageChange={gantiHalamanGal} />
           </div>
@@ -6999,7 +6658,7 @@ export default function DashboardPage() {
                   <div className="mt-1.5"><CustomDateInput value={hadirForm.tanggal} onChange={function (v) { setHadirForm(Object.assign({}, hadirForm, { tanggal: v })) }} /></div>
                 </div>
                 <div>
-                  <label className={labelCls}>Status kehadiran <span className="text-red-500">*</span></label>
+                  <label className={labelCls}>Status Kehadiran <span className="text-red-500">*</span></label>
                   <div className="mt-1.5">
                     <CustomSelect value={hadirForm.status} onChange={function (v) { setHadirForm(Object.assign({}, hadirForm, { status: v, alasan: v === 'Masuk' ? '' : hadirForm.alasan })) }} options={[{ value: 'Masuk', label: 'Masuk' }, { value: 'Izin', label: 'Izin' }, { value: 'Bolos', label: 'Bolos' }]} />
                   </div>
@@ -7032,7 +6691,7 @@ export default function DashboardPage() {
                 return <AttendanceCard key={h.id} row={h} isOwner onDetail={function () { setDetail({ type: 'hadir', data: h }) }} onEdit={function () { startEditHadir(h) }} onDelete={function () { deleteHadir(h) }} />
               })}
             </div>
-            {!filteredHadir.length ? <EmptyState icon="clipboard" title={hadir.length ? 'Catatan tidak ditemukan' : 'Belum ada data kehadiran'} desc={hadir.length ? 'Coba reset filter atau pilih filter lain.' : 'Isi daftar hadir pertama kamu.'} /> : null}
+            {!filteredHadir.length ? <EmptyState icon="clipboard" title={hadir.length ? 'Catatan Tidak Ditemukan' : 'Belum Ada Data Kehadiran'} desc={hadir.length ? 'Coba reset filter atau pilih filter lain.' : 'Isi daftar hadir pertama kamu.'} /> : null}
             <Pagination totalItems={hadirTotal} perPage={PER_PAGE_DASH} page={hadirPageAman} onPageChange={gantiHalamanHadir} />
           </div>
         </section>

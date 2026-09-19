@@ -363,7 +363,7 @@ export default function DashboardPage() {
     function startEditLog(log) {
     if (isLogbookDirty()) {
       setKonfirmasiEdit({
-        judul: 'Ganti Draf Logbook?',
+        judul: 'Timpa Draf Logbook?',
         pesan: 'Isian form logbook yang belum disimpan akan hilang dan diganti dengan data logbook yang kamu pilih.',
         aksi: function () { lakukanStartEditLog(log) }
       })
@@ -395,7 +395,7 @@ export default function DashboardPage() {
     function startEditGal(g) {
     if (isGaleriDirty()) {
       setKonfirmasiEdit({
-        judul: 'Ganti Draf Galeri?',
+        judul: 'Timpa Draf Galeri?',
         pesan: 'Isian form galeri yang belum disimpan akan hilang dan diganti dengan data galeri yang kamu pilih.',
         aksi: function () { lakukanStartEditGal(g) }
       })
@@ -425,7 +425,7 @@ export default function DashboardPage() {
     function startEditHadir(h) {
     if (isHadirDirty()) {
       setKonfirmasiEdit({
-        judul: 'Ganti Draf Daftar Hadir?',
+        judul: 'Timpa Draf Daftar Hadir?',
         pesan: 'Isian form daftar hadir yang belum disimpan akan hilang dan diganti dengan data daftar hadir yang kamu pilih.',
         aksi: function () { lakukanStartEditHadir(h) }
       })
@@ -727,7 +727,7 @@ export default function DashboardPage() {
             <h2 className="mt-4 text-xl font-black text-slate-900">{mahasiswa.nama}</h2>
             <p className="mt-1 text-sm text-slate-600">NIM {mahasiswa.nim}</p>
             <div className="mt-5 flex flex-wrap justify-center gap-2">
-              <button type="button" onClick={function () { if (showUploadFoto) { setShowUploadFoto(false); return } setFotoPreview(null); setFotoFile(null); setShowUploadFoto(true) }} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition">{mahasiswa.foto_profil ? 'Ganti Foto' : 'Unggah Foto'}</button>
+              <button type="button" onClick={function () { if (showUploadFoto) { setShowUploadFoto(false); return } setFotoPreview(null); setFotoFile(null); setShowUploadFoto(true) }} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition">{mahasiswa.foto_profil ? 'Ganti Foto' : 'Upload Foto'}</button>
               {mahasiswa.foto_profil ? <button type="button" onClick={hapusFotoProfilKu} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-red-50 text-red-700 hover:bg-red-100 transition">Hapus Foto</button> : null}
             </div>
             <div className={'unggah-foto-wrap w-full' + (showUploadFoto ? ' unggah-foto-buka' : '')}>
@@ -741,7 +741,7 @@ export default function DashboardPage() {
                     ) : fotoPreview ? <img src={fotoPreview} alt="Pratinjau foto profil" className="h-20 w-20 rounded-[28%] object-cover shadow-lg" /> : null}
                     <div className="min-w-0 flex-1">
                       <input type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/heif" onChange={pilihFotoProfil} aria-label="Pilih Foto Profil" className="block w-full text-sm text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-800 hover:file:bg-emerald-100" />
-                      <p className="mt-2 text-xs text-slate-600">Format JPG, PNG, atau HEIC. Ukuran maksimal 5 MB.</p>
+                      <p className="mt-2 text-xs text-slate-600">Format JPG, PNG, WebP, atau HEIC iPhone. Otomatis dikonversi ke WebP ringan. Maksimal 5 MB.</p>
                     </div>
                   </div>
                   <div className="mt-4 flex gap-2">
@@ -791,7 +791,7 @@ export default function DashboardPage() {
                 </div>
                 <div>
                   <label className={labelCls}>Status Tampil</label>
-                  <div className="mt-1.5"><CustomSelect value={form.status} onChange={function (v) { setForm(Object.assign({}, form, { status: v })) }} options={[{ value: 'draft', label: 'Draf' }, { value: 'publik', label: 'Publik' }]} /></div>
+                  <div className="mt-1.5"><CustomSelect value={form.status} onChange={function (v) { setForm(Object.assign({}, form, { status: v })) }} options={[{ value: 'draft', label: 'Draft' }, { value: 'publik', label: 'Published' }]} /></div>
                 </div>
               </div>
               <div>
@@ -873,7 +873,7 @@ export default function DashboardPage() {
             <h2 ref={refListLog} className="text-xl sm:text-2xl font-black text-slate-900 scroll-mt-24">Logbook Kamu</h2>
             <FilterBar open={logFilterOpen} onToggle={function () { setLogFilterOpen(function (o) { return !o }) }} activeCount={logFilterActive} onReset={function () { setLogFilter(LOG_INITIAL) }}>
               <FilterSelect icon={ICONS.tag} value={logFilter.kategori} onChange={function (v) { setLogFilter(Object.assign({}, logFilter, { kategori: v })) }} options={[{ value: '', label: 'Semua Kategori' }].concat(KATEGORI.map(function (k) { return { value: k, label: k } }))} />
-              <FilterSelect icon={ICONS.check} value={logFilter.status} onChange={function (v) { setLogFilter(Object.assign({}, logFilter, { status: v })) }} options={[{ value: '', label: 'Semua Status' }, { value: 'draft', label: 'Draf' }, { value: 'publik', label: 'Publik' }]} />
+              <FilterSelect icon={ICONS.check} value={logFilter.status} onChange={function (v) { setLogFilter(Object.assign({}, logFilter, { status: v })) }} options={[{ value: '', label: 'Semua Status' }, { value: 'draft', label: 'Draft' }, { value: 'publik', label: 'Published' }]} />
               <TimeFilter filter={logFilter} set={setLogFilter} />
               <SortSelect value={sort} onChange={setSort} />
             </FilterBar>
@@ -963,7 +963,7 @@ export default function DashboardPage() {
                 <div className="mt-1.5">
                   <CustomSelect placeholder="Pilih Kegiatan" value={galForm.kegiatan} onChange={function (v) { setGalForm(Object.assign({}, galForm, { kegiatan: v })) }} options={GALERI_KEGIATAN.map(function (k) { return { value: k, label: k } })} />
                 </div>
-                {editGalDerived ? <p className="mt-1 text-xs text-slate-600">Media ini berasal dari logbook. Perubahan hanya berlaku di galeri dan tidak mengubah logbook aslinya.</p> : null}
+                {editGalDerived ? <p className="mt-1 text-xs text-slate-600">Media ini berasal dari logbook. Perubahan judul, deskripsi, kegiatan, dan tanggal hanya memengaruhi galeri dan tidak akan ditimpa saat logbook disimpan.</p> : null}
               </div>
               <div><label className={labelCls}>Deskripsi (Opsional)</label><AutoTextArea className={inputCls} value={galForm.deskripsi} onChange={function (e) { setGalForm(Object.assign({}, galForm, { deskripsi: e.target.value })) }} aria-label="Deskripsi Media" placeholder="Tambahkan keterangan media." /></div>
               <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks={infoProses || 'Menyimpan'} /> : (editGalId ? 'Simpan Perubahan Media' : 'Unggah Media')}</button>
@@ -1016,7 +1016,7 @@ export default function DashboardPage() {
                   aria-label="Alasan atau Keterangan" placeholder={hadirForm.status === 'Masuk' ? 'Status Masuk tidak memerlukan alasan' : 'Contoh: Keperluan keluarga, sakit.'}
                   disabled={hadirForm.status === 'Masuk'}
                 />
-                {hadirForm.status === 'Masuk' ? <p className="mt-1 text-xs text-slate-600">Alasan hanya diisi untuk status Izin atau Bolos.</p> : null}
+                {hadirForm.status === 'Masuk' ? <p className="mt-1 text-xs text-slate-600">Field ini hanya terisi untuk status Izin atau Bolos.</p> : null}
               </div>
               <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks="Menyimpan" /> : (editHadirId ? 'Simpan Perubahan' : 'Simpan Daftar Hadir')}</button>
             </form>
@@ -1057,7 +1057,7 @@ export default function DashboardPage() {
           open={!!konfirmasiEdit}
           title={konfirmasiEdit ? konfirmasiEdit.judul : ''}
           message={konfirmasiEdit ? konfirmasiEdit.pesan : ''}
-          confirmLabel="Ya, Ganti"
+          confirmLabel="Ya, Timpa"
           icon="trash"
           tone="bahaya"
           onCancel={function () { setKonfirmasiEdit(null) }}
