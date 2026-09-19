@@ -104,15 +104,15 @@ return (
 <div className="grid grid-cols-3 gap-2">
 <div className="rounded-xl bg-emerald-50 p-2 text-center">
 <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase">Masuk</p>
-<p className="text-base font-black text-emerald-700 dark:text-emerald-400">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Masuk' }).length}</p>
+<p className="text-base font-black text-emerald-700">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Masuk' }).length}</p>
 </div>
 <div className="rounded-xl bg-amber-50 p-2 text-center">
 <p className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase">Izin</p>
-<p className="text-base font-black text-amber-700 dark:text-amber-400">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Izin' }).length}</p>
+<p className="text-base font-black text-amber-700">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Izin' }).length}</p>
 </div>
 <div className="rounded-xl bg-red-50 p-2 text-center">
-<p className="text-[10px] font-bold text-red-600 dark:text-red-400 uppercase">Bolos</p>
-<p className="text-base font-black text-red-600 dark:text-red-400">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Bolos' }).length}</p>
+<p className="text-[10px] font-bold text-red-600 uppercase">Bolos</p>
+<p className="text-base font-black text-red-700">{hadirRows.filter(function (x) { return x.mahasiswa_id === p.id && x.status === 'Bolos' }).length}</p>
 </div>
 </div>
 </div>
