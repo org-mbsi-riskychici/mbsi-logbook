@@ -1,6 +1,5 @@
 import { SkeletonDashboard } from '../components/Skeleton.jsx'
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../lib/auth.js'
 import { uploadMedia, deleteMedia } from '../lib/upload.js'
@@ -138,69 +137,6 @@ export default function DashboardPage() {
     setHadirPage(1)
   }, [logFilter, galFilter, hadirFilter, sort])
 
-   /* ===== proteksi-unsaved-v1: cegah kehilangan draf saat pindah tab/halaman, batal edit, atau tutup tab ===== */
-   const [unsavedModal, setUnsavedModal] = useState(null)
-   const navigate = useNavigate()
-   function isLogbookDirty() {
-     if (editLogId) return true
-     return !!(form.judul || form.kategori || form.unit || form.kendala || form.solusi || form.pembelajaran ||
-       items.some(function (it) { return it.judul || it.deskripsi || it.hasil || it.file }))
-   }
-   function isGaleriDirty() {
-     if (editGalId) return true
-     return !!(galForm.judul || galForm.deskripsi || galForm.kegiatan || galForm.file || galYtLink || galDriveLink)
-   }
-   function isHadirDirty() {
-     if (editHadirId) return true
-     return hadirForm.status !== 'Masuk' || !!hadirForm.alasan
-   }
-   function isAnyFormDirty() {
-     return isLogbookDirty() || isGaleriDirty() || isHadirDirty()
-   }
-   function bukaModalUnsaved(judul, pesan, labelConfirm, aksi) {
-     setUnsavedModal({
-       title: judul,
-       message: pesan,
-       confirmLabel: labelConfirm,
-       onConfirm: function () { setUnsavedModal(null); aksi() },
-       onCancel: function () { setUnsavedModal(null) }
-     })
-   }
-   function cobaCancelEditLog() {
-     if (isLogbookDirty()) { bukaModalUnsaved('Buang perubahan logbook?', 'Perubahan pada logbook akan hilang dan tidak bisa dikembalikan. Yakin ingin membatalkan?', 'Ya, Buang', cancelEditLog); return }
-     cancelEditLog()
-   }
-   function cobaCancelEditGal() {
-     if (isGaleriDirty()) { bukaModalUnsaved('Buang perubahan galeri?', 'Perubahan pada media galeri akan hilang dan tidak bisa dikembalikan. Yakin ingin membatalkan?', 'Ya, Buang', cancelEditGal); return }
-     cancelEditGal()
-   }
-   function cobaCancelEditHadir() {
-     if (isHadirDirty()) { bukaModalUnsaved('Buang perubahan kehadiran?', 'Perubahan pada daftar hadir akan hilang dan tidak bisa dikembalikan. Yakin ingin membatalkan?', 'Ya, Buang', cancelEditHadir); return }
-     cancelEditHadir()
-   }
-   useEffect(function () {
-     function onBeforeUnload(e) {
-       if (!isAnyFormDirty()) return
-       e.preventDefault()
-       e.returnValue = ''
-     }
-     function onClickLink(e) {
-       if (!isAnyFormDirty()) return
-       const t = e.target
-       const a = t && t.closest ? t.closest('a[href]') : null
-       if (!a) return
-       const href = a.getAttribute('href') || ''
-       if (!href || href.indexOf('http') === 0 || href.indexOf('#') === 0 || a.target === '_blank') return
-       e.preventDefault()
-       bukaModalUnsaved('Pindah halaman?', 'Kamu punya perubahan yang belum disimpan. Yakin ingin meninggalkan halaman ini? Semua perubahan akan hilang.', 'Ya, Tinggalkan', function () { navigate(href) })
-     }
-     window.addEventListener('beforeunload', onBeforeUnload)
-     document.addEventListener('click', onClickLink, true)
-     return function () {
-       window.removeEventListener('beforeunload', onBeforeUnload)
-       document.removeEventListener('click', onClickLink, true)
-     }
-   })
   if (loading || !mahasiswa) {
     return <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:py-8"><SkeletonDashboard /></div>
   }
@@ -629,22 +565,9 @@ export default function DashboardPage() {
 
   const editGalDerived = editGalId ? ((galeri.find(function (g) { return g.id === editGalId }) || {}).logbook_item_id || null) : null
   
-     function gantiTab(tabBaru) {
-     if (tabBaru === tab) return
-     if (isAnyFormDirty()) {
-       bukaModalUnsaved('Pindah tab?', 'Kamu punya perubahan yang belum disimpan. Yakin ingin pindah tab? Semua perubahan akan hilang.', 'Ya, Pindah', function () {
-         cancelEditLog()
-         cancelEditGal()
-         cancelEditHadir()
-         setTab(tabBaru)
-       })
-       return
-     }
-     cancelEditLog()
-     cancelEditGal()
-     cancelEditHadir()
-     setTab(tabBaru)
-   }
+  function gantiTab(tabBaru) {
+    if (tabBaru !== tab) { cancelEditLog(); cancelEditGal(); cancelEditHadir(); setTab(tabBaru) }
+  }
 
   const tabCls = function (t) {
     return 'px-4 py-2.5 rounded-xl text-xs sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm font-bold ' + (tab === t ? 'bg-bsi-800 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200')
@@ -724,7 +647,7 @@ export default function DashboardPage() {
       {tab === 'logbook' ? (
         <section className="anim-tab mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
           <div ref={refFormLog} className={'card-hover scroll-mt-24 bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editLogId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
-            <ModeIndicator edit={!!editLogId} onCancel={cobaCancelEditLog} />
+            <ModeIndicator edit={!!editLogId} onCancel={cancelEditLog} />
             <h2 className="mt-3 text-xl sm:text-2xl font-black text-slate-900">{editLogId ? 'Ubah logbook harian' : 'Tambah logbook harian'}</h2>
             <form onSubmit={submitLogbook} className="mt-6 space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
@@ -845,7 +768,7 @@ export default function DashboardPage() {
       {tab === 'galeri' ? (
         <section className="anim-tab mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
           <div ref={refFormGal} className={'card-hover scroll-mt-24 bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editGalId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
-            <ModeIndicator edit={!!editGalId} onCancel={cobaCancelEditGal} />
+            <ModeIndicator edit={!!editGalId} onCancel={cancelEditGal} />
             <h2 className="mt-3 text-xl sm:text-2xl font-black text-slate-900">{editGalId ? 'Ubah media galeri' : 'Tambah media galeri'}</h2>
             <form onSubmit={submitGaleri} className="mt-6 space-y-4">
               <div>
@@ -945,7 +868,7 @@ export default function DashboardPage() {
       {tab === 'absen' ? (
         <section className="anim-tab mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
           <div ref={refFormHadir} className={'card-hover scroll-mt-24 bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editHadirId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
-            <ModeIndicator edit={!!editHadirId} onCancel={cobaCancelEditHadir} />
+            <ModeIndicator edit={!!editHadirId} onCancel={cancelEditHadir} />
             <h2 className="mt-3 text-xl sm:text-2xl font-black text-slate-900">{editHadirId ? 'Ubah daftar hadir' : 'Isi daftar hadir'}</h2>
             <form onSubmit={submitHadir} className="mt-6 space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
@@ -1006,16 +929,6 @@ export default function DashboardPage() {
         onCancel={function () { setPendingDelete(null) }}
         onConfirm={executeDelete}
       />
-       <ConfirmModal
-         open={!!unsavedModal}
-         title={unsavedModal ? unsavedModal.title : ''}
-         message={unsavedModal ? unsavedModal.message : ''}
-         confirmLabel={unsavedModal ? unsavedModal.confirmLabel : 'Ya'}
-         icon="trash"
-         tone="bahaya"
-         onCancel={unsavedModal ? unsavedModal.onCancel : function () { setUnsavedModal(null) }}
-         onConfirm={unsavedModal ? unsavedModal.onConfirm : function () { setUnsavedModal(null) }}
-       />
     </div>
   )
 }
