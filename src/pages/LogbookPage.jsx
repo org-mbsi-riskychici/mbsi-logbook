@@ -63,8 +63,8 @@ export default function LogbookPage() {
   return (
     <div>
       <section className="rounded-[2rem] bg-white border border-slate-200 p-5 sm:p-8 lg:p-10 shadow-sm">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-400">Logbook publik</p>
-        <h1 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Catatan kegiatan magang</h1>
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-400">Logbook Publik</p>
+        <h1 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Catatan Kegiatan Magang</h1>
         <p className="mt-2 text-sm text-slate-600 max-w-2xl sm:mt-3 sm:text-base">Satu logbook mewakili satu hari kerja dan bisa berisi beberapa kegiatan.</p>
       </section>
 
@@ -72,9 +72,9 @@ export default function LogbookPage() {
         <FilterBar open={open} onToggle={function () { setOpen(function (o) { return !o }) }} activeCount={active}
           onReset={function () { setFilter(INITIAL) }}>
           <FilterSelect icon={ICONS.user} value={filter.mahasiswa} onChange={function (v) { setFilter(Object.assign({}, filter, { mahasiswa: v })) }}
-            options={[{ value: '', label: 'Semua mahasiswa' }].concat(people.map(function (p) { return { value: p.id, label: p.nama } }))} />
+            options={[{ value: '', label: 'Semua Mahasiswa' }].concat(people.map(function (p) { return { value: p.id, label: p.nama } }))} />
           <FilterSelect icon={ICONS.tag} value={filter.kategori} onChange={function (v) { setFilter(Object.assign({}, filter, { kategori: v })) }}
-            options={[{ value: '', label: 'Semua kategori' }].concat(KATEGORI.map(function (k) { return { value: k, label: k } }))} />
+            options={[{ value: '', label: 'Semua Kategori' }].concat(KATEGORI.map(function (k) { return { value: k, label: k } }))} />
           <TimeFilter filter={filter} set={setFilter} />
           <SortSelect value={sort} onChange={setSort} />
         </FilterBar>
@@ -91,7 +91,7 @@ export default function LogbookPage() {
                 </div>
               )
             })}
-        {!loading && !logs.length ? <div className="w-full"><EmptyState title="Logbook tidak ditemukan" desc="Coba reset filter atau pilih filter lain." /></div> : null}
+        {!loading && !logs.length ? <div className="w-full"><EmptyState title="Logbook Tidak Ditemukan" desc="Coba reset filter atau pilih filter lain." /></div> : null}
       </section>
       {!loading && totalData > 0 ? (
         <div className="mt-6 text-center text-sm text-slate-600">

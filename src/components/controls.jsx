@@ -148,7 +148,7 @@ export function CustomDateInput(props) {
       <button type="button" onClick={toggle} className={(props.buttonCls || defaultBtn) + ' text-left'}>
         <span className="shrink-0 text-slate-600">{ICONS.calendar}</span>
         <span className={'flex-1 truncate ' + (props.value ? 'text-slate-800' : 'text-slate-600')}>
-          {label || (mode === 'month' ? 'Pilih bulan' : 'Pilih tanggal')}
+          {label || (mode === 'month' ? 'Pilih Bulan' : 'Pilih Tanggal')}
         </span>
         <span className={'shrink-0 text-slate-600 transition-transform duration-200 ' + (open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
       </button>
@@ -204,7 +204,7 @@ export function CustomDateInput(props) {
 
           <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
             <button type="button" onClick={function () { props.onChange(''); setOpen(false) }} className="text-sm font-semibold text-slate-600 hover:text-red-600">Hapus</button>
-            <button type="button" onClick={pickToday} className="text-sm font-semibold text-bsi-700 hover:text-bsi-900">Hari ini</button>
+            <button type="button" onClick={pickToday} className="text-sm font-semibold text-bsi-700 hover:text-bsi-900">Hari Ini</button>
           </div>
         </div>
 </SelubungPanel>
@@ -234,7 +234,7 @@ export function FileInput(props) {
         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-bsi-100 text-bsi-800">{ICONS.image}</span>
         <span className="min-w-0 flex-1">
           <span className={'block truncate text-sm font-semibold ' + (props.fileName ? 'text-slate-800' : 'text-slate-600')}>
-            {props.fileName || props.label || 'Klik untuk pilih foto atau video'}
+            {props.fileName || props.label || 'Klik untuk Pilih Foto atau Video'}
           </span>
           <span className="block text-xs text-slate-600">{props.hint || 'Foto JPG, PNG, atau HEIC otomatis dikonversi. Video maks 50 MB.'}</span>
         </span>
@@ -261,7 +261,7 @@ export function SumberVideo(props) {
     <div className="space-y-2">
       <p className="text-xs font-semibold text-slate-600">Sisa kuota upload video hari ini: {props.quotaLoading ? <span className="inline-block w-3 h-3 ml-1 border-2 border-slate-400 border-t-transparent rounded-full animate-spin align-middle"></span> : <>{props.quotaRemaining} dari {props.quotaLimit}</>}</p>
       <div className={habis && !props.fileName ? 'opacity-50 pointer-events-none' : ''}>
-        <FileInput accept="video/*" fileName={props.fileName || ''} label="Klik untuk pilih video" hint="Video maks 50 MB. Format MP4, MOV, WebM, atau MKV." onChange={props.onFile} />
+        <FileInput accept="video/*" fileName={props.fileName || ''} label="Klik untuk Pilih Video" hint="Video maks 50 MB. Format MP4, MOV, WebM, atau MKV." onChange={props.onFile} />
       </div>
       {habis ? <p className="text-xs text-red-600">Kuota habis. Gunakan link video di bawah.</p> : null}
       <input className={props.inputCls} value={props.ytLink} onChange={props.onYtLink} aria-label="Link video YouTube" placeholder="Link video YouTube untuk tampilan (opsional)" />

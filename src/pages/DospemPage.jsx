@@ -42,7 +42,7 @@ export default function DospemPage() {
     <div>
       <section className="card-hover rounded-[2rem] bg-bsi-900 text-white p-5 sm:p-5 sm:p-8 lg:p-12">
         <span className="inline-flex px-3 py-1.5 rounded-full bg-white/10 text-[10px] font-semibold uppercase tracking-wide sm:px-4 sm:py-2 sm:text-xs">Monitoring Dospem dan Kaprodi</span>
-        <h1 className="mt-6 text-2xl sm:text-2xl sm:text-3xl lg:text-5xl font-black max-w-3xl leading-tight">Ringkasan kegiatan magang tim di Bank BSI</h1>
+        <h1 className="mt-6 text-2xl sm:text-2xl sm:text-3xl lg:text-5xl font-black max-w-3xl leading-tight">Ringkasan Kegiatan Magang Tim di Bank BSI</h1>
         <p className="mt-3 max-w-3xl text-sm leading-relaxed text-white/80 sm:mt-4 sm:text-base">Halaman ini dapat diakses tanpa login.</p>
         <div className="mt-5 grid grid-cols-2 gap-2.5 sm:mt-8 sm:gap-4 xl:grid-cols-4">
           {loading
@@ -55,21 +55,21 @@ export default function DospemPage() {
                 )
               })
             : [
-                <div key="mahasiswa" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Total mahasiswa</p><p className="mt-1 text-2xl sm:text-3xl font-black">{people.length}</p></div>,
-                <div key="logbook" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Logbook publik</p><p className="mt-1 text-2xl sm:text-3xl font-black">{logs.length}</p></div>,
-                <div key="galeri" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Media galeri</p><p className="mt-1 text-2xl sm:text-3xl font-black">{galCount}</p></div>,
-                <div key="hadir" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Catatan hadir</p><p className="mt-1 text-2xl sm:text-3xl font-black">{hadirCount}</p></div>
+                <div key="mahasiswa" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Total Mahasiswa</p><p className="mt-1 text-2xl sm:text-3xl font-black">{people.length}</p></div>,
+                <div key="logbook" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Logbook Publik</p><p className="mt-1 text-2xl sm:text-3xl font-black">{logs.length}</p></div>,
+                <div key="galeri" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Media Galeri</p><p className="mt-1 text-2xl sm:text-3xl font-black">{galCount}</p></div>,
+                <div key="hadir" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Catatan Hadir</p><p className="mt-1 text-2xl sm:text-3xl font-black">{hadirCount}</p></div>
               ]}
         </div>
         <div className="mt-6 flex flex-wrap gap-2 sm:mt-8 sm:gap-3">
-          <Link to="/logbook" className="px-4 py-2 rounded-xl bg-gold-500 text-slate-900 text-xs font-bold hover:bg-gold-400 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat logbook</Link>
-          <Link to="/galeri" className="px-4 py-2 rounded-xl bg-white/10 text-white text-xs font-bold hover:bg-white/20 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat galeri</Link>
-          <Link to="/absen" className="px-4 py-2 rounded-xl bg-white/10 text-white text-xs font-bold hover:bg-white/20 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat daftar hadir</Link>
+          <Link to="/logbook" className="px-4 py-2 rounded-xl bg-gold-500 text-slate-900 text-xs font-bold hover:bg-gold-400 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat Logbook</Link>
+          <Link to="/galeri" className="px-4 py-2 rounded-xl bg-white/10 text-white text-xs font-bold hover:bg-white/20 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat Galeri</Link>
+          <Link to="/absen" className="px-4 py-2 rounded-xl bg-white/10 text-white text-xs font-bold hover:bg-white/20 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat Daftar Hadir</Link>
         </div>
       </section>
 
       <section className="mt-10">
-<h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Profil tim magang</h2>
+<h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Profil Tim Magang</h2>
 <p className="mt-2 max-w-3xl text-sm text-slate-600 sm:text-base">Seluruh mahasiswa magang beserta kontribusi logbook, media galeri, dan catatan kehadiran masing-masing.</p>
 <div className="grid-pusat-rapat mt-6">
 {loading
@@ -120,12 +120,12 @@ return (
  </div>
 )
 })}
-{!loading && !people.length ? <div className="w-full"><EmptyState title="Belum ada data mahasiswa" desc="Profil tim akan tampil setelah mahasiswa terdaftar." /></div> : null}
+{!loading && !people.length ? <div className="w-full"><EmptyState title="Belum Ada Data Mahasiswa" desc="Profil tim akan tampil setelah mahasiswa terdaftar." /></div> : null}
 </div>
 </section>
 
       <section className="mt-10">
-        <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Aktivitas yang sudah dipublikasikan</h2>
+        <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Aktivitas yang Sudah Dipublikasikan</h2>
         <div className="grid-pusat mt-6">
           {loading
             ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
@@ -136,10 +136,10 @@ return (
                   </div>
                 )
               })}
-          {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum ada logbook publik" desc="Logbook akan tampil setelah mahasiswa mengatur status siap dilihat." /></div> : null}
+          {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum Ada Logbook Publik" desc="Logbook akan tampil setelah mahasiswa mengatur status siap dilihat." /></div> : null}
         </div>
         <div className="mt-8 flex justify-center">
-          <Link to="/logbook" className="rounded-xl bg-bsi-800 px-5 py-2.5 text-xs font-bold text-white hover:bg-bsi-900 sm:rounded-2xl sm:px-6 sm:py-3 sm:text-sm">Lihat semua logbook</Link>
+          <Link to="/logbook" className="rounded-xl bg-bsi-800 px-5 py-2.5 text-xs font-bold text-white hover:bg-bsi-900 sm:rounded-2xl sm:px-6 sm:py-3 sm:text-sm">Lihat Semua Logbook</Link>
         </div>
       </section>
       <Modal open={!!detail} onClose={function () { setDetail(null) }}>

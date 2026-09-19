@@ -36,7 +36,7 @@ export default function Carousel(props) {
           ) : (
             <SmartFit src={s.src} full={s.full} type={s.type} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} />
           )}
-          <button type="button" title="Perbesar media" onClick={function () { setZoom(s) }}
+          <button type="button" title="Perbesar Media" onClick={function () { setZoom(s) }}
             className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
             <SizedIcon name="expand" size={15} />
           </button>
@@ -79,7 +79,7 @@ export default function Carousel(props) {
                   }}
                 />
                 )}
-                <button type="button" title="Perbesar media" onClick={function (e) { e.stopPropagation(); setZoom(s) }}
+                <button type="button" title="Perbesar Media" onClick={function (e) { e.stopPropagation(); setZoom(s) }}
                   className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
                   <SizedIcon name="expand" size={15} />
                 </button>

@@ -211,7 +211,7 @@ export default function PemutarVideo(props) {
 
       {/* Perisai penangkap klik */}
       {dimulai && !selesai && !gagal ? (
-        <button type="button" aria-label="Putar atau jeda video" onClick={jungkir}
+        <button type="button" aria-label="Putar atau Jeda Video" onClick={jungkir}
           className="absolute inset-0 z-10 h-full w-full bg-transparent" style={{ cursor: kontrolSembunyi ? 'none' : 'default' }} />
       ) : null}
 
@@ -222,7 +222,7 @@ export default function PemutarVideo(props) {
             className="absolute inset-0 h-full w-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
           <div className="absolute inset-0 grid place-items-center">
-            <button type="button" onClick={mulai} title="Putar video"
+            <button type="button" onClick={mulai} title="Putar Video"
               className="grid h-12 w-12 place-items-center rounded-full border border-white/20 bg-black/50 text-white backdrop-blur-md transition hover:scale-110 hover:border-bsi-500 hover:bg-bsi-600">
               <IkonPlay className="ml-0.5 h-5 w-5" />
             </button>
@@ -235,12 +235,12 @@ export default function PemutarVideo(props) {
       {selesai ? (
         <div className="absolute inset-0 z-20 grid place-items-center bg-black/85 backdrop-blur-sm">
           <div className="flex flex-col items-center gap-3">
-            <button type="button" title="Putar ulang"
+            <button type="button" title="Putar Ulang"
               onClick={function () { const p = playerRef.current; if (p) { p.seekTo(0, true); p.playVideo() } setSelesai(false) }}
               className="grid h-14 w-14 place-items-center rounded-full bg-gold-500 text-slate-900 shadow-lg transition hover:scale-105">
               <IkonUlang />
             </button>
-            <p className="text-xs font-semibold text-slate-200">Putar ulang</p>
+            <p className="text-xs font-semibold text-slate-200">Putar Ulang</p>
           </div>
         </div>
       ) : null}
@@ -249,7 +249,7 @@ export default function PemutarVideo(props) {
       {gagal ? (
         <div className="absolute inset-0 z-30 grid place-items-center bg-black/90">
           <div className="flex flex-col items-center gap-2 px-6 text-center">
-            <p className="text-sm font-semibold text-slate-200">Video tidak dapat dimuat</p>
+            <p className="text-sm font-semibold text-slate-200">Video Tidak Dapat Dimuat</p>
             <p className="text-xs text-slate-300">Periksa koneksi atau ketersediaan video di saluran.</p>
           </div>
         </div>
@@ -262,11 +262,11 @@ export default function PemutarVideo(props) {
             className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-bsi-700 text-white transition hover:bg-bsi-600">
             {memutar ? <IkonPause className="h-4 w-4" /> : <IkonPlay className="ml-0.5 h-4 w-4" />}
           </button>
-          <input type="range" min="0" max="100" step="0.1" value={persen} onChange={geser} title="Geser durasi"
+          <input type="range" min="0" max="100" step="0.1" value={persen} onChange={geser} title="Geser Durasi"
             className="pemutar-progress h-1.5 w-full cursor-pointer appearance-none rounded-full outline-none"
             style={{ background: 'linear-gradient(to right, #166534 0%, #166534 ' + persen + '%, rgba(255,255,255,0.25) ' + persen + '%, rgba(255,255,255,0.25) 100%)' }} />
           <span className="min-w-[64px] sm:min-w-[84px] shrink-0 text-center text-[10px] sm:text-[11px] font-semibold tabular-nums text-slate-200">{formatWaktu(waktu)} / {formatWaktu(durasi)}</span>
-          <button type="button" onClick={aturBisu} title={bisu ? 'Nyalakan suara' : 'Bisukan'}
+          <button type="button" onClick={aturBisu} title={bisu ? 'Nyalakan Suara' : 'Bisukan'}
             className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/10 text-white transition hover:bg-white/20">
             {bisu ? <IkonBisu /> : <IkonSuara />}
           </button>
@@ -274,7 +274,7 @@ export default function PemutarVideo(props) {
             className="pemutar-volume hidden sm:block h-1 w-16 shrink-0 cursor-pointer appearance-none rounded-full outline-none"
             style={{ background: 'linear-gradient(to right, #eab308 0%, #eab308 ' + (bisu ? 0 : volume) + '%, rgba(255,255,255,0.25) ' + (bisu ? 0 : volume) + '%, rgba(255,255,255,0.25) 100%)' }} />
           {buffer ? <span className="inline-block h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-gold-500 border-t-transparent" /> : null}
-          <button type="button" onClick={aturPenuh} title={penuh ? 'Keluar layar penuh' : 'Layar penuh'}
+          <button type="button" onClick={aturPenuh} title={penuh ? 'Keluar Layar Penuh' : 'Layar Penuh'}
             className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/10 text-white transition hover:bg-white/20">
             {penuh ? <IkonKecil /> : <IkonPenuh />}
           </button>

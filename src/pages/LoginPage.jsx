@@ -50,18 +50,18 @@ export default function LoginPage() {
     <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr] items-start">
       <div className="card-hover rounded-[2rem] bg-bsi-900 text-white p-5 sm:p-8 lg:p-10">
         <span className="inline-flex px-3 py-1.5 rounded-full bg-white/10 text-[10px] font-semibold uppercase tracking-wide sm:px-4 sm:py-2 sm:text-xs">Area Intern</span>
-        <h1 className="mt-6 text-2xl sm:text-3xl lg:text-4xl font-black leading-tight">Masuk untuk mengisi logbook, galeri, dan daftar hadir</h1>
+        <h1 className="mt-6 text-2xl sm:text-3xl lg:text-4xl font-black leading-tight">Masuk untuk Mengisi Logbook, Galeri, dan Daftar Hadir</h1>
         <p className="mt-3 text-sm leading-relaxed text-white/80 sm:mt-4 sm:text-base">Halaman ini hanya digunakan oleh mahasiswa magang. Dosen pembimbing dan kaprodi tidak perlu login untuk melihat halaman publik.</p>
       </div>
       <div className="card-hover bg-white rounded-[2rem] border border-slate-200 shadow-sm p-5 sm:p-8 lg:p-10">
-        <h2 className="text-xl sm:text-2xl font-black text-slate-900">Login mahasiswa magang</h2>
+        <h2 className="text-xl sm:text-2xl font-black text-slate-900">Login Mahasiswa Magang</h2>
         {error ? (
           <div className="mt-3 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-red-100 text-red-600">
               <SizedIcon name="close" size={12} />
             </span>
             <div className="min-w-0">
-              <p className="font-bold">Gagal masuk</p>
+              <p className="font-bold">Gagal Masuk</p>
               <p className="mt-1 leading-relaxed">{error}</p>
             </div>
           </div>
@@ -79,20 +79,20 @@ export default function LoginPage() {
                 className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 pr-12 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
                 value={kode}
                 onChange={function (e) { setKode(e.target.value) }}
-                aria-label="Kode akses" placeholder="Masukkan kode akses"
+                aria-label="Kode Akses" placeholder="Masukkan kode akses"
                 required
               />
               <button
                 type="button"
                 onClick={function () { setLihatKode(function (v) { return !v }) }}
-                title={lihatKode ? 'Sembunyikan kode akses' : 'Lihat kode akses'}
+                title={lihatKode ? 'Sembunyikan Kode Akses' : 'Lihat Kode Akses'}
                 className="absolute right-2 top-0 bottom-0 my-auto grid h-9 w-9 place-items-center rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-600"
               >
                 <EyeToggle open={lihatKode} size={18} />
               </button>
             </div>
           </div>
-          <button type="submit" disabled={busy} className={btnPrimary}>{busy ? 'Memproses...' : 'Masuk ke dashboard'}</button>
+          <button type="submit" disabled={busy} className={btnPrimary}>{busy ? 'Memproses...' : 'Masuk ke Dashboard'}</button>
         </form>
       </div>
     </section>

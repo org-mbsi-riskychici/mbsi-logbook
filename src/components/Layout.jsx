@@ -47,7 +47,7 @@ export default function Layout() {
 
   const themeBtn = function (extra) {
     return (
-      <button onClick={theme.toggle} className={'rounded-xl border border-slate-300 grid place-items-center hover:bg-slate-100 text-slate-700 ' + (extra || 'h-10 w-10')} title="Ganti tema">
+      <button onClick={theme.toggle} className={'rounded-xl border border-slate-300 grid place-items-center hover:bg-slate-100 text-slate-700 ' + (extra || 'h-10 w-10')} title="Ganti Tema">
         <SizedIcon name={theme.dark ? 'sun' : 'moon'} size={18} />
       </button>
     )
@@ -113,7 +113,7 @@ export default function Layout() {
 </footer>
 <ConfirmModal
   open={konfirmasiKeluar}
-  title="Keluar dari akun?"
+  title="Keluar dari Akun?"
   message="Sesi login kamu akan berakhir dan area intern tidak bisa diakses sampai kamu masuk lagi. Data yang sudah disimpan tetap aman."
   confirmLabel="Ya, Keluar"
   icon="user"

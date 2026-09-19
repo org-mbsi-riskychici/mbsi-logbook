@@ -50,7 +50,7 @@ export function LogbookCard(props) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-1.5">
           <CategoryBadge value={log.kategori} />
-          <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">{log.unit || 'Unit belum diisi'}</span>
+          <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">{log.unit || 'Unit Belum Diisi'}</span>
         </div>
         <StatusBadge status={log.status} />
       </div>
@@ -80,7 +80,7 @@ export function LogbookDetail(props) {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-2">
         <CategoryBadge value={log.kategori} />
-        <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">{log.unit || 'Unit belum diisi'}</span>
+        <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">{log.unit || 'Unit Belum Diisi'}</span>
         <StatusBadge status={log.status} />
       </div>
       <div>
@@ -88,7 +88,7 @@ export function LogbookDetail(props) {
         <h2 className="mt-1 text-xl sm:text-2xl font-black text-slate-900">{log.judul}</h2>
       </div>
       <div>
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-400">Rincian kegiatan</p>
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-400">Rincian Kegiatan</p>
         <div className="mt-4">
           {items.map(function (it, i) {
             return (
@@ -107,7 +107,7 @@ export function LogbookDetail(props) {
                     ) : null}
                   <p className="font-bold text-slate-900">
                     {it.judul}
-                    {it.show_in_gallery && it.media_path ? <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gold-500/15 text-amber-700 dark:text-amber-400">Di galeri</span> : null}
+                    {it.show_in_gallery && it.media_path ? <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gold-500/15 text-amber-700 dark:text-amber-400">Di Galeri</span> : null}
                   </p>
                   {it.deskripsi ? <p className="mt-1 text-sm text-slate-600">{it.deskripsi}</p> : null}
                   {it.hasil ? <p className="mt-2 inline-flex px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold">Hasil: {it.hasil}</p> : null}
@@ -120,7 +120,7 @@ export function LogbookDetail(props) {
       </div>
       {log.kendala || log.solusi || log.pembelajaran ? (
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-400">Refleksi harian</p>
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-400">Refleksi Harian</p>
           <div className="mt-3 grid gap-3 md:grid-cols-3">
             {log.kendala ? <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs font-semibold uppercase text-slate-600">Kendala</p><p className="mt-1 text-sm text-slate-700">{log.kendala}</p></div> : null}
             {log.solusi ? <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs font-semibold uppercase text-slate-600">Solusi</p><p className="mt-1 text-sm text-slate-700">{log.solusi}</p></div> : null}
@@ -150,7 +150,7 @@ export function GalleryCard(props) {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap gap-1.5">
             <CategoryBadge value={item.kegiatan} />
-            {item.logbook_item_id ? <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gold-500/15 text-amber-700 dark:text-amber-400">Dari logbook</span> : null}
+            {item.logbook_item_id ? <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gold-500/15 text-amber-700 dark:text-amber-400">Dari Logbook</span> : null}
           </div>
           <span className="text-xs text-slate-600">{formatTanggalShort(item.tanggal)}</span>
         </div>
@@ -211,7 +211,7 @@ export function AttendanceCard(props) {
         <AttendanceBadge status={row.status} />
       </div>
       <div className="mt-4 rounded-2xl bg-slate-50 p-4 flex-1">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Alasan atau keterangan</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Alasan atau Keterangan</p>
         <p className="mt-1 text-sm text-slate-700">{row.alasan || 'Tidak ada alasan.'}</p>
       </div>
       <div className="mt-4">
@@ -228,12 +228,12 @@ export function AttendanceDetail(props) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm text-slate-600">{formatTanggal(row.tanggal)}</p>
-          <h2 className="mt-1 text-xl sm:text-2xl font-black text-slate-900">Detail daftar hadir</h2>
+          <h2 className="mt-1 text-xl sm:text-2xl font-black text-slate-900">Detail Daftar Hadir</h2>
         </div>
         <AttendanceBadge status={row.status} />
       </div>
       <div className="rounded-2xl bg-slate-50 p-4">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Alasan atau keterangan</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Alasan atau Keterangan</p>
         <p className="mt-1 text-sm text-slate-700">{row.alasan || 'Tidak ada alasan.'}</p>
       </div>
       <div className="detail-footer border-t border-slate-100 pt-4"><PersonChip mahasiswa={row.mahasiswa} /></div>

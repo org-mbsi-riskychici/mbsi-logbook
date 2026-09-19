@@ -55,9 +55,9 @@ export default function HomePage() {
           {loading
             ? [0, 1, 2].map(function (i) { return <SkeletonStatCard key={i} /> })
             : [
-                <StatCard key="mahasiswa" label="Total mahasiswa magang" labelRapat="Mahasiswa" value={stats.mahasiswa} sub="Mahasiswa terdaftar dalam tim" rapat />,
-                <StatCard key="logbook" label="Total logbook publik" labelRapat="Logbook" value={stats.logbook} sub="Catatan kegiatan harian" rapat />,
-                <StatCard key="galeri" label="Total media galeri" labelRapat="Media" value={stats.galeri} sub="Foto dan video dokumentasi" rapat />
+                <StatCard key="mahasiswa" label="Total Mahasiswa Magang" labelRapat="Mahasiswa" value={stats.mahasiswa} sub="Mahasiswa Terdaftar dalam Tim" rapat />,
+                <StatCard key="logbook" label="Total Logbook Publik" labelRapat="Logbook" value={stats.logbook} sub="Catatan Kegiatan Harian" rapat />,
+                <StatCard key="galeri" label="Total Media Galeri" labelRapat="Media" value={stats.galeri} sub="Foto dan Video Dokumentasi" rapat />
               ]}
         </div>
       </section>
@@ -66,9 +66,9 @@ export default function HomePage() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-400">Kegiatan terbaru</p>
-            <h2 className="mt-2 text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Logbook terbaru tim</h2>
+            <h2 className="mt-2 text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Logbook Terbaru Tim</h2>
           </div>
-          <Link to="/logbook" className="text-sm font-semibold text-bsi-800 hover:text-bsi-950">Lihat semua logbook</Link>
+          <Link to="/logbook" className="text-sm font-semibold text-bsi-800 hover:text-bsi-950">Lihat Semua Logbook</Link>
         </div>
         <div className="grid-pusat mt-6">
           {loading
@@ -80,10 +80,10 @@ export default function HomePage() {
                   </div>
                 )
               })}
-          {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum ada logbook publik" desc="Logbook yang sudah berstatus Published akan tampil di sini." /></div> : null}
+          {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum Ada Logbook Publik" desc="Logbook yang sudah berstatus Published akan tampil di sini." /></div> : null}
         </div>
         <div className="mt-8 flex justify-center">
-          <Link to="/logbook" className="rounded-xl bg-bsi-800 px-5 py-2.5 text-xs font-bold text-white hover:bg-bsi-900 sm:rounded-2xl sm:px-6 sm:py-3 sm:text-sm">Lihat semua logbook</Link>
+          <Link to="/logbook" className="rounded-xl bg-bsi-800 px-5 py-2.5 text-xs font-bold text-white hover:bg-bsi-900 sm:rounded-2xl sm:px-6 sm:py-3 sm:text-sm">Lihat Semua Logbook</Link>
         </div>
       </section>
 

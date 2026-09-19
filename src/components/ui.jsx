@@ -98,7 +98,7 @@ export function Modal(props) {
         <div className="anim-modal modal-detail w-full max-w-3xl rounded-[2rem] bg-white shadow-2xl max-h-[88vh] overflow-y-auto overscroll-contain" onClick={function (e) { e.stopPropagation() }}>
           <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
             <p className="font-bold text-slate-900">{props.title || 'Detail'}</p>
-            <button onClick={props.onClose} aria-label="Tutup detail" className="h-9 w-9 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 grid place-items-center">
+            <button onClick={props.onClose} aria-label="Tutup Detail" className="h-9 w-9 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 grid place-items-center">
               <SizedIcon name="close" size={16} />
             </button>
           </div>
@@ -155,7 +155,7 @@ return (
 <SizedIcon name={p.icon || 'trash'} size={24} />
 </div>
 <div className="text-center">
-<h3 className="text-xl font-black text-slate-900">{p.title || 'Hapus data ini?'}</h3>
+<h3 className="text-xl font-black text-slate-900">{p.title || 'Hapus Data Ini?'}</h3>
 <p className="mt-2 text-sm text-slate-600">{p.message}</p>
 </div>
 <div className="grid grid-cols-2 gap-3">
@@ -292,7 +292,7 @@ export function Lightbox(props) {
       <div className="absolute right-4 top-4 flex gap-2">
         <button
           type="button"
-          title={busyUnduh ? 'Menyiapkan unduhan...' : (props.driveId ? 'Unduh video dari Google Drive' : 'Unduh media')}
+          title={busyUnduh ? 'Menyiapkan Unduhan...' : (props.driveId ? 'Unduh Video dari Google Drive' : 'Unduh Media')}
           onClick={unduh}
           disabled={busyUnduh}
           style={tombolUnduhTerlihat ? undefined : { display: 'none' }}
@@ -330,7 +330,7 @@ export function ZoomableMedia(props) {
       />
       <button
         type="button"
-        title="Perbesar media"
+        title="Perbesar Media"
         onClick={function (e) { e.stopPropagation(); setOpen(true) }}
         className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100"
       >
@@ -430,7 +430,7 @@ export function MediaYouTube(props) {
       <div className={'grid place-items-center bg-slate-800 ' + (props.className || 'absolute inset-0 h-full w-full')}>
         <div className="flex flex-col items-center gap-2 text-slate-400">
           <SizedIcon name="video" size={26} />
-          <p className="px-2 text-center text-[11px] font-semibold">{status === 'habis' ? 'Pratinjau video belum siap' : 'Menyiapkan pratinjau video'}</p>
+          <p className="px-2 text-center text-[11px] font-semibold">{status === 'habis' ? 'Pratinjau Video Belum Siap' : 'Menyiapkan Pratinjau Video'}</p>
         </div>
       </div>
     )
@@ -630,7 +630,7 @@ const ToastContext = createContext(null)
                 <SizedIcon name={sukses ? 'check' : 'close'} size={15} />
               </span>
               <p className="toast-teks flex-1 text-sm font-semibold">{t.pesan}</p>
-              <button type="button" onClick={function () { tutupToast(t.id) }} title="Tutup notifikasi"
+              <button type="button" onClick={function () { tutupToast(t.id) }} title="Tutup Notifikasi"
                 className="toast-tutup grid h-7 w-7 shrink-0 place-items-center rounded-lg">
                 <SizedIcon name="close" size={13} />
               </button>
