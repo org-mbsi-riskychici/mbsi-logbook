@@ -33,7 +33,7 @@ The content is organized as follows:
 - Files are sorted by Git change count (files with more changes are at the bottom)
 
 # Directory Structure
-```
+````
 api/
   _lib/
     sesi.js
@@ -94,12 +94,12 @@ README.md
 tailwind.config.js
 vercel.json
 vite.config.js
-```
+````
 
 # Files
 
 ## File: api/_lib/sesi.js
-```javascript
+````javascript
 import { createClient } from '@supabase/supabase-js'
 
 export async function cekSesi(env, authHeader) {
@@ -122,10 +122,10 @@ export function bacaBody(req) {
     })
   })
 }
-```
+````
 
 ## File: api/_lib/youtube.js
-```javascript
+````javascript
 export const LIMIT_PER_PROJECT = 5
 
 export function ptToday() {
@@ -167,10 +167,10 @@ export async function getAccessToken(kred) {
   cacheToken[kred.n] = { token: j.access_token, expire: now + (j.expires_in || 3600) * 1000 }
   return j.access_token
 }
-```
+````
 
 ## File: public/llms.txt
-```
+````
 # Logbook Magang BSI
 Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia.
 Aplikasi single page berbasis React dengan data tersimpan di Supabase dan media di Cloudflare R2, YouTube, serta Google Drive.
@@ -189,10 +189,10 @@ Aplikasi single page berbasis React dengan data tersimpan di Supabase dan media 
 ## Catatan teknis
 - Seluruh konten dimuat lewat JavaScript, tersedia blok noscript berisi tautan halaman utama.
 - robots.txt mengizinkan perayap umum dan agen AI.
-```
+````
 
 ## File: public/robots.txt
-```
+````
 User-agent: *
 Allow: /
 
@@ -213,10 +213,10 @@ Allow: /
 
 User-agent: PerplexityBot
 Allow: /
-```
+````
 
 ## File: src/lib/profil.js
-```javascript
+````javascript
 import { supabase } from './supabase.js'
 import { siapkanFotoProfil } from './konversi.js'
 
@@ -252,30 +252,30 @@ export async function hapusFotoProfil(mahasiswaId, fotoUrl) {
   const { error } = await supabase.from('mahasiswa').update({ foto_profil: null }).eq('id', mahasiswaId)
   if (error) throw new Error(error.message)
 }
-```
+````
 
 ## File: src/lib/supabase.js
-```javascript
+````javascript
 import { createClient } from '@supabase/supabase-js'
 
 export const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
   import.meta.env.VITE_SUPABASE_ANON_KEY
 )
-```
+````
 
 ## File: supabase/migrasi-drive-download.sql
-```sql
+````sql
 -- Migrasi fitur download Google Drive
 -- Jalankan SQL ini di Supabase Dashboard > SQL Editor
 -- jika kolom drive_id belum ada.
 
 alter table public.logbook_items add column if not exists drive_id text;
 alter table public.galeri add column if not exists drive_id text;
-```
+````
 
 ## File: .env.example
-```
+````
 VITE_SUPABASE_URL=
 VITE_SUPABASE_ANON_KEY=
 R2_ACCOUNT_ID=
@@ -283,20 +283,20 @@ R2_ACCESS_KEY_ID=
 R2_SECRET_ACCESS_KEY=
 R2_BUCKET_NAME=mbsi-media
 R2_PUBLIC_BASE_URL=
-```
+````
 
 ## File: postcss.config.js
-```javascript
+````javascript
 export default {
   plugins: {
     tailwindcss: {},
     autoprefixer: {}
   }
 }
-```
+````
 
 ## File: tailwind.config.js
-```javascript
+````javascript
 export default {
   darkMode: 'class',
   content: ['./index.html', './src/**/*.{js,jsx}'],
@@ -314,17 +314,17 @@ export default {
   },
   plugins: []
 }
-```
+````
 
 ## File: vercel.json
-```json
+````json
 {
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }
-```
+````
 
 ## File: api/r2/delete.js
-```javascript
+````javascript
 import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3'
 import { cekSesi } from '../_lib/sesi.js'
 
@@ -346,10 +346,10 @@ export default async function handler(req, res) {
   await s3.send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key }))
   return res.status(200).json({ ok: true })
 }
-```
+````
 
 ## File: api/r2/presign.js
-```javascript
+````javascript
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { cekSesi } from '../_lib/sesi.js'
@@ -379,10 +379,10 @@ export default async function handler(req, res) {
   const publicUrl = process.env.R2_PUBLIC_BASE_URL + '/' + key
   return res.status(200).json({ uploadUrl, publicUrl, key })
 }
-```
+````
 
 ## File: src/lib/constants.js
-```javascript
+````javascript
 export const KATEGORI = [
   'Administrasi',
   'Pengarsipan',
@@ -407,10 +407,10 @@ export const GALERI_KEGIATAN = [
   'Operasional',
   'Lainnya'
 ]
-```
+````
 
 ## File: src/lib/drive.js
-```javascript
+````javascript
 export function parseDriveId(url) {
   if (!url) return null
   const s = String(url).trim()
@@ -447,10 +447,10 @@ export function driveDownloadUrl(id) {
 export function driveViewUrl(id) {
   return 'https://drive.google.com/file/d/' + id + '/view'
 }
-```
+````
 
 ## File: src/lib/youtube.js
-```javascript
+````javascript
 import { supabase } from './supabase.js'
 
 export function parseYouTubeId(url) {
@@ -557,10 +557,10 @@ export async function ambilTokenSesi() {
     return ''
   }
 }
-```
+````
 
 ## File: supabase/schema.sql
-```sql
+````sql
 create extension if not exists "pgcrypto";
 create table public.mahasiswa (
   id uuid primary key default gen_random_uuid(),
@@ -682,20 +682,20 @@ create policy "hadir_update_self" on public.daftar_hadir for update using (
 create policy "hadir_delete_self" on public.daftar_hadir for delete using (
   mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
 );
-```
+````
 
 ## File: .gitignore
-```
+````
 node_modules
 dist
 .env.local
 .env
 *.log
 .env.youtube-*
-```
+````
 
 ## File: api/youtube/latest.js
-```javascript
+````javascript
 import { createClient } from '@supabase/supabase-js'
 import { LIMIT_PER_PROJECT, ptToday, daftarKredensial, getAccessToken } from '../_lib/youtube.js'
 import { cekSesi } from '../_lib/sesi.js'
@@ -725,10 +725,10 @@ export default async function handler(req, res) {
   }
   return res.status(502).json({ error: 'Gagal memeriksa video terbaru: ' + terakhir })
 }
-```
+````
 
 ## File: api/youtube/quota.js
-```javascript
+````javascript
 import { createClient } from '@supabase/supabase-js'
 import { LIMIT_PER_PROJECT, ptToday, daftarKredensial, getAccessToken } from '../_lib/youtube.js'
 import { cekSesi } from '../_lib/sesi.js'
@@ -750,10 +750,10 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store')
   return res.status(200).json({ limit: limit, used: usedTotal, remaining: Math.max(0, limit - usedTotal), perProject: perProject, ptDate: today })
 }
-```
+````
 
 ## File: api/youtube/session.js
-```javascript
+````javascript
 import { createClient } from '@supabase/supabase-js'
 import { LIMIT_PER_PROJECT, ptToday, daftarKredensial, getAccessToken } from '../_lib/youtube.js'
 import { cekSesi } from '../_lib/sesi.js'
@@ -792,10 +792,10 @@ export default async function handler(req, res) {
   }
   return res.status(429).json({ error: 'Kuota harian semua project video sudah habis. Coba lagi besok atau gunakan link video eksternal.', detail: terakhir })
 }
-```
+````
 
 ## File: src/lib/auth.js
-```javascript
+````javascript
 import { useEffect, useState } from 'react'
 import { supabase } from './supabase.js'
 
@@ -889,13 +889,25 @@ export function useAuth() {
 
   return { mahasiswa: mahasiswa, loading: loading }
 }
-```
+````
 
 ## File: src/lib/theme.jsx
-```javascript
+````javascript
 import { createContext, useContext, useEffect, useState } from 'react'
 
 const ThemeContext = createContext(null)
+
+/* View Transition hanya aman saat toolbar browser pasti stabil.
+   Di perangkat sentuh, toolbar bisa sedang beranimasi buka/tutup
+   ketika user scroll. Snapshot VT pada momen itu membuat toolbar
+   meluas menutupi navbar, jadi VT dilewati kecuali halaman
+   benar-benar di paling atas. */
+function bolehTransisiVT() {
+  if (!document.startViewTransition) return false
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false
+  if (window.matchMedia('(pointer: coarse)').matches && window.scrollY > 0) return false
+  return true
+}
 
 export function ThemeProvider(props) {
   const [dark, setDark] = useState(function () {
@@ -903,26 +915,24 @@ export function ThemeProvider(props) {
     if (saved) return saved === 'dark'
     return window.matchMedia('(prefers-color-scheme: dark)').matches
   })
-
   useEffect(function () {
     document.documentElement.classList.toggle('dark', dark)
     localStorage.setItem('mbsi-theme', dark ? 'dark' : 'light')
   }, [dark])
-
   return (
     <ThemeContext.Provider value={{ dark: dark, toggle: function () {
-const ganti = function () { setDark(function (d) { return !d }) }
-if (document.startViewTransition && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-  const akar = document.documentElement
-  const vt = document.startViewTransition(function () {
-    akar.classList.add('vt-tema')
-    ganti()
-  })
-  const lepas = function () { akar.classList.remove('vt-tema') }
-  vt.finished.then(lepas, lepas)
-  setTimeout(lepas, 600)
-} else ganti()
-} }}>
+      const ganti = function () { setDark(function (d) { return !d }) }
+      if (bolehTransisiVT()) {
+        const akar = document.documentElement
+        const vt = document.startViewTransition(function () {
+          akar.classList.add('vt-tema')
+          ganti()
+        })
+        const lepas = function () { akar.classList.remove('vt-tema') }
+        vt.finished.then(lepas, lepas)
+        setTimeout(lepas, 600)
+      } else ganti()
+    } }}>
       {props.children}
     </ThemeContext.Provider>
   )
@@ -931,10 +941,10 @@ if (document.startViewTransition && !window.matchMedia('(prefers-reduced-motion:
 export function useTheme() {
   return useContext(ThemeContext)
 }
-```
+````
 
 ## File: index.html
-```html
+````html
 <!DOCTYPE html>
 <html lang="id">
   <head>
@@ -973,10 +983,10 @@ export function useTheme() {
     </noscript>
   </body>
 </html>
-```
+````
 
 ## File: package.json
-```json
+````json
 {
   "name": "mbsi-logbook",
   "private": true,
@@ -1004,29 +1014,10 @@ export function useTheme() {
     "vite": "^5.4.0"
   }
 }
-```
-
-## File: README.md
-```markdown
-# Logbook Magang BSI
-
-Portal logbook, galeri, dan daftar hadir magang Bank Syariah Indonesia.
-
-## Menjalankan lokal
-1. node setup project saat ini (sudah dilakukan saat setup)
-2. npm run dev
-3. Buka http://localhost:5173
-
-## Database
-Jalankan isi file supabase/schema.sql di Supabase SQL Editor.
-Buat user Auth dengan pola email NIM@mbsi.local dan isi tabel mahasiswa beserta auth_uid.
-
-## Deploy
-Push ke GitHub, import di Vercel, salin isi .env.local ke Environment Variables Vercel.
-```
+````
 
 ## File: src/lib/format.js
-```javascript
+````javascript
 export function formatTanggal(s) {
   if (!s) return 'Tanggal belum diisi'
   const d = new Date(s + 'T00:00:00')
@@ -1090,10 +1081,190 @@ export function urutkanTanggal(list, mode) {
   })
   return arr
 }
+````
+
+## File: README.md
+````markdown
+# Logbook Magang BSI
+
+Portal pencatatan kegiatan magang mahasiswa Bank Syariah Indonesia (BSI) yang menggabungkan **logbook harian**, **galeri foto & video**, dan **daftar kehadiran** dalam satu tempat.
+
+Dibangun untuk memudahkan mahasiswa mendokumentasikan kegiatan magang, serta memberikan akses **publik** (tanpa login) kepada Dosen Pembimbing (Dospem) dan Kaprodi untuk memantau progres tim.
+
+## ✨ Fitur Utama
+
+### Untuk Mahasiswa (Login)
+- **Dashboard** dengan empat tab: Logbook, Galeri, Daftar Hadir, dan Profil.
+- **Form Logbook** interaktif: kolom Kendala / Solusi / Pembelajaran melebar otomatis saat difokuskan atau terisi, dengan animasi halus pada kartu form dan tombol Simpan.
+- **Upload foto** otomatis dikonversi ke WebP ringan (mendukung HEIC iPhone).
+- **Upload video** melalui YouTube (unlisted) dengan sistem kuota harian per project, atau alternatif link YouTube/Google Drive.
+- **Proteksi draf**: konfirmasi otomatis saat pindah tab, pindah halaman, refresh, tutup tab, batal edit, atau menimpa draf melalui tombol Edit.
+- **Profil & avatar** dengan upload foto profil sendiri.
+
+### Untuk Dosen Pembimbing & Kaprodi (Publik)
+- Halaman **Beranda** menampilkan logbook terbaru tim yang sudah dibagikan.
+- Halaman **Logbook**, **Galeri**, dan **Absen** dengan filter & pencarian.
+- Halaman **Dospem** menampilkan profil tim magang beserta rekap kehadiran (Masuk / Izin / Bolos) dan grafik per mahasiswa.
+- Semua halaman tersedia dalam mode terang & gelap.
+
+### Umum
+- **Pagination responsif**: ikon panah + elipsis `...` ala web korporat, tampil satu baris rapi di mobile, tablet, dan desktop.
+- **Dark mode** dengan transisi tema halus.
+- **Tampilan responsif** penuh dari 360px hingga desktop lebar.
+- **Skeleton loading** yang konsisten di setiap daftar.
+
+## 🛠️ Tech Stack
+
+| Lapisan | Teknologi |
+|---------|-----------|
+| Frontend | React 18 + Vite 5 |
+| Styling | Tailwind CSS 3 |
+| Routing | React Router |
+| Database & Auth | Supabase (PostgreSQL + Row Level Security) |
+| Penyimpanan File | Cloudflare R2 |
+| Video Hosting | YouTube Data API v3 (unlisted) |
+| Hosting | Vercel (frontend + serverless functions) |
+| Build Tool | Vite, PostCSS |
+
+## 📁 Struktur Proyek
+
+```
+mbsi-logbook/
+├── api/                    # Fungsi serverless Vercel
+│   ├── _lib/               # Helper server (supabase admin, r2, youtube)
+│   ├── r2/                 # Endpoint upload/unduh/hapus media R2
+│   └── youtube/            # Endpoint kuota, sesi upload, cek video terbaru
+├── public/                 # File statis (favicon, robots.txt, llms.txt)
+├── src/
+│   ├── components/         # Komponen UI bersama
+│   │   ├── ui.jsx          # Toast, Modal, Pagination, AutoTextArea, dll.
+│   │   ├── cards.jsx       # Kartu logbook, galeri, kehadiran
+│   │   ├── controls.jsx    # Filter, pencarian, dropdown
+│   │   ├── Layout.jsx      # Navbar, footer, guard unsaved changes
+│   │   ├── Carousel.jsx    # Carousel media
+│   │   ├── PemutarVideo.jsx# Custom video player
+│   │   └── icons.jsx       # Kumpulan ikon SVG inline
+│   ├── lib/                # Logika & helper
+│   │   ├── auth.js         # Sesi & autentikasi
+│   │   ├── upload.js       # Pipeline upload foto/video
+│   │   ├── konversi.js     # Konversi HEIC → WebP
+│   │   ├── youtube.js      # Helper YouTube API
+│   │   ├── drive.js        # Helper Google Drive
+│   │   ├── profil.js       # Upload avatar
+│   │   ├── logbook.js      # Logika form logbook
+│   │   ├── format.js       # Format tanggal, angka, file size
+│   │   └── constants.js    # Konstanta bersama
+│   ├── pages/              # Halaman utama
+│   │   ├── HomePage.jsx    # Landing page publik
+│   │   ├── LoginPage.jsx   # Login mahasiswa
+│   │   ├── DashboardPage.jsx # Dashboard mahasiswa (4 tab)
+│   │   ├── LogbookPage.jsx # Daftar logbook publik
+│   │   ├── GalleryPage.jsx # Galeri publik
+│   │   ├── AttendancePage.jsx # Daftar hadir publik
+│   │   └── DospemPage.jsx  # Halaman Dospem/Kaprodi
+│   ├── App.jsx             # Router utama
+│   ├── main.jsx            # Entry point + animasi halaman
+│   └── index.css           # Tema & utilitas global
+├── supabase/
+│   ├── schema.sql          # Skema database lengkap
+│   └── migrasi-drive-download.sql
+├── .env.example            # Contoh variabel lingkungan
+├── vercel.json             # Konfigurasi Vercel (rewrite SPA)
+├── vite.config.js          # Plugin Vite untuk middleware API lokal
+└── tailwind.config.js      # Konfigurasi Tailwind + tema BSI
 ```
 
+## 🚀 Menjalankan di Lokal
+
+### Prasyarat
+- Node.js 18+
+- Akun [Supabase](https://supabase.com) (untuk DB + Auth)
+- Akun [Cloudflare](https://cloudflare.com) (untuk R2)
+- Akun [Google Cloud Console](https://console.cloud.google.com) (untuk YouTube API)
+
+### Langkah Setup
+
+1. **Clone & install**
+   ```bash
+   git clone <repo-url>
+   cd mbsi-logbook
+   npm install
+   ```
+
+2. **Salin `.env.example` menjadi `.env.local`**
+   ```bash
+   cp .env.example .env.local
+   ```
+   Isi semua variabel sesuai layanan yang kamu miliki (lihat bagian **Variabel Lingkungan**).
+
+3. **Jalankan skema database**
+   - Buka Supabase → SQL Editor.
+   - Tempel seluruh isi `supabase/schema.sql`, lalu jalankan.
+   - Buat user Auth dengan pola `NIM@mbsi.local` (sesuai konvensi kampus) dan isi tabel `mahasiswa` dengan `auth_uid` yang cocok.
+
+4. **Jalankan server lokal**
+   ```bash
+   npm run dev
+   ```
+   Buka `http://localhost:5173` (atau `http://<IP-lokal>:5173` untuk uji dari HP satu jaringan).
+
+5. **Preview build production**
+   ```bash
+   npm run build
+   npm run preview
+   ```
+
+## 🔐 Variabel Lingkungan
+
+### Client (dipakai saat build, prefix `VITE_`)
+| Variabel | Keterangan |
+|----------|-----------|
+| `VITE_SUPABASE_URL` | URL proyek Supabase |
+| `VITE_SUPABASE_ANON_KEY` | Public anon key Supabase |
+
+### Server (dipakai fungsi `api/` saat runtime)
+| Variabel | Keterangan |
+|----------|-----------|
+| `SUPABASE_SERVICE_ROLE_KEY` | Service role key (hanya di server) |
+| `R2_ACCOUNT_ID` | Cloudflare Account ID |
+| `R2_ACCESS_KEY_ID` | R2 access key |
+| `R2_SECRET_ACCESS_KEY` | R2 secret key |
+| `R2_BUCKET_NAME` | Nama bucket R2 |
+| `R2_PUBLIC_BASE_URL` | URL publik bucket (mis. `https://pub-xxx.r2.dev`) |
+| `YOUTUBE_CLIENT_ID_1` | OAuth client ID Google project ke-1 |
+| `YOUTUBE_CLIENT_SECRET_1` | OAuth client secret project ke-1 |
+| `YOUTUBE_REFRESH_TOKEN_1` | Refresh token project ke-1 |
+| `YOUTUBE_CLIENT_ID_2.._6` | Opsional — untuk kuota video lebih besar |
+| `YOUTUBE_CLIENT_SECRET_2.._6` | Opsional |
+| `YOUTUBE_REFRESH_TOKEN_2.._6` | Opsional |
+
+Setiap project YouTube mendapat kuota **5 upload/hari** (zona waktu Pacific). Tambahkan project 2–6 bila butuh kuota harian lebih besar (total hingga 30 upload/hari).
+
+## 🌐 Deploy ke Vercel
+
+1. Push repo ke GitHub.
+2. Import proyek di [Vercel](https://vercel.com).
+3. Salin seluruh isi `.env.local` ke **Settings → Environment Variables** (berlaku untuk Production + Preview).
+4. Deploy. Vercel otomatis mendeteksi framework Vite dan menjalankan fungsi serverless dari folder `api/`.
+
+> ⚠️ Tanpa variabel server (terutama `SUPABASE_SERVICE_ROLE_KEY`, `R2_*`, dan `YOUTUBE_*`), build akan sukses tetapi API akan mengembalikan `500` / "Kredensial belum dikonfigurasi".
+
+## 📏 Batasan & Catatan Produksi
+
+- **Ukuran foto maksimum**: 15 MB (dikonversi ke WebP sebelum diunggah).
+- **Ukuran video maksimum**: 50 MB (diperiksa di sisi klien).
+- **Kuota video YouTube**: 5 upload/project/hari; bila habis, sistem menyarankan link eksternal.
+- **Privasi video YouTube**: `unlisted` (hanya dapat diakses lewat link tertanam).
+- **Row Level Security (RLS)** Supabase wajib aktif di semua tabel produksi (`logbooks`, `logbook_items`, `galeri`, `daftar_hadir`, `mahasiswa`, `youtube_quota_usage`).
+- **Service role key Supabase** hanya boleh berada di sisi server (`api/`), jangan pernah masuk ke kode klien.
+
+## 📄 Lisensi
+
+Proyek internal untuk kegiatan magang Bank Syariah Indonesia. Hak cipta © 2026 Tim Magang BSI.
+````
+
 ## File: src/components/Skeleton.jsx
-```javascript
+````javascript
 export function SkeletonLogbookCard() {
   return (
     <div className="card-hover flex h-full flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -1330,10 +1501,10 @@ export function SkeletonChartRow() {
     </div>
   )
 }
-```
+````
 
 ## File: src/lib/konversi.js
-```javascript
+````javascript
 const MAKS_SISI_FULL = 2560
 const KUALITAS_FULL = 0.92
 const MAKS_SISI_THUMB = 1200
@@ -1475,10 +1646,10 @@ export async function siapkanFotoProfil(file, maksSisi, kualitas) {
     URL.revokeObjectURL(muat.url)
   }
 }
-```
+````
 
 ## File: src/lib/logbook.js
-```javascript
+````javascript
 import { supabase } from './supabase.js'
 
 const EMPTY = '00000000-0000-0000-0000-000000000000'
@@ -1518,10 +1689,10 @@ export async function syncGaleriFromLogbook(mahasiswaId, items, meta) {
     }
   }
 }
-```
+````
 
 ## File: src/lib/upload.js
-```javascript
+````javascript
 import { supabase } from './supabase.js'
 import { iniVideo, ekstensiFile, siapkanFoto } from './konversi.js'
 
@@ -1625,10 +1796,10 @@ export async function deleteMedia(key) {
   }
   return res.json()
 }
-```
+````
 
 ## File: src/components/PemutarVideo.jsx
-```javascript
+````javascript
 import { useEffect, useRef, useState } from 'react'
 
 let janjiApi = null
@@ -1914,10 +2085,10 @@ export default function PemutarVideo(props) {
     </div>
   )
 }
-```
+````
 
 ## File: vite.config.js
-```javascript
+````javascript
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
@@ -2115,10 +2286,10 @@ export default defineConfig(function ({ mode }) {
     }
   }
 })
-```
+````
 
 ## File: src/components/Carousel.jsx
-```javascript
+````javascript
 import { useEffect, useRef, useState } from 'react'
 import { SizedIcon } from './icons.jsx'
 import { Lightbox, SmartFit, MediaDrive } from './ui.jsx'
@@ -2241,10 +2412,10 @@ export default function Carousel(props) {
     </>
   )
 }
-```
+````
 
 ## File: src/components/controls.jsx
-```javascript
+````javascript
 import { SelubungPanel } from './ui.jsx'
 import { useEffect, useRef, useState } from 'react'
 import { ICONS } from './icons.jsx'
@@ -2516,10 +2687,10 @@ export function SumberVideo(props) {
     </div>
   )
 }
-```
+````
 
 ## File: src/components/FilterBar.jsx
-```javascript
+````javascript
 import { useEffect, useState } from 'react'
 import { ICONS } from './icons.jsx'
 import { CustomSelect, CustomDateInput } from './controls.jsx'
@@ -2638,10 +2809,10 @@ export function countActiveFilters(o) {
   }
   return c
 }
-```
+````
 
 ## File: src/components/icons.jsx
-```javascript
+````javascript
 function svg(inner, size) {
   const s = size || 16
   return (
@@ -2850,10 +3021,10 @@ export function EyeToggle(props) {
     </svg>
   )
 }
-```
+````
 
 ## File: src/main.jsx
-```javascript
+````javascript
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
@@ -3066,17 +3237,18 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     const sekarang = akar.classList.contains('dark')
     if (sekarang === gelap) return
     gelap = sekarang
-    if (document.startViewTransition) return
+    /* VT sedang menangani pergantian ini bila kelas vt-tema menempel di html */
+    if (akar.classList.contains('vt-tema')) return
     akar.classList.add('theme-transition')
     if (timer) clearTimeout(timer)
     timer = setTimeout(function () { akar.classList.remove('theme-transition') }, 400)
   })
   obs.observe(akar, { attributes: true, attributeFilter: ['class'] })
 })()
-```
+````
 
 ## File: src/App.jsx
-```javascript
+````javascript
 import { SkeletonDashboard } from './components/Skeleton.jsx'
 import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
@@ -3137,10 +3309,10 @@ export default function App() {
     </ThemeProvider>
   )
 }
-```
+````
 
 ## File: src/pages/LoginPage.jsx
-```javascript
+````javascript
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { loginWithNim } from '../lib/auth.js'
@@ -3241,10 +3413,10 @@ export default function LoginPage() {
     </section>
   )
 }
-```
+````
 
 ## File: src/pages/DospemPage.jsx
-```javascript
+````javascript
 import { urutkanTanggal } from '../lib/format.js'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -3395,10 +3567,10 @@ return (
     </div>
   )
 }
-```
+````
 
 ## File: src/pages/LogbookPage.jsx
-```javascript
+````javascript
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../lib/auth.js'
@@ -3505,10 +3677,10 @@ export default function LogbookPage() {
     </div>
   )
 }
-```
+````
 
 ## File: src/components/Layout.jsx
-```javascript
+````javascript
 import { Outlet, Link, NavLink, useNavigate } from 'react-router-dom'
 import { useTheme } from '../lib/theme.jsx'
 import { useAuth, logoutMahasiswa } from '../lib/auth.js'
@@ -3635,10 +3807,10 @@ export default function Layout() {
     </div>
   )
 }
-```
+````
 
 ## File: src/pages/HomePage.jsx
-```javascript
+````javascript
 import { urutkanTanggal } from '../lib/format.js'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -3734,10 +3906,10 @@ export default function HomePage() {
     </div>
   )
 }
-```
+````
 
 ## File: src/pages/AttendancePage.jsx
-```javascript
+````javascript
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../lib/auth.js'
@@ -3895,10 +4067,10 @@ export default function AttendancePage() {
     </div>
   )
 }
-```
+````
 
 ## File: src/pages/GalleryPage.jsx
-```javascript
+````javascript
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../lib/auth.js'
@@ -3997,10 +4169,10 @@ export default function GalleryPage() {
     </div>
   )
 }
-```
+````
 
 ## File: src/components/cards.jsx
-```javascript
+````javascript
 import { Avatar } from './ui.jsx'
 import PemutarVideo from './PemutarVideo.jsx'
 import Carousel from './Carousel.jsx'
@@ -4243,10 +4415,10 @@ export function AttendanceDetail(props) {
     </div>
   )
 }
-```
+````
 
 ## File: src/index.css
-```css
+````css
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -4943,10 +5115,10 @@ button:active:not(:disabled), a:active, .clickable:active { transition-duration:
 .dark .detail-footer {
   background: #0f172a;
 }
-```
+````
 
 ## File: src/components/ui.jsx
-```javascript
+````javascript
 import { createPortal } from 'react-dom'
 import PemutarVideo from './PemutarVideo.jsx'
 import { drivePreviewUrl, driveDownloadUrl, driveThumbUrl } from '../lib/drive.js'
@@ -5618,10 +5790,10 @@ export function SelubungPanel(props) {
   if (!tampil) return null
   return <div className={'selubung-panel' + (tutup ? ' panel-tutup' : '')}>{props.children}</div>
 }
-```
+````
 
 ## File: src/pages/DashboardPage.jsx
-```javascript
+````javascript
 import { SkeletonDashboard } from '../components/Skeleton.jsx'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -6784,4 +6956,4 @@ export default function DashboardPage() {
     </div>
   )
 }
-```
+````

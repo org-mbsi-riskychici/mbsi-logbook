@@ -210,7 +210,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     const sekarang = akar.classList.contains('dark')
     if (sekarang === gelap) return
     gelap = sekarang
-    if (document.startViewTransition) return
+    /* VT sedang menangani pergantian ini bila kelas vt-tema menempel di html */
+    if (akar.classList.contains('vt-tema')) return
     akar.classList.add('theme-transition')
     if (timer) clearTimeout(timer)
     timer = setTimeout(function () { akar.classList.remove('theme-transition') }, 400)
