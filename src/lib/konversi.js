@@ -1,5 +1,6 @@
-const MAKS_SISI_FULL = 2560
-const KUALITAS_FULL = 0.92
+const MAKS_SISI_FULL = 2048
+const MAKS_BYTE_FULL = 500 * 1024
+const TINGKAT_KUALITAS_FULL = [0.88, 0.84, 0.80]
 const MAKS_SISI_THUMB = 900
 const MAKS_BYTE_THUMB = 70 * 1024
 const TINGKAT_KUALITAS_THUMB = [0.8, 0.72, 0.65]
@@ -56,6 +57,16 @@ async function keWebP(berkas, maksSisi, kualitas) {
   return blob
 }
 
+/* File penuh untuk Lightbox dan unduhan: coba kualitas tertinggi dulu, turunkan bertahap hanya bila melewati batas ukuran */
+async function keWebPFull(berkas) {
+  let blob = null
+  for (let i = 0; i < TINGKAT_KUALITAS_FULL.length; i++) {
+    blob = await keWebP(berkas, MAKS_SISI_FULL, TINGKAT_KUALITAS_FULL[i])
+    if (!blob || blob.size <= MAKS_BYTE_FULL) break
+  }
+  return blob
+}
+
 /* Thumbnail kartu: coba kualitas tertinggi dulu, turunkan hanya bila masih di atas batas ukuran */
 async function keWebPThumb(berkas) {
   let blob = null
@@ -77,7 +88,7 @@ export async function siapkanFoto(file, onInfo) {
   if (onInfo) onInfo('Menyiapkan WebP')
   let fullBlob = null
   try {
-    fullBlob = await keWebP(sumber, MAKS_SISI_FULL, KUALITAS_FULL)
+    fullBlob = await keWebPFull(sumber)
   } catch (e) {
     fullBlob = null
   }
