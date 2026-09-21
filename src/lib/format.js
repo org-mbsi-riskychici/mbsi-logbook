@@ -20,7 +20,10 @@ export function todayInput() {
 }
 
 export function detectMediaType(u) {
-  const ext = String(u || '').split('?')[0].split('.').pop().toLowerCase()
+  let s = String(u || '')
+  const iK = s.indexOf('key=')
+  if (iK !== -1) s = decodeURIComponent(s.slice(iK + 4).split('&')[0])
+  const ext = s.split('?')[0].split('.').pop().toLowerCase()
   return ['mp4', 'webm', 'ogg', 'mov', 'm4v'].indexOf(ext) !== -1 ? 'video' : 'foto'
 }
 

@@ -309,14 +309,19 @@ export default function DashboardPage() {
   }
 
   function keyDariUrl(url) {
-    try { return new URL(url).pathname.slice(1) } catch (e) { return '' }
+    try {
+      const u = new URL(url, window.location.origin)
+      const k = u.searchParams.get('key')
+      if (k) return k
+      return u.pathname.slice(1)
+    } catch (e) { return '' }
   }
-
   async function hapusMediaR2(url) {
-    if (String(url || '').indexOf('i.ytimg.com') !== -1 || String(url || '').indexOf('youtube') !== -1) return
-    if (String(url || '').indexOf('drive.google.com') !== -1 || String(url || '').indexOf('drive.usercontent.google.com') !== -1) return
-    if (!/^https?:\/\//.test(String(url || ''))) return
-    const key = keyDariUrl(url)
+    const s = String(url || '')
+    if (s.indexOf('i.ytimg.com') !== -1 || s.indexOf('youtube') !== -1) return
+    if (s.indexOf('drive.google.com') !== -1 || s.indexOf('drive.usercontent.google.com') !== -1) return
+    if (!/^(https?:\/\/|\/api\/r2\/file)/.test(s)) return
+    const key = keyDariUrl(s)
     if (!key) { console.warn('URL media tidak valid, dilewati:', url); return }
     try {
       await deleteMedia(key)

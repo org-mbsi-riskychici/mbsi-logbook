@@ -40,6 +40,7 @@ api/
     youtube.js
   r2/
     delete.js
+    file.js
     presign.js
   youtube/
     latest.js
@@ -97,6 +98,59 @@ vite.config.js
 ````
 
 # Files
+
+## File: api/r2/file.js
+````javascript
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+
+const s3 = new S3Client({
+  region: 'auto',
+  endpoint: 'https://' + process.env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
+  }
+})
+
+/* Media disajikan lewat domain aplikasi sendiri:
+   default 302 ke presigned GET R2 (untuk <img>/<video>),
+   ?unduh=1 mem-proxy byte supaya unduhan Lightbox tetap same-origin. */
+export default async function handler(req, res) {
+  if (req.method !== 'GET') {
+    res.statusCode = 405
+    res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
+    return
+  }
+  const url = new URL(req.url, 'http://localhost')
+  const key = url.searchParams.get('key')
+  if (!key) {
+    res.statusCode = 400
+    res.end(JSON.stringify({ error: 'Key tidak ada' }))
+    return
+  }
+  const cmd = new GetObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key })
+  if (url.searchParams.get('unduh') !== '1') {
+    const signed = await getSignedUrl(s3, cmd, { expiresIn: 300 })
+    res.statusCode = 302
+    res.setHeader('Location', signed)
+    res.setHeader('Cache-Control', 'public, max-age=60')
+    res.end()
+    return
+  }
+  try {
+    const obj = await s3.send(cmd)
+    res.statusCode = 200
+    res.setHeader('Content-Type', obj.ContentType || 'application/octet-stream')
+    if (obj.ContentLength) res.setHeader('Content-Length', String(obj.ContentLength))
+    res.setHeader('Cache-Control', 'public, max-age=3600')
+    obj.Body.pipe(res)
+  } catch (e) {
+    res.statusCode = 404
+    res.end(JSON.stringify({ error: 'Media tidak ditemukan' }))
+  }
+}
+````
 
 ## File: api/_lib/sesi.js
 ````javascript
@@ -376,7 +430,7 @@ export default async function handler(req, res) {
     new PutObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key, ContentType: contentType }),
     { expiresIn: 300 }
   )
-  const publicUrl = process.env.R2_PUBLIC_BASE_URL + '/' + key
+  const publicUrl = '/api/r2/file?key=' + key
   return res.status(200).json({ uploadUrl, publicUrl, key })
 }
 ````
@@ -891,58 +945,6 @@ export function useAuth() {
 }
 ````
 
-## File: src/lib/theme.jsx
-````javascript
-import { createContext, useContext, useEffect, useState } from 'react'
-
-const ThemeContext = createContext(null)
-
-/* View Transition hanya aman saat toolbar browser pasti stabil.
-   Di perangkat sentuh, toolbar bisa sedang beranimasi buka/tutup
-   ketika user scroll. Snapshot VT pada momen itu membuat toolbar
-   meluas menutupi navbar, jadi VT dilewati kecuali halaman
-   benar-benar di paling atas. */
-function bolehTransisiVT() {
-  if (!document.startViewTransition) return false
-  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false
-  if (window.matchMedia('(pointer: coarse)').matches && window.scrollY > 0) return false
-  return true
-}
-
-export function ThemeProvider(props) {
-  const [dark, setDark] = useState(function () {
-    const saved = localStorage.getItem('mbsi-theme')
-    if (saved) return saved === 'dark'
-    return window.matchMedia('(prefers-color-scheme: dark)').matches
-  })
-  useEffect(function () {
-    document.documentElement.classList.toggle('dark', dark)
-    localStorage.setItem('mbsi-theme', dark ? 'dark' : 'light')
-  }, [dark])
-  return (
-    <ThemeContext.Provider value={{ dark: dark, toggle: function () {
-      const ganti = function () { setDark(function (d) { return !d }) }
-      if (bolehTransisiVT()) {
-        const akar = document.documentElement
-        const vt = document.startViewTransition(function () {
-          akar.classList.add('vt-tema')
-          ganti()
-        })
-        const lepas = function () { akar.classList.remove('vt-tema') }
-        vt.finished.then(lepas, lepas)
-        setTimeout(lepas, 600)
-      } else ganti()
-    } }}>
-      {props.children}
-    </ThemeContext.Provider>
-  )
-}
-
-export function useTheme() {
-  return useContext(ThemeContext)
-}
-````
-
 ## File: index.html
 ````html
 <!DOCTYPE html>
@@ -1040,7 +1042,10 @@ export function todayInput() {
 }
 
 export function detectMediaType(u) {
-  const ext = String(u || '').split('?')[0].split('.').pop().toLowerCase()
+  let s = String(u || '')
+  const iK = s.indexOf('key=')
+  if (iK !== -1) s = decodeURIComponent(s.slice(iK + 4).split('&')[0])
+  const ext = s.split('?')[0].split('.').pop().toLowerCase()
   return ['mp4', 'webm', 'ogg', 'mov', 'm4v'].indexOf(ext) !== -1 ? 'video' : 'foto'
 }
 
@@ -1080,6 +1085,58 @@ export function urutkanTanggal(list, mode) {
     return 0
   })
   return arr
+}
+````
+
+## File: src/lib/theme.jsx
+````javascript
+import { createContext, useContext, useEffect, useState } from 'react'
+
+const ThemeContext = createContext(null)
+
+/* View Transition hanya aman saat toolbar browser pasti stabil.
+   Di perangkat sentuh, toolbar bisa sedang beranimasi buka/tutup
+   ketika user scroll. Snapshot VT pada momen itu membuat toolbar
+   meluas menutupi navbar, jadi VT dilewati kecuali halaman
+   benar-benar di paling atas. */
+function bolehTransisiVT() {
+  if (!document.startViewTransition) return false
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false
+  if (window.matchMedia('(pointer: coarse)').matches && window.scrollY > 0) return false
+  return true
+}
+
+export function ThemeProvider(props) {
+  const [dark, setDark] = useState(function () {
+    const saved = localStorage.getItem('mbsi-theme')
+    if (saved) return saved === 'dark'
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  })
+  useEffect(function () {
+    document.documentElement.classList.toggle('dark', dark)
+    localStorage.setItem('mbsi-theme', dark ? 'dark' : 'light')
+  }, [dark])
+  return (
+    <ThemeContext.Provider value={{ dark: dark, toggle: function () {
+      const ganti = function () { setDark(function (d) { return !d }) }
+      if (bolehTransisiVT()) {
+        const akar = document.documentElement
+        const vt = document.startViewTransition(function () {
+          akar.classList.add('vt-tema')
+          ganti()
+        })
+        const lepas = function () { akar.classList.remove('vt-tema') }
+        vt.finished.then(lepas, lepas)
+        setTimeout(lepas, 600)
+      } else ganti()
+    } }}>
+      {props.children}
+    </ThemeContext.Provider>
+  )
+}
+
+export function useTheme() {
+  return useContext(ThemeContext)
 }
 ````
 
@@ -2091,7 +2148,7 @@ export default function PemutarVideo(props) {
 ````javascript
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { createClient } from '@supabase/supabase-js'
 import { LIMIT_PER_PROJECT, ptToday, daftarKredensial, getAccessToken } from './api/_lib/youtube.js'
@@ -2132,7 +2189,7 @@ function pluginApiR2(env) {
       res.setHeader('Content-Type', 'application/json')
       res.end(JSON.stringify({
         uploadUrl: uploadUrl,
-        publicUrl: env.R2_PUBLIC_BASE_URL + '/' + key,
+        publicUrl: '/api/r2/file?key=' + key,
         key: key
       }))
     })
@@ -2153,6 +2210,40 @@ function pluginApiR2(env) {
       await s3.send(new DeleteObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: body.key }))
       res.setHeader('Content-Type', 'application/json')
       res.end(JSON.stringify({ ok: true }))
+    })
+    server.middlewares.use('/api/r2/file', async function (req, res) {
+      if (req.method !== 'GET') {
+        res.statusCode = 405
+        res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
+        return
+      }
+      const url = new URL(req.url, 'http://localhost')
+      const key = url.searchParams.get('key')
+      if (!key) {
+        res.statusCode = 400
+        res.end(JSON.stringify({ error: 'Key tidak ada' }))
+        return
+      }
+      const cmd = new GetObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: key })
+      if (url.searchParams.get('unduh') !== '1') {
+        const signed = await getSignedUrl(s3, cmd, { expiresIn: 300 })
+        res.statusCode = 302
+        res.setHeader('Location', signed)
+        res.setHeader('Cache-Control', 'public, max-age=60')
+        res.end()
+        return
+      }
+      try {
+        const obj = await s3.send(cmd)
+        res.statusCode = 200
+        res.setHeader('Content-Type', obj.ContentType || 'application/octet-stream')
+        if (obj.ContentLength) res.setHeader('Content-Length', String(obj.ContentLength))
+        res.setHeader('Cache-Control', 'public, max-age=3600')
+        obj.Body.pipe(res)
+      } catch (e) {
+        res.statusCode = 404
+        res.end(JSON.stringify({ error: 'Media tidak ditemukan' }))
+      }
     })
   }
 
@@ -3023,6 +3114,70 @@ export function EyeToggle(props) {
 }
 ````
 
+## File: src/App.jsx
+````javascript
+import { SkeletonDashboard } from './components/Skeleton.jsx'
+import { useEffect } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { ThemeProvider } from './lib/theme.jsx'
+ import { ToastProvider } from './components/ui.jsx'
+import { useAuth } from './lib/auth.js'
+import Layout from './components/Layout.jsx'
+import HomePage from './pages/HomePage.jsx'
+import LogbookPage from './pages/LogbookPage.jsx'
+import GalleryPage from './pages/GalleryPage.jsx'
+import AttendancePage from './pages/AttendancePage.jsx'
+import DospemPage from './pages/DospemPage.jsx'
+import LoginPage from './pages/LoginPage.jsx'
+import DashboardPage from './pages/DashboardPage.jsx'
+
+function ScrollToTop() {
+  const { pathname } = useLocation()
+  useEffect(function () {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+  }, [pathname])
+  return null
+}
+function RequireAuth(props) {
+  const { mahasiswa, loading } = useAuth()
+  if (loading) return <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:py-8"><SkeletonDashboard /></div>
+  if (!mahasiswa) return <Navigate to="/login" replace />
+  return props.children
+}
+
+function RequireGuest(props) {
+  const { mahasiswa, loading } = useAuth()
+  if (loading) return <div className="grid min-h-[60vh] place-items-center"><div className="h-10 w-10 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div></div>
+  if (mahasiswa) return <Navigate to="/dashboard" replace />
+  return props.children
+}
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <ToastProvider>
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ScrollToTop />
+        <Routes>
+          <Route element={<Layout />}>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/logbook" element={<LogbookPage />} />
+            <Route path="/galeri" element={<GalleryPage />} />
+            <Route path="/absen" element={<AttendancePage />} />
+            <Route path="/dospem" element={<DospemPage />} />
+            <Route path="/tim" element={<Navigate to="/dospem" replace />} />
+            <Route path="/login" element={<RequireGuest><LoginPage /></RequireGuest>} />
+            <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+      </ToastProvider>
+    </ThemeProvider>
+  )
+}
+````
+
 ## File: src/main.jsx
 ````javascript
 import React from 'react'
@@ -3245,70 +3400,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   })
   obs.observe(akar, { attributes: true, attributeFilter: ['class'] })
 })()
-````
-
-## File: src/App.jsx
-````javascript
-import { SkeletonDashboard } from './components/Skeleton.jsx'
-import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import { ThemeProvider } from './lib/theme.jsx'
- import { ToastProvider } from './components/ui.jsx'
-import { useAuth } from './lib/auth.js'
-import Layout from './components/Layout.jsx'
-import HomePage from './pages/HomePage.jsx'
-import LogbookPage from './pages/LogbookPage.jsx'
-import GalleryPage from './pages/GalleryPage.jsx'
-import AttendancePage from './pages/AttendancePage.jsx'
-import DospemPage from './pages/DospemPage.jsx'
-import LoginPage from './pages/LoginPage.jsx'
-import DashboardPage from './pages/DashboardPage.jsx'
-
-function ScrollToTop() {
-  const { pathname } = useLocation()
-  useEffect(function () {
-    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
-  }, [pathname])
-  return null
-}
-function RequireAuth(props) {
-  const { mahasiswa, loading } = useAuth()
-  if (loading) return <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:py-8"><SkeletonDashboard /></div>
-  if (!mahasiswa) return <Navigate to="/login" replace />
-  return props.children
-}
-
-function RequireGuest(props) {
-  const { mahasiswa, loading } = useAuth()
-  if (loading) return <div className="grid min-h-[60vh] place-items-center"><div className="h-10 w-10 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div></div>
-  if (mahasiswa) return <Navigate to="/dashboard" replace />
-  return props.children
-}
-
-export default function App() {
-  return (
-    <ThemeProvider>
-      <ToastProvider>
-      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <ScrollToTop />
-        <Routes>
-          <Route element={<Layout />}>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/logbook" element={<LogbookPage />} />
-            <Route path="/galeri" element={<GalleryPage />} />
-            <Route path="/absen" element={<AttendancePage />} />
-            <Route path="/dospem" element={<DospemPage />} />
-            <Route path="/tim" element={<Navigate to="/dospem" replace />} />
-            <Route path="/login" element={<RequireGuest><LoginPage /></RequireGuest>} />
-            <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-      </ToastProvider>
-    </ThemeProvider>
-  )
-}
 ````
 
 ## File: src/pages/LoginPage.jsx
@@ -5373,13 +5464,14 @@ export function Lightbox(props) {
     }
     let nama = 'media'
     try {
-      const urlAsli = new URL(props.src)
-      const ekstensi = urlAsli.pathname.split('.').pop().split('?')[0] || 'jpg'
+      const urlAsli = new URL(props.src, window.location.origin)
+      const basis = urlAsli.searchParams.get('key') || urlAsli.pathname
+      const ekstensi = basis.split('.').pop().split('?')[0] || 'jpg'
       if (props.title && props.title.trim()) {
         const judulAman = props.title.trim().replace(/[\/\\:*?"<>|]/g, '').replace(/\s+/g, '-').substring(0, 60)
         nama = judulAman + '.' + ekstensi
       } else {
-        nama = urlAsli.pathname.split('/').pop() || ('media.' + ekstensi)
+        nama = basis.split('/').pop() || ('media.' + ekstensi)
       }
     } catch (e) {
       nama = (props.title || 'media') + '.jpg'
@@ -5509,7 +5601,9 @@ export function SmartFit(props) {
   function cadangkan(e) {
     const el = e.currentTarget
     const cad = props.full && props.full !== props.src ? props.full : props.src
-    if (cad && el.src !== cad) el.src = cad
+    let tujuan = cad
+    try { tujuan = new URL(cad, window.location.origin).href } catch (err) {}
+    if (cad && el.src !== tujuan) el.src = cad
   }
   const cover = ratio !== null && ratio > 1
   const potret = ratio !== null && ratio <= 1
@@ -6105,14 +6199,19 @@ export default function DashboardPage() {
   }
 
   function keyDariUrl(url) {
-    try { return new URL(url).pathname.slice(1) } catch (e) { return '' }
+    try {
+      const u = new URL(url, window.location.origin)
+      const k = u.searchParams.get('key')
+      if (k) return k
+      return u.pathname.slice(1)
+    } catch (e) { return '' }
   }
-
   async function hapusMediaR2(url) {
-    if (String(url || '').indexOf('i.ytimg.com') !== -1 || String(url || '').indexOf('youtube') !== -1) return
-    if (String(url || '').indexOf('drive.google.com') !== -1 || String(url || '').indexOf('drive.usercontent.google.com') !== -1) return
-    if (!/^https?:\/\//.test(String(url || ''))) return
-    const key = keyDariUrl(url)
+    const s = String(url || '')
+    if (s.indexOf('i.ytimg.com') !== -1 || s.indexOf('youtube') !== -1) return
+    if (s.indexOf('drive.google.com') !== -1 || s.indexOf('drive.usercontent.google.com') !== -1) return
+    if (!/^(https?:\/\/|\/api\/r2\/file)/.test(s)) return
+    const key = keyDariUrl(s)
     if (!key) { console.warn('URL media tidak valid, dilewati:', url); return }
     try {
       await deleteMedia(key)

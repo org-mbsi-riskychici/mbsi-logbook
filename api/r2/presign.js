@@ -24,6 +24,6 @@ export default async function handler(req, res) {
     new PutObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key, ContentType: contentType }),
     { expiresIn: 300 }
   )
-  const publicUrl = process.env.R2_PUBLIC_BASE_URL + '/' + key
+  const publicUrl = '/api/r2/file?key=' + key
   return res.status(200).json({ uploadUrl, publicUrl, key })
 }

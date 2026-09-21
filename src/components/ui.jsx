@@ -252,13 +252,14 @@ export function Lightbox(props) {
     }
     let nama = 'media'
     try {
-      const urlAsli = new URL(props.src)
-      const ekstensi = urlAsli.pathname.split('.').pop().split('?')[0] || 'jpg'
+      const urlAsli = new URL(props.src, window.location.origin)
+      const basis = urlAsli.searchParams.get('key') || urlAsli.pathname
+      const ekstensi = basis.split('.').pop().split('?')[0] || 'jpg'
       if (props.title && props.title.trim()) {
         const judulAman = props.title.trim().replace(/[\/\\:*?"<>|]/g, '').replace(/\s+/g, '-').substring(0, 60)
         nama = judulAman + '.' + ekstensi
       } else {
-        nama = urlAsli.pathname.split('/').pop() || ('media.' + ekstensi)
+        nama = basis.split('/').pop() || ('media.' + ekstensi)
       }
     } catch (e) {
       nama = (props.title || 'media') + '.jpg'
@@ -388,7 +389,9 @@ export function SmartFit(props) {
   function cadangkan(e) {
     const el = e.currentTarget
     const cad = props.full && props.full !== props.src ? props.full : props.src
-    if (cad && el.src !== cad) el.src = cad
+    let tujuan = cad
+    try { tujuan = new URL(cad, window.location.origin).href } catch (err) {}
+    if (cad && el.src !== tujuan) el.src = cad
   }
   const cover = ratio !== null && ratio > 1
   const potret = ratio !== null && ratio <= 1
