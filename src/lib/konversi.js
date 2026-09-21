@@ -1,7 +1,8 @@
 const MAKS_SISI_FULL = 2560
 const KUALITAS_FULL = 0.92
-const MAKS_SISI_THUMB = 1200
-const KUALITAS_THUMB = 0.9
+const MAKS_SISI_THUMB = 900
+const MAKS_BYTE_THUMB = 70 * 1024
+const TINGKAT_KUALITAS_THUMB = [0.8, 0.72, 0.65]
 const EXT_VIDEO = ['mp4', 'mov', 'm4v', 'webm', 'ogg', 'mkv', 'avi']
 
 export function ekstensiFile(file) {
@@ -55,6 +56,16 @@ async function keWebP(berkas, maksSisi, kualitas) {
   return blob
 }
 
+/* Thumbnail kartu: coba kualitas tertinggi dulu, turunkan hanya bila masih di atas batas ukuran */
+async function keWebPThumb(berkas) {
+  let blob = null
+  for (let i = 0; i < TINGKAT_KUALITAS_THUMB.length; i++) {
+    blob = await keWebP(berkas, MAKS_SISI_THUMB, TINGKAT_KUALITAS_THUMB[i])
+    if (!blob || blob.size <= MAKS_BYTE_THUMB) break
+  }
+  return blob
+}
+
 export async function siapkanFoto(file, onInfo) {
   let sumber = file
   if (formatHeic(file)) {
@@ -75,13 +86,12 @@ export async function siapkanFoto(file, onInfo) {
   const fullType = pakaiWebp ? 'image/webp' : sumber.type
   let thumbBlob = null
   try {
-    thumbBlob = await keWebP(fullFinal, MAKS_SISI_THUMB, KUALITAS_THUMB)
+    thumbBlob = await keWebPThumb(fullFinal)
   } catch (e) {
     thumbBlob = null
   }
   return { fullBlob: fullFinal, fullType: fullType, thumbBlob: thumbBlob }
 }
-
 
 export async function pratinjauHeic(file) {
   if (!formatHeic(file)) return null
@@ -100,6 +110,7 @@ export async function urlPratinjau(file) {
   }
   return URL.createObjectURL(file)
 }
+
 /* foto-profil-webp: pipeline konversi foto profil, pola sama dengan alur media R2 */
 function muatGambarProfil(sumber) {
   return new Promise(function (resolve, reject) {
