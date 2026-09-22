@@ -90,6 +90,7 @@ export default function DashboardPage() {
   const [galDriveLink, setGalDriveLink] = useState('')
   const [galOldYt, setGalOldYt] = useState(null)
   const [pendingDelete, setPendingDelete] = useState(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
   const [konfirmasiEdit, setKonfirmasiEdit] = useState(null)
    const [refleksiFokus, setRefleksiFokus] = useState('')
    const refleksiRefs = useRef({})
@@ -672,20 +673,22 @@ export default function DashboardPage() {
     return { title: 'Hapus Catatan Hadir?', message: 'Catatan kehadiran tanggal ' + pendingDelete.data.tanggal + ' dengan status ' + pendingDelete.data.status + ' akan dihapus permanen.' }
   }
 
-  async function executeDelete() {
-    if (!pendingDelete) return
-    const target = pendingDelete
+async function executeDelete() {
+  if (!pendingDelete || deleteBusy) return
+  const target = pendingDelete
+  if (target.type === 'media-item') { setPendingDelete(null); removeItemFile(target.data); return }
+  if (target.type === 'media-gal') { setPendingDelete(null); setGalForm(function (g) { return Object.assign({}, g, { file: null, preview: '', oldPath: '' }) }); return }
+  if (target.type === 'kegiatan') {
     setPendingDelete(null)
-    if (target.type === 'media-item') { removeItemFile(target.data); return }
-    if (target.type === 'media-gal') { setGalForm(function (g) { return Object.assign({}, g, { file: null, preview: '', oldPath: '' }) }); return }
-    if (target.type === 'kegiatan') {
-      const buang = items[target.data]
-      const pratinjau = buang && buang.preview ? String(buang.preview) : ''
-      if (pratinjau.indexOf('blob:') === 0) URL.revokeObjectURL(pratinjau)
-      setItems(function (p) { return p.filter(function (x, idx) { return idx !== target.data }) })
-      toast.sukses('Kegiatan ' + (target.data + 1) + ' dihapus')
-      return
-    }
+    const buang = items[target.data]
+    const pratinjau = buang && buang.preview ? String(buang.preview) : ''
+    if (pratinjau.indexOf('blob:') === 0) URL.revokeObjectURL(pratinjau)
+    setItems(function (p) { return p.filter(function (x, idx) { return idx !== target.data }) })
+    toast.sukses('Kegiatan ' + (target.data + 1) + ' dihapus')
+    return
+  }
+  setDeleteBusy(true)
+  try {
     if (target.type === 'log') {
       const urls = []
       ;(target.data.logbook_items || []).forEach(function (it) {
@@ -693,21 +696,32 @@ export default function DashboardPage() {
         if (it.media_path) urls.push(it.media_path)
         if (it.media_thumb) urls.push(it.media_thumb)
       })
-      await supabase.from('logbooks').delete().eq('id', target.data.id)
-      for (const u of urls) await hapusMediaR2(u)
+      const res = await supabase.from('logbooks').delete().eq('id', target.data.id)
+      if (res.error) throw new Error(res.error.message)
+      await Promise.all(urls.map(function (u) { return hapusMediaR2(u) }))
     } else if (target.type === 'gal') {
       const urls = target.data.logbook_item_id || target.data.media_source === 'youtube' ? [] : [target.data.media_path, target.data.media_thumb].filter(Boolean)
-      await supabase.from('galeri').delete().eq('id', target.data.id)
+      const res = await supabase.from('galeri').delete().eq('id', target.data.id)
+      if (res.error) throw new Error(res.error.message)
       if (target.data.logbook_item_id) {
-        await supabase.from('logbook_items').update({ show_in_gallery: false }).eq('id', target.data.logbook_item_id)
+        const upd = await supabase.from('logbook_items').update({ show_in_gallery: false }).eq('id', target.data.logbook_item_id)
+        if (upd.error) throw new Error(upd.error.message)
       }
-      for (const u of urls) await hapusMediaR2(u)
+      await Promise.all(urls.map(function (u) { return hapusMediaR2(u) }))
     } else if (target.type === 'hadir') {
-      await supabase.from('daftar_hadir').delete().eq('id', target.data.id)
+      const res = await supabase.from('daftar_hadir').delete().eq('id', target.data.id)
+      if (res.error) throw new Error(res.error.message)
     }
     await refresh()
     toast.sukses('Data berhasil dihapus')
+  } catch (err) {
+    toast.gagal('Gagal menghapus data: ' + (err && err.message ? err.message : 'kesalahan tidak diketahui'))
+    await refresh()
+  } finally {
+    setDeleteBusy(false)
+    setPendingDelete(null)
   }
+}
 
   const filteredLogs = logs.filter(function (l) {
     if (logFilter.kategori && l.kategori !== logFilter.kategori) return false
@@ -1135,13 +1149,16 @@ export default function DashboardPage() {
         {detail && detail.type === 'hadir' ? <AttendanceDetail row={detail.data} /> : null}
       </Modal>
       
-      <ConfirmModal
-        open={!!pendingDelete}
-        title={pendingDelete && confirmInfo() ? confirmInfo().title : ''}
-        message={pendingDelete && confirmInfo() ? confirmInfo().message : ''}
-        onCancel={function () { setPendingDelete(null) }}
-        onConfirm={executeDelete}
-      />
+<ConfirmModal
+  open={!!pendingDelete}
+  title={pendingDelete && confirmInfo() ? confirmInfo().title : ''}
+  message={pendingDelete && confirmInfo() ? confirmInfo().message : ''}
+  busy={deleteBusy}
+  busyLabel="Menghapus"
+  onCancel={function () { if (!deleteBusy) setPendingDelete(null) }}
+  onConfirm={executeDelete}
+/>
+
         <ConfirmModal
           open={!!konfirmasiEdit}
           title={konfirmasiEdit ? konfirmasiEdit.judul : ''}

@@ -143,44 +143,50 @@ export function AutoTextArea(props) {
 }
 
 export function ConfirmModal(props) {
-const [tampil, setTampil] = useState(props.open)
-const propsSimpan = useRef(null)
-if (props.open) propsSimpan.current = props
-const p = props.open ? props : (propsSimpan.current || props)
-const tutup = tampil && !props.open
-useBodyScrollLock(!!props.open)
-useEffect(function () {
-if (props.open) { setTampil(true); return undefined }
-if (!tampil) return undefined
-const t = setTimeout(function () { setTampil(false) }, 200)
-return function () { clearTimeout(t) }
-}, [props.open, tampil])
-if (!tampil) return null
-return (
-<div className={'anim-overlay fixed inset-0 z-[70] overflow-y-auto overscroll-contain bg-slate-900/60 p-4' + (tutup ? ' modal-tutup' : '')} onClick={p.onCancel}>
-<div className="min-h-full flex items-center justify-center py-8">
-<div className="anim-modal w-full max-w-md rounded-[2rem] bg-white shadow-2xl" onClick={function (e) { e.stopPropagation() }}>
-<div className="p-6 space-y-4">
-<div className={'mx-auto h-14 w-14 ' + 'rounded-2xl grid place-items-center ' + ((p.tone || 'bahaya') === 'bahaya' ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600')}>
-<SizedIcon name={p.icon || 'trash'} size={24} />
-</div>
-<div className="text-center">
-<h3 className="text-xl font-black text-slate-900">{p.title || 'Hapus Data Ini?'}</h3>
-<p className="mt-2 text-sm text-slate-600">{p.message}</p>
-</div>
-<div className="grid grid-cols-2 gap-3">
-<button type="button" onClick={p.onCancel} className="rounded-2xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100">
-Batal
-</button>
-<button type="button" onClick={p.onConfirm} className={'rounded-2xl px-4 py-3 ' + 'text-sm font-bold text-white ' + ((p.tone || 'bahaya') === 'bahaya' ? 'bg-red-500 hover:bg-red-600' : 'bg-bsi-800 hover:bg-bsi-900')}>
-{p.confirmLabel || 'Hapus'}
-</button>
-</div>
-</div>
-</div>
-</div>
-</div>
-)
+  const [tampil, setTampil] = useState(props.open)
+  const propsSimpan = useRef(null)
+  if (props.open) propsSimpan.current = props
+  const p = props.open ? props : (propsSimpan.current || props)
+  const tutup = tampil && !props.open
+  const sibuk = !!props.busy
+  useBodyScrollLock(!!props.open)
+  useEffect(function () {
+    if (props.open) { setTampil(true); return undefined }
+    if (!tampil) return undefined
+    const t = setTimeout(function () { setTampil(false) }, 200)
+    return function () { clearTimeout(t) }
+  }, [props.open, tampil])
+  if (!tampil) return null
+  return (
+    <div className={'anim-overlay fixed inset-0 z-[70] overflow-y-auto overscroll-contain bg-slate-900/60 p-4' + (tutup ? ' modal-tutup' : '')} onClick={sibuk ? undefined : p.onCancel}>
+      <div className="min-h-full flex items-center justify-center py-8">
+        <div className="anim-modal w-full max-w-md rounded-[2rem] bg-white shadow-2xl" onClick={function (e) { e.stopPropagation() }}>
+          <div className="p-6 space-y-4">
+            <div className={'mx-auto h-14 w-14 ' + 'rounded-2xl grid place-items-center ' + ((p.tone || 'bahaya') === 'bahaya' ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600')}>
+              <SizedIcon name={p.icon || 'trash'} size={24} />
+            </div>
+            <div className="text-center">
+              <h3 className="text-xl font-black text-slate-900">{p.title || 'Hapus Data Ini?'}</h3>
+              <p className="mt-2 text-sm text-slate-600">{p.message}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <button type="button" disabled={sibuk} onClick={p.onCancel} className="rounded-2xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50">
+                Batal
+              </button>
+              <button type="button" disabled={sibuk} onClick={p.onConfirm} className={'rounded-2xl px-4 py-3 ' + 'text-sm font-bold text-white ' + ((p.tone || 'bahaya') === 'bahaya' ? 'bg-red-500 hover:bg-red-600' : 'bg-bsi-800 hover:bg-bsi-900') + (sibuk ? ' cursor-not-allowed opacity-80' : '')}>
+                {sibuk ? (
+                  <span className="inline-flex items-center justify-center gap-2">
+                    <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-white/60 border-t-white"></span>
+                    <span>{p.busyLabel || 'Memproses'}...</span>
+                  </span>
+                ) : (p.confirmLabel || 'Hapus')}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 
