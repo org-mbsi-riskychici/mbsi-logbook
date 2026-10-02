@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { loginWithNim } from '../lib/auth.js'
 import { inputCls, labelCls, btnPrimary } from '../components/ui.jsx'
 import { EyeToggle, SizedIcon } from '../components/icons.jsx'
@@ -27,6 +27,7 @@ function pesanErrorLogin(err) {
 }
 export default function LoginPage() {
   const navigate = useNavigate()
+  const [params] = useSearchParams()
   const [nim, setNim] = useState('')
   const [kode, setKode] = useState('')
   const [error, setError] = useState('')
@@ -39,7 +40,8 @@ export default function LoginPage() {
     setError('')
     try {
   await loginWithNim(nim, kode)
-  navigate('/dashboard')
+  const next = params.get('next')
+  navigate(next && next.charAt(0) === '/' && next.indexOf('//') !== 0 ? next : '/dashboard')
 } catch (err) {
   setError(pesanErrorLogin(err))
 }

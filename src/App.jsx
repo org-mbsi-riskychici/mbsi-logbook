@@ -12,6 +12,7 @@ import AttendancePage from './pages/AttendancePage.jsx'
 import DospemPage from './pages/DospemPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import DashboardPage from './pages/DashboardPage.jsx'
+import QuickPage from './pages/QuickPage.jsx'
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -22,8 +23,9 @@ function ScrollToTop() {
 }
 function RequireAuth(props) {
   const { mahasiswa, loading } = useAuth()
+  const location = useLocation()
   if (loading) return <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:py-8"><SkeletonDashboard /></div>
-  if (!mahasiswa) return <Navigate to="/login" replace />
+  if (!mahasiswa) return <Navigate to={'/login?next=' + encodeURIComponent(location.pathname + location.search)} replace />
   return props.children
 }
 
@@ -50,6 +52,7 @@ export default function App() {
             <Route path="/tim" element={<Navigate to="/dospem" replace />} />
             <Route path="/login" element={<RequireGuest><LoginPage /></RequireGuest>} />
             <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
+            <Route path="/cepat" element={<RequireAuth><QuickPage /></RequireAuth>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

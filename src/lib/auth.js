@@ -52,7 +52,11 @@ export function useAuth() {
 
         const mhs = await cariMahasiswa(uid)
         if (active) {
-          setMahasiswa(mhs)
+          setMahasiswa(function (prev) {
+            if (prev && mhs && prev.id === mhs.id) return prev
+            if (!mhs && prev && prev.auth_uid === uid) return prev
+            return mhs
+          })
           setLoading(false)
         }
       } catch (e) {
