@@ -7,11 +7,13 @@ import { EmptyState, Modal } from '../components/ui.jsx'
 import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
 import { SkeletonLogbookCard } from '../components/Skeleton.jsx'
 
+const GRADIENT_DOT = ['linear-gradient(135deg,#86ecb0,#1a9e57)', 'linear-gradient(135deg,#fbbf24,#d97706)', 'linear-gradient(135deg,#27c06d,#135033)']
 export default function HomePage() {
   const { mahasiswa } = useAuth()
   const [logs, setLogs] = useState([])
   const [stats, setStats] = useState({ logbook: 0, galeri: 0, mahasiswa: 0 })
   const [hadir, setHadir] = useState({ masuk: 0, izin: 0, bolos: 0 })
+  const [tim, setTim] = useState([])
   const [detail, setDetail] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -24,7 +26,7 @@ export default function HomePage() {
         .order('tanggal', { ascending: false })
         .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
       const g = await supabase.from('galeri').select('id')
-      const p = await supabase.from('mahasiswa').select('id')
+      const p = await supabase.from('mahasiswa').select('id, nama, foto_profil').order('nama')
       const h = await supabase.from('daftar_hadir').select('status')
       const hitung = { masuk: 0, izin: 0, bolos: 0 }
       const rows = h.data || []
@@ -35,6 +37,7 @@ export default function HomePage() {
       }
       setLogs(l.data || [])
       setStats({ logbook: (l.data || []).length, galeri: (g.data || []).length, mahasiswa: (p.data || []).length })
+      setTim(p.data || [])
       setHadir(hitung)
       setLoading(false)
     }
@@ -49,35 +52,38 @@ export default function HomePage() {
 
   return (
     <div>
-      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-6 sm:p-10 lg:p-14">
-        <span className="bsi-chip bsi-chip-green bsi-chip-c1">▦</span>
-        <span className="bsi-chip bsi-chip-gold bsi-chip-c2">▶</span>
-        <span className="bsi-chip bsi-chip-deep bsi-chip-c3">✦</span>
-        <div className="relative z-10 flex items-start gap-10">
+      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-6 sm:p-10 lg:px-12 lg:py-9">
+        <div className="pointer-events-none absolute right-16 top-1/2 h-80 w-80 -translate-y-1/2 rounded-full bg-bsi-500/10 blur-3xl" />
+        <span className="bsi-chip bsi-chip-deep bsi-chip-mobile-1 xl:hidden">▦</span>
+        <span className="bsi-chip bsi-chip-gold bsi-chip-mobile-2 xl:hidden">▶</span>
+        <span className="bsi-chip bsi-chip-green bsi-chip-mobile-3 xl:hidden">✦</span>
+        <div className="relative z-10 flex items-center gap-10">
           <div className="min-w-0 flex-1">
-            <span className="bsi-pill">✦ Magang Bank BSI</span>
-            <h1 className="mt-5 max-w-2xl text-2xl font-black leading-tight text-slate-900 sm:text-3xl lg:text-5xl">
-              Logbook, Galeri, dan Daftar Hadir Magang dalam <span className="bsi-grad-text">Satu Portal</span>
+            <h1 className="max-w-2xl text-2xl font-black leading-tight text-slate-900 sm:text-3xl lg:text-5xl">
+              Portal Logbook, Galeri & Kehadiran Magang <span className="bsi-grad-text"></span>
             </h1>
             <p className="mt-4 max-w-2xl text-sm leading-relaxed text-slate-600 sm:mt-5 sm:text-base">
-              Portal ini mencatat kegiatan harian, dokumentasi media, dan kehadiran tim magang selama membantu operasional Bank BSI.
+              Platform terpusat untuk mendokumentasikan aktivitas dan kehadiran tim magang BSI.
             </p>
             <div className="mt-6 flex flex-wrap gap-2 sm:mt-8 sm:gap-3">
               <Link to="/logbook" className="inline-flex items-center gap-2 rounded-2xl bg-bsi-800 px-5 py-3 text-sm font-bold text-white shadow-lg hover:bg-bsi-900 sm:px-6 sm:text-base">Lihat Logbook</Link>
-              <Link to="/galeri" className="bsi-btn-glass">Lihat Galeri</Link>
+              {/* <Link to="/galeri" className="bsi-btn-glass">Lihat Galeri</Link> */}
               <Link to="/absen" className="bsi-btn-glass">Daftar Hadir</Link>
-              {mahasiswa
+              {/* {mahasiswa
                 ? <Link to="/dashboard" className="bsi-btn-white">Buka Dashboard</Link>
-                : <Link to="/login" className="bsi-btn-white">Masuk Akun</Link>}
+                : <Link to="/login" className="bsi-btn-white">Masuk Akun</Link>} */}
             </div>
           </div>
-          <div className="bsi-hero-art hidden shrink-0 items-start gap-4 xl:flex">
-            <div className="bsi-mini-card bsi-mini-green">
+          <div className="bsi-hero-art relative hidden w-[430px] shrink-0 self-stretch min-h-[350px] xl:block">
+            <span className="bsi-chip bsi-chip-deep bsi-chip-c1">▦</span>
+            <span className="bsi-chip bsi-chip-green bsi-chip-c3">✦</span>
+            <span className="bsi-chip bsi-chip-gold bsi-chip-c2">▶</span>
+            <div className="bsi-mini-card bsi-mini-green absolute left-0 top-10 -rotate-2">
               <p className="text-xs font-bold opacity-80">LOGBOOK PUBLIK</p>
               <p className="mt-1 text-3xl font-black">{loading ? '—' : stats.logbook}</p>
               <p className="mt-2 text-xs opacity-75">{loading ? 'Memuat data...' : stats.galeri + ' media di galeri'}</p>
             </div>
-            <div className="bsi-mini-card bsi-mini-white">
+            <div className="bsi-mini-card bsi-mini-white absolute right-0 top-[36%] rotate-2">
               <p className="text-xs font-bold opacity-80">KEHADIRAN TIM</p>
               <p className="mt-1 text-3xl font-black">{loading ? '—' : persenMasuk + '%'}</p>
               <div className="bsi-stack">
@@ -86,6 +92,19 @@ export default function HomePage() {
                 <i style={{ width: lebarBolos + '%', background: '#ef4444' }}></i>
               </div>
               <p className="mt-2 text-xs opacity-75">Masuk {hadir.masuk} • Izin {hadir.izin} • Bolos {hadir.bolos}</p>
+            </div>
+            <div className="bsi-pill-card">
+              <span className="flex -space-x-2">
+                {loading
+                  ? [0, 1, 2].map(function (i) { return <i key={i} className="bsi-dot" style={{ background: GRADIENT_DOT[i] }}></i> })
+                  : tim.slice(0, 3).map(function (m, i) {
+                      return m.foto_profil
+                        ? <img key={m.id} src={m.foto_profil} alt={'Foto ' + m.nama} loading="lazy" decoding="async" className="bsi-dot bsi-dot-foto" />
+                        : <span key={m.id} className="bsi-dot bsi-dot-inisial" style={{ background: GRADIENT_DOT[i % GRADIENT_DOT.length] }}>{(m.nama || '?').charAt(0).toUpperCase()}</span>
+                    })}
+                {!loading && tim.length > 3 ? <span className="bsi-dot bsi-dot-lebih">+{tim.length - 3}</span> : null}
+              </span>
+              <span className="text-xs font-bold">{loading ? 'Memuat data...' : 'Tim magang • ' + stats.mahasiswa + ' mahasiswa'}</span>
             </div>
           </div>
         </div>

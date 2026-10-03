@@ -767,10 +767,10 @@ body { background-color: #f4f8f4; background-image: linear-gradient(160deg, #dff
 .bsi-chip-gold { background: linear-gradient(135deg, #fbbf24, #d97706); }
 .bsi-chip-deep { background: linear-gradient(135deg, #27c06d, #135033); }
 .bsi-chip-c1 { top: 36px; right: 330px; }
-.bsi-chip-c2 { bottom: 44px; right: 90px; animation-delay: 1.2s; }
+.bsi-chip-c2 { bottom: 64px; right: 260px; animation-delay: 1.2s; }
 .bsi-chip-c3 { top: 130px; right: 20px; animation-delay: 2.1s; }
 @media (prefers-reduced-motion: reduce) { .bsi-chip { animation: none; } }
-@media (max-width: 960px) { .bsi-chip-c1, .bsi-hero-art { display: none; } }
+@media (max-width: 960px) { .bsi-hero-art { display: none; } }
 .bsi-mini-card { width: 212px; border-radius: 20px; padding: 18px; box-shadow: 0 24px 48px -24px rgba(15,42,29,.25); }
 .bsi-mini-green { background: linear-gradient(135deg, #27c06d, #135033); color: #fff; }
 .bsi-mini-white { background: #fff; color: #0f2a1d; margin-top: 40px; border: 1px solid rgba(15,42,29,.10); }
@@ -813,3 +813,39 @@ body { background-color: #f4f8f4; background-image: linear-gradient(160deg, #dff
     background-color: rgba(16, 42, 29, 0.6) !important;
   }
 }
+
+.bsi-mini-white { margin-top: 56px; }
+
+/* hero-art-v2: cluster kartu + chip meregang setinggi hero, elemen tersebar atas-tengah-bawah supaya tidak ada pita kosong */
+.bsi-hero-art .bsi-mini-white { margin-top: 0; }
+.bsi-chip-c1 { top: 0; left: 52%; right: auto; bottom: auto; }
+.bsi-chip-c3 { top: 24%; right: -6px; left: auto; bottom: auto; }
+.bsi-chip-c2 { bottom: 84px; left: 30%; right: auto; top: auto; }
+.bsi-pill-card { position: absolute; left: 8px; right: 24px; bottom: 8px; display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 16px; background: rgba(255,255,255,.65); border: 1px solid rgba(15,42,29,.10); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); color: #0f2a1d; box-shadow: 0 10px 24px -12px rgba(15,42,29,.18); }
+.dark .bsi-pill-card { background: rgba(16,42,29,.6); border-color: rgba(234,244,238,.10); color: #eaf4ee; }
+.bsi-dot { width: 22px; height: 22px; border-radius: 50%; display: block; border: 2px solid #fff; }
+.dark .bsi-dot { border-color: #0f241b; }
+
+/* dot-profil-v1: bulatan pill tim memakai foto profil asli dari database */
+.bsi-dot-foto { object-fit: cover; object-position: center; display: block; }
+.bsi-dot-inisial { display: grid; place-items: center; color: #fff; font-size: 10px; font-weight: 800; line-height: 1; }
+.bsi-dot-lebih { display: grid; place-items: center; background: rgba(15,42,29,.12); color: #0f2a1d; font-size: 9px; font-weight: 800; line-height: 1; }
+.dark .bsi-dot-lebih { background: rgba(234,244,238,.16); color: #eaf4ee; }
+
+/* hero-chip-mobile-v4: tiap chip menempel tepi berbeda (pojok kanan, tepi atas, tepi kiri) supaya tidak ada kolom vertikal */
+.bsi-chip-mobile-1 { top: 36px; right: 50px; }
+.bsi-chip-mobile-2 { bottom: 24px; right: 120px; }
+.bsi-chip-mobile-3 { top: 135px; right: 20px; }
+@media (max-width: 960px) {
+  .bsi-chip-mobile-1 { width: 40px; height: 40px; font-size: 17px; border-radius: 13px; }
+  .bsi-chip-mobile-2 { width: 40px; height: 40px; font-size: 14px; border-radius: 11px; }
+  .bsi-chip-mobile-3 { width: 38px; height: 38px; font-size: 12px; border-radius: 10px; }
+}
+
+/* chip-miring-v1: tiap chip mobile punya kemiringan & ayunan sendiri supaya tidak terasa copy-paste */
+@keyframes bsiFloatM1 { 0%, 100% { transform: translateY(0) rotate(7deg); } 50% { transform: translateY(-12px) rotate(2deg); } }
+@keyframes bsiFloatM2 { 0%, 100% { transform: translateY(0) rotate(-8deg); } 50% { transform: translateY(-10px) rotate(-2deg); } }
+@keyframes bsiFloatM3 { 0%, 100% { transform: translateY(0) rotate(-4deg); } 50% { transform: translateY(-14px) rotate(5deg); } }
+.bsi-chip-mobile-1 { animation-name: bsiFloatM1; }
+.bsi-chip-mobile-2 { animation-name: bsiFloatM2; animation-delay: 1.2s; }
+.bsi-chip-mobile-3 { animation-name: bsiFloatM3; animation-delay: 2.1s; }

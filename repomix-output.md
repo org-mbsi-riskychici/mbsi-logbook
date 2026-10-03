@@ -94,1330 +94,12 @@ mvp-opsi-b.html
 package.json
 postcss.config.js
 README.md
-setup-fitur-cepat.cjs
-setup-fitur-cepat1.cjs
-setup-tema-hybrid.cjs
-setup-tema-opsib.cjs
 tailwind.config.js
 vercel.json
 vite.config.js
 ````
 
 # Files
-
-## File: mvp-opsi-b.html
-````html
-<!DOCTYPE html>
-<html lang="id">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MVP Opsi B — Hybrid BSI | Logbook Magang BSI</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
-<style>
-  :root{
-    --bg:#F4F8F4;
-    --bg-grad:linear-gradient(160deg,#DFF3E6 0%,#F2FBF4 45%,#FBF3E2 100%);
-    --glass:rgba(255,255,255,.65);
-    --card:#FFFFFF;
-    --ink:#0F2A1D; --ink-2:#5F6F64;
-    --brand:#177C48; --brand-2:#1A9E57; --brand-soft:rgba(39,192,109,.12);
-    --gold:#D97706; --gold-soft:rgba(245,158,11,.14);
-    --green:#059669; --green-soft:rgba(16,185,129,.14);
-    --amber:#D97706; --amber-soft:rgba(245,158,11,.16);
-    --red:#DC2626; --red-soft:rgba(239,68,68,.12);
-    --neutral-soft:rgba(15,42,29,.06);
-    --border:rgba(15,42,29,.10);
-    --input-bg:#FAFDF9;
-    --btn-bg:#16623C; --btn-fg:#FFFFFF;
-    --hero-grad:linear-gradient(135deg,#E7F6EC 0%,#F4FBEE 55%,#FDF4E3 100%);
-    --shadow:0 24px 48px -24px rgba(15,42,29,.25);
-    --shadow-sm:0 10px 24px -12px rgba(15,42,29,.18);
-  }
-  html.dark{
-    --bg:#081A13;
-    --bg-grad:linear-gradient(160deg,#0C2418 0%,#081A13 45%,#0A1F16 100%);
-    --glass:rgba(16,42,29,.6);
-    --card:#0F241B;
-    --ink:#EAF4EE; --ink-2:#9DB4A6;
-    --brand:#86ECB0; --brand-2:#27C06D; --brand-soft:rgba(39,192,109,.18);
-    --gold:#FBBF24; --gold-soft:rgba(251,191,36,.16);
-    --green:#34D399; --green-soft:rgba(52,211,153,.16);
-    --amber:#FBBF24; --amber-soft:rgba(251,191,36,.16);
-    --red:#F87171; --red-soft:rgba(248,113,113,.16);
-    --neutral-soft:rgba(234,244,238,.07);
-    --border:rgba(234,244,238,.10);
-    --input-bg:#0B1E15;
-    --btn-bg:#27C06D; --btn-fg:#06281A;
-    --hero-grad:linear-gradient(135deg,#103021 0%,#0E2A1C 55%,#0B2019 100%);
-    --shadow:0 24px 48px -24px rgba(0,0,0,.6);
-    --shadow-sm:0 10px 24px -12px rgba(0,0,0,.5);
-  }
-  *{margin:0;padding:0;box-sizing:border-box}
-  body{
-    font-family:'Plus Jakarta Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
-    background-color:var(--bg);background-image:var(--bg-grad);background-attachment:fixed;
-    color:var(--ink);min-height:100vh;transition:background-color .3s,color .3s;
-  }
-  .wrap{max-width:1120px;margin:0 auto;padding:0 20px}
-  .note{background:var(--btn-bg);color:var(--btn-fg);font-size:12px;font-weight:600;padding:8px 16px;display:flex;align-items:center;justify-content:center;gap:12px;text-align:center}
-  .note button{background:rgba(255,255,255,.2);border:none;color:inherit;border-radius:8px;padding:3px 10px;font-size:11px;cursor:pointer;font-weight:700}
-  /* ===== Navbar glass ===== */
-  .nav{position:sticky;top:0;z-index:50;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);background:var(--glass);border-bottom:1px solid var(--border)}
-  .nav-in{display:flex;align-items:center;gap:14px;height:64px}
-  .logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:15px}
-  .logo small{display:block;font-size:11px;font-weight:600;color:var(--ink-2)}
-  .logo-tile{width:38px;height:38px;border-radius:12px;background:linear-gradient(135deg,#16623C,#F59E0B);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:800;box-shadow:var(--shadow-sm)}
-  .nav-links{display:flex;gap:4px;margin-left:auto}
-  .nav-links a{padding:8px 12px;border-radius:12px;font-size:14px;font-weight:600;color:var(--ink-2);text-decoration:none}
-  .nav-links a.active,.nav-links a:hover{background:var(--brand-soft);color:var(--brand)}
-  .nav-act{display:flex;gap:8px;align-items:center;margin-left:auto}
-  .nav-links + .nav-act{margin-left:0}
-  .icon-btn{width:38px;height:38px;border-radius:12px;border:1px solid var(--border);background:transparent;display:grid;place-items:center;cursor:pointer;color:var(--ink-2);font-size:15px}
-  /* ===== Tombol ===== */
-  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:none;cursor:pointer;font-weight:700;border-radius:14px;padding:10px 18px;font-size:14px;font-family:inherit;transition:.2s}
-  .btn:hover{transform:translateY(-1px)}
-  .btn-primary{background:var(--btn-bg);color:var(--btn-fg);box-shadow:var(--shadow-sm)}
-  .btn-glass{background:var(--glass);color:var(--ink);border:1px solid var(--border);backdrop-filter:blur(8px)}
-  .btn-white{background:var(--card);color:var(--brand);box-shadow:var(--shadow-sm)}
-  .btn-soft{background:var(--brand-soft);color:var(--brand)}
-  .btn-danger{background:var(--red-soft);color:var(--red)}
-  .btn-xs{padding:7px 12px;font-size:12px;border-radius:10px}
-  /* ===== Hero ===== */
-  .hero{position:relative;margin-top:28px;border-radius:32px;padding:56px 48px;overflow:hidden;background:var(--hero-grad);box-shadow:var(--shadow)}
-  .pill{display:inline-flex;align-items:center;gap:6px;background:var(--glass);border:1px solid var(--border);color:var(--brand);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.14em;padding:7px 14px;border-radius:999px;backdrop-filter:blur(8px)}
-  .hero h1{font-size:clamp(2rem,5vw,3.3rem);font-weight:800;letter-spacing:-.02em;line-height:1.12;margin-top:18px;max-width:560px}
-  .hl{background:linear-gradient(90deg,var(--brand-2),var(--gold));-webkit-background-clip:text;background-clip:text;color:transparent}
-  .hero p{color:var(--ink-2);max-width:500px;margin:16px 0 26px;font-size:15px;line-height:1.7}
-  .hero-actions{display:flex;gap:12px;flex-wrap:wrap}
-  .chip{position:absolute;width:54px;height:54px;border-radius:16px;display:grid;place-items:center;color:#fff;font-size:20px;box-shadow:var(--shadow);animation:float 6s ease-in-out infinite}
-  .chip.green{background:linear-gradient(135deg,#86ECB0,#1A9E57)}
-  .chip.gold{background:linear-gradient(135deg,#FBBF24,#D97706)}
-  .chip.deep{background:linear-gradient(135deg,#27C06D,#135033)}
-  .c1{top:36px;right:330px}
-  .c2{bottom:44px;right:90px;animation-delay:1.2s}
-  .c3{top:130px;right:20px;animation-delay:2.1s}
-  @keyframes float{0%,100%{transform:translateY(0) rotate(6deg)}50%{transform:translateY(-12px) rotate(-5deg)}}
-  @media (prefers-reduced-motion: reduce){.chip{animation:none}}
-  .hero-art{position:absolute;right:56px;top:50%;transform:translateY(-50%);display:flex;gap:16px;align-items:flex-start}
-  .mini-card{width:212px;border-radius:20px;padding:18px;box-shadow:var(--shadow)}
-  .mini-card.green{background:linear-gradient(135deg,#27C06D,#135033);color:#fff}
-  .mini-card.white{background:var(--card);color:var(--ink);margin-top:40px;border:1px solid var(--border)}
-  .mini-card .lbl{font-size:11px;font-weight:700;opacity:.8}
-  .mini-card .val{font-size:26px;font-weight:800;margin-top:4px}
-  .mini-card .sub{font-size:11px;opacity:.75;margin-top:6px}
-  /* ===== Stat ===== */
-  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:20px}
-  .stat{background:var(--glass);border:1px solid var(--border);border-radius:24px;padding:20px;backdrop-filter:blur(10px)}
-  .stat .lbl{font-size:11px;font-weight:800;color:var(--ink-2);text-transform:uppercase;letter-spacing:.08em}
-  .stat .val{font-size:32px;font-weight:800;margin-top:6px}
-  .stat .sub{font-size:12px;color:var(--ink-2);margin-top:4px}
-  /* ===== Blok & kartu ===== */
-  .block{margin-top:48px}
-  .eyebrow{display:inline-flex;align-items:center;gap:6px;background:var(--gold-soft);color:var(--gold);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.14em;padding:6px 12px;border-radius:999px}
-  .block h2{font-size:24px;font-weight:800;margin-top:10px}
-  .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:18px}
-  .grid-2{display:grid;grid-template-columns:1.1fr .9fr;gap:16px;margin-top:18px}
-  .card{background:var(--card);border:1px solid var(--border);border-radius:24px;padding:18px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:12px}
-  .media{aspect-ratio:16/9;border-radius:16px;background:linear-gradient(135deg,var(--brand-soft),var(--gold-soft));display:grid;place-items:center;color:var(--brand);font-size:30px}
-  .media.video{background:linear-gradient(135deg,#1A9E57,#135033);color:#fff}
-  .badges{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-  .badge{font-size:11px;font-weight:700;padding:5px 10px;border-radius:999px}
-  .badge.brand{background:var(--brand-soft);color:var(--brand)}
-  .badge.gold{background:var(--gold-soft);color:var(--gold)}
-  .badge.green{background:var(--green-soft);color:var(--green)}
-  .badge.amber{background:var(--amber-soft);color:var(--amber)}
-  .badge.red{background:var(--red-soft);color:var(--red)}
-  .badge.neutral{background:var(--neutral-soft);color:var(--ink-2)}
-  .date{font-size:12px;color:var(--ink-2)}
-  .title{font-size:17px;font-weight:800;line-height:1.35}
-  .items{font-size:12px;color:var(--ink-2);display:grid;gap:4px}
-  .items b{color:var(--brand)}
-  .card-foot{margin-top:auto;display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid var(--border);padding-top:12px}
-  .person{display:flex;align-items:center;gap:10px;min-width:0}
-  .avatar{width:36px;height:36px;border-radius:12px;display:grid;place-items:center;color:#fff;font-size:12px;font-weight:800;flex-shrink:0}
-  .avatar.g{background:linear-gradient(135deg,#86ECB0,#1A9E57)}
-  .avatar.y{background:linear-gradient(135deg,#FBBF24,#D97706)}
-  .avatar.d{background:linear-gradient(135deg,#27C06D,#135033)}
-  .person .nm{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .person .nim{font-size:11px;color:var(--ink-2)}
-  .actions{display:flex;gap:6px;flex-shrink:0}
-  /* ===== Kehadiran ===== */
-  .reason{background:var(--neutral-soft);border-radius:16px;padding:12px 14px;font-size:13px;color:var(--ink-2)}
-  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;font-weight:700;color:var(--ink-2)}
-  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
-  .stack{display:flex;height:12px;border-radius:999px;overflow:hidden;margin-top:14px}
-  .bars{display:flex;align-items:flex-end;gap:8px;height:120px;margin-top:16px}
-  .bars i{flex:1;border-radius:8px 8px 4px 4px;background:linear-gradient(180deg,var(--brand-2),var(--brand));opacity:.9}
-  /* ===== Form ===== */
-  .form-card{background:var(--card);border:1px solid var(--border);border-radius:28px;padding:24px;box-shadow:var(--shadow-sm);max-width:660px;margin-top:18px}
-  .tabs{display:flex;gap:6px;background:var(--neutral-soft);padding:6px;border-radius:16px;width:max-content}
-  .tab{padding:8px 16px;border-radius:12px;border:none;background:transparent;color:var(--ink-2);font-weight:700;font-size:13px;cursor:pointer;font-family:inherit}
-  .tab.active{background:var(--card);color:var(--brand);box-shadow:var(--shadow-sm)}
-  .info-lama{margin-top:14px;font-size:12px;font-weight:700;color:var(--amber)}
-  .field{margin-top:14px}
-  .label{font-size:12px;font-weight:700;color:var(--ink-2);display:block;margin-bottom:6px}
-  .input{width:100%;border:1px solid var(--border);background:var(--input-bg);border-radius:14px;padding:11px 14px;font-size:14px;color:var(--ink);outline:none;font-family:inherit;transition:.2s}
-  .input:focus{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
-  .input:disabled{opacity:.55;cursor:not-allowed}
-  textarea.input{resize:none}
-  .media-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-  .dashed{border:2px dashed var(--border);background:transparent;border-radius:16px;padding:12px;font-weight:700;font-size:13px;color:var(--ink-2);cursor:pointer;font-family:inherit}
-  .dashed:hover{border-color:var(--brand);color:var(--brand)}
-  .check{display:flex;gap:10px;align-items:flex-start;margin-top:14px;font-size:13px;font-weight:600}
-  .check input{accent-color:var(--brand);width:16px;height:16px;margin-top:2px}
-  .seg{display:flex;gap:8px}
-  .seg button{flex:1;padding:11px;border-radius:14px;border:1px solid var(--border);background:var(--neutral-soft);color:var(--ink-2);font-weight:800;font-size:13px;cursor:pointer;font-family:inherit}
-  .seg button.on-green{background:var(--green);border-color:var(--green);color:#fff}
-  footer{margin-top:56px;padding:26px 0;text-align:center;font-size:12px;color:var(--ink-2)}
-  @media (max-width:960px){.hero-art,.c1{display:none}.grid-3,.grid-2{grid-template-columns:1fr}.stats{grid-template-columns:1fr}}
-  @media (max-width:800px){.nav-links{display:none}}
-  @media (max-width:600px){.hero{padding:36px 24px}}
-</style>
-</head>
-<body>
-<div class="note">Pratinjau statis Opsi B (hybrid): teknik visual pastel fintech + warna brand BSI hijau-gold. <button onclick="this.parentElement.remove()">Tutup</button></div>
-
-<header class="nav">
-  <div class="wrap nav-in">
-    <div class="logo"><span class="logo-tile">BSI</span><span>Logbook Magang<small>Bank Syariah Indonesia</small></span></div>
-    <nav class="nav-links">
-      <a href="#" class="active">Beranda</a><a href="#">Logbook</a><a href="#">Galeri</a><a href="#">Daftar Hadir</a><a href="#">Tim & Dospem</a>
-    </nav>
-    <div class="nav-act">
-      <button class="icon-btn" id="toggleTema" title="Ganti Tema">🌙</button>
-      <button class="btn btn-primary btn-xs" style="padding:9px 16px">Dashboard</button>
-    </div>
-  </div>
-</header>
-
-<main class="wrap">
-  <!-- HERO -->
-  <section class="hero">
-    <span class="chip green c1">▦</span>
-    <span class="chip gold c2">▶</span>
-    <span class="chip deep c3">✦</span>
-    <span class="pill">✦ Magang Bank BSI</span>
-    <h1>Logbook, Galeri, dan Daftar Hadir Magang dalam <span class="hl">Satu Portal</span></h1>
-    <p>Portal ini mencatat kegiatan harian, dokumentasi media, dan kehadiran tim magang selama membantu operasional Bank BSI.</p>
-    <div class="hero-actions">
-      <button class="btn btn-primary">Lihat Logbook</button>
-      <button class="btn btn-glass">Lihat Galeri</button>
-      <button class="btn btn-white">Masuk Akun</button>
-    </div>
-    <div class="hero-art">
-      <div class="mini-card green">
-        <p class="lbl">LOGBOOK BULAN INI</p>
-        <p class="val">24</p>
-        <p class="sub">4 media baru minggu ini</p>
-      </div>
-      <div class="mini-card white">
-        <p class="lbl">KEHADIRAN TIM</p>
-        <p class="val">96%</p>
-        <div class="stack" style="margin-top:10px">
-          <i style="width:78%;background:var(--green)"></i><i style="width:14%;background:var(--amber)"></i><i style="width:8%;background:var(--red)"></i>
-        </div>
-        <p class="sub">Masuk 78 • Izin 14 • Bolos 8</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- STAT -->
-  <section class="stats">
-    <div class="stat"><p class="lbl">Total Mahasiswa</p><p class="val">12</p><p class="sub">Mahasiswa terdaftar dalam tim</p></div>
-    <div class="stat"><p class="lbl">Logbook Publik</p><p class="val">186</p><p class="sub">Catatan kegiatan harian</p></div>
-    <div class="stat"><p class="lbl">Media Galeri</p><p class="val">342</p><p class="sub">Foto dan video dokumentasi</p></div>
-  </section>
-
-  <!-- LOGBOOK -->
-  <section class="block">
-    <span class="eyebrow">🏆 Kegiatan terbaru</span>
-    <h2>Logbook Terbaru Tim</h2>
-    <div class="grid-3">
-      <article class="card">
-        <div class="media">🖼</div>
-        <div class="badges"><span class="badge brand">Layanan Nasabah</span><span class="badge green">Publik</span></div>
-        <div><p class="date">Kamis, 2 Oktober 2026</p><p class="title" style="margin-top:6px">Mendampingi pembukaan rekening nasabah prioritas</p></div>
-        <div class="items"><span>1. Verifikasi dokumen nasabah</span><span>2. Input data CIF ke sistem</span><span><b>+1 kegiatan lainnya</b></span></div>
-        <div class="card-foot">
-          <div class="person"><span class="avatar g">RC</span><span><span class="nm">Risky Chici</span><br><span class="nim">NIM 24070041</span></span></div>
-          <div class="actions"><button class="btn btn-soft btn-xs">Detail</button></div>
-        </div>
-      </article>
-      <article class="card">
-        <div class="media video">▶</div>
-        <div class="badges"><span class="badge brand">Dokumentasi</span><span class="badge green">Publik</span></div>
-        <div><p class="date">Rabu, 1 Oktober 2026</p><p class="title" style="margin-top:6px">Dokumentasi video edukasi produk payroll di aula cabang</p></div>
-        <div class="items"><span>1. Setup kamera dan pencahayaan</span><span>2. Rekaman sesi edukasi</span></div>
-        <div class="card-foot">
-          <div class="person"><span class="avatar y">NS</span><span><span class="nm">Nadia Safitri</span><br><span class="nim">NIM 24070038</span></span></div>
-          <div class="actions"><button class="btn btn-soft btn-xs">Detail</button></div>
-        </div>
-      </article>
-      <article class="card">
-        <div class="media">📷</div>
-        <div class="badges"><span class="badge brand">Edukasi</span><span class="badge gold">Dari Logbook</span></div>
-        <div><p class="date">1 Okt 2026</p><p class="title" style="margin-top:6px">Sosialisasi mobile banking untuk nasabah pensiunan</p></div>
-        <p class="items"><span>Foto suasana sosialisasi bersama tim frontliner di ruang edukasi.</span></p>
-        <div class="card-foot">
-          <div class="person"><span class="avatar d">AP</span><span><span class="nm">Andre Pratama</span><br><span class="nim">NIM 24070052</span></span></div>
-          <span class="badge neutral">Klik untuk detail</span>
-        </div>
-      </article>
-    </div>
-  </section>
-
-  <!-- KEHADIRAN -->
-  <section class="block">
-    <span class="eyebrow">📋 Daftar hadir</span>
-    <h2>Rekap Kehadiran Tim Magang</h2>
-    <div class="grid-2">
-      <article class="card">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
-          <div><p class="date">Kamis, 2 Oktober 2026</p>
-            <div class="person" style="margin-top:10px"><span class="avatar g">RC</span><span><span class="nm">Risky Chici</span><br><span class="nim">NIM 24070041</span></span></div>
-          </div>
-          <span class="badge green">Masuk</span>
-        </div>
-        <div class="reason"><b style="color:var(--ink)">Alasan atau keterangan:</b><br>Tidak ada alasan.</div>
-        <div class="card-foot" style="margin-top:0">
-          <div class="actions"><button class="btn btn-soft btn-xs">Detail</button><button class="btn btn-xs" style="background:var(--btn-bg);color:var(--btn-fg)">Edit</button><button class="btn btn-danger btn-xs">Hapus</button></div>
-        </div>
-      </article>
-      <article class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-          <p class="title">Grafik Kehadiran per Mahasiswa</p>
-          <div class="legend">
-            <span><i class="dot" style="background:var(--green)"></i>Masuk</span>
-            <span><i class="dot" style="background:var(--amber)"></i>Izin</span>
-            <span><i class="dot" style="background:var(--red)"></i>Bolos</span>
-          </div>
-        </div>
-        <div class="stack"><i style="width:78%;background:var(--green)"></i><i style="width:14%;background:var(--amber)"></i><i style="width:8%;background:var(--red)"></i></div>
-        <div class="bars"><i style="height:60%"></i><i style="height:85%"></i><i style="height:45%"></i><i style="height:95%"></i><i style="height:70%"></i><i style="height:55%"></i><i style="height:80%"></i></div>
-        <p class="date" style="text-align:center">Min • Sen • Sel • Rab • Kam • Jum • Sab</p>
-      </article>
-    </div>
-  </section>
-
-  <!-- FORM CEPAT -->
-  <section class="block">
-    <span class="eyebrow">⚡ Isi cepat via QR</span>
-    <h2>Form Isi Cepat</h2>
-    <div class="form-card">
-      <div class="tabs">
-        <button class="tab active" data-panel="p-log">Logbook</button>
-        <button class="tab" data-panel="p-absen">Daftar Hadir</button>
-      </div>
-      <div id="p-log">
-        <p class="info-lama">📅 Terakhir mengisi logbook: 3 hari yang lalu</p>
-        <div class="field"><label class="label">Kategori Utama *</label><select class="input"><option>Pilih Kategori</option><option>Layanan Nasabah</option><option>Dokumentasi</option></select></div>
-        <div class="field"><label class="label">Judul kegiatan *</label><input class="input" placeholder="Judul kegiatan"></div>
-        <div class="field"><label class="label">Deskripsi singkat</label><textarea class="input" rows="2" placeholder="Deskripsi singkat kegiatan"></textarea></div>
-        <div class="field"><div class="media-btns"><button class="dashed">📷 Ambil Foto</button><button class="dashed">🖼 Dari Galeri</button></div></div>
-        <label class="check"><input type="checkbox"><span>Tampilkan kegiatan ini di galeri</span></label>
-        <div class="field"><button class="btn btn-primary" style="width:100%">Simpan Logbook</button></div>
-      </div>
-      <div id="p-absen" hidden>
-        <p class="info-lama">📋 Terakhir mengisi daftar hadir: kemarin</p>
-        <div class="field"><label class="label">Status Kehadiran *</label>
-          <div class="seg"><button class="on-green">Masuk</button><button>Izin</button><button>Bolos</button></div>
-        </div>
-        <div class="field"><label class="label">Alasan atau Keterangan</label><textarea class="input" rows="2" disabled placeholder="Status Masuk tidak memerlukan alasan"></textarea></div>
-        <div class="field"><button class="btn btn-primary" style="width:100%">Simpan Daftar Hadir</button></div>
-      </div>
-    </div>
-  </section>
-</main>
-
-<footer>© 2026 Tim Magang BSI — Pratinjau MVP Opsi B (hybrid)</footer>
-
-<script>
-  const root = document.documentElement
-  const btnTema = document.getElementById('toggleTema')
-  btnTema.addEventListener('click', function () {
-    root.classList.toggle('dark')
-    btnTema.textContent = root.classList.contains('dark') ? '☀️' : '🌙'
-  })
-  document.querySelectorAll('.tab').forEach(function (t) {
-    t.addEventListener('click', function () {
-      document.querySelectorAll('.tab').forEach(function (x) { x.classList.remove('active') })
-      t.classList.add('active')
-      document.getElementById('p-log').hidden = t.dataset.panel !== 'p-log'
-      document.getElementById('p-absen').hidden = t.dataset.panel !== 'p-absen'
-    })
-  })
-</script>
-</body>
-</html>
-````
-
-## File: setup-fitur-cepat1.cjs
-````javascript
-/**
- * setup-fitur-cepat.cjs
- * Menerapkan fitur "Isi Cepat" berbasis QR untuk project Logbook Magang BSI.
- *
- * Yang dilakukan script ini:
- *   1. Membuat src/pages/QuickPage.jsx  -> form cepat (tab Logbook & Daftar Hadir)
- *   2. Mengubah src/App.jsx             -> import, RequireAuth dengan ?next, route /cepat
- *   3. Mengubah src/pages/LoginPage.jsx -> setelah login balik ke halaman asal (?next)
- *   4. Mengubah public/llms.txt         -> tambah dokumentasi route /cepat
- *
- * Cara pakai: jalankan dari folder root project (sejajar package.json):
- *   node setup-fitur-cepat.cjs
- */
-'use strict'
-
-const fs = require('fs')
-const path = require('path')
-const ROOT = process.cwd()
-
-const FILE = {
-  app: path.join(ROOT, 'src', 'App.jsx'),
-  login: path.join(ROOT, 'src', 'pages', 'LoginPage.jsx'),
-  llms: path.join(ROOT, 'public', 'llms.txt'),
-  quick: path.join(ROOT, 'src', 'pages', 'QuickPage.jsx')
-}
-
-function gagal(pesan) {
-  console.error('')
-  console.error('[GAGAL] ' + pesan)
-  console.error('Tidak ada file yang diubah.')
-  process.exit(1)
-}
-
-/* ===== 1. Validasi struktur project ===== */
-if (!fs.existsSync(path.join(ROOT, 'package.json'))) {
-  gagal('package.json tidak ditemukan. Jalankan script dari folder root project.')
-}
-
-for (const nama of ['app', 'login', 'llms']) {
-  if (!fs.existsSync(FILE[nama])) gagal('File tidak ditemukan: ' + FILE[nama])
-}
-
-if (fs.existsSync(FILE.quick)) {
-  gagal('src/pages/QuickPage.jsx sudah ada. Fitur tampaknya sudah pernah diterapkan.')
-}
-
-let appSrc = fs.readFileSync(FILE.app, 'utf8')
-let loginSrc = fs.readFileSync(FILE.login, 'utf8')
-let llmsSrc = fs.readFileSync(FILE.llms, 'utf8')
-
-if (appSrc.indexOf('/cepat') !== -1 || appSrc.indexOf('QuickPage') !== -1) {
-  gagal('src/App.jsx sudah memuat route /cepat atau QuickPage. Fitur tampaknya sudah pernah diterapkan.')
-}
-
-/* ===== 2. Helper ganti teks (pastikan pola ada dan tunggal) ===== */
-function gantiTepat(src, cari, ganti, label, file) {
-  const i = src.indexOf(cari)
-  if (i === -1) gagal('Pola tidak ditemukan di ' + file + ' — langkah: ' + label)
-  if (src.indexOf(cari, i + cari.length) !== -1) gagal('Pola muncul lebih dari sekali di ' + file + ' — langkah: ' + label)
-  return src.slice(0, i) + ganti + src.slice(i + cari.length)
-}
-
-/* ===== 3. Ubah src/App.jsx ===== */
-const EOL_APP = appSrc.indexOf('\r\n') !== -1 ? '\r\n' : '\n'
-
-appSrc = gantiTepat(
-  appSrc,
-  "import DashboardPage from './pages/DashboardPage.jsx'",
-  "import DashboardPage from './pages/DashboardPage.jsx'" + EOL_APP + "import QuickPage from './pages/QuickPage.jsx'",
-  'import QuickPage',
-  'src/App.jsx'
-)
-
-const blokRequireAuth = [
-  'function RequireAuth(props) {',
-  '  const { mahasiswa, loading } = useAuth()',
-  '  const location = useLocation()',
-  '  if (loading) return <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:py-8"><SkeletonDashboard /></div>',
-  "  if (!mahasiswa) return <Navigate to={'/login?next=' + encodeURIComponent(location.pathname + location.search)} replace />",
-  '  return props.children',
-  '}'
-].join(EOL_APP)
-
-const regexRequireAuth = /function RequireAuth\(props\) \{[\s\S]*?\n\}/
-if (!regexRequireAuth.test(appSrc)) gagal('Fungsi RequireAuth tidak ditemukan di src/App.jsx')
-appSrc = appSrc.replace(regexRequireAuth, blokRequireAuth)
-
-appSrc = gantiTepat(
-  appSrc,
-  '<Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />',
-  '<Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />' +
-    EOL_APP +
-    '            <Route path="/cepat" element={<RequireAuth><QuickPage /></RequireAuth>} />',
-  'route /cepat',
-  'src/App.jsx'
-)
-
-/* ===== 4. Ubah src/pages/LoginPage.jsx ===== */
-const EOL_LOGIN = loginSrc.indexOf('\r\n') !== -1 ? '\r\n' : '\n'
-
-loginSrc = gantiTepat(
-  loginSrc,
-  "import { useNavigate } from 'react-router-dom'",
-  "import { useNavigate, useSearchParams } from 'react-router-dom'",
-  'import useSearchParams',
-  'src/pages/LoginPage.jsx'
-)
-
-loginSrc = gantiTepat(
-  loginSrc,
-  'const navigate = useNavigate()',
-  'const navigate = useNavigate()' + EOL_LOGIN + '  const [params] = useSearchParams()',
-  'state params',
-  'src/pages/LoginPage.jsx'
-)
-
-loginSrc = gantiTepat(
-  loginSrc,
-  "navigate('/dashboard')",
-  "const next = params.get('next')" +
-    EOL_LOGIN +
-    "  navigate(next && next.charAt(0) === '/' && next.indexOf('//') !== 0 ? next : '/dashboard')",
-  'redirect balik setelah login',
-  'src/pages/LoginPage.jsx'
-)
-
-/* ===== 5. Ubah public/llms.txt ===== */
-const EOL_LLMS = llmsSrc.indexOf('\r\n') !== -1 ? '\r\n' : '\n'
-const BARIS_DASHBOARD = '- /dashboard : pengelolaan logbook, galeri, daftar hadir, dan foto profil, memerlukan sesi login'
-const BARIS_CEPAT = '- /cepat : form cepat berbasis QR untuk menambah kegiatan logbook hari ini dan daftar hadir tanpa membuka dashboard, memerlukan sesi login'
-
-if (llmsSrc.indexOf(BARIS_CEPAT) === -1) {
-  llmsSrc = gantiTepat(llmsSrc, BARIS_DASHBOARD, BARIS_DASHBOARD + EOL_LLMS + BARIS_CEPAT, 'baris /cepat', 'public/llms.txt')
-}
-
-/* ===== 6. Isi src/pages/QuickPage.jsx ===== */
-const QUICK_PAGE = `import { useEffect, useRef, useState } from 'react'
-import { supabase } from '../lib/supabase.js'
-import { useAuth } from '../lib/auth.js'
-import { uploadMedia } from '../lib/upload.js'
-import { syncGaleriFromLogbook } from '../lib/logbook.js'
-import { urlPratinjau } from '../lib/konversi.js'
-import { todayInput, formatTanggal } from '../lib/format.js'
-import { KATEGORI } from '../lib/constants.js'
-import { inputCls, labelCls, btnPrimary, useToast, AutoTextArea, LabelProses } from '../components/ui.jsx'
-import { CustomSelect } from '../components/controls.jsx'
-import { SizedIcon } from '../components/icons.jsx'
-
-const STATUS_HADIR = ['Masuk', 'Izin', 'Bolos']
-
-export default function QuickPage() {
-  const { mahasiswa } = useAuth()
-  const toast = useToast()
-  const tanggal = todayInput()
-  const [tab, setTab] = useState('logbook')
-  const [loading, setLoading] = useState(true)
-  const [todayLog, setTodayLog] = useState(null)
-  const [hadirHariIni, setHadirHariIni] = useState(null)
-  const [lastLogTanggal, setLastLogTanggal] = useState(null)
-  const [lastHadirTanggal, setLastHadirTanggal] = useState(null)
-  const [kategori, setKategori] = useState('')
-  const [judulKegiatan, setJudulKegiatan] = useState('')
-  const [deskripsi, setDeskripsi] = useState('')
-  const [file, setFile] = useState(null)
-  const [preview, setPreview] = useState('')
-  const [showGal, setShowGal] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [info, setInfo] = useState('')
-  const [status, setStatus] = useState('Masuk')
-  const [alasan, setAlasan] = useState('')
-  const cameraRef = useRef(null)
-  const galeriRef = useRef(null)
-
-  async function muatData(mhs, senyap) {
-    if (!senyap) setLoading(true)
-    const l = await supabase
-      .from('logbooks')
-      .select('*, logbook_items(*)')
-      .eq('mahasiswa_id', mhs.id)
-      .eq('tanggal', tanggal)
-      .order('created_at', { ascending: false })
-      .limit(1)
-    const log = (l.data || [])[0] || null
-    if (log) {
-      log.logbook_items = (log.logbook_items || []).sort(function (a, b) { return (a.urutan || 0) - (b.urutan || 0) })
-    }
-    const h = await supabase
-      .from('daftar_hadir')
-      .select('*')
-      .eq('mahasiswa_id', mhs.id)
-      .eq('tanggal', tanggal)
-      .limit(1)
-    const hadir = (h.data || [])[0] || null
-    const ll = await supabase
-      .from('logbooks')
-      .select('tanggal')
-      .eq('mahasiswa_id', mhs.id)
-      .order('tanggal', { ascending: false })
-      .limit(1)
-    const lh = await supabase
-      .from('daftar_hadir')
-      .select('tanggal')
-      .eq('mahasiswa_id', mhs.id)
-      .order('tanggal', { ascending: false })
-      .limit(1)
-    setTodayLog(log)
-    setHadirHariIni(hadir)
-    setLastLogTanggal(ll.data && ll.data[0] ? ll.data[0].tanggal : null)
-    setLastHadirTanggal(lh.data && lh.data[0] ? lh.data[0].tanggal : null)
-    if (hadir) {
-      setStatus(hadir.status)
-      setAlasan(hadir.alasan || '')
-    }
-    if (!senyap) setLoading(false)
-  }
-
-  useEffect(function () {
-    if (mahasiswa) muatData(mahasiswa)
-  }, [mahasiswa])
-
-  async function pilihFile(e) {
-    const f = e.target.files[0]
-    e.target.value = ''
-    if (!f) return
-    if (preview && preview.indexOf('blob:') === 0) URL.revokeObjectURL(preview)
-    setFile(f)
-    setPreview(await urlPratinjau(f))
-  }
-
-  function hapusFile() {
-    if (preview && preview.indexOf('blob:') === 0) URL.revokeObjectURL(preview)
-    setFile(null)
-    setPreview('')
-    setShowGal(false)
-  }
-
-  async function submitLogbook(e) {
-    e.preventDefault()
-    if (!todayLog && !kategori) { toast.gagal('Pilih kategori terlebih dahulu.'); return }
-    if (!judulKegiatan.trim()) { toast.gagal('Judul kegiatan wajib diisi.'); return }
-    setBusy(true)
-    try {
-      let mediaPath = null
-      let mediaThumb = null
-      if (file) {
-        const up = await uploadMedia(file, 'logbook', setInfo)
-        mediaPath = up.publicUrl
-        mediaThumb = up.thumbUrl || null
-      }
-      let logId = todayLog ? todayLog.id : null
-      if (!todayLog) {
-        const ins = await supabase.from('logbooks').insert({
-          mahasiswa_id: mahasiswa.id, tanggal: tanggal, unit: '', kategori: kategori,
-          judul: judulKegiatan.trim(), kendala: '', solusi: '', pembelajaran: '', status: 'publik'
-        }).select().single()
-        if (ins.error) throw new Error(ins.error.message)
-        logId = ins.data.id
-      }
-      const urutan = todayLog ? todayLog.logbook_items.reduce(function (m, it) { return Math.max(m, it.urutan || 0) }, 0) + 1 : 1
-      const insItem = await supabase.from('logbook_items').insert({
-        logbook_id: logId,
-        urutan: urutan,
-        judul: judulKegiatan.trim(),
-        deskripsi: deskripsi.trim(),
-        hasil: '',
-        media_path: mediaPath,
-        media_type: mediaPath ? 'foto' : null,
-        media_thumb: mediaThumb,
-        media_source: 'r2',
-        youtube_id: null,
-        drive_id: null,
-        show_in_gallery: showGal && !!mediaPath
-      }).select().single()
-      if (insItem.error) throw new Error(insItem.error.message)
-      if (todayLog && todayLog.status !== 'publik') {
-        await supabase.from('logbooks').update({ status: 'publik' }).eq('id', todayLog.id)
-      }
-      if (showGal && mediaPath) {
-        await syncGaleriFromLogbook(mahasiswa.id, [insItem.data], {
-          tanggal: tanggal,
-          kategori: todayLog ? todayLog.kategori : kategori
-        })
-      }
-      const pertama = !todayLog
-      setJudulKegiatan('')
-      setDeskripsi('')
-      hapusFile()
-      if (pertama) setKategori('')
-      await muatData(mahasiswa, true)
-      toast.sukses(pertama ? 'Logbook hari ini berhasil dibuat' : 'Kegiatan baru berhasil ditambahkan')
-    } catch (err) {
-      toast.gagal('Gagal menyimpan logbook: ' + err.message)
-    }
-    setInfo('')
-    setBusy(false)
-  }
-
-  async function submitAbsen(e) {
-    e.preventDefault()
-    setBusy(true)
-    try {
-      const payload = {
-        mahasiswa_id: mahasiswa.id,
-        tanggal: tanggal,
-        status: status,
-        alasan: status === 'Masuk' ? '' : alasan.trim()
-      }
-      let res
-      if (hadirHariIni) {
-        res = await supabase.from('daftar_hadir').update(payload).eq('id', hadirHariIni.id)
-      } else {
-        res = await supabase.from('daftar_hadir').insert(payload)
-      }
-      if (res.error) throw new Error(res.error.message)
-      await muatData(mahasiswa, true)
-      toast.sukses(hadirHariIni ? 'Daftar hadir berhasil diperbarui' : 'Daftar hadir berhasil disimpan')
-    } catch (err) {
-      toast.gagal('Gagal menyimpan kehadiran: ' + err.message)
-    }
-    setBusy(false)
-  }
-
-  function infoTerakhir(tgl) {
-    if (!tgl) return { teks: 'belum pernah', lama: true }
-    const selisih = Math.round((new Date(tanggal + 'T00:00:00').getTime() - new Date(tgl + 'T00:00:00').getTime()) / 86400000)
-    if (selisih <= 0) return { teks: 'hari ini', lama: false }
-    if (selisih === 1) return { teks: 'kemarin', lama: false }
-    return { teks: selisih + ' hari yang lalu', lama: true }
-  }
-
-  if (loading) {
-    return <div className="grid min-h-[50vh] place-items-center"><div className="h-10 w-10 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div></div>
-  }
-
-  const infoLog = infoTerakhir(lastLogTanggal)
-  const infoHadir = infoTerakhir(lastHadirTanggal)
-  const tabCls = function (t) {
-    return 'flex-1 px-4 py-2.5 rounded-xl text-xs sm:rounded-2xl sm:py-3 sm:text-sm font-bold ' + (tab === t ? 'bg-white text-bsi-900' : 'bg-white/10 text-white hover:bg-white/20')
-  }
-
-  return (
-    <div className="mx-auto w-full max-w-xl space-y-5">
-      <section className="rounded-[2rem] bg-bsi-900 p-5 text-white sm:p-8">
-        <h1 className="text-xl font-black sm:text-2xl">Isi Cepat</h1>
-        <p className="mt-1 text-sm text-white/80">{formatTanggal(tanggal)}</p>
-        <div className="mt-4 flex gap-2">
-          <button type="button" onClick={function () { setTab('logbook') }} className={tabCls('logbook')}>Logbook</button>
-          <button type="button" onClick={function () { setTab('absen') }} className={tabCls('absen')}>Daftar Hadir</button>
-        </div>
-      </section>
-
-      {tab === 'logbook' ? (
-        <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
-          <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoLog.lama ? 'text-amber-600' : 'text-slate-500')}>
-            <SizedIcon name="calendar" size={13} />
-            Terakhir mengisi logbook: {infoLog.teks}
-          </p>
-          {todayLog ? (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-              <p className="text-sm font-bold text-emerald-800">Logbook hari ini sudah ada</p>
-              <p className="mt-1 text-sm text-emerald-800">{todayLog.judul} • {todayLog.logbook_items.length} kegiatan</p>
-              <div className="mt-2 space-y-1">
-                {todayLog.logbook_items.map(function (it, i) {
-                  return <p key={it.id} className="truncate text-xs text-emerald-800">{i + 1}. {it.judul}</p>
-                })}
-              </div>
-              <p className="mt-2 text-xs text-emerald-800">Kegiatan baru ditambahkan di bawahnya tanpa menghapus kegiatan lama.</p>
-              {todayLog.status !== 'publik' ? <p className="mt-1 text-xs font-semibold text-emerald-800">Status masih draf — akan otomatis dipublikasikan.</p> : null}
-            </div>
-          ) : (
-            <div>
-              <label className={labelCls}>Kategori Utama <span className="text-red-500">*</span></label>
-              <div className="mt-1.5">
-                <CustomSelect placeholder="Pilih Kategori" value={kategori} onChange={setKategori} options={KATEGORI.map(function (k) { return { value: k, label: k } })} />
-              </div>
-            </div>
-          )}
-          <form onSubmit={submitLogbook} className="mt-5 space-y-4">
-            <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-xs font-bold text-bsi-800">{todayLog ? 'Kegiatan Baru (kegiatan ' + (todayLog.logbook_items.length + 1) + ')' : 'Kegiatan'}</p>
-              <input className={inputCls} value={judulKegiatan} onChange={function (e) { setJudulKegiatan(e.target.value) }} aria-label="Judul Kegiatan" placeholder="Judul kegiatan" />
-              <AutoTextArea className={inputCls} value={deskripsi} onChange={function (e) { setDeskripsi(e.target.value) }} aria-label="Deskripsi Kegiatan" placeholder="Deskripsi singkat kegiatan" />
-              {preview ? (
-                <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-900">
-                  <img src={preview} alt="Pratinjau" className="absolute inset-0 h-full w-full object-contain" />
-                  <button type="button" onClick={hapusFile} title="Hapus Gambar" className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-red-500 text-white hover:bg-red-600">
-                    <SizedIcon name="close" size={14} />
-                  </button>
-                </div>
-              ) : null}
-              <div className="grid grid-cols-2 gap-3">
-                <button type="button" onClick={function () { cameraRef.current.click() }} className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-3 py-3.5 text-sm font-semibold text-slate-700 hover:border-bsi-500 hover:bg-slate-100">
-                  <SizedIcon name="camera" size={18} /> Ambil Foto
-                </button>
-                <button type="button" onClick={function () { galeriRef.current.click() }} className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-3 py-3.5 text-sm font-semibold text-slate-700 hover:border-bsi-500 hover:bg-slate-100">
-                  <SizedIcon name="image" size={18} /> Dari Galeri
-                </button>
-              </div>
-              <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={pilihFile} />
-              <input ref={galeriRef} type="file" accept="image/*" className="hidden" onChange={pilihFile} />
-              {preview ? (
-                <label className="flex w-full cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 p-3">
-                  <input type="checkbox" checked={showGal} onChange={function (e) { setShowGal(e.target.checked) }} className="mt-0.5 h-4 w-4 rounded accent-bsi-800" />
-                  <span className="text-sm font-semibold text-slate-800">Tampilkan kegiatan ini di galeri</span>
-                </label>
-              ) : null}
-            </div>
-            <button type="submit" disabled={busy} className={btnPrimary}>
-              {busy ? <LabelProses teks={info || 'Menyimpan'} /> : (todayLog ? 'Tambah Kegiatan' : 'Simpan Logbook')}
-            </button>
-          </form>
-        </section>
-      ) : null}
-
-      {tab === 'absen' ? (
-        <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
-          <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoHadir.lama ? 'text-amber-600' : 'text-slate-500')}>
-            <SizedIcon name="clipboard" size={13} />
-            Terakhir mengisi daftar hadir: {infoHadir.teks}
-          </p>
-          {hadirHariIni ? (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-              <p className="text-sm font-bold text-emerald-800">Kamu sudah mengisi daftar hadir hari ini ({hadirHariIni.status})</p>
-              <p className="mt-1 text-xs text-emerald-800">Form di bawah bisa dipakai untuk memperbarui status bila ada perubahan.</p>
-            </div>
-          ) : null}
-          <form onSubmit={submitAbsen} className={'space-y-4 ' + (hadirHariIni ? 'mt-5' : '')}>
-            <div>
-              <label className={labelCls}>Status Kehadiran <span className="text-red-500">*</span></label>
-              <div className="mt-1.5 flex gap-2">
-                {STATUS_HADIR.map(function (s) {
-                  const aktif = status === s
-                  const warna = aktif
-                    ? (s === 'Masuk' ? 'bg-emerald-500 text-white' : s === 'Izin' ? 'bg-amber-500 text-white' : 'bg-red-500 text-white')
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  return <button type="button" key={s} onClick={function () { setStatus(s) }} className={'flex-1 rounded-2xl px-3 py-3 text-sm font-bold ' + warna}>{s}</button>
-                })}
-              </div>
-            </div>
-            <div>
-              <label className={labelCls}>Alasan atau Keterangan</label>
-              <AutoTextArea
-                className={inputCls + (status === 'Masuk' ? ' cursor-not-allowed opacity-60' : '')}
-                value={alasan}
-                onChange={function (e) { setAlasan(e.target.value) }}
-                aria-label="Alasan atau Keterangan"
-                placeholder={status === 'Masuk' ? 'Status Masuk tidak memerlukan alasan' : 'Contoh: Keperluan keluarga, sakit.'}
-                disabled={status === 'Masuk'}
-              />
-            </div>
-            <button type="submit" disabled={busy} className={btnPrimary}>
-              {busy ? <LabelProses teks="Menyimpan" /> : (hadirHariIni ? 'Perbarui Daftar Hadir' : 'Simpan Daftar Hadir')}
-            </button>
-          </form>
-        </section>
-      ) : null}
-    </div>
-  )
-}
-`
-
-/* ===== 7. Tulis semua file (baru dieksekusi jika semua langkah di atas lolos) ===== */
-try {
-  fs.writeFileSync(FILE.quick, QUICK_PAGE, 'utf8')
-  fs.writeFileSync(FILE.app, appSrc, 'utf8')
-  fs.writeFileSync(FILE.login, loginSrc, 'utf8')
-  fs.writeFileSync(FILE.llms, llmsSrc, 'utf8')
-} catch (e) {
-  gagal('Gagal menulis file: ' + e.message)
-}
-
-console.log('')
-console.log('[SELESAI] Fitur Isi Cepat (/cepat) berhasil diterapkan.')
-console.log('')
-console.log('File yang dibuat/diubah:')
-console.log('  + src/pages/QuickPage.jsx   (baru)')
-console.log('  ~ src/App.jsx               (import QuickPage, RequireAuth + ?next, route /cepat)')
-console.log('  ~ src/pages/LoginPage.jsx   (setelah login balik ke halaman asal)')
-console.log('  ~ public/llms.txt           (dokumentasi route baru)')
-console.log('')
-console.log('Langkah berikutnya:')
-console.log('  1. Uji lokal   : npm run dev, buka http://localhost:5173/cepat')
-console.log('  2. Deploy      : push ke GitHub / vercel deploy seperti biasa')
-console.log('  3. Buat QR     : encode URL https://domain-kamu/cepat pakai QR generator,')
-console.log('                   lalu print/tempel di kantor atau share di grup WA')
-````
-
-## File: setup-tema-hybrid.cjs
-````javascript
-/**
- * setup-tema-hybrid.cjs
- * Menerapkan tema Opsi B (hybrid pastel-fintech + brand BSI) ke CSS global.
- * Tidak menyentuh JSX — struktur hero diganti manual (lihat template terpisah).
- * Aman dijalankan berulang: guard mencegah duplikasi.
- */
-'use strict'
-const fs = require('fs')
-const path = require('path')
-const ROOT = process.cwd()
-const FILE = {
-  css: path.join(ROOT, 'src', 'index.css'),
-  html: path.join(ROOT, 'index.html')
-}
-function gagal(pesan) {
-  console.error(''); console.error('[GAGAL] ' + pesan); console.error('Tidak ada file yang diubah.'); process.exit(1)
-}
-for (const k in FILE) if (!fs.existsSync(FILE[k])) gagal('File tidak ditemukan: ' + FILE[k])
-let css = fs.readFileSync(FILE.css, 'utf8')
-let html = fs.readFileSync(FILE.html, 'utf8')
-if (css.indexOf('/* ===== Tema Opsi B') !== -1) gagal('Tema hybrid sudah pernah diterapkan. Hapus blok lama dulu kalau ingin menerapkan ulang.')
-/* ===== A. Tambahkan blok tema hybrid di akhir index.css ===== */
-const BLOK_TEMA = `
-
-/* ================================================================
-   Tema Opsi B: Hybrid Pastel-Fintech + Brand BSI
-   ================================================================ */
-
-/* Latar gradasi pastel (light) & hijau-tua (dark) */
-body {
-  background-color: #f4f8f4;
-  background-image: linear-gradient(160deg, #dff3e6 0%, #f2fbf4 45%, #fbf3e2 100%);
-  background-attachment: fixed;
-}
-.dark body {
-  background-color: #081a13 !important;
-  background-image: linear-gradient(160deg, #0c2418 0%, #081a13 45%, #0a1f16 100%) !important;
-  background-attachment: fixed;
-}
-
-/* Override netral Slate -> bernuansa hijau (supaya menyatu dengan brand) */
-.bg-slate-50  { background-color: #f4f8f4; }
-.bg-slate-100 { background-color: #eaf2ec; }
-.bg-slate-200 { background-color: #dde7e0; }
-.dark .bg-slate-50  { background-color: #081a13 !important; }
-.dark .bg-slate-100 { background-color: #17352b !important; }
-.dark .bg-slate-200 { background-color: #1e3d33 !important; }
-.dark .bg-white     { background-color: #0f241b !important; }
-
-/* Navbar glass (sticky header otomatis jadi glass) */
-header.sticky {
-  background-color: rgba(255,255,255,0.65) !important;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-}
-.dark header.sticky {
-  background-color: rgba(16,42,29,0.6) !important;
-}
-
-/* Glass card / surface */
-.bsi-glass {
-  background: rgba(255,255,255,0.65);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid rgba(15,42,29,0.10);
-}
-.dark .bsi-glass {
-  background: rgba(16,42,29,0.6);
-  border-color: rgba(234,244,238,0.10);
-}
-
-/* Shadow lembut (pakai rona hijau, bukan biru) */
-.bsi-shadow    { box-shadow: 0 24px 48px -24px rgba(15,42,29,0.25); }
-.bsi-shadow-sm { box-shadow: 0 10px 24px -12px rgba(15,42,29,0.18); }
-.dark .bsi-shadow    { box-shadow: 0 24px 48px -24px rgba(0,0,0,0.6); }
-.dark .bsi-shadow-sm { box-shadow: 0 10px 24px -12px rgba(0,0,0,0.5); }
-
-/* Hero gradasi pastel -> krem gold (light) & hijau tua (dark) */
-.bsi-hero {
-  background: linear-gradient(135deg, #e7f6ec 0%, #f4fbee 55%, #fdf4e3 100%);
-}
-.dark .bsi-hero {
-  background: linear-gradient(135deg, #103021 0%, #0e2a1c 55%, #0b2019 100%) !important;
-}
-
-/* Chip melayang di pojok hero */
-@keyframes bsiFloat {
-  0%, 100% { transform: translateY(0) rotate(6deg); }
-  50%      { transform: translateY(-12px) rotate(-5deg); }
-}
-.bsi-chip {
-  position: absolute;
-  width: 54px; height: 54px;
-  border-radius: 16px;
-  display: grid; place-items: center;
-  color: #fff; font-size: 20px;
-  box-shadow: 0 10px 24px -12px rgba(15,42,29,0.18);
-  animation: bsiFloat 6s ease-in-out infinite;
-}
-.bsi-chip-green { background: linear-gradient(135deg, #86ecb0, #1a9e57); }
-.bsi-chip-gold  { background: linear-gradient(135deg, #fbbf24, #d97706); }
-.bsi-chip-deep  { background: linear-gradient(135deg, #27c06d, #135033); }
-.bsi-chip-c1 { top: 36px;   right: 330px; }
-.bsi-chip-c2 { bottom: 44px; right: 90px; animation-delay: 1.2s; }
-.bsi-chip-c3 { top: 130px;  right: 20px; animation-delay: 2.1s; }
-@media (prefers-reduced-motion: reduce) { .bsi-chip { animation: none; } }
-
-/* Pill eyebrow glass */
-.bsi-pill {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: rgba(255,255,255,0.65);
-  border: 1px solid rgba(15,42,29,0.10);
-  color: #177c48;
-  font-size: 11px; font-weight: 800;
-  text-transform: uppercase; letter-spacing: 0.14em;
-  padding: 7px 14px;
-  border-radius: 999px;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-}
-.dark .bsi-pill {
-  background: rgba(16,42,29,0.6);
-  border-color: rgba(234,244,238,0.10);
-  color: #86ecb0;
-}
-
-/* Teks gradient brand */
-.bsi-grad-text {
-  background: linear-gradient(90deg, #1a9e57, #f59e0b);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-/* Tombol glass */
-.bsi-btn-glass {
-  background: rgba(255,255,255,0.7);
-  color: #0f2a1d;
-  border: 1px solid rgba(15,42,29,0.12);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border-radius: 14px;
-  padding: 10px 18px;
-  font-weight: 700;
-  font-size: 14px;
-  display: inline-flex; align-items: center; gap: 8px;
-  transition: transform .15s ease, background-color .2s ease;
-}
-.bsi-btn-glass:hover { transform: translateY(-1px); background: rgba(255,255,255,0.85); }
-.dark .bsi-btn-glass {
-  background: rgba(16,42,29,0.6);
-  color: #eaf4ee;
-  border-color: rgba(234,244,238,0.10);
-}
-.dark .bsi-btn-glass:hover { background: rgba(16,42,29,0.75); }
-
-/* Tombol putih (varian ketiga di hero) */
-.bsi-btn-white {
-  background: #fff;
-  color: #177c48;
-  border: 1px solid rgba(15,42,29,0.08);
-  border-radius: 14px;
-  padding: 10px 18px;
-  font-weight: 700;
-  font-size: 14px;
-  display: inline-flex; align-items: center; gap: 8px;
-  box-shadow: 0 10px 24px -12px rgba(15,42,29,0.18);
-  transition: transform .15s ease;
-}
-.bsi-btn-white:hover { transform: translateY(-1px); }
-.dark .bsi-btn-white {
-  background: #0f241b;
-  color: #86ecb0;
-  border-color: rgba(234,244,238,0.10);
-}
-
-/* Mini card mengambang di hero */
-.bsi-mini-card {
-  width: 212px;
-  border-radius: 20px;
-  padding: 18px;
-  box-shadow: 0 24px 48px -24px rgba(15,42,29,0.25);
-}
-.bsi-mini-green {
-  background: linear-gradient(135deg, #27c06d, #135033);
-  color: #fff;
-}
-.bsi-mini-white {
-  background: #fff;
-  color: #0f2a1d;
-  margin-top: 40px;
-  border: 1px solid rgba(15,42,29,0.10);
-}
-.dark .bsi-mini-white {
-  background: #0f241b !important;
-  color: #eaf4ee !important;
-  border-color: rgba(234,244,238,0.10);
-}
-
-/* Stat card glass */
-.bsi-stat {
-  background: rgba(255,255,255,0.6);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(15,42,29,0.10);
-  border-radius: 24px;
-  padding: 20px;
-}
-.dark .bsi-stat {
-  background: rgba(16,42,29,0.6);
-  border-color: rgba(234,244,238,0.10);
-}
-
-/* Stack bar untuk kehadiran */
-.bsi-stack { display: flex; height: 12px; border-radius: 999px; overflow: hidden; margin-top: 10px; }
-.bsi-stack i { display: block; height: 100%; }
-
-/* Hide chips di layar sempit (biar hero tidak berantakan) */
-@media (max-width: 960px) {
-  .bsi-chip-c1, .bsi-hero-art { display: none; }
-}
-/* ================================================================ */
-`
-css = css + BLOK_TEMA
-/* ===== B. theme-color di index.html ===== */
-const reTheme = /<meta name="theme-color" content="#[0-9a-fA-F]{6}/
-if (!reTheme.test(html)) gagal('Meta theme-color tidak ditemukan di index.html')
-html = html.replace(reTheme, '<meta name="theme-color" content="#16623c')
-/* ===== Tulis ===== */
-try {
-  fs.writeFileSync(FILE.css, css, 'utf8')
-  fs.writeFileSync(FILE.html, html, 'utf8')
-} catch (e) {
-  gagal('Gagal menulis file: ' + e.message)
-}
-console.log('')
-console.log('[SELESAI] Tema Opsi B (hybrid) diterapkan ke CSS.')
-console.log('')
-console.log('File yang diubah:')
-console.log('  ~ src/index.css   (tambah blok Tema Opsi B di akhir)')
-console.log('  ~ index.html      (theme-color disesuaikan)')
-console.log('')
-console.log('Langkah selanjutnya: ganti hero di src/pages/HomePage.jsx')
-console.log('dengan template yang diberikan setelah script ini.')
-````
-
-## File: setup-tema-opsib.cjs
-````javascript
-/**
- * setup-tema-opsib.cjs (v3)
- * Menyinkronkan tema aplikasi dengan token MVP Opsi B (light & dark).
- * Bagian HomePage bersifat opsional: dilewati bila hero Opsi B sudah terpasang.
- * Jalankan dari root project: node setup-tema-opsib.cjs
- */
-'use strict'
-const fs = require('fs')
-const path = require('path')
-const ROOT = process.cwd()
-const FILE = {
-  html: path.join(ROOT, 'index.html'),
-  tw: path.join(ROOT, 'tailwind.config.js'),
-  css: path.join(ROOT, 'src', 'index.css'),
-  layout: path.join(ROOT, 'src', 'components', 'Layout.jsx'),
-  ui: path.join(ROOT, 'src', 'components', 'ui.jsx'),
-  cards: path.join(ROOT, 'src', 'components', 'cards.jsx'),
-  home: path.join(ROOT, 'src', 'pages', 'HomePage.jsx')
-}
-function gagal(pesan) {
-  console.error('')
-  console.error('[GAGAL] ' + pesan)
-  console.error('Tidak ada file yang diubah.')
-  process.exit(1)
-}
-for (const k in FILE) if (!fs.existsSync(FILE[k])) gagal('File tidak ditemukan: ' + FILE[k])
-const src = {}
-for (const k in FILE) src[k] = fs.readFileSync(FILE[k], 'utf8')
-if (src.css.indexOf('Tema Opsi B final') !== -1) gagal('Tema Opsi B sudah diterapkan sebelumnya.')
-function op(nama, cari, ganti, jumlah) {
-  const n = src[nama].split(cari).length - 1
-  if (n !== (jumlah || 1)) gagal('Pola "' + cari.slice(0, 60) + '..." di ' + nama + ' ditemukan ' + n + 'x, diharapkan ' + (jumlah || 1) + 'x.')
-  src[nama] = src[nama].split(cari).join(ganti)
-}
-/* ===== 1. index.html (toleran) ===== */
-if (src.html.indexOf('content="#163832"') !== -1) src.html = src.html.split('content="#163832"').join('content="#16623c"')
-if (src.html.indexOf('%23163832') !== -1) src.html = src.html.split('%23163832').join('%2316623c')
-if (src.html.indexOf('content="#16623c"') === -1) gagal('Meta theme-color tidak dikenali di index.html.')
-if (src.html.indexOf('bg-slate-50 text-slate-800') !== -1) src.html = src.html.split('bg-slate-50 text-slate-800').join('text-slate-800')
-if (src.html.indexOf('Plus+Jakarta+Sans') === -1) {
-  op('html', '</head>', '  <link rel="preconnect" href="https://fonts.googleapis.com" />\n  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />\n  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet" />\n</head>')
-}
-/* ===== 2. tailwind.config.js ===== */
-src.tw = src.tw.replace(/bsi: \{[\s\S]*?gold: \{[^}]*\}/,
-  "bsi: {\n           50: '#f4fbf6', 100: '#dff0e4', 200: '#bfe3cc', 300: '#86ecb0',\n           400: '#4ed58f', 500: '#27c06d', 600: '#1a9e57', 700: '#177c48',\n           800: '#16623c', 900: '#135033', 950: '#081a13'\n         },\n         gold: { 400: '#fbbf24', 500: '#f59e0b', 600: '#d97706' }")
-if (src.tw.indexOf('#16623c') === -1) gagal('Palet tailwind gagal diganti.')
-/* ===== 3. Layout.jsx ===== */
-op('layout', 'sticky top-0 z-50 bg-white/90 backdrop-blur border-b border-slate-200',
-  'sticky top-0 z-50 bg-[rgba(255,255,255,.65)] backdrop-blur-[14px] border-b border-slate-200 dark:bg-[rgba(16,42,29,.6)]')
-op('layout', "return 'px-3 py-2 rounded-xl text-sm font-semibold ' + (active ? 'bg-bsi-900 text-white' : 'text-slate-600 hover:bg-slate-100')",
-  "return 'px-3 py-2 rounded-xl text-sm font-semibold ' + (active ? 'bg-[rgba(39,192,109,.12)] text-[#177c48] dark:bg-[rgba(39,192,109,.18)] dark:text-[#86ecb0]' : 'text-[#5f6f64] hover:bg-[rgba(15,42,29,.06)] dark:text-[#9db4a6] dark:hover:bg-[rgba(234,244,238,.07)]')")
-op('layout', "(s.isActive ? 'bg-bsi-100 text-bsi-900 font-bold ring-1 ring-bsi-200 dark:ring-bsi-500/40' : 'font-semibold text-slate-600 hover:bg-slate-100')",
-  "(s.isActive ? 'bg-[rgba(39,192,109,.12)] text-[#177c48] font-bold dark:bg-[rgba(39,192,109,.18)] dark:text-[#86ecb0]' : 'font-semibold text-[#5f6f64] hover:bg-[rgba(15,42,29,.06)] dark:text-[#9db4a6] dark:hover:bg-[rgba(234,244,238,.07)]')")
-op('layout', 'px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-700',
-  'px-4 py-2 rounded-xl bg-bsi-800 text-white text-sm font-semibold hover:bg-bsi-900')
-op('layout', 'block px-4 py-3 rounded-xl bg-slate-900 text-white text-sm font-semibold',
-  'block px-4 py-3 rounded-xl bg-bsi-800 text-white text-sm font-semibold')
-/* ===== 4. ui.jsx & cards.jsx ===== */
-op('ui', "const clsValue = (rapat ? 'mt-1 text-xl sm:text-3xl' : 'mt-2 text-2xl sm:text-3xl') + ' font-black text-bsi-900'",
-  "const clsValue = (rapat ? 'mt-1 text-xl sm:text-3xl' : 'mt-2 text-2xl sm:text-3xl') + ' font-black text-slate-900'")
-op('ui', 'rounded-full text-xs font-semibold bg-bsi-100 text-bsi-900', 'rounded-full text-xs font-semibold bg-bsi-100 text-bsi-700')
-op('cards', 'bg-bsi-100 text-bsi-900 hover:bg-bsi-200', 'bg-bsi-100 text-bsi-700 hover:bg-bsi-200')
-/* ===== 5. HomePage.jsx: opsional ===== */
-if (src.home.indexOf('bsi-hero') !== -1) {
-  console.log('  - HomePage.jsx sudah memakai hero Opsi B, bagian HomePage dilewati.')
-} else if (src.home.indexOf('import { StatCard') === -1) {
-  gagal('HomePage.jsx tidak dikenali: bukan versi lama (punya StatCard) maupun versi hero Opsi B (bsi-hero).')
-} else {
-  op('home', "import { StatCard, EmptyState, Modal } from '../components/ui.jsx'", "import { EmptyState, Modal } from '../components/ui.jsx'")
-  op('home', "import { SkeletonLogbookCard, SkeletonStatCard } from '../components/Skeleton.jsx'", "import { SkeletonLogbookCard } from '../components/Skeleton.jsx'")
-  op('home', "  const [stats, setStats] = useState({ logbook: 0, galeri: 0, mahasiswa: 0 })",
-    "  const [stats, setStats] = useState({ logbook: 0, galeri: 0, mahasiswa: 0 })\n  const [hadir, setHadir] = useState({ masuk: 0, izin: 0, bolos: 0 })")
-  op('home', "      const p = await supabase.from('mahasiswa').select('id')",
-    "      const p = await supabase.from('mahasiswa').select('id')\n      const h = await supabase.from('daftar_hadir').select('status')")
-  op('home', "      setStats({ logbook: (l.data || []).length, galeri: (g.data || []).length, mahasiswa: (p.data || []).length })",
-    "      setStats({ logbook: (l.data || []).length, galeri: (g.data || []).length, mahasiswa: (p.data || []).length })\n      const hit = { masuk: 0, izin: 0, bolos: 0 }\n      const rowsH = h.data || []\n      for (let i = 0; i < rowsH.length; i++) { if (rowsH[i].status === 'Masuk') hit.masuk += 1; else if (rowsH[i].status === 'Izin') hit.izin += 1; else if (rowsH[i].status === 'Bolos') hit.bolos += 1 }\n      setHadir(hit)")
-  op('home', '  return (\n    <div>\n',
-    '  const totalHadir = hadir.masuk + hadir.izin + hadir.bolos\n  const persenHadir = totalHadir ? Math.round((hadir.masuk / totalHadir) * 100) : 0\n  const lebarM = totalHadir ? (hadir.masuk / totalHadir) * 100 : 0\n  const lebarI = totalHadir ? (hadir.izin / totalHadir) * 100 : 0\n  const lebarB = totalHadir ? (hadir.bolos / totalHadir) * 100 : 0\n  return (\n    <div>\n')
-  const heroLama = /<section className="grid gap-6 lg:grid-cols-\[1\.2fr_0\.8fr\] items-stretch">[\s\S]*?<\/section>/
-  if (!heroLama.test(src.home)) gagal('Section hero lama tidak ditemukan di HomePage.jsx')
-  const heroBaru = `<section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-6 sm:p-10 lg:p-14">
-        <span className="bsi-chip bsi-chip-green bsi-chip-c1">▦</span>
-        <span className="bsi-chip bsi-chip-gold bsi-chip-c2">▶</span>
-        <span className="bsi-chip bsi-chip-deep bsi-chip-c3">✦</span>
-        <div className="relative z-10 flex items-start gap-10">
-          <div className="min-w-0 flex-1">
-            <span className="bsi-pill">✦ Magang Bank BSI</span>
-            <h1 className="mt-5 max-w-2xl text-2xl font-black leading-tight text-slate-900 sm:text-3xl lg:text-5xl">Logbook, Galeri, dan Daftar Hadir Magang dalam <span className="bsi-grad-text">Satu Portal</span></h1>
-            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-slate-600 sm:text-base">Portal ini mencatat kegiatan harian, dokumentasi media, dan kehadiran tim magang selama membantu operasional Bank BSI.</p>
-            <div className="mt-6 flex flex-wrap gap-2 sm:mt-8 sm:gap-3">
-              <Link to="/logbook" className="inline-flex items-center gap-2 rounded-[14px] bg-bsi-800 px-5 py-3 text-sm font-bold text-white shadow-lg hover:bg-bsi-900 sm:text-base">Lihat Logbook</Link>
-              <Link to="/galeri" className="bsi-btn-glass">Lihat Galeri</Link>
-              <Link to="/absen" className="bsi-btn-glass">Daftar Hadir</Link>
-              {mahasiswa
-                ? <Link to="/dashboard" className="bsi-btn-white">Buka Dashboard</Link>
-                : <Link to="/login" className="bsi-btn-white">Masuk Akun</Link>}
-            </div>
-          </div>
-          <div className="bsi-hero-art hidden shrink-0 items-start gap-4 xl:flex">
-            <div className="bsi-mini-card bsi-mini-green">
-              <p className="text-xs font-bold opacity-80">LOGBOOK PUBLIK</p>
-              <p className="mt-1 text-3xl font-black">{loading ? '—' : stats.logbook}</p>
-              <p className="mt-2 text-xs opacity-75">{loading ? 'Memuat data...' : stats.galeri + ' media di galeri'}</p>
-            </div>
-            <div className="bsi-mini-card bsi-mini-white">
-              <p className="text-xs font-bold opacity-80">KEHADIRAN TIM</p>
-              <p className="mt-1 text-3xl font-black">{loading ? '—' : persenHadir + '%'}</p>
-              <div className="bsi-stack">
-                <i style={{ width: lebarM + '%', background: '#059669' }}></i>
-                <i style={{ width: lebarI + '%', background: '#d97706' }}></i>
-                <i style={{ width: lebarB + '%', background: '#dc2626' }}></i>
-              </div>
-              <p className="mt-2 text-xs opacity-75">Masuk {hadir.masuk} • Izin {hadir.izin} • Bolos {hadir.bolos}</p>
-            </div>
-          </div>
-        </div>
-      </section>
-      <section className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {loading
-          ? [0, 1, 2].map(function (i) {
-              return (
-                <div key={i} className="bsi-stat">
-                  <div className="skeleton h-3 w-24 rounded-full"></div>
-                  <div className="skeleton mt-2 h-8 w-16 rounded-full"></div>
-                  <div className="skeleton mt-2 h-3 w-32 rounded-full"></div>
-                </div>
-              )
-            })
-          : [
-              <div key="mahasiswa" className="bsi-stat"><p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Total Mahasiswa</p><p className="mt-2 text-3xl font-black text-slate-900">{stats.mahasiswa}</p><p className="mt-1 text-xs text-slate-500">Mahasiswa terdaftar dalam tim</p></div>,
-              <div key="logbook" className="bsi-stat"><p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Logbook Publik</p><p className="mt-2 text-3xl font-black text-slate-900">{stats.logbook}</p><p className="mt-1 text-xs text-slate-500">Catatan kegiatan harian</p></div>,
-              <div key="galeri" className="bsi-stat"><p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Media Galeri</p><p className="mt-2 text-3xl font-black text-slate-900">{stats.galeri}</p><p className="mt-1 text-xs text-slate-500">Foto dan video dokumentasi</p></div>
-            ]}
-      </section>`
-  src.home = src.home.replace(heroLama, heroBaru)
-}
-/* ===== 6. index.css: blok token MVP ===== */
-src.css += `
-/* ===== Tema Opsi B final (sinkron MVP) ===== */
-body { background-color: #f4f8f4; background-image: linear-gradient(160deg, #dff3e6 0%, #f2fbf4 45%, #fbf3e2 100%); background-attachment: fixed; color: #0f2a1d; font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif; }
-.dark body { background-color: #081a13 !important; background-image: linear-gradient(160deg, #0c2418 0%, #081a13 45%, #0a1f16 100%) !important; color: #eaf4ee !important; }
-.bg-slate-50, .bg-slate-100, .bg-slate-200 { background-color: rgba(15,42,29,.06); }
-.dark .bg-slate-50, .dark .bg-slate-100, .dark .bg-slate-200 { background-color: rgba(234,244,238,.07) !important; }
-.hover\\:bg-slate-100:hover, .hover\\:bg-slate-200:hover { background-color: rgba(15,42,29,.10); }
-.dark .hover\\:bg-slate-100:hover, .dark .hover\\:bg-slate-200:hover { background-color: rgba(234,244,238,.10) !important; }
-.border-slate-100, .border-slate-200, .border-slate-300 { border-color: rgba(15,42,29,.10); }
-.dark .border-slate-100, .dark .border-slate-200, .dark .border-slate-300 { border-color: rgba(234,244,238,.10) !important; }
-.text-slate-900, .text-slate-800, .text-slate-700 { color: #0f2a1d; }
-.dark .text-slate-900, .dark .text-slate-800, .dark .text-slate-700 { color: #eaf4ee !important; }
-.text-slate-600, .text-slate-500, .text-slate-400 { color: #5f6f64; }
-.dark .text-slate-600, .dark .text-slate-500, .dark .text-slate-400 { color: #9db4a6 !important; }
-.dark .bg-white { background-color: #0f241b !important; }
-.dark .bg-slate-900 { background-color: #eaf4ee !important; color: #081a13 !important; }
-.bg-bsi-100 { background-color: rgba(39,192,109,.12); }
-.dark .bg-bsi-100 { background-color: rgba(39,192,109,.18) !important; }
-.text-bsi-900, .text-bsi-800, .text-bsi-700 { color: #177c48; }
-.dark .text-bsi-900, .dark .text-bsi-800, .dark .text-bsi-700 { color: #86ecb0 !important; }
-.dark .bg-bsi-800 { background-color: #27c06d !important; }
-.dark .bg-bsi-800.text-white { color: #06281a !important; }
-.dark .hover\\:bg-bsi-900:hover { background-color: #34d399 !important; color: #06281a !important; }
-.dark .bg-bsi-900 { background-color: #0e2a1c !important; background-image: linear-gradient(135deg, #103021 0%, #0e2a1c 55%, #0b2019 100%) !important; }
-.bg-gold-500\\/15 { background-color: rgba(245,158,11,.14); }
-.dark .bg-gold-500\\/15 { background-color: rgba(251,191,36,.16) !important; }
-.dark .text-gold-600, .dark .text-gold-500 { color: #fbbf24 !important; }
-.dark .bg-gold-500 { color: #06281a !important; }
-.time-toggle { border-color: rgba(15,42,29,.10); }
-.time-toggle button { color: #5f6f64; }
-.time-toggle button.active { background: #16623c; color: #fff; }
-.dark .time-toggle { border-color: rgba(234,244,238,.10); }
-.dark .time-toggle button { color: #9db4a6; }
-.dark .time-toggle button.active { background: #27c06d; color: #06281a; }
-::-webkit-scrollbar-thumb:hover { background-color: #16623c; }
-.dark ::-webkit-scrollbar-thumb:hover { background-color: #27c06d; }
-.pemutar-progress::-webkit-slider-thumb, .pemutar-progress::-moz-range-thumb { background: #1a9e57; }
-.pemutar-volume::-webkit-slider-thumb, .pemutar-volume::-moz-range-thumb { background: #d97706; }
-.detail-footer { background: #ffffff; }
-.dark .detail-footer { background: #0f241b !important; }
-.shadow-sm { box-shadow: 0 10px 24px -12px rgba(15,42,29,.18); }
-.dark .shadow-sm { box-shadow: 0 10px 24px -12px rgba(0,0,0,.5) !important; }
-@media (max-width: 639px) {
-  header.sticky { background-color: rgba(244,248,244,.97) !important; }
-  .dark header.sticky { background-color: rgba(8,26,19,.97) !important; }
-}
-.bsi-hero { background: linear-gradient(135deg, #e7f6ec 0%, #f4fbee 55%, #fdf4e3 100%); }
-.dark .bsi-hero { background: linear-gradient(135deg, #103021 0%, #0e2a1c 55%, #0b2019 100%) !important; }
-.bsi-pill { display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,.65); border: 1px solid rgba(15,42,29,.10); color: #177c48; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .14em; padding: 7px 14px; border-radius: 999px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
-.dark .bsi-pill { background: rgba(16,42,29,.6); border-color: rgba(234,244,238,.10); color: #86ecb0; }
-.bsi-grad-text { background: linear-gradient(90deg, #1a9e57, #d97706); -webkit-background-clip: text; background-clip: text; color: transparent; }
-.bsi-btn-glass { display: inline-flex; align-items: center; gap: 8px; background: rgba(255,255,255,.65); color: #0f2a1d; border: 1px solid rgba(15,42,29,.12); border-radius: 14px; padding: 10px 18px; font-weight: 700; font-size: 14px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); transition: transform .15s ease, background-color .2s ease; }
-.bsi-btn-glass:hover { transform: translateY(-1px); background: rgba(255,255,255,.85); }
-.dark .bsi-btn-glass { background: rgba(16,42,29,.6); color: #eaf4ee; border-color: rgba(234,244,238,.10); }
-.dark .bsi-btn-glass:hover { background: rgba(16,42,29,.75); }
-.bsi-btn-white { display: inline-flex; align-items: center; gap: 8px; background: #fff; color: #177c48; border: 1px solid rgba(15,42,29,.08); border-radius: 14px; padding: 10px 18px; font-weight: 700; font-size: 14px; box-shadow: 0 10px 24px -12px rgba(15,42,29,.18); transition: transform .15s ease; }
-.bsi-btn-white:hover { transform: translateY(-1px); }
-.dark .bsi-btn-white { background: #0f241b; color: #86ecb0; border-color: rgba(234,244,238,.10); }
-@keyframes bsiFloat { 0%, 100% { transform: translateY(0) rotate(6deg); } 50% { transform: translateY(-12px) rotate(-5deg); } }
-.bsi-chip { position: absolute; width: 54px; height: 54px; border-radius: 16px; display: grid; place-items: center; color: #fff; font-size: 20px; box-shadow: 0 10px 24px -12px rgba(15,42,29,.18); animation: bsiFloat 6s ease-in-out infinite; }
-.bsi-chip-green { background: linear-gradient(135deg, #86ecb0, #1a9e57); }
-.bsi-chip-gold { background: linear-gradient(135deg, #fbbf24, #d97706); }
-.bsi-chip-deep { background: linear-gradient(135deg, #27c06d, #135033); }
-.bsi-chip-c1 { top: 36px; right: 330px; }
-.bsi-chip-c2 { bottom: 44px; right: 90px; animation-delay: 1.2s; }
-.bsi-chip-c3 { top: 130px; right: 20px; animation-delay: 2.1s; }
-@media (prefers-reduced-motion: reduce) { .bsi-chip { animation: none; } }
-@media (max-width: 960px) { .bsi-chip-c1, .bsi-hero-art { display: none; } }
-.bsi-mini-card { width: 212px; border-radius: 20px; padding: 18px; box-shadow: 0 24px 48px -24px rgba(15,42,29,.25); }
-.bsi-mini-green { background: linear-gradient(135deg, #27c06d, #135033); color: #fff; }
-.bsi-mini-white { background: #fff; color: #0f2a1d; margin-top: 40px; border: 1px solid rgba(15,42,29,.10); }
-.dark .bsi-mini-white { background: #0f241b !important; color: #eaf4ee !important; border-color: rgba(234,244,238,.10); }
-.bsi-stat { background: rgba(255,255,255,.6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(15,42,29,.10); border-radius: 24px; padding: 20px; }
-.dark .bsi-stat { background: rgba(16,42,29,.6); border-color: rgba(234,244,238,.10); }
-.bsi-stack { display: flex; height: 12px; border-radius: 999px; overflow: hidden; margin-top: 10px; }
-.bsi-stack i { display: block; height: 100%; }
-`
-/* ===== Tulis semua file ===== */
-try {
-  for (const k in FILE) fs.writeFileSync(FILE[k], src[k], 'utf8')
-} catch (e) {
-  gagal('Gagal menulis file: ' + e.message)
-}
-console.log('')
-console.log('[SELESAI] Tema Opsi B diterapkan (token MVP, light & dark).')
-console.log('File diubah: index.html, tailwind.config.js, src/index.css,')
-console.log('  src/components/Layout.jsx, ui.jsx, cards.jsx' + (src.home.indexOf('bsi-hero') !== -1 ? '' : ', src/pages/HomePage.jsx'))
-console.log('Verifikasi: npm run dev -> cek light & dark, lalu npm run build.')
-````
 
 ## File: api/_lib/sesi.js
 ````javascript
@@ -1970,6 +652,354 @@ R2_BUCKET_NAME=mbsi-media
 R2_PUBLIC_BASE_URL=
 ````
 
+## File: mvp-opsi-b.html
+````html
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MVP Opsi B — Hybrid BSI | Logbook Magang BSI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F4F8F4;
+    --bg-grad:linear-gradient(160deg,#DFF3E6 0%,#F2FBF4 45%,#FBF3E2 100%);
+    --glass:rgba(255,255,255,.65);
+    --card:#FFFFFF;
+    --ink:#0F2A1D; --ink-2:#5F6F64;
+    --brand:#177C48; --brand-2:#1A9E57; --brand-soft:rgba(39,192,109,.12);
+    --gold:#D97706; --gold-soft:rgba(245,158,11,.14);
+    --green:#059669; --green-soft:rgba(16,185,129,.14);
+    --amber:#D97706; --amber-soft:rgba(245,158,11,.16);
+    --red:#DC2626; --red-soft:rgba(239,68,68,.12);
+    --neutral-soft:rgba(15,42,29,.06);
+    --border:rgba(15,42,29,.10);
+    --input-bg:#FAFDF9;
+    --btn-bg:#16623C; --btn-fg:#FFFFFF;
+    --hero-grad:linear-gradient(135deg,#E7F6EC 0%,#F4FBEE 55%,#FDF4E3 100%);
+    --shadow:0 24px 48px -24px rgba(15,42,29,.25);
+    --shadow-sm:0 10px 24px -12px rgba(15,42,29,.18);
+  }
+  html.dark{
+    --bg:#081A13;
+    --bg-grad:linear-gradient(160deg,#0C2418 0%,#081A13 45%,#0A1F16 100%);
+    --glass:rgba(16,42,29,.6);
+    --card:#0F241B;
+    --ink:#EAF4EE; --ink-2:#9DB4A6;
+    --brand:#86ECB0; --brand-2:#27C06D; --brand-soft:rgba(39,192,109,.18);
+    --gold:#FBBF24; --gold-soft:rgba(251,191,36,.16);
+    --green:#34D399; --green-soft:rgba(52,211,153,.16);
+    --amber:#FBBF24; --amber-soft:rgba(251,191,36,.16);
+    --red:#F87171; --red-soft:rgba(248,113,113,.16);
+    --neutral-soft:rgba(234,244,238,.07);
+    --border:rgba(234,244,238,.10);
+    --input-bg:#0B1E15;
+    --btn-bg:#27C06D; --btn-fg:#06281A;
+    --hero-grad:linear-gradient(135deg,#103021 0%,#0E2A1C 55%,#0B2019 100%);
+    --shadow:0 24px 48px -24px rgba(0,0,0,.6);
+    --shadow-sm:0 10px 24px -12px rgba(0,0,0,.5);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    font-family:'Plus Jakarta Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+    background-color:var(--bg);background-image:var(--bg-grad);background-attachment:fixed;
+    color:var(--ink);min-height:100vh;transition:background-color .3s,color .3s;
+  }
+  .wrap{max-width:1120px;margin:0 auto;padding:0 20px}
+  .note{background:var(--btn-bg);color:var(--btn-fg);font-size:12px;font-weight:600;padding:8px 16px;display:flex;align-items:center;justify-content:center;gap:12px;text-align:center}
+  .note button{background:rgba(255,255,255,.2);border:none;color:inherit;border-radius:8px;padding:3px 10px;font-size:11px;cursor:pointer;font-weight:700}
+  /* ===== Navbar glass ===== */
+  .nav{position:sticky;top:0;z-index:50;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);background:var(--glass);border-bottom:1px solid var(--border)}
+  .nav-in{display:flex;align-items:center;gap:14px;height:64px}
+  .logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:15px}
+  .logo small{display:block;font-size:11px;font-weight:600;color:var(--ink-2)}
+  .logo-tile{width:38px;height:38px;border-radius:12px;background:linear-gradient(135deg,#16623C,#F59E0B);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:800;box-shadow:var(--shadow-sm)}
+  .nav-links{display:flex;gap:4px;margin-left:auto}
+  .nav-links a{padding:8px 12px;border-radius:12px;font-size:14px;font-weight:600;color:var(--ink-2);text-decoration:none}
+  .nav-links a.active,.nav-links a:hover{background:var(--brand-soft);color:var(--brand)}
+  .nav-act{display:flex;gap:8px;align-items:center;margin-left:auto}
+  .nav-links + .nav-act{margin-left:0}
+  .icon-btn{width:38px;height:38px;border-radius:12px;border:1px solid var(--border);background:transparent;display:grid;place-items:center;cursor:pointer;color:var(--ink-2);font-size:15px}
+  /* ===== Tombol ===== */
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:none;cursor:pointer;font-weight:700;border-radius:14px;padding:10px 18px;font-size:14px;font-family:inherit;transition:.2s}
+  .btn:hover{transform:translateY(-1px)}
+  .btn-primary{background:var(--btn-bg);color:var(--btn-fg);box-shadow:var(--shadow-sm)}
+  .btn-glass{background:var(--glass);color:var(--ink);border:1px solid var(--border);backdrop-filter:blur(8px)}
+  .btn-white{background:var(--card);color:var(--brand);box-shadow:var(--shadow-sm)}
+  .btn-soft{background:var(--brand-soft);color:var(--brand)}
+  .btn-danger{background:var(--red-soft);color:var(--red)}
+  .btn-xs{padding:7px 12px;font-size:12px;border-radius:10px}
+  /* ===== Hero ===== */
+  .hero{position:relative;margin-top:28px;border-radius:32px;padding:56px 48px;overflow:hidden;background:var(--hero-grad);box-shadow:var(--shadow)}
+  .pill{display:inline-flex;align-items:center;gap:6px;background:var(--glass);border:1px solid var(--border);color:var(--brand);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.14em;padding:7px 14px;border-radius:999px;backdrop-filter:blur(8px)}
+  .hero h1{font-size:clamp(2rem,5vw,3.3rem);font-weight:800;letter-spacing:-.02em;line-height:1.12;margin-top:18px;max-width:560px}
+  .hl{background:linear-gradient(90deg,var(--brand-2),var(--gold));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hero p{color:var(--ink-2);max-width:500px;margin:16px 0 26px;font-size:15px;line-height:1.7}
+  .hero-actions{display:flex;gap:12px;flex-wrap:wrap}
+  .chip{position:absolute;width:54px;height:54px;border-radius:16px;display:grid;place-items:center;color:#fff;font-size:20px;box-shadow:var(--shadow);animation:float 6s ease-in-out infinite}
+  .chip.green{background:linear-gradient(135deg,#86ECB0,#1A9E57)}
+  .chip.gold{background:linear-gradient(135deg,#FBBF24,#D97706)}
+  .chip.deep{background:linear-gradient(135deg,#27C06D,#135033)}
+  .c1{top:36px;right:330px}
+  .c2{bottom:44px;right:90px;animation-delay:1.2s}
+  .c3{top:130px;right:20px;animation-delay:2.1s}
+  @keyframes float{0%,100%{transform:translateY(0) rotate(6deg)}50%{transform:translateY(-12px) rotate(-5deg)}}
+  @media (prefers-reduced-motion: reduce){.chip{animation:none}}
+  .hero-art{position:absolute;right:56px;top:50%;transform:translateY(-50%);display:flex;gap:16px;align-items:flex-start}
+  .mini-card{width:212px;border-radius:20px;padding:18px;box-shadow:var(--shadow)}
+  .mini-card.green{background:linear-gradient(135deg,#27C06D,#135033);color:#fff}
+  .mini-card.white{background:var(--card);color:var(--ink);margin-top:40px;border:1px solid var(--border)}
+  .mini-card .lbl{font-size:11px;font-weight:700;opacity:.8}
+  .mini-card .val{font-size:26px;font-weight:800;margin-top:4px}
+  .mini-card .sub{font-size:11px;opacity:.75;margin-top:6px}
+  /* ===== Stat ===== */
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:20px}
+  .stat{background:var(--glass);border:1px solid var(--border);border-radius:24px;padding:20px;backdrop-filter:blur(10px)}
+  .stat .lbl{font-size:11px;font-weight:800;color:var(--ink-2);text-transform:uppercase;letter-spacing:.08em}
+  .stat .val{font-size:32px;font-weight:800;margin-top:6px}
+  .stat .sub{font-size:12px;color:var(--ink-2);margin-top:4px}
+  /* ===== Blok & kartu ===== */
+  .block{margin-top:48px}
+  .eyebrow{display:inline-flex;align-items:center;gap:6px;background:var(--gold-soft);color:var(--gold);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.14em;padding:6px 12px;border-radius:999px}
+  .block h2{font-size:24px;font-weight:800;margin-top:10px}
+  .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:18px}
+  .grid-2{display:grid;grid-template-columns:1.1fr .9fr;gap:16px;margin-top:18px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:24px;padding:18px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:12px}
+  .media{aspect-ratio:16/9;border-radius:16px;background:linear-gradient(135deg,var(--brand-soft),var(--gold-soft));display:grid;place-items:center;color:var(--brand);font-size:30px}
+  .media.video{background:linear-gradient(135deg,#1A9E57,#135033);color:#fff}
+  .badges{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .badge{font-size:11px;font-weight:700;padding:5px 10px;border-radius:999px}
+  .badge.brand{background:var(--brand-soft);color:var(--brand)}
+  .badge.gold{background:var(--gold-soft);color:var(--gold)}
+  .badge.green{background:var(--green-soft);color:var(--green)}
+  .badge.amber{background:var(--amber-soft);color:var(--amber)}
+  .badge.red{background:var(--red-soft);color:var(--red)}
+  .badge.neutral{background:var(--neutral-soft);color:var(--ink-2)}
+  .date{font-size:12px;color:var(--ink-2)}
+  .title{font-size:17px;font-weight:800;line-height:1.35}
+  .items{font-size:12px;color:var(--ink-2);display:grid;gap:4px}
+  .items b{color:var(--brand)}
+  .card-foot{margin-top:auto;display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid var(--border);padding-top:12px}
+  .person{display:flex;align-items:center;gap:10px;min-width:0}
+  .avatar{width:36px;height:36px;border-radius:12px;display:grid;place-items:center;color:#fff;font-size:12px;font-weight:800;flex-shrink:0}
+  .avatar.g{background:linear-gradient(135deg,#86ECB0,#1A9E57)}
+  .avatar.y{background:linear-gradient(135deg,#FBBF24,#D97706)}
+  .avatar.d{background:linear-gradient(135deg,#27C06D,#135033)}
+  .person .nm{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .person .nim{font-size:11px;color:var(--ink-2)}
+  .actions{display:flex;gap:6px;flex-shrink:0}
+  /* ===== Kehadiran ===== */
+  .reason{background:var(--neutral-soft);border-radius:16px;padding:12px 14px;font-size:13px;color:var(--ink-2)}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;font-weight:700;color:var(--ink-2)}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
+  .stack{display:flex;height:12px;border-radius:999px;overflow:hidden;margin-top:14px}
+  .bars{display:flex;align-items:flex-end;gap:8px;height:120px;margin-top:16px}
+  .bars i{flex:1;border-radius:8px 8px 4px 4px;background:linear-gradient(180deg,var(--brand-2),var(--brand));opacity:.9}
+  /* ===== Form ===== */
+  .form-card{background:var(--card);border:1px solid var(--border);border-radius:28px;padding:24px;box-shadow:var(--shadow-sm);max-width:660px;margin-top:18px}
+  .tabs{display:flex;gap:6px;background:var(--neutral-soft);padding:6px;border-radius:16px;width:max-content}
+  .tab{padding:8px 16px;border-radius:12px;border:none;background:transparent;color:var(--ink-2);font-weight:700;font-size:13px;cursor:pointer;font-family:inherit}
+  .tab.active{background:var(--card);color:var(--brand);box-shadow:var(--shadow-sm)}
+  .info-lama{margin-top:14px;font-size:12px;font-weight:700;color:var(--amber)}
+  .field{margin-top:14px}
+  .label{font-size:12px;font-weight:700;color:var(--ink-2);display:block;margin-bottom:6px}
+  .input{width:100%;border:1px solid var(--border);background:var(--input-bg);border-radius:14px;padding:11px 14px;font-size:14px;color:var(--ink);outline:none;font-family:inherit;transition:.2s}
+  .input:focus{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
+  .input:disabled{opacity:.55;cursor:not-allowed}
+  textarea.input{resize:none}
+  .media-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .dashed{border:2px dashed var(--border);background:transparent;border-radius:16px;padding:12px;font-weight:700;font-size:13px;color:var(--ink-2);cursor:pointer;font-family:inherit}
+  .dashed:hover{border-color:var(--brand);color:var(--brand)}
+  .check{display:flex;gap:10px;align-items:flex-start;margin-top:14px;font-size:13px;font-weight:600}
+  .check input{accent-color:var(--brand);width:16px;height:16px;margin-top:2px}
+  .seg{display:flex;gap:8px}
+  .seg button{flex:1;padding:11px;border-radius:14px;border:1px solid var(--border);background:var(--neutral-soft);color:var(--ink-2);font-weight:800;font-size:13px;cursor:pointer;font-family:inherit}
+  .seg button.on-green{background:var(--green);border-color:var(--green);color:#fff}
+  footer{margin-top:56px;padding:26px 0;text-align:center;font-size:12px;color:var(--ink-2)}
+  @media (max-width:960px){.hero-art,.c1{display:none}.grid-3,.grid-2{grid-template-columns:1fr}.stats{grid-template-columns:1fr}}
+  @media (max-width:800px){.nav-links{display:none}}
+  @media (max-width:600px){.hero{padding:36px 24px}}
+</style>
+</head>
+<body>
+<div class="note">Pratinjau statis Opsi B (hybrid): teknik visual pastel fintech + warna brand BSI hijau-gold. <button onclick="this.parentElement.remove()">Tutup</button></div>
+
+<header class="nav">
+  <div class="wrap nav-in">
+    <div class="logo"><span class="logo-tile">BSI</span><span>Logbook Magang<small>Bank Syariah Indonesia</small></span></div>
+    <nav class="nav-links">
+      <a href="#" class="active">Beranda</a><a href="#">Logbook</a><a href="#">Galeri</a><a href="#">Daftar Hadir</a><a href="#">Tim & Dospem</a>
+    </nav>
+    <div class="nav-act">
+      <button class="icon-btn" id="toggleTema" title="Ganti Tema">🌙</button>
+      <button class="btn btn-primary btn-xs" style="padding:9px 16px">Dashboard</button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- HERO -->
+  <section class="hero">
+    <span class="chip green c1">▦</span>
+    <span class="chip gold c2">▶</span>
+    <span class="chip deep c3">✦</span>
+    <span class="pill">✦ Magang Bank BSI</span>
+    <h1>Logbook, Galeri, dan Daftar Hadir Magang dalam <span class="hl">Satu Portal</span></h1>
+    <p>Portal ini mencatat kegiatan harian, dokumentasi media, dan kehadiran tim magang selama membantu operasional Bank BSI.</p>
+    <div class="hero-actions">
+      <button class="btn btn-primary">Lihat Logbook</button>
+      <button class="btn btn-glass">Lihat Galeri</button>
+      <button class="btn btn-white">Masuk Akun</button>
+    </div>
+    <div class="hero-art">
+      <div class="mini-card green">
+        <p class="lbl">LOGBOOK BULAN INI</p>
+        <p class="val">24</p>
+        <p class="sub">4 media baru minggu ini</p>
+      </div>
+      <div class="mini-card white">
+        <p class="lbl">KEHADIRAN TIM</p>
+        <p class="val">96%</p>
+        <div class="stack" style="margin-top:10px">
+          <i style="width:78%;background:var(--green)"></i><i style="width:14%;background:var(--amber)"></i><i style="width:8%;background:var(--red)"></i>
+        </div>
+        <p class="sub">Masuk 78 • Izin 14 • Bolos 8</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- STAT -->
+  <section class="stats">
+    <div class="stat"><p class="lbl">Total Mahasiswa</p><p class="val">12</p><p class="sub">Mahasiswa terdaftar dalam tim</p></div>
+    <div class="stat"><p class="lbl">Logbook Publik</p><p class="val">186</p><p class="sub">Catatan kegiatan harian</p></div>
+    <div class="stat"><p class="lbl">Media Galeri</p><p class="val">342</p><p class="sub">Foto dan video dokumentasi</p></div>
+  </section>
+
+  <!-- LOGBOOK -->
+  <section class="block">
+    <span class="eyebrow">🏆 Kegiatan terbaru</span>
+    <h2>Logbook Terbaru Tim</h2>
+    <div class="grid-3">
+      <article class="card">
+        <div class="media">🖼</div>
+        <div class="badges"><span class="badge brand">Layanan Nasabah</span><span class="badge green">Publik</span></div>
+        <div><p class="date">Kamis, 2 Oktober 2026</p><p class="title" style="margin-top:6px">Mendampingi pembukaan rekening nasabah prioritas</p></div>
+        <div class="items"><span>1. Verifikasi dokumen nasabah</span><span>2. Input data CIF ke sistem</span><span><b>+1 kegiatan lainnya</b></span></div>
+        <div class="card-foot">
+          <div class="person"><span class="avatar g">RC</span><span><span class="nm">Risky Chici</span><br><span class="nim">NIM 24070041</span></span></div>
+          <div class="actions"><button class="btn btn-soft btn-xs">Detail</button></div>
+        </div>
+      </article>
+      <article class="card">
+        <div class="media video">▶</div>
+        <div class="badges"><span class="badge brand">Dokumentasi</span><span class="badge green">Publik</span></div>
+        <div><p class="date">Rabu, 1 Oktober 2026</p><p class="title" style="margin-top:6px">Dokumentasi video edukasi produk payroll di aula cabang</p></div>
+        <div class="items"><span>1. Setup kamera dan pencahayaan</span><span>2. Rekaman sesi edukasi</span></div>
+        <div class="card-foot">
+          <div class="person"><span class="avatar y">NS</span><span><span class="nm">Nadia Safitri</span><br><span class="nim">NIM 24070038</span></span></div>
+          <div class="actions"><button class="btn btn-soft btn-xs">Detail</button></div>
+        </div>
+      </article>
+      <article class="card">
+        <div class="media">📷</div>
+        <div class="badges"><span class="badge brand">Edukasi</span><span class="badge gold">Dari Logbook</span></div>
+        <div><p class="date">1 Okt 2026</p><p class="title" style="margin-top:6px">Sosialisasi mobile banking untuk nasabah pensiunan</p></div>
+        <p class="items"><span>Foto suasana sosialisasi bersama tim frontliner di ruang edukasi.</span></p>
+        <div class="card-foot">
+          <div class="person"><span class="avatar d">AP</span><span><span class="nm">Andre Pratama</span><br><span class="nim">NIM 24070052</span></span></div>
+          <span class="badge neutral">Klik untuk detail</span>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <!-- KEHADIRAN -->
+  <section class="block">
+    <span class="eyebrow">📋 Daftar hadir</span>
+    <h2>Rekap Kehadiran Tim Magang</h2>
+    <div class="grid-2">
+      <article class="card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+          <div><p class="date">Kamis, 2 Oktober 2026</p>
+            <div class="person" style="margin-top:10px"><span class="avatar g">RC</span><span><span class="nm">Risky Chici</span><br><span class="nim">NIM 24070041</span></span></div>
+          </div>
+          <span class="badge green">Masuk</span>
+        </div>
+        <div class="reason"><b style="color:var(--ink)">Alasan atau keterangan:</b><br>Tidak ada alasan.</div>
+        <div class="card-foot" style="margin-top:0">
+          <div class="actions"><button class="btn btn-soft btn-xs">Detail</button><button class="btn btn-xs" style="background:var(--btn-bg);color:var(--btn-fg)">Edit</button><button class="btn btn-danger btn-xs">Hapus</button></div>
+        </div>
+      </article>
+      <article class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+          <p class="title">Grafik Kehadiran per Mahasiswa</p>
+          <div class="legend">
+            <span><i class="dot" style="background:var(--green)"></i>Masuk</span>
+            <span><i class="dot" style="background:var(--amber)"></i>Izin</span>
+            <span><i class="dot" style="background:var(--red)"></i>Bolos</span>
+          </div>
+        </div>
+        <div class="stack"><i style="width:78%;background:var(--green)"></i><i style="width:14%;background:var(--amber)"></i><i style="width:8%;background:var(--red)"></i></div>
+        <div class="bars"><i style="height:60%"></i><i style="height:85%"></i><i style="height:45%"></i><i style="height:95%"></i><i style="height:70%"></i><i style="height:55%"></i><i style="height:80%"></i></div>
+        <p class="date" style="text-align:center">Min • Sen • Sel • Rab • Kam • Jum • Sab</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- FORM CEPAT -->
+  <section class="block">
+    <span class="eyebrow">⚡ Isi cepat via QR</span>
+    <h2>Form Isi Cepat</h2>
+    <div class="form-card">
+      <div class="tabs">
+        <button class="tab active" data-panel="p-log">Logbook</button>
+        <button class="tab" data-panel="p-absen">Daftar Hadir</button>
+      </div>
+      <div id="p-log">
+        <p class="info-lama">📅 Terakhir mengisi logbook: 3 hari yang lalu</p>
+        <div class="field"><label class="label">Kategori Utama *</label><select class="input"><option>Pilih Kategori</option><option>Layanan Nasabah</option><option>Dokumentasi</option></select></div>
+        <div class="field"><label class="label">Judul kegiatan *</label><input class="input" placeholder="Judul kegiatan"></div>
+        <div class="field"><label class="label">Deskripsi singkat</label><textarea class="input" rows="2" placeholder="Deskripsi singkat kegiatan"></textarea></div>
+        <div class="field"><div class="media-btns"><button class="dashed">📷 Ambil Foto</button><button class="dashed">🖼 Dari Galeri</button></div></div>
+        <label class="check"><input type="checkbox"><span>Tampilkan kegiatan ini di galeri</span></label>
+        <div class="field"><button class="btn btn-primary" style="width:100%">Simpan Logbook</button></div>
+      </div>
+      <div id="p-absen" hidden>
+        <p class="info-lama">📋 Terakhir mengisi daftar hadir: kemarin</p>
+        <div class="field"><label class="label">Status Kehadiran *</label>
+          <div class="seg"><button class="on-green">Masuk</button><button>Izin</button><button>Bolos</button></div>
+        </div>
+        <div class="field"><label class="label">Alasan atau Keterangan</label><textarea class="input" rows="2" disabled placeholder="Status Masuk tidak memerlukan alasan"></textarea></div>
+        <div class="field"><button class="btn btn-primary" style="width:100%">Simpan Daftar Hadir</button></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>© 2026 Tim Magang BSI — Pratinjau MVP Opsi B (hybrid)</footer>
+
+<script>
+  const root = document.documentElement
+  const btnTema = document.getElementById('toggleTema')
+  btnTema.addEventListener('click', function () {
+    root.classList.toggle('dark')
+    btnTema.textContent = root.classList.contains('dark') ? '☀️' : '🌙'
+  })
+  document.querySelectorAll('.tab').forEach(function (t) {
+    t.addEventListener('click', function () {
+      document.querySelectorAll('.tab').forEach(function (x) { x.classList.remove('active') })
+      t.classList.add('active')
+      document.getElementById('p-log').hidden = t.dataset.panel !== 'p-log'
+      document.getElementById('p-absen').hidden = t.dataset.panel !== 'p-absen'
+    })
+  })
+</script>
+</body>
+</html>
+````
+
 ## File: postcss.config.js
 ````javascript
 export default {
@@ -1977,528 +1007,6 @@ export default {
     tailwindcss: {},
     autoprefixer: {}
   }
-}
-````
-
-## File: setup-fitur-cepat.cjs
-````javascript
-/**
- * setup-fitur-cepat.cjs
- * Menerapkan fitur "Isi Cepat" berbasis QR untuk project Logbook Magang BSI.
- *
- * Yang dilakukan script ini:
- *   1. Membuat src/pages/QuickPage.jsx  -> form cepat (tab Logbook & Daftar Hadir)
- *   2. Mengubah src/App.jsx             -> import, RequireAuth dengan ?next, route /cepat
- *   3. Mengubah src/pages/LoginPage.jsx -> setelah login balik ke halaman asal (?next)
- *   4. Mengubah public/llms.txt         -> tambah dokumentasi route /cepat
- *
- * Cara pakai: jalankan dari folder root project (sejajar package.json):
- *   node setup-fitur-cepat.cjs
- */
-
-'use strict'
-
-const fs = require('fs')
-const path = require('path')
-
-const ROOT = process.cwd()
-const FILE = {
-  app: path.join(ROOT, 'src', 'App.jsx'),
-  login: path.join(ROOT, 'src', 'pages', 'LoginPage.jsx'),
-  llms: path.join(ROOT, 'public', 'llms.txt'),
-  quick: path.join(ROOT, 'src', 'pages', 'QuickPage.jsx')
-}
-
-function gagal(pesan) {
-  console.error('')
-  console.error('[GAGAL] ' + pesan)
-  console.error('Tidak ada file yang diubah.')
-  process.exit(1)
-}
-
-/* ===== 1. Validasi struktur project ===== */
-
-if (!fs.existsSync(path.join(ROOT, 'package.json'))) {
-  gagal('package.json tidak ditemukan. Jalankan script dari folder root project.')
-}
-for (const nama of ['app', 'login', 'llms']) {
-  if (!fs.existsSync(FILE[nama])) gagal('File tidak ditemukan: ' + FILE[nama])
-}
-if (fs.existsSync(FILE.quick)) {
-  gagal('src/pages/QuickPage.jsx sudah ada. Fitur tampaknya sudah pernah diterapkan.')
-}
-
-let appSrc = fs.readFileSync(FILE.app, 'utf8')
-let loginSrc = fs.readFileSync(FILE.login, 'utf8')
-let llmsSrc = fs.readFileSync(FILE.llms, 'utf8')
-
-if (appSrc.indexOf('/cepat') !== -1 || appSrc.indexOf('QuickPage') !== -1) {
-  gagal('src/App.jsx sudah memuat route /cepat atau QuickPage. Fitur tampaknya sudah pernah diterapkan.')
-}
-
-/* ===== 2. Helper ganti teks (pastikan pola ada dan tunggal) ===== */
-
-function gantiTepat(src, cari, ganti, label, file) {
-  const i = src.indexOf(cari)
-  if (i === -1) gagal('Pola tidak ditemukan di ' + file + ' — langkah: ' + label)
-  if (src.indexOf(cari, i + cari.length) !== -1) gagal('Pola muncul lebih dari sekali di ' + file + ' — langkah: ' + label)
-  return src.slice(0, i) + ganti + src.slice(i + cari.length)
-}
-
-/* ===== 3. Ubah src/App.jsx ===== */
-
-const EOL_APP = appSrc.indexOf('\r\n') !== -1 ? '\r\n' : '\n'
-
-appSrc = gantiTepat(
-  appSrc,
-  "import DashboardPage from './pages/DashboardPage.jsx'",
-  "import DashboardPage from './pages/DashboardPage.jsx'" + EOL_APP + "import QuickPage from './pages/QuickPage.jsx'",
-  'import QuickPage',
-  'src/App.jsx'
-)
-
-const blokRequireAuth = [
-  'function RequireAuth(props) {',
-  '  const { mahasiswa, loading } = useAuth()',
-  '  const location = useLocation()',
-  '  if (loading) return <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:py-8"><SkeletonDashboard /></div>',
-  "  if (!mahasiswa) return <Navigate to={'/login?next=' + encodeURIComponent(location.pathname + location.search)} replace />",
-  '  return props.children',
-  '}'
-].join(EOL_APP)
-
-const regexRequireAuth = /function RequireAuth\(props\) \{[\s\S]*?\n\}/
-if (!regexRequireAuth.test(appSrc)) gagal('Fungsi RequireAuth tidak ditemukan di src/App.jsx')
-appSrc = appSrc.replace(regexRequireAuth, blokRequireAuth)
-
-appSrc = gantiTepat(
-  appSrc,
-  '<Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />',
-  '<Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />' +
-    EOL_APP +
-    '            <Route path="/cepat" element={<RequireAuth><QuickPage /></RequireAuth>} />',
-  'route /cepat',
-  'src/App.jsx'
-)
-
-/* ===== 4. Ubah src/pages/LoginPage.jsx ===== */
-
-const EOL_LOGIN = loginSrc.indexOf('\r\n') !== -1 ? '\r\n' : '\n'
-
-loginSrc = gantiTepat(
-  loginSrc,
-  "import { useNavigate } from 'react-router-dom'",
-  "import { useNavigate, useSearchParams } from 'react-router-dom'",
-  'import useSearchParams',
-  'src/pages/LoginPage.jsx'
-)
-
-loginSrc = gantiTepat(
-  loginSrc,
-  'const navigate = useNavigate()',
-  'const navigate = useNavigate()' + EOL_LOGIN + '  const [params] = useSearchParams()',
-  'state params',
-  'src/pages/LoginPage.jsx'
-)
-
-loginSrc = gantiTepat(
-  loginSrc,
-  "navigate('/dashboard')",
-  "const next = params.get('next')" +
-    EOL_LOGIN +
-    "  navigate(next && next.charAt(0) === '/' && next.indexOf('//') !== 0 ? next : '/dashboard')",
-  'redirect balik setelah login',
-  'src/pages/LoginPage.jsx'
-)
-
-/* ===== 5. Ubah public/llms.txt ===== */
-
-const EOL_LLMS = llmsSrc.indexOf('\r\n') !== -1 ? '\r\n' : '\n'
-const BARIS_DASHBOARD = '- /dashboard : pengelolaan logbook, galeri, daftar hadir, dan foto profil, memerlukan sesi login'
-const BARIS_CEPAT = '- /cepat : form cepat berbasis QR untuk menambah kegiatan logbook hari ini dan daftar hadir tanpa membuka dashboard, memerlukan sesi login'
-
-if (llmsSrc.indexOf(BARIS_CEPAT) === -1) {
-  llmsSrc = gantiTepat(llmsSrc, BARIS_DASHBOARD, BARIS_DASHBOARD + EOL_LLMS + BARIS_CEPAT, 'baris /cepat', 'public/llms.txt')
-}
-
-/* ===== 6. Isi src/pages/QuickPage.jsx ===== */
-
-const QUICK_PAGE = `import { useEffect, useRef, useState } from 'react'
-import { supabase } from '../lib/supabase.js'
-import { useAuth } from '../lib/auth.js'
-import { uploadMedia } from '../lib/upload.js'
-import { syncGaleriFromLogbook } from '../lib/logbook.js'
-import { urlPratinjau } from '../lib/konversi.js'
-import { todayInput, formatTanggal } from '../lib/format.js'
-import { KATEGORI } from '../lib/constants.js'
-import { inputCls, labelCls, btnPrimary, useToast, AutoTextArea, LabelProses } from '../components/ui.jsx'
-import { CustomSelect } from '../components/controls.jsx'
-import { SizedIcon } from '../components/icons.jsx'
-
-const STATUS_HADIR = ['Masuk', 'Izin', 'Bolos']
-
-export default function QuickPage() {
-  const { mahasiswa } = useAuth()
-  const toast = useToast()
-  const tanggal = todayInput()
-
-  const [tab, setTab] = useState('logbook')
-  const [loading, setLoading] = useState(true)
-  const [todayLog, setTodayLog] = useState(null)
-  const [hadirHariIni, setHadirHariIni] = useState(null)
-  const [lastLogTanggal, setLastLogTanggal] = useState(null)
-  const [lastHadirTanggal, setLastHadirTanggal] = useState(null)
-
-  const [kategori, setKategori] = useState('')
-  const [judulKegiatan, setJudulKegiatan] = useState('')
-  const [deskripsi, setDeskripsi] = useState('')
-  const [file, setFile] = useState(null)
-  const [preview, setPreview] = useState('')
-  const [showGal, setShowGal] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [info, setInfo] = useState('')
-
-  const [status, setStatus] = useState('Masuk')
-  const [alasan, setAlasan] = useState('')
-
-  const cameraRef = useRef(null)
-  const galeriRef = useRef(null)
-
-  async function muatData(mhs, senyap) {
-    if (!senyap) setLoading(true)
-    const l = await supabase
-      .from('logbooks')
-      .select('*, logbook_items(*)')
-      .eq('mahasiswa_id', mhs.id)
-      .eq('tanggal', tanggal)
-      .order('created_at', { ascending: false })
-      .limit(1)
-    const log = (l.data || [])[0] || null
-    if (log) {
-      log.logbook_items = (log.logbook_items || []).sort(function (a, b) { return (a.urutan || 0) - (b.urutan || 0) })
-    }
-    const h = await supabase
-      .from('daftar_hadir')
-      .select('*')
-      .eq('mahasiswa_id', mhs.id)
-      .eq('tanggal', tanggal)
-      .limit(1)
-    const hadir = (h.data || [])[0] || null
-    const ll = await supabase
-      .from('logbooks')
-      .select('tanggal')
-      .eq('mahasiswa_id', mhs.id)
-      .order('tanggal', { ascending: false })
-      .limit(1)
-    const lh = await supabase
-      .from('daftar_hadir')
-      .select('tanggal')
-      .eq('mahasiswa_id', mhs.id)
-      .order('tanggal', { ascending: false })
-      .limit(1)
-    setTodayLog(log)
-    setHadirHariIni(hadir)
-    setLastLogTanggal(ll.data && ll.data[0] ? ll.data[0].tanggal : null)
-    setLastHadirTanggal(lh.data && lh.data[0] ? lh.data[0].tanggal : null)
-    if (hadir) {
-      setStatus(hadir.status)
-      setAlasan(hadir.alasan || '')
-    }
-    if (!senyap) setLoading(false)
-  }
-
-  useEffect(function () {
-    if (mahasiswa) muatData(mahasiswa)
-  }, [mahasiswa])
-
-  async function pilihFile(e) {
-    const f = e.target.files[0]
-    e.target.value = ''
-    if (!f) return
-    if (preview && preview.indexOf('blob:') === 0) URL.revokeObjectURL(preview)
-    setFile(f)
-    setPreview(await urlPratinjau(f))
-  }
-
-  function hapusFile() {
-    if (preview && preview.indexOf('blob:') === 0) URL.revokeObjectURL(preview)
-    setFile(null)
-    setPreview('')
-    setShowGal(false)
-  }
-
-  async function submitLogbook(e) {
-    e.preventDefault()
-    if (!todayLog && !kategori) { toast.gagal('Pilih kategori terlebih dahulu.'); return }
-    if (!judulKegiatan.trim()) { toast.gagal('Judul kegiatan wajib diisi.'); return }
-    setBusy(true)
-    try {
-      let mediaPath = null
-      let mediaThumb = null
-      if (file) {
-        const up = await uploadMedia(file, 'logbook', setInfo)
-        mediaPath = up.publicUrl
-        mediaThumb = up.thumbUrl || null
-      }
-      let logId = todayLog ? todayLog.id : null
-      if (!todayLog) {
-        const ins = await supabase.from('logbooks').insert({
-          mahasiswa_id: mahasiswa.id, tanggal: tanggal, unit: '', kategori: kategori,
-          judul: judulKegiatan.trim(), kendala: '', solusi: '', pembelajaran: '', status: 'publik'
-        }).select().single()
-        if (ins.error) throw new Error(ins.error.message)
-        logId = ins.data.id
-      }
-      const urutan = todayLog ? todayLog.logbook_items.reduce(function (m, it) { return Math.max(m, it.urutan || 0) }, 0) + 1 : 1
-      const insItem = await supabase.from('logbook_items').insert({
-        logbook_id: logId,
-        urutan: urutan,
-        judul: judulKegiatan.trim(),
-        deskripsi: deskripsi.trim(),
-        hasil: '',
-        media_path: mediaPath,
-        media_type: mediaPath ? 'foto' : null,
-        media_thumb: mediaThumb,
-        media_source: 'r2',
-        youtube_id: null,
-        drive_id: null,
-        show_in_gallery: showGal && !!mediaPath
-      }).select().single()
-      if (insItem.error) throw new Error(insItem.error.message)
-      if (todayLog && todayLog.status !== 'publik') {
-        await supabase.from('logbooks').update({ status: 'publik' }).eq('id', todayLog.id)
-      }
-      if (showGal && mediaPath) {
-        await syncGaleriFromLogbook(mahasiswa.id, [insItem.data], {
-          tanggal: tanggal,
-          kategori: todayLog ? todayLog.kategori : kategori
-        })
-      }
-      const pertama = !todayLog
-      setJudulKegiatan('')
-      setDeskripsi('')
-      hapusFile()
-      if (pertama) setKategori('')
-      await muatData(mahasiswa, true)
-      toast.sukses(pertama ? 'Logbook hari ini berhasil dibuat' : 'Kegiatan baru berhasil ditambahkan')
-    } catch (err) {
-      toast.gagal('Gagal menyimpan logbook: ' + err.message)
-    }
-    setInfo('')
-    setBusy(false)
-  }
-
-  async function submitAbsen(e) {
-    e.preventDefault()
-    setBusy(true)
-    try {
-      const payload = {
-        mahasiswa_id: mahasiswa.id,
-        tanggal: tanggal,
-        status: status,
-        alasan: status === 'Masuk' ? '' : alasan.trim()
-      }
-      let res
-      if (hadirHariIni) {
-        res = await supabase.from('daftar_hadir').update(payload).eq('id', hadirHariIni.id)
-      } else {
-        res = await supabase.from('daftar_hadir').insert(payload)
-      }
-      if (res.error) throw new Error(res.error.message)
-      await muatData(mahasiswa, true)
-      toast.sukses(hadirHariIni ? 'Daftar hadir berhasil diperbarui' : 'Daftar hadir berhasil disimpan')
-    } catch (err) {
-      toast.gagal('Gagal menyimpan kehadiran: ' + err.message)
-    }
-    setBusy(false)
-  }
-
-  function infoTerakhir(tgl) {
-    if (!tgl) return { teks: 'belum pernah', lama: true }
-    const selisih = Math.round((new Date(tanggal + 'T00:00:00').getTime() - new Date(tgl + 'T00:00:00').getTime()) / 86400000)
-    if (selisih <= 0) return { teks: 'hari ini', lama: false }
-    if (selisih === 1) return { teks: 'kemarin', lama: false }
-    return { teks: selisih + ' hari yang lalu', lama: true }
-  }
-
-  if (loading) {
-    return <div className="grid min-h-[50vh] place-items-center"><div className="h-10 w-10 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div></div>
-  }
-
-  const infoLog = infoTerakhir(lastLogTanggal)
-  const infoHadir = infoTerakhir(lastHadirTanggal)
-
-  const tabCls = function (t) {
-    return 'flex-1 px-4 py-2.5 rounded-xl text-xs sm:rounded-2xl sm:py-3 sm:text-sm font-bold ' + (tab === t ? 'bg-white text-bsi-900' : 'bg-white/10 text-white hover:bg-white/20')
-  }
-
-  return (
-    <div className="mx-auto w-full max-w-xl space-y-5">
-      <section className="rounded-[2rem] bg-bsi-900 p-5 text-white sm:p-8">
-        <h1 className="text-xl font-black sm:text-2xl">Isi Cepat</h1>
-        <p className="mt-1 text-sm text-white/80">{formatTanggal(tanggal)}</p>
-        <div className="mt-4 flex gap-2">
-          <button type="button" onClick={function () { setTab('logbook') }} className={tabCls('logbook')}>Logbook</button>
-          <button type="button" onClick={function () { setTab('absen') }} className={tabCls('absen')}>Daftar Hadir</button>
-        </div>
-      </section>
-
-      {tab === 'logbook' ? (
-        <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
-          <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoLog.lama ? 'text-amber-600' : 'text-slate-500')}>
-            <SizedIcon name="calendar" size={13} />
-            Terakhir mengisi logbook: {infoLog.teks}
-          </p>
-          {todayLog ? (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-              <p className="text-sm font-bold text-emerald-800">Logbook hari ini sudah ada</p>
-              <p className="mt-1 text-sm text-emerald-800">{todayLog.judul} • {todayLog.logbook_items.length} kegiatan</p>
-              <div className="mt-2 space-y-1">
-                {todayLog.logbook_items.map(function (it, i) {
-                  return <p key={it.id} className="truncate text-xs text-emerald-800">{i + 1}. {it.judul}</p>
-                })}
-              </div>
-              <p className="mt-2 text-xs text-emerald-800">Kegiatan baru ditambahkan di bawahnya tanpa menghapus kegiatan lama.</p>
-              {todayLog.status !== 'publik' ? <p className="mt-1 text-xs font-semibold text-emerald-800">Status masih draf — akan otomatis dipublikasikan.</p> : null}
-            </div>
-          ) : (
-            <div>
-              <label className={labelCls}>Kategori Utama <span className="text-red-500">*</span></label>
-              <div className="mt-1.5">
-                <CustomSelect placeholder="Pilih Kategori" value={kategori} onChange={setKategori} options={KATEGORI.map(function (k) { return { value: k, label: k } })} />
-              </div>
-            </div>
-          )}
-
-          <form onSubmit={submitLogbook} className="mt-5 space-y-4">
-            <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-xs font-bold text-bsi-800">{todayLog ? 'Kegiatan Baru (kegiatan ' + (todayLog.logbook_items.length + 1) + ')' : 'Kegiatan'}</p>
-              <input className={inputCls} value={judulKegiatan} onChange={function (e) { setJudulKegiatan(e.target.value) }} aria-label="Judul Kegiatan" placeholder="Judul kegiatan" />
-              <AutoTextArea className={inputCls} value={deskripsi} onChange={function (e) { setDeskripsi(e.target.value) }} aria-label="Deskripsi Kegiatan" placeholder="Deskripsi singkat kegiatan" />
-              {preview ? (
-                <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-900">
-                  <img src={preview} alt="Pratinjau" className="absolute inset-0 h-full w-full object-contain" />
-                  <button type="button" onClick={hapusFile} title="Hapus Gambar" className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-red-500 text-white hover:bg-red-600">
-                    <SizedIcon name="close" size={14} />
-                  </button>
-                </div>
-              ) : null}
-              <div className="grid grid-cols-2 gap-3">
-                <button type="button" onClick={function () { cameraRef.current.click() }} className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-3 py-3.5 text-sm font-semibold text-slate-700 hover:border-bsi-500 hover:bg-slate-100">
-                  <SizedIcon name="camera" size={18} /> Ambil Foto
-                </button>
-                <button type="button" onClick={function () { galeriRef.current.click() }} className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-3 py-3.5 text-sm font-semibold text-slate-700 hover:border-bsi-500 hover:bg-slate-100">
-                  <SizedIcon name="image" size={18} /> Dari Galeri
-                </button>
-              </div>
-              <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={pilihFile} />
-              <input ref={galeriRef} type="file" accept="image/*" className="hidden" onChange={pilihFile} />
-              {preview ? (
-                <label className="flex w-full cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 p-3">
-                  <input type="checkbox" checked={showGal} onChange={function (e) { setShowGal(e.target.checked) }} className="mt-0.5 h-4 w-4 rounded accent-bsi-800" />
-                  <span className="text-sm font-semibold text-slate-800">Tampilkan kegiatan ini di galeri</span>
-                </label>
-              ) : null}
-            </div>
-            <button type="submit" disabled={busy} className={btnPrimary}>
-              {busy ? <LabelProses teks={info || 'Menyimpan'} /> : (todayLog ? 'Tambah Kegiatan' : 'Simpan Logbook')}
-            </button>
-          </form>
-        </section>
-      ) : null}
-
-      {tab === 'absen' ? (
-        <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
-          <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoHadir.lama ? 'text-amber-600' : 'text-slate-500')}>
-            <SizedIcon name="clipboard" size={13} />
-            Terakhir mengisi daftar hadir: {infoHadir.teks}
-          </p>
-          {hadirHariIni ? (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-              <p className="text-sm font-bold text-emerald-800">Kamu sudah mengisi daftar hadir hari ini ({hadirHariIni.status})</p>
-              <p className="mt-1 text-xs text-emerald-800">Form di bawah bisa dipakai untuk memperbarui status bila ada perubahan.</p>
-            </div>
-          ) : null}
-          <form onSubmit={submitAbsen} className={'space-y-4 ' + (hadirHariIni ? 'mt-5' : '')}>
-            <div>
-              <label className={labelCls}>Status Kehadiran <span className="text-red-500">*</span></label>
-              <div className="mt-1.5 flex gap-2">
-                {STATUS_HADIR.map(function (s) {
-                  const aktif = status === s
-                  const warna = aktif
-                    ? (s === 'Masuk' ? 'bg-emerald-500 text-white' : s === 'Izin' ? 'bg-amber-500 text-white' : 'bg-red-500 text-white')
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  return <button type="button" key={s} onClick={function () { setStatus(s) }} className={'flex-1 rounded-2xl px-3 py-3 text-sm font-bold ' + warna}>{s}</button>
-                })}
-              </div>
-            </div>
-            <div>
-              <label className={labelCls}>Alasan atau Keterangan</label>
-              <AutoTextArea
-                className={inputCls + (status === 'Masuk' ? ' cursor-not-allowed opacity-60' : '')}
-                value={alasan}
-                onChange={function (e) { setAlasan(e.target.value) }}
-                aria-label="Alasan atau Keterangan"
-                placeholder={status === 'Masuk' ? 'Status Masuk tidak memerlukan alasan' : 'Contoh: Keperluan keluarga, sakit.'}
-                disabled={status === 'Masuk'}
-              />
-            </div>
-            <button type="submit" disabled={busy} className={btnPrimary}>
-              {busy ? <LabelProses teks="Menyimpan" /> : (hadirHariIni ? 'Perbarui Daftar Hadir' : 'Simpan Daftar Hadir')}
-            </button>
-          </form>
-        </section>
-      ) : null}
-    </div>
-  )
-}
-`
-
-/* ===== 7. Tulis semua file (baru dieksekusi jika semua langkah di atas lolos) ===== */
-
-try {
-  fs.writeFileSync(FILE.quick, QUICK_PAGE, 'utf8')
-  fs.writeFileSync(FILE.app, appSrc, 'utf8')
-  fs.writeFileSync(FILE.login, loginSrc, 'utf8')
-  fs.writeFileSync(FILE.llms, llmsSrc, 'utf8')
-} catch (e) {
-  gagal('Gagal menulis file: ' + e.message)
-}
-
-console.log('')
-console.log('[SELESAI] Fitur Isi Cepat (/cepat) berhasil diterapkan.')
-console.log('')
-console.log('File yang dibuat/diubah:')
-console.log('  + src/pages/QuickPage.jsx   (baru)')
-console.log('  ~ src/App.jsx               (import QuickPage, RequireAuth + ?next, route /cepat)')
-console.log('  ~ src/pages/LoginPage.jsx   (setelah login balik ke halaman asal)')
-console.log('  ~ public/llms.txt           (dokumentasi route baru)')
-console.log('')
-console.log('Langkah berikutnya:')
-console.log('  1. Uji lokal   : npm run dev, buka http://localhost:5173/cepat')
-console.log('  2. Deploy      : push ke GitHub / vercel deploy seperti biasa')
-console.log('  3. Buat QR     : encode URL https://domain-kamu/cepat pakai QR generator,')
-console.log('                   lalu print/tempel di kantor atau share di grup WA')
-````
-
-## File: tailwind.config.js
-````javascript
-export default {
-  darkMode: 'class',
-  content: ['./index.html', './src/**/*.{js,jsx}'],
-  theme: {
-    extend: {
-      colors: {
-        bsi: {
-           50: '#f4fbf6', 100: '#dff0e4', 200: '#bfe3cc', 300: '#86ecb0',
-           400: '#4ed58f', 500: '#27c06d', 600: '#1a9e57', 700: '#177c48',
-           800: '#16623c', 900: '#135033', 950: '#081a13'
-         },
-         gold: { 400: '#fbbf24', 500: '#f59e0b', 600: '#d97706' }
-      }
-    }
-  },
-  plugins: []
 }
 ````
 
@@ -2860,6 +1368,27 @@ create policy "hadir_delete_self" on public.daftar_hadir for delete using (
 );
 ````
 
+## File: tailwind.config.js
+````javascript
+export default {
+  darkMode: 'class',
+  content: ['./index.html', './src/**/*.{js,jsx}'],
+  theme: {
+    extend: {
+      colors: {
+        bsi: {
+           50: '#f4fbf6', 100: '#dff0e4', 200: '#bfe3cc', 300: '#86ecb0',
+           400: '#4ed58f', 500: '#27c06d', 600: '#1a9e57', 700: '#177c48',
+           800: '#16623c', 900: '#135033', 950: '#081a13'
+         },
+         gold: { 400: '#fbbf24', 500: '#f59e0b', 600: '#d97706' }
+      }
+    }
+  },
+  plugins: []
+}
+````
+
 ## File: api/r2/presign.js
 ````javascript
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
@@ -3002,51 +1531,6 @@ dist
 *.log
 .env.youtube-*
 repomix-output.md
-````
-
-## File: index.html
-````html
-<!DOCTYPE html>
-<html lang="id">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="robots" content="index, follow" />
-    <meta name="description" content="Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia. Catatan kegiatan harian, dokumentasi media, dan monitoring kehadiran tim magang dalam satu portal." />
-    <meta name="theme-color" content="#16623c" />
-    <meta property="og:type" content="website" />
-    <meta property="og:title" content="Logbook Magang BSI" />
-    <meta property="og:description" content="Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia." />
-    <meta property="og:locale" content="id_ID" />
-    <link rel="preconnect" href="https://i.ytimg.com" crossorigin />
-    <link rel="preconnect" href="https://drive.google.com" crossorigin />
-    <link rel="dns-prefetch" href="https://drive.usercontent.google.com" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='14'%20fill='%2316623c'/%3E%3Ctext%20x='32'%20y='44'%20font-size='34'%20font-weight='700'%20text-anchor='middle'%20fill='%23ffffff'%20font-family='Arial,%20sans-serif'%3EB%3C/text%3E%3C/svg%3E" />
-    <title>Logbook Magang BSI</title>
-      <script type="application/ld+json">
-    {"@context":"https://schema.org","@type":"WebSite","name":"Logbook Magang BSI","alternateName":"Portal Logbook Magang Bank Syariah Indonesia","description":"Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia.","inLanguage":"id-ID"}
-    </script>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet" />
-</head>
-  <body class="text-slate-800 min-h-screen antialiased">
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-      <noscript>
-      <div style="max-width:640px;margin:48px auto;padding:24px;font-family:sans-serif;line-height:1.6">
-        <h1>Logbook Magang BSI</h1>
-        <p>Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia. Aktifkan JavaScript untuk menggunakan portal ini secara penuh.</p>
-        <ul>
-          <li><a href="/logbook">Logbook publik</a></li>
-          <li><a href="/galeri">Galeri dokumentasi</a></li>
-          <li><a href="/absen">Daftar hadir tim</a></li>
-          <li><a href="/dospem">Ringkasan untuk dosen pembimbing dan kaprodi</a></li>
-        </ul>
-      </div>
-    </noscript>
-  </body>
-</html>
 ````
 
 ## File: package.json
@@ -3231,6 +1715,51 @@ export function ThemeProvider(props) {
 export function useTheme() {
   return useContext(ThemeContext)
 }
+````
+
+## File: index.html
+````html
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="index, follow" />
+    <meta name="description" content="Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia. Catatan kegiatan harian, dokumentasi media, dan monitoring kehadiran tim magang dalam satu portal." />
+    <meta name="theme-color" content="#16623c" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Logbook Magang BSI" />
+    <meta property="og:description" content="Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia." />
+    <meta property="og:locale" content="id_ID" />
+    <link rel="preconnect" href="https://i.ytimg.com" crossorigin />
+    <link rel="preconnect" href="https://drive.google.com" crossorigin />
+    <link rel="dns-prefetch" href="https://drive.usercontent.google.com" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='14'%20fill='%2316623c'/%3E%3Ctext%20x='32'%20y='44'%20font-size='34'%20font-weight='700'%20text-anchor='middle'%20fill='%23ffffff'%20font-family='Arial,%20sans-serif'%3EB%3C/text%3E%3C/svg%3E" />
+    <title>Logbook Magang BSI</title>
+      <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"WebSite","name":"Logbook Magang BSI","alternateName":"Portal Logbook Magang Bank Syariah Indonesia","description":"Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia.","inLanguage":"id-ID"}
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet" />
+</head>
+  <body class="text-slate-800 min-h-screen antialiased">
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+      <noscript>
+      <div style="max-width:640px;margin:48px auto;padding:24px;font-family:sans-serif;line-height:1.6">
+        <h1>Logbook Magang BSI</h1>
+        <p>Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia. Aktifkan JavaScript untuk menggunakan portal ini secara penuh.</p>
+        <ul>
+          <li><a href="/logbook">Logbook publik</a></li>
+          <li><a href="/galeri">Galeri dokumentasi</a></li>
+          <li><a href="/absen">Daftar hadir tim</a></li>
+          <li><a href="/dospem">Ringkasan untuk dosen pembimbing dan kaprodi</a></li>
+        </ul>
+      </div>
+    </noscript>
+  </body>
+</html>
 ````
 
 ## File: README.md
@@ -6144,10 +4673,11 @@ export default function HomePage() {
   return (
     <div>
       <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-6 sm:p-10 lg:p-14">
+        <div className="pointer-events-none absolute right-16 top-1/2 h-80 w-80 -translate-y-1/2 rounded-full bg-bsi-500/10 blur-3xl" />
         <span className="bsi-chip bsi-chip-green bsi-chip-c1">▦</span>
         <span className="bsi-chip bsi-chip-gold bsi-chip-c2">▶</span>
         <span className="bsi-chip bsi-chip-deep bsi-chip-c3">✦</span>
-        <div className="relative z-10 flex items-start gap-10">
+        <div className="relative z-10 flex items-center gap-10">
           <div className="min-w-0 flex-1">
             <span className="bsi-pill">✦ Magang Bank BSI</span>
             <h1 className="mt-5 max-w-2xl text-2xl font-black leading-tight text-slate-900 sm:text-3xl lg:text-5xl">
@@ -6165,13 +4695,13 @@ export default function HomePage() {
                 : <Link to="/login" className="bsi-btn-white">Masuk Akun</Link>}
             </div>
           </div>
-          <div className="bsi-hero-art hidden shrink-0 items-start gap-4 xl:flex">
-            <div className="bsi-mini-card bsi-mini-green">
+          <div className="bsi-hero-art hidden shrink-0 items-center gap-6 xl:flex">
+            <div className="bsi-mini-card bsi-mini-green -rotate-2">
               <p className="text-xs font-bold opacity-80">LOGBOOK PUBLIK</p>
               <p className="mt-1 text-3xl font-black">{loading ? '—' : stats.logbook}</p>
               <p className="mt-2 text-xs opacity-75">{loading ? 'Memuat data...' : stats.galeri + ' media di galeri'}</p>
             </div>
-            <div className="bsi-mini-card bsi-mini-white">
+            <div className="bsi-mini-card bsi-mini-white rotate-2">
               <p className="text-xs font-bold opacity-80">KEHADIRAN TIM</p>
               <p className="mt-1 text-3xl font-black">{loading ? '—' : persenMasuk + '%'}</p>
               <div className="bsi-stack">
@@ -7460,205 +5990,11 @@ button:active:not(:disabled), a:active, .clickable:active { transition-duration:
 }
 
 
-/* ================================================================
-   Tema Opsi B: Hybrid Pastel-Fintech + Brand BSI
-   ================================================================ */
-
-/* Latar gradasi pastel (light) & hijau-tua (dark) */
-body {
-  background-color: #f4f8f4;
-  background-image: linear-gradient(160deg, #dff3e6 0%, #f2fbf4 45%, #fbf3e2 100%);
-  background-attachment: fixed;
-}
-.dark body {
-  background-color: #081a13 !important;
-  background-image: linear-gradient(160deg, #0c2418 0%, #081a13 45%, #0a1f16 100%) !important;
-  background-attachment: fixed;
-}
-
-/* Override netral Slate -> bernuansa hijau (supaya menyatu dengan brand) */
-.bg-slate-50  { background-color: #f4f8f4; }
-.bg-slate-100 { background-color: #eaf2ec; }
-.bg-slate-200 { background-color: #dde7e0; }
-.dark .bg-slate-50  { background-color: #081a13 !important; }
-.dark .bg-slate-100 { background-color: #17352b !important; }
-.dark .bg-slate-200 { background-color: #1e3d33 !important; }
-.dark .bg-white     { background-color: #0f241b !important; }
-
-/* Navbar glass (sticky header otomatis jadi glass) */
-header.sticky {
-  background-color: rgba(255,255,255,0.65) !important;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-}
-.dark header.sticky {
-  background-color: rgba(16,42,29,0.6) !important;
-}
-
-/* Glass card / surface */
-.bsi-glass {
-  background: rgba(255,255,255,0.65);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid rgba(15,42,29,0.10);
-}
-.dark .bsi-glass {
-  background: rgba(16,42,29,0.6);
-  border-color: rgba(234,244,238,0.10);
-}
-
-/* Shadow lembut (pakai rona hijau, bukan biru) */
+/* bayangan lembut hero & kartu (dipakai kelas bsi-shadow / bsi-shadow-sm) */
 .bsi-shadow    { box-shadow: 0 24px 48px -24px rgba(15,42,29,0.25); }
 .bsi-shadow-sm { box-shadow: 0 10px 24px -12px rgba(15,42,29,0.18); }
 .dark .bsi-shadow    { box-shadow: 0 24px 48px -24px rgba(0,0,0,0.6); }
 .dark .bsi-shadow-sm { box-shadow: 0 10px 24px -12px rgba(0,0,0,0.5); }
-
-/* Hero gradasi pastel -> krem gold (light) & hijau tua (dark) */
-.bsi-hero {
-  background: linear-gradient(135deg, #e7f6ec 0%, #f4fbee 55%, #fdf4e3 100%);
-}
-.dark .bsi-hero {
-  background: linear-gradient(135deg, #103021 0%, #0e2a1c 55%, #0b2019 100%) !important;
-}
-
-/* Chip melayang di pojok hero */
-@keyframes bsiFloat {
-  0%, 100% { transform: translateY(0) rotate(6deg); }
-  50%      { transform: translateY(-12px) rotate(-5deg); }
-}
-.bsi-chip {
-  position: absolute;
-  width: 54px; height: 54px;
-  border-radius: 16px;
-  display: grid; place-items: center;
-  color: #fff; font-size: 20px;
-  box-shadow: 0 10px 24px -12px rgba(15,42,29,0.18);
-  animation: bsiFloat 6s ease-in-out infinite;
-}
-.bsi-chip-green { background: linear-gradient(135deg, #86ecb0, #1a9e57); }
-.bsi-chip-gold  { background: linear-gradient(135deg, #fbbf24, #d97706); }
-.bsi-chip-deep  { background: linear-gradient(135deg, #27c06d, #135033); }
-.bsi-chip-c1 { top: 36px;   right: 330px; }
-.bsi-chip-c2 { bottom: 44px; right: 90px; animation-delay: 1.2s; }
-.bsi-chip-c3 { top: 130px;  right: 20px; animation-delay: 2.1s; }
-@media (prefers-reduced-motion: reduce) { .bsi-chip { animation: none; } }
-
-/* Pill eyebrow glass */
-.bsi-pill {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: rgba(255,255,255,0.65);
-  border: 1px solid rgba(15,42,29,0.10);
-  color: #177c48;
-  font-size: 11px; font-weight: 800;
-  text-transform: uppercase; letter-spacing: 0.14em;
-  padding: 7px 14px;
-  border-radius: 999px;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-}
-.dark .bsi-pill {
-  background: rgba(16,42,29,0.6);
-  border-color: rgba(234,244,238,0.10);
-  color: #86ecb0;
-}
-
-/* Teks gradient brand */
-.bsi-grad-text {
-  background: linear-gradient(90deg, #1a9e57, #f59e0b);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-/* Tombol glass */
-.bsi-btn-glass {
-  background: rgba(255,255,255,0.7);
-  color: #0f2a1d;
-  border: 1px solid rgba(15,42,29,0.12);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border-radius: 14px;
-  padding: 10px 18px;
-  font-weight: 700;
-  font-size: 14px;
-  display: inline-flex; align-items: center; gap: 8px;
-  transition: transform .15s ease, background-color .2s ease;
-}
-.bsi-btn-glass:hover { transform: translateY(-1px); background: rgba(255,255,255,0.85); }
-.dark .bsi-btn-glass {
-  background: rgba(16,42,29,0.6);
-  color: #eaf4ee;
-  border-color: rgba(234,244,238,0.10);
-}
-.dark .bsi-btn-glass:hover { background: rgba(16,42,29,0.75); }
-
-/* Tombol putih (varian ketiga di hero) */
-.bsi-btn-white {
-  background: #fff;
-  color: #177c48;
-  border: 1px solid rgba(15,42,29,0.08);
-  border-radius: 14px;
-  padding: 10px 18px;
-  font-weight: 700;
-  font-size: 14px;
-  display: inline-flex; align-items: center; gap: 8px;
-  box-shadow: 0 10px 24px -12px rgba(15,42,29,0.18);
-  transition: transform .15s ease;
-}
-.bsi-btn-white:hover { transform: translateY(-1px); }
-.dark .bsi-btn-white {
-  background: #0f241b;
-  color: #86ecb0;
-  border-color: rgba(234,244,238,0.10);
-}
-
-/* Mini card mengambang di hero */
-.bsi-mini-card {
-  width: 212px;
-  border-radius: 20px;
-  padding: 18px;
-  box-shadow: 0 24px 48px -24px rgba(15,42,29,0.25);
-}
-.bsi-mini-green {
-  background: linear-gradient(135deg, #27c06d, #135033);
-  color: #fff;
-}
-.bsi-mini-white {
-  background: #fff;
-  color: #0f2a1d;
-  margin-top: 40px;
-  border: 1px solid rgba(15,42,29,0.10);
-}
-.dark .bsi-mini-white {
-  background: #0f241b !important;
-  color: #eaf4ee !important;
-  border-color: rgba(234,244,238,0.10);
-}
-
-/* Stat card glass */
-.bsi-stat {
-  background: rgba(255,255,255,0.6);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(15,42,29,0.10);
-  border-radius: 24px;
-  padding: 20px;
-}
-.dark .bsi-stat {
-  background: rgba(16,42,29,0.6);
-  border-color: rgba(234,244,238,0.10);
-}
-
-/* Stack bar untuk kehadiran */
-.bsi-stack { display: flex; height: 12px; border-radius: 999px; overflow: hidden; margin-top: 10px; }
-.bsi-stack i { display: block; height: 100%; }
-
-/* Hide chips di layar sempit (biar hero tidak berantakan) */
-@media (max-width: 960px) {
-  .bsi-chip-c1, .bsi-hero-art { display: none; }
-}
-/* ================================================================ */
-
 /* ===== Tema Opsi B final (sinkron MVP) ===== */
 body { background-color: #f4f8f4; background-image: linear-gradient(160deg, #dff3e6 0%, #f2fbf4 45%, #fbf3e2 100%); background-attachment: fixed; color: #0f2a1d; font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif; }
 .dark body { background-color: #081a13 !important; background-image: linear-gradient(160deg, #0c2418 0%, #081a13 45%, #0a1f16 100%) !important; color: #eaf4ee !important; }
@@ -7692,8 +6028,8 @@ body { background-color: #f4f8f4; background-image: linear-gradient(160deg, #dff
 .dark .time-toggle { border-color: rgba(234,244,238,.10); }
 .dark .time-toggle button { color: #9db4a6; }
 .dark .time-toggle button.active { background: #27c06d; color: #06281a; }
-::-webkit-scrollbar-thumb:hover { background-color: #16623c; }
-.dark ::-webkit-scrollbar-thumb:hover { background-color: #27c06d; }
+
+
 .pemutar-progress::-webkit-slider-thumb, .pemutar-progress::-moz-range-thumb { background: #1a9e57; }
 .pemutar-volume::-webkit-slider-thumb, .pemutar-volume::-moz-range-thumb { background: #d97706; }
 .detail-footer { background: #ffffff; }
@@ -7722,7 +6058,7 @@ body { background-color: #f4f8f4; background-image: linear-gradient(160deg, #dff
 .bsi-chip-gold { background: linear-gradient(135deg, #fbbf24, #d97706); }
 .bsi-chip-deep { background: linear-gradient(135deg, #27c06d, #135033); }
 .bsi-chip-c1 { top: 36px; right: 330px; }
-.bsi-chip-c2 { bottom: 44px; right: 90px; animation-delay: 1.2s; }
+.bsi-chip-c2 { bottom: 64px; right: 260px; animation-delay: 1.2s; }
 .bsi-chip-c3 { top: 130px; right: 20px; animation-delay: 2.1s; }
 @media (prefers-reduced-motion: reduce) { .bsi-chip { animation: none; } }
 @media (max-width: 960px) { .bsi-chip-c1, .bsi-hero-art { display: none; } }
@@ -7768,6 +6104,8 @@ body { background-color: #f4f8f4; background-image: linear-gradient(160deg, #dff
     background-color: rgba(16, 42, 29, 0.6) !important;
   }
 }
+
+.bsi-mini-white { margin-top: 56px; }
 ````
 
 ## File: src/components/ui.jsx
