@@ -3,14 +3,15 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../lib/auth.js'
-import { StatCard, EmptyState, Modal } from '../components/ui.jsx'
+import { EmptyState, Modal } from '../components/ui.jsx'
 import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
-import { SkeletonLogbookCard, SkeletonStatCard } from '../components/Skeleton.jsx'
+import { SkeletonLogbookCard } from '../components/Skeleton.jsx'
 
 export default function HomePage() {
   const { mahasiswa } = useAuth()
   const [logs, setLogs] = useState([])
   const [stats, setStats] = useState({ logbook: 0, galeri: 0, mahasiswa: 0 })
+  const [hadir, setHadir] = useState({ masuk: 0, izin: 0, bolos: 0 })
   const [detail, setDetail] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -24,48 +25,106 @@ export default function HomePage() {
         .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
       const g = await supabase.from('galeri').select('id')
       const p = await supabase.from('mahasiswa').select('id')
+      const h = await supabase.from('daftar_hadir').select('status')
+      const hitung = { masuk: 0, izin: 0, bolos: 0 }
+      const rows = h.data || []
+      for (let i = 0; i < rows.length; i++) {
+        if (rows[i].status === 'Masuk') hitung.masuk += 1
+        else if (rows[i].status === 'Izin') hitung.izin += 1
+        else if (rows[i].status === 'Bolos') hitung.bolos += 1
+      }
       setLogs(l.data || [])
       setStats({ logbook: (l.data || []).length, galeri: (g.data || []).length, mahasiswa: (p.data || []).length })
+      setHadir(hitung)
       setLoading(false)
     }
     load()
   }, [])
 
+  const totalHadir = hadir.masuk + hadir.izin + hadir.bolos
+  const persenMasuk = totalHadir ? Math.round((hadir.masuk / totalHadir) * 100) : 0
+  const lebarMasuk = totalHadir ? (hadir.masuk / totalHadir) * 100 : 0
+  const lebarIzin = totalHadir ? (hadir.izin / totalHadir) * 100 : 0
+  const lebarBolos = totalHadir ? (hadir.bolos / totalHadir) * 100 : 0
+
   return (
     <div>
-      <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr] items-stretch">
-        <div className="card-hover relative overflow-hidden rounded-[2rem] bg-bsi-900 text-white p-5 sm:p-8 lg:p-12">
-          <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-gold-500/20 blur-2xl" />
-          <div className="absolute -left-10 bottom-0 h-40 w-40 rounded-full bg-emerald-300/10 blur-2xl" />
-          <div className="relative z-10">
-            <span className="inline-flex px-3 py-1.5 rounded-full bg-white/10 text-[10px] font-semibold uppercase tracking-wide sm:px-4 sm:py-2 sm:text-xs">Magang Bank BSI</span>
-            <h1 className="mt-6 text-2xl sm:text-3xl lg:text-5xl font-black leading-tight max-w-2xl">Logbook, Galeri, dan Daftar Hadir Magang dalam Satu Portal</h1>
-            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-white/80 sm:mt-5 sm:text-base">Portal ini mencatat kegiatan harian, dokumentasi media, dan kehadiran tim magang selama membantu operasional Bank BSI.</p>
+      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-6 sm:p-10 lg:p-14">
+        <span className="bsi-chip bsi-chip-green bsi-chip-c1">▦</span>
+        <span className="bsi-chip bsi-chip-gold bsi-chip-c2">▶</span>
+        <span className="bsi-chip bsi-chip-deep bsi-chip-c3">✦</span>
+        <div className="relative z-10 flex items-start gap-10">
+          <div className="min-w-0 flex-1">
+            <span className="bsi-pill">✦ Magang Bank BSI</span>
+            <h1 className="mt-5 max-w-2xl text-2xl font-black leading-tight text-slate-900 sm:text-3xl lg:text-5xl">
+              Logbook, Galeri, dan Daftar Hadir Magang dalam <span className="bsi-grad-text">Satu Portal</span>
+            </h1>
+            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-slate-600 sm:mt-5 sm:text-base">
+              Portal ini mencatat kegiatan harian, dokumentasi media, dan kehadiran tim magang selama membantu operasional Bank BSI.
+            </p>
             <div className="mt-6 flex flex-wrap gap-2 sm:mt-8 sm:gap-3">
-              <Link to="/logbook" className="px-4 py-2.5 rounded-xl bg-gold-500 text-slate-900 text-sm font-bold hover:bg-gold-400 sm:px-6 sm:py-3 sm:rounded-2xl sm:text-base">Lihat Logbook</Link>
-              <Link to="/galeri" className="px-4 py-2.5 rounded-xl bg-white/10 text-white text-sm font-bold hover:bg-white/20 sm:px-6 sm:py-3 sm:rounded-2xl sm:text-base">Lihat Galeri</Link>
-              <Link to="/absen" className="px-4 py-2.5 rounded-xl bg-white/10 text-white text-sm font-bold hover:bg-white/20 sm:px-6 sm:py-3 sm:rounded-2xl sm:text-base">Daftar Hadir</Link>
+              <Link to="/logbook" className="inline-flex items-center gap-2 rounded-2xl bg-bsi-800 px-5 py-3 text-sm font-bold text-white shadow-lg hover:bg-bsi-900 sm:px-6 sm:text-base">Lihat Logbook</Link>
+              <Link to="/galeri" className="bsi-btn-glass">Lihat Galeri</Link>
+              <Link to="/absen" className="bsi-btn-glass">Daftar Hadir</Link>
               {mahasiswa
-                ? <Link to="/dashboard" className="px-4 py-2.5 rounded-xl bg-[#ffffff] text-[#135033] text-sm font-bold hover:bg-[#f1f5f9] sm:px-6 sm:py-3 sm:rounded-2xl sm:text-base">Buka Dashboard</Link>
-                : <Link to="/login" className="px-4 py-2.5 rounded-xl bg-[#ffffff] text-[#135033] text-sm font-bold hover:bg-[#f1f5f9] sm:px-6 sm:py-3 sm:rounded-2xl sm:text-base">Masuk Akun</Link>}
+                ? <Link to="/dashboard" className="bsi-btn-white">Buka Dashboard</Link>
+                : <Link to="/login" className="bsi-btn-white">Masuk Akun</Link>}
+            </div>
+          </div>
+          <div className="bsi-hero-art hidden shrink-0 items-start gap-4 xl:flex">
+            <div className="bsi-mini-card bsi-mini-green">
+              <p className="text-xs font-bold opacity-80">LOGBOOK PUBLIK</p>
+              <p className="mt-1 text-3xl font-black">{loading ? '—' : stats.logbook}</p>
+              <p className="mt-2 text-xs opacity-75">{loading ? 'Memuat data...' : stats.galeri + ' media di galeri'}</p>
+            </div>
+            <div className="bsi-mini-card bsi-mini-white">
+              <p className="text-xs font-bold opacity-80">KEHADIRAN TIM</p>
+              <p className="mt-1 text-3xl font-black">{loading ? '—' : persenMasuk + '%'}</p>
+              <div className="bsi-stack">
+                <i style={{ width: lebarMasuk + '%', background: '#10b981' }}></i>
+                <i style={{ width: lebarIzin + '%', background: '#f59e0b' }}></i>
+                <i style={{ width: lebarBolos + '%', background: '#ef4444' }}></i>
+              </div>
+              <p className="mt-2 text-xs opacity-75">Masuk {hadir.masuk} • Izin {hadir.izin} • Bolos {hadir.bolos}</p>
             </div>
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-2 sm:gap-3 lg:grid-cols-1 lg:gap-4">
-          {loading
-            ? [0, 1, 2].map(function (i) { return <SkeletonStatCard key={i} /> })
-            : [
-                <StatCard key="mahasiswa" label="Total Mahasiswa Magang" labelRapat="Mahasiswa" value={stats.mahasiswa} sub="Mahasiswa Terdaftar dalam Tim" rapat />,
-                <StatCard key="logbook" label="Total Logbook Publik" labelRapat="Logbook" value={stats.logbook} sub="Catatan Kegiatan Harian" rapat />,
-                <StatCard key="galeri" label="Total Media Galeri" labelRapat="Media" value={stats.galeri} sub="Foto dan Video Dokumentasi" rapat />
-              ]}
-        </div>
+      </section>
+
+      <section className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {loading
+          ? [0, 1, 2].map(function (i) {
+              return (
+                <div key={i} className="bsi-stat">
+                  <div className="skeleton h-3 w-24 rounded-full"></div>
+                  <div className="skeleton mt-2 h-8 w-16 rounded-full"></div>
+                  <div className="skeleton mt-2 h-3 w-32 rounded-full"></div>
+                </div>
+              )
+            })
+          : [
+              <div key="mahasiswa" className="bsi-stat">
+                <p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Total Mahasiswa</p>
+                <p className="mt-2 text-3xl font-black text-slate-900">{stats.mahasiswa}</p>
+                <p className="mt-1 text-xs text-slate-500">Mahasiswa terdaftar dalam tim</p>
+              </div>,
+              <div key="logbook" className="bsi-stat">
+                <p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Logbook Publik</p>
+                <p className="mt-2 text-3xl font-black text-slate-900">{stats.logbook}</p>
+                <p className="mt-1 text-xs text-slate-500">Catatan kegiatan harian</p>
+              </div>,
+              <div key="galeri" className="bsi-stat">
+                <p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Media Galeri</p>
+                <p className="mt-2 text-3xl font-black text-slate-900">{stats.galeri}</p>
+                <p className="mt-1 text-xs text-slate-500">Foto dan video dokumentasi</p>
+              </div>
+            ]}
       </section>
 
       <section className="mt-10">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-400">Kegiatan terbaru</p>
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600 dark:text-gold-400">Kegiatan terbaru</p>
             <h2 className="mt-2 text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Logbook Terbaru Tim</h2>
           </div>
           <Link to="/logbook" className="text-sm font-semibold text-bsi-800 hover:text-bsi-950">Lihat Semua Logbook</Link>

@@ -22,7 +22,7 @@ function PersonChip(props) {
 function ActionButtons(props) {
   return (
     <div className="flex flex-wrap gap-2">
-      <button onClick={props.onDetail} className={btnSmall + ' bg-bsi-100 text-bsi-900 hover:bg-bsi-200'}>Detail</button>
+      <button onClick={props.onDetail} className={btnSmall + ' bg-bsi-100 text-bsi-700 hover:bg-bsi-200'}>Detail</button>
       {props.isOwner && props.onEdit ? (
         <>
           <button onClick={props.onEdit} className={btnSmall + ' bg-slate-900 text-white hover:bg-slate-700'}>Edit</button>
@@ -88,7 +88,7 @@ export function LogbookDetail(props) {
         <h2 className="mt-1 text-xl sm:text-2xl font-black text-slate-900">{log.judul}</h2>
       </div>
       <div>
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-400">Rincian Kegiatan</p>
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600 dark:text-gold-400">Rincian Kegiatan</p>
         <div className="mt-4">
           {items.map(function (it, i) {
             return (
@@ -107,7 +107,7 @@ export function LogbookDetail(props) {
                     ) : null}
                   <p className="font-bold text-slate-900">
                     {it.judul}
-                    {it.show_in_gallery && it.media_path ? <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gold-500/15 text-amber-700 dark:text-amber-400">Di Galeri</span> : null}
+                    {it.show_in_gallery && it.media_path ? <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gold-500/15 text-gold-600 dark:text-gold-400">Di Galeri</span> : null}
                   </p>
                   {it.deskripsi ? <p className="mt-1 text-sm text-slate-600">{it.deskripsi}</p> : null}
                   {it.hasil ? <p className="mt-2 inline-flex px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold">Hasil: {it.hasil}</p> : null}
@@ -120,7 +120,7 @@ export function LogbookDetail(props) {
       </div>
       {log.kendala || log.solusi || log.pembelajaran ? (
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-400">Refleksi Harian</p>
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600 dark:text-gold-400">Refleksi Harian</p>
           <div className="mt-3 grid gap-3 md:grid-cols-3">
             {log.kendala ? <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs font-semibold uppercase text-slate-600">Kendala</p><p className="mt-1 text-sm text-slate-700">{log.kendala}</p></div> : null}
             {log.solusi ? <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs font-semibold uppercase text-slate-600">Solusi</p><p className="mt-1 text-sm text-slate-700">{log.solusi}</p></div> : null}
@@ -150,7 +150,7 @@ export function GalleryCard(props) {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap gap-1.5">
             <CategoryBadge value={item.kegiatan} />
-            {item.logbook_item_id ? <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gold-500/15 text-amber-700 dark:text-amber-400">Dari Logbook</span> : null}
+            {item.logbook_item_id ? <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gold-500/15 text-gold-600 dark:text-gold-400">Dari Logbook</span> : null}
           </div>
           <span className="text-xs text-slate-600">{formatTanggalShort(item.tanggal)}</span>
         </div>

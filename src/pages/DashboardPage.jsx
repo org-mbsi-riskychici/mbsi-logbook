@@ -45,7 +45,7 @@ const PER_PAGE_DASH = 6
 function ModeIndicator(props) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className={'inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold ' + (props.edit ? 'bg-gold-500/15 text-amber-700 dark:text-amber-400' : 'bg-bsi-100 text-bsi-900')}>
+      <span className={'inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold ' + (props.edit ? 'bg-gold-500/15 text-gold-600 dark:text-gold-400' : 'bg-bsi-100 text-bsi-900')}>
         <span className={'h-2 w-2 rounded-full ' + (props.edit ? 'bg-gold-500' : 'bg-bsi-500')}></span>
         {props.edit ? 'Mode Edit' : 'Mode Tambah'}
       </span>

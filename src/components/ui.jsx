@@ -26,7 +26,7 @@ export function StatCard(props) {
   const clsWadah = rapat ? ' p-3 sm:p-6' : ' p-4 sm:p-6'
   const clsLabel = (rapat ? 'text-[11px] leading-snug sm:text-sm' : 'text-xs sm:text-sm') + ' text-slate-600'
   const clsLabelRapat = 'text-[11px] leading-snug font-semibold text-slate-600 sm:hidden'
-  const clsValue = (rapat ? 'mt-1 text-xl sm:text-3xl' : 'mt-2 text-2xl sm:text-3xl') + ' font-black text-bsi-900'
+  const clsValue = (rapat ? 'mt-1 text-xl sm:text-3xl' : 'mt-2 text-2xl sm:text-3xl') + ' font-black text-slate-900'
   const clsSub = (rapat ? 'hidden sm:block ' : '') + 'mt-1 text-[11px] leading-snug sm:text-xs text-slate-600'
   return (
     <div className={cardCls + clsWadah}>
@@ -59,7 +59,7 @@ export function StatusBadge(props) {
 }
 
 export function CategoryBadge(props) {
-  return <span className="px-3 py-1 rounded-full text-xs font-semibold bg-bsi-100 text-bsi-900">{props.value || 'Lainnya'}</span>
+  return <span className="px-3 py-1 rounded-full text-xs font-semibold bg-bsi-100 text-bsi-700">{props.value || 'Lainnya'}</span>
 }
 
 export function AttendanceBadge(props) {
@@ -493,7 +493,7 @@ export function Avatar(props) {
   const nama = props.nama || ''
   const kata = nama.trim().split(/\s+/)
   const inisial = nama ? ((kata[0] ? kata[0].charAt(0) : '') + (kata[1] ? kata[1].charAt(0) : '')).toUpperCase() : '?'
-  const palet = ['#166534', '#15803d', '#a16207', '#ca8a04', '#334155', '#047857']
+  const palet = ['#163832', '#1f7153', '#2e8b67', '#c47e16', '#334155', '#0b2b26']
   let hash = 0
   for (let i = 0; i < nama.length; i++) hash = (hash * 31 + nama.charCodeAt(i)) >>> 0
   const warna = palet[hash % palet.length]
