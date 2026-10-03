@@ -62,7 +62,7 @@ export function FilterBar(props) {
     return undefined
   }, [props.open])
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-4 lg:p-5 shadow-sm">
+    <div className="bsi-panel rounded-3xl p-4 lg:p-5">
       <div className="flex items-center justify-between gap-3">
         <button onClick={props.onToggle}
           className="xl:hidden flex items-center gap-2 px-4 py-2.5 rounded-2xl border border-slate-200 bg-slate-50 text-sm font-semibold text-slate-700 hover:bg-slate-100">

@@ -790,7 +790,7 @@ async function executeDelete() {
 
   return (
     <div>
-      <section className="card-hover rounded-[2rem] bg-white border border-slate-200 p-5 sm:p-8 lg:p-10 shadow-sm">
+      <section className="card-hover bsi-panel rounded-[2rem] p-5 sm:p-8 lg:p-10">
         <div className="flex flex-wrap items-center justify-between gap-4 sm:gap-6">
           <div>
             <div className="flex flex-wrap items-center gap-4 sm:gap-6">
@@ -813,7 +813,7 @@ async function executeDelete() {
 
       {tab === 'profil' ? (
         <section className="anim-tab mt-8 grid gap-6 lg:grid-cols-[0.85fr_1.15fr] items-start">
-          <div className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 shadow-sm flex flex-col items-center text-center">
+          <div className="card-hover bsi-panel rounded-[2rem] p-8 flex flex-col items-center text-center">
             <div className="avatar-profil-tab"><Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="2xl" /></div>
             <h2 className="mt-4 text-xl font-black text-slate-900">{mahasiswa.nama}</h2>
             <p className="mt-1 text-sm text-slate-600">NIM {mahasiswa.nim}</p>
@@ -843,7 +843,7 @@ async function executeDelete() {
               </div>
             </div>
           </div>
-          <div className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 shadow-sm">
+          <div className="card-hover bsi-panel rounded-[2rem] p-8">
             <h2 className="text-lg font-black text-slate-900">Ringkasan Aktivitas Magang</h2>
             <div className="stats-profil-grid mt-4 grid grid-cols-3 gap-2">
               <div className="rounded-xl bg-slate-50 p-2 text-center"><p className="text-[10px] font-bold text-slate-600 uppercase tracking-wide">Logbook</p><p className="text-base font-black text-bsi-800">{typeof logs !== 'undefined' ? logs.length : 0}</p></div>
@@ -861,7 +861,7 @@ async function executeDelete() {
 
       {tab === 'logbook' ? (
         <section className="anim-tab mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
-          <div ref={refFormLog} className={'card-hover scroll-mt-24 bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editLogId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
+          <div ref={refFormLog} className={'card-hover scroll-mt-24 bsi-panel rounded-[2rem] p-8 min-w-0 ' + (editLogId ? 'ring-2 ring-gold-500' : '')}>
             <ModeIndicator edit={!!editLogId} onCancel={cobaCancelEditLog} />
             <h2 className="mt-3 text-xl sm:text-2xl font-black text-slate-900">{editLogId ? 'Ubah Logbook Harian' : 'Tambah Logbook Harian'}</h2>
             <form onSubmit={submitLogbook} className="mt-6 space-y-4">
@@ -994,7 +994,7 @@ async function executeDelete() {
 
       {tab === 'galeri' ? (
         <section className="anim-tab mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
-          <div ref={refFormGal} className={'card-hover scroll-mt-24 bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editGalId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
+          <div ref={refFormGal} className={'card-hover scroll-mt-24 bsi-panel rounded-[2rem] p-8 min-w-0 ' + (editGalId ? 'ring-2 ring-gold-500' : '')}>
             <ModeIndicator edit={!!editGalId} onCancel={cobaCancelEditGal} />
             <h2 className="mt-3 text-xl sm:text-2xl font-black text-slate-900">{editGalId ? 'Ubah Media Galeri' : 'Tambah Media Galeri'}</h2>
             <form onSubmit={submitGaleri} className="mt-6 space-y-4">
@@ -1094,7 +1094,7 @@ async function executeDelete() {
 
       {tab === 'absen' ? (
         <section className="anim-tab mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
-          <div ref={refFormHadir} className={'card-hover scroll-mt-24 bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editHadirId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
+          <div ref={refFormHadir} className={'card-hover scroll-mt-24 bsi-panel rounded-[2rem] p-8 min-w-0 ' + (editHadirId ? 'ring-2 ring-gold-500' : '')}>
             <ModeIndicator edit={!!editHadirId} onCancel={cobaCancelEditHadir} />
             <h2 className="mt-3 text-xl sm:text-2xl font-black text-slate-900">{editHadirId ? 'Ubah Daftar Hadir' : 'Isi Daftar Hadir'}</h2>
             <form onSubmit={submitHadir} className="mt-6 space-y-4">

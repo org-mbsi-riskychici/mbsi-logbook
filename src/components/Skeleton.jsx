@@ -1,6 +1,6 @@
 export function SkeletonLogbookCard() {
   return (
-    <div className="card-hover flex h-full flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div className="card-hover bsi-panel flex h-full flex-col gap-4 rounded-3xl p-6">
       {/* Media / carousel */}
       <div className="skeleton aspect-video w-full rounded-2xl"></div>
 
@@ -41,7 +41,7 @@ export function SkeletonLogbookCard() {
 
 export function SkeletonGalleryCard() {
   return (
-    <div className="card-hover flex h-full flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+    <div className="card-hover bsi-panel flex h-full flex-col overflow-hidden rounded-3xl">
       {/* Media menempel tepi atas sesuai GalleryCard asli */}
       <div className="skeleton aspect-video w-full"></div>
 
@@ -80,7 +80,7 @@ export function SkeletonGalleryCard() {
 
 export function SkeletonAttendanceCard() {
   return (
-    <div className="card-hover flex h-full flex-col rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="card-hover bsi-panel flex h-full flex-col rounded-3xl p-5">
       {/* Tanggal + profil + badge status */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -112,7 +112,7 @@ export function SkeletonAttendanceCard() {
 
 export function SkeletonPersonCard() {
   return (
-    <div className="card-hover flex h-full flex-col rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="card-hover bsi-panel flex h-full flex-col rounded-3xl p-5">
       {/* Profil mahasiswa */}
       <div className="flex items-center gap-4">
         <div className="skeleton h-14 w-14 shrink-0" style={{ borderRadius: '28%' }}></div>
@@ -161,7 +161,7 @@ export function SkeletonDashboard() {
   return (
     <div className="space-y-6">
       {/* Header profil + tab */}
-      <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-8 lg:p-10">
+      <div className="bsi-panel rounded-[2rem] p-5 shadow-sm sm:p-8 lg:p-10">
         <div className="flex flex-wrap items-center gap-4 sm:gap-6">
           <div className="skeleton h-14 w-14 shrink-0 sm:h-24 sm:w-24" style={{ borderRadius: '28%' }}></div>
           <div className="min-w-0 flex-1 space-y-2">
@@ -180,7 +180,7 @@ export function SkeletonDashboard() {
 
       {/* Form logbook + daftar logbook */}
       <div className="grid items-start gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-        <div className="space-y-4 rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
+        <div className="space-y-4 bsi-panel rounded-[2rem] p-5 shadow-sm sm:p-8">
           <div className="skeleton h-6 w-48 rounded-full"></div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="skeleton h-11 w-full rounded-2xl"></div>
@@ -212,7 +212,7 @@ export function SkeletonDashboard() {
 
 export function SkeletonStatCard() {
   return (
-    <div className="card-hover rounded-3xl border border-slate-200 bg-white p-3 shadow-sm sm:p-6">
+    <div className="card-hover bsi-panel rounded-3xl p-3 shadow-sm sm:p-6">
       <div className="skeleton h-3 w-3/4 rounded-full sm:h-4 sm:w-28"></div>
       <div className="skeleton mt-1 h-6 w-1/2 rounded-full sm:mt-3 sm:h-9 sm:w-16"></div>
       <div className="skeleton mt-2 h-3 w-36 rounded-full hidden sm:block"></div>
@@ -222,7 +222,7 @@ export function SkeletonStatCard() {
 
 export function SkeletonChartRow() {
   return (
-    <div className="card-hover rounded-[1.5rem] border border-slate-200 bg-white p-5">
+    <div className="card-hover bsi-panel rounded-[1.5rem] p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="space-y-1.5">
           <div className="skeleton h-4 w-32 rounded-full"></div>

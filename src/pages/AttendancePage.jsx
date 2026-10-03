@@ -66,7 +66,7 @@ export default function AttendancePage() {
 
   return (
     <div>
-      <section className="rounded-[2rem] bg-white border border-slate-200 p-5 sm:p-5 sm:p-8 lg:p-10 shadow-sm">
+      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8 lg:p-10">
         <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600 dark:text-gold-400">Daftar hadir</p>
         <h1 className="mt-2 text-2xl sm:text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Rekap Kehadiran Tim Magang</h1>
         <div className="mt-5 grid grid-cols-2 gap-2.5 sm:mt-8 sm:gap-4 xl:grid-cols-4">
@@ -93,7 +93,7 @@ export default function AttendancePage() {
         </FilterBar>
       </section>
 
-      <section className="mt-8 card-hover rounded-[2rem] bg-white border border-slate-200 p-5 sm:p-5 sm:p-8 lg:p-10 shadow-sm">
+      <section className="mt-8 bsi-panel rounded-[2rem] p-5 sm:p-8 lg:p-10">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <h2 className="text-xl sm:text-2xl font-black text-slate-900">Grafik Kehadiran per Mahasiswa</h2>
           <div className="flex flex-wrap gap-3 text-xs font-semibold">

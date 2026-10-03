@@ -4619,165 +4619,6 @@ export default function Layout() {
 }
 ````
 
-## File: src/pages/HomePage.jsx
-````javascript
-import { urutkanTanggal } from '../lib/format.js'
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { supabase } from '../lib/supabase.js'
-import { useAuth } from '../lib/auth.js'
-import { EmptyState, Modal } from '../components/ui.jsx'
-import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
-import { SkeletonLogbookCard } from '../components/Skeleton.jsx'
-
-export default function HomePage() {
-  const { mahasiswa } = useAuth()
-  const [logs, setLogs] = useState([])
-  const [stats, setStats] = useState({ logbook: 0, galeri: 0, mahasiswa: 0 })
-  const [hadir, setHadir] = useState({ masuk: 0, izin: 0, bolos: 0 })
-  const [detail, setDetail] = useState(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(function () {
-    async function load() {
-      const l = await supabase
-        .from('logbooks')
-        .select('*, mahasiswa(*), logbook_items(*)')
-        .eq('status', 'publik')
-        .order('tanggal', { ascending: false })
-        .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
-      const g = await supabase.from('galeri').select('id')
-      const p = await supabase.from('mahasiswa').select('id')
-      const h = await supabase.from('daftar_hadir').select('status')
-      const hitung = { masuk: 0, izin: 0, bolos: 0 }
-      const rows = h.data || []
-      for (let i = 0; i < rows.length; i++) {
-        if (rows[i].status === 'Masuk') hitung.masuk += 1
-        else if (rows[i].status === 'Izin') hitung.izin += 1
-        else if (rows[i].status === 'Bolos') hitung.bolos += 1
-      }
-      setLogs(l.data || [])
-      setStats({ logbook: (l.data || []).length, galeri: (g.data || []).length, mahasiswa: (p.data || []).length })
-      setHadir(hitung)
-      setLoading(false)
-    }
-    load()
-  }, [])
-
-  const totalHadir = hadir.masuk + hadir.izin + hadir.bolos
-  const persenMasuk = totalHadir ? Math.round((hadir.masuk / totalHadir) * 100) : 0
-  const lebarMasuk = totalHadir ? (hadir.masuk / totalHadir) * 100 : 0
-  const lebarIzin = totalHadir ? (hadir.izin / totalHadir) * 100 : 0
-  const lebarBolos = totalHadir ? (hadir.bolos / totalHadir) * 100 : 0
-
-  return (
-    <div>
-      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-6 sm:p-10 lg:p-14">
-        <div className="pointer-events-none absolute right-16 top-1/2 h-80 w-80 -translate-y-1/2 rounded-full bg-bsi-500/10 blur-3xl" />
-        <span className="bsi-chip bsi-chip-green bsi-chip-c1">▦</span>
-        <span className="bsi-chip bsi-chip-gold bsi-chip-c2">▶</span>
-        <span className="bsi-chip bsi-chip-deep bsi-chip-c3">✦</span>
-        <div className="relative z-10 flex items-center gap-10">
-          <div className="min-w-0 flex-1">
-            <span className="bsi-pill">✦ Magang Bank BSI</span>
-            <h1 className="mt-5 max-w-2xl text-2xl font-black leading-tight text-slate-900 sm:text-3xl lg:text-5xl">
-              Logbook, Galeri, dan Daftar Hadir Magang dalam <span className="bsi-grad-text">Satu Portal</span>
-            </h1>
-            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-slate-600 sm:mt-5 sm:text-base">
-              Portal ini mencatat kegiatan harian, dokumentasi media, dan kehadiran tim magang selama membantu operasional Bank BSI.
-            </p>
-            <div className="mt-6 flex flex-wrap gap-2 sm:mt-8 sm:gap-3">
-              <Link to="/logbook" className="inline-flex items-center gap-2 rounded-2xl bg-bsi-800 px-5 py-3 text-sm font-bold text-white shadow-lg hover:bg-bsi-900 sm:px-6 sm:text-base">Lihat Logbook</Link>
-              <Link to="/galeri" className="bsi-btn-glass">Lihat Galeri</Link>
-              <Link to="/absen" className="bsi-btn-glass">Daftar Hadir</Link>
-              {mahasiswa
-                ? <Link to="/dashboard" className="bsi-btn-white">Buka Dashboard</Link>
-                : <Link to="/login" className="bsi-btn-white">Masuk Akun</Link>}
-            </div>
-          </div>
-          <div className="bsi-hero-art hidden shrink-0 items-center gap-6 xl:flex">
-            <div className="bsi-mini-card bsi-mini-green -rotate-2">
-              <p className="text-xs font-bold opacity-80">LOGBOOK PUBLIK</p>
-              <p className="mt-1 text-3xl font-black">{loading ? '—' : stats.logbook}</p>
-              <p className="mt-2 text-xs opacity-75">{loading ? 'Memuat data...' : stats.galeri + ' media di galeri'}</p>
-            </div>
-            <div className="bsi-mini-card bsi-mini-white rotate-2">
-              <p className="text-xs font-bold opacity-80">KEHADIRAN TIM</p>
-              <p className="mt-1 text-3xl font-black">{loading ? '—' : persenMasuk + '%'}</p>
-              <div className="bsi-stack">
-                <i style={{ width: lebarMasuk + '%', background: '#10b981' }}></i>
-                <i style={{ width: lebarIzin + '%', background: '#f59e0b' }}></i>
-                <i style={{ width: lebarBolos + '%', background: '#ef4444' }}></i>
-              </div>
-              <p className="mt-2 text-xs opacity-75">Masuk {hadir.masuk} • Izin {hadir.izin} • Bolos {hadir.bolos}</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {loading
-          ? [0, 1, 2].map(function (i) {
-              return (
-                <div key={i} className="bsi-stat">
-                  <div className="skeleton h-3 w-24 rounded-full"></div>
-                  <div className="skeleton mt-2 h-8 w-16 rounded-full"></div>
-                  <div className="skeleton mt-2 h-3 w-32 rounded-full"></div>
-                </div>
-              )
-            })
-          : [
-              <div key="mahasiswa" className="bsi-stat">
-                <p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Total Mahasiswa</p>
-                <p className="mt-2 text-3xl font-black text-slate-900">{stats.mahasiswa}</p>
-                <p className="mt-1 text-xs text-slate-500">Mahasiswa terdaftar dalam tim</p>
-              </div>,
-              <div key="logbook" className="bsi-stat">
-                <p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Logbook Publik</p>
-                <p className="mt-2 text-3xl font-black text-slate-900">{stats.logbook}</p>
-                <p className="mt-1 text-xs text-slate-500">Catatan kegiatan harian</p>
-              </div>,
-              <div key="galeri" className="bsi-stat">
-                <p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Media Galeri</p>
-                <p className="mt-2 text-3xl font-black text-slate-900">{stats.galeri}</p>
-                <p className="mt-1 text-xs text-slate-500">Foto dan video dokumentasi</p>
-              </div>
-            ]}
-      </section>
-
-      <section className="mt-10">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600 dark:text-gold-400">Kegiatan terbaru</p>
-            <h2 className="mt-2 text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Logbook Terbaru Tim</h2>
-          </div>
-          <Link to="/logbook" className="text-sm font-semibold text-bsi-800 hover:text-bsi-950">Lihat Semua Logbook</Link>
-        </div>
-        <div className="grid-pusat mt-6">
-          {loading
-            ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
-            : urutkanTanggal(logs, 'terbaru').slice(0, 6).map(function (l) {
-                return (
-                  <div key={l.id} className="kolom-kartu">
-                    <LogbookCard log={l} onDetail={function () { setDetail(l) }} />
-                  </div>
-                )
-              })}
-          {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum Ada Logbook Publik" desc="Logbook yang sudah dibagikan akan tampil di sini." /></div> : null}
-        </div>
-        <div className="mt-8 flex justify-center">
-          <Link to="/logbook" className="rounded-xl bg-bsi-800 px-5 py-2.5 text-xs font-bold text-white hover:bg-bsi-900 sm:rounded-2xl sm:px-6 sm:py-3 sm:text-sm">Lihat Semua Logbook</Link>
-        </div>
-      </section>
-
-      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
-        {detail ? <LogbookDetail log={detail} /> : null}
-      </Modal>
-    </div>
-  )
-}
-````
-
 ## File: src/pages/AttendancePage.jsx
 ````javascript
 import { useEffect, useState } from 'react'
@@ -4933,6 +4774,183 @@ export default function AttendancePage() {
 
       <Modal open={!!detail} onClose={function () { setDetail(null) }}>
         {detail ? <AttendanceDetail row={detail} /> : null}
+      </Modal>
+    </div>
+  )
+}
+````
+
+## File: src/pages/HomePage.jsx
+````javascript
+import { urutkanTanggal } from '../lib/format.js'
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { supabase } from '../lib/supabase.js'
+import { useAuth } from '../lib/auth.js'
+import { EmptyState, Modal } from '../components/ui.jsx'
+import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
+import { SkeletonLogbookCard } from '../components/Skeleton.jsx'
+
+const GRADIENT_DOT = ['linear-gradient(135deg,#86ecb0,#1a9e57)', 'linear-gradient(135deg,#fbbf24,#d97706)', 'linear-gradient(135deg,#27c06d,#135033)']
+export default function HomePage() {
+  const { mahasiswa } = useAuth()
+  const [logs, setLogs] = useState([])
+  const [stats, setStats] = useState({ logbook: 0, galeri: 0, mahasiswa: 0 })
+  const [hadir, setHadir] = useState({ masuk: 0, izin: 0, bolos: 0 })
+  const [tim, setTim] = useState([])
+  const [detail, setDetail] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(function () {
+    async function load() {
+      const l = await supabase
+        .from('logbooks')
+        .select('*, mahasiswa(*), logbook_items(*)')
+        .eq('status', 'publik')
+        .order('tanggal', { ascending: false })
+        .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
+      const g = await supabase.from('galeri').select('id')
+      const p = await supabase.from('mahasiswa').select('id, nama, foto_profil').order('nama')
+      const h = await supabase.from('daftar_hadir').select('status')
+      const hitung = { masuk: 0, izin: 0, bolos: 0 }
+      const rows = h.data || []
+      for (let i = 0; i < rows.length; i++) {
+        if (rows[i].status === 'Masuk') hitung.masuk += 1
+        else if (rows[i].status === 'Izin') hitung.izin += 1
+        else if (rows[i].status === 'Bolos') hitung.bolos += 1
+      }
+      setLogs(l.data || [])
+      setStats({ logbook: (l.data || []).length, galeri: (g.data || []).length, mahasiswa: (p.data || []).length })
+      setTim(p.data || [])
+      setHadir(hitung)
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  const totalHadir = hadir.masuk + hadir.izin + hadir.bolos
+  const persenMasuk = totalHadir ? Math.round((hadir.masuk / totalHadir) * 100) : 0
+  const lebarMasuk = totalHadir ? (hadir.masuk / totalHadir) * 100 : 0
+  const lebarIzin = totalHadir ? (hadir.izin / totalHadir) * 100 : 0
+  const lebarBolos = totalHadir ? (hadir.bolos / totalHadir) * 100 : 0
+
+  return (
+    <div>
+      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-6 sm:p-10 lg:px-12 lg:py-9">
+        <div className="pointer-events-none absolute right-16 top-1/2 h-80 w-80 -translate-y-1/2 rounded-full bg-bsi-500/10 blur-3xl" />
+        <span className="bsi-chip bsi-chip-deep bsi-chip-mobile-1 xl:hidden">▦</span>
+        <span className="bsi-chip bsi-chip-gold bsi-chip-mobile-2 xl:hidden">▶</span>
+        <span className="bsi-chip bsi-chip-green bsi-chip-mobile-3 xl:hidden">✦</span>
+        <div className="relative z-10 flex items-center gap-10">
+          <div className="min-w-0 flex-1">
+            <h1 className="max-w-2xl text-2xl font-black leading-tight text-slate-900 sm:text-3xl lg:text-5xl">
+              Portal Logbook, Galeri & Kehadiran Magang <span className="bsi-grad-text"></span>
+            </h1>
+            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-slate-600 sm:mt-5 sm:text-base">
+              Platform terpusat untuk mendokumentasikan aktivitas dan kehadiran tim magang BSI.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-2 sm:mt-8 sm:gap-3">
+              <Link to="/logbook" className="inline-flex items-center gap-2 rounded-2xl bg-bsi-800 px-5 py-3 text-sm font-bold text-white shadow-lg hover:bg-bsi-900 sm:px-6 sm:text-base">Lihat Logbook</Link>
+              {/* <Link to="/galeri" className="bsi-btn-glass">Lihat Galeri</Link> */}
+              <Link to="/absen" className="bsi-btn-glass">Daftar Hadir</Link>
+              {/* {mahasiswa
+                ? <Link to="/dashboard" className="bsi-btn-white">Buka Dashboard</Link>
+                : <Link to="/login" className="bsi-btn-white">Masuk Akun</Link>} */}
+            </div>
+          </div>
+          <div className="bsi-hero-art relative hidden w-[430px] shrink-0 self-stretch min-h-[350px] xl:block">
+            <span className="bsi-chip bsi-chip-deep bsi-chip-c1">▦</span>
+            <span className="bsi-chip bsi-chip-green bsi-chip-c3">✦</span>
+            <span className="bsi-chip bsi-chip-gold bsi-chip-c2">▶</span>
+            <div className="bsi-mini-card bsi-mini-green absolute left-0 top-10 -rotate-2">
+              <p className="text-xs font-bold opacity-80">LOGBOOK PUBLIK</p>
+              <p className="mt-1 text-3xl font-black">{loading ? '—' : stats.logbook}</p>
+              <p className="mt-2 text-xs opacity-75">{loading ? 'Memuat data...' : stats.galeri + ' media di galeri'}</p>
+            </div>
+            <div className="bsi-mini-card bsi-mini-white absolute right-0 top-[36%] rotate-2">
+              <p className="text-xs font-bold opacity-80">KEHADIRAN TIM</p>
+              <p className="mt-1 text-3xl font-black">{loading ? '—' : persenMasuk + '%'}</p>
+              <div className="bsi-stack">
+                <i style={{ width: lebarMasuk + '%', background: '#10b981' }}></i>
+                <i style={{ width: lebarIzin + '%', background: '#f59e0b' }}></i>
+                <i style={{ width: lebarBolos + '%', background: '#ef4444' }}></i>
+              </div>
+              <p className="mt-2 text-xs opacity-75">Masuk {hadir.masuk} • Izin {hadir.izin} • Bolos {hadir.bolos}</p>
+            </div>
+            <div className="bsi-pill-card">
+              <span className="flex -space-x-2">
+                {loading
+                  ? [0, 1, 2].map(function (i) { return <i key={i} className="bsi-dot" style={{ background: GRADIENT_DOT[i] }}></i> })
+                  : tim.slice(0, 3).map(function (m, i) {
+                      return m.foto_profil
+                        ? <img key={m.id} src={m.foto_profil} alt={'Foto ' + m.nama} loading="lazy" decoding="async" className="bsi-dot bsi-dot-foto" />
+                        : <span key={m.id} className="bsi-dot bsi-dot-inisial" style={{ background: GRADIENT_DOT[i % GRADIENT_DOT.length] }}>{(m.nama || '?').charAt(0).toUpperCase()}</span>
+                    })}
+                {!loading && tim.length > 3 ? <span className="bsi-dot bsi-dot-lebih">+{tim.length - 3}</span> : null}
+              </span>
+              <span className="text-xs font-bold">{loading ? 'Memuat data...' : 'Tim magang • ' + stats.mahasiswa + ' mahasiswa'}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {loading
+          ? [0, 1, 2].map(function (i) {
+              return (
+                <div key={i} className="bsi-stat">
+                  <div className="skeleton h-3 w-24 rounded-full"></div>
+                  <div className="skeleton mt-2 h-8 w-16 rounded-full"></div>
+                  <div className="skeleton mt-2 h-3 w-32 rounded-full"></div>
+                </div>
+              )
+            })
+          : [
+              <div key="mahasiswa" className="bsi-stat">
+                <p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Total Mahasiswa</p>
+                <p className="mt-2 text-3xl font-black text-slate-900">{stats.mahasiswa}</p>
+                <p className="mt-1 text-xs text-slate-500">Mahasiswa terdaftar dalam tim</p>
+              </div>,
+              <div key="logbook" className="bsi-stat">
+                <p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Logbook Publik</p>
+                <p className="mt-2 text-3xl font-black text-slate-900">{stats.logbook}</p>
+                <p className="mt-1 text-xs text-slate-500">Catatan kegiatan harian</p>
+              </div>,
+              <div key="galeri" className="bsi-stat">
+                <p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Media Galeri</p>
+                <p className="mt-2 text-3xl font-black text-slate-900">{stats.galeri}</p>
+                <p className="mt-1 text-xs text-slate-500">Foto dan video dokumentasi</p>
+              </div>
+            ]}
+      </section>
+
+      <section className="mt-10">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600 dark:text-gold-400">Kegiatan terbaru</p>
+            <h2 className="mt-2 text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Logbook Terbaru Tim</h2>
+          </div>
+          <Link to="/logbook" className="text-sm font-semibold text-bsi-800 hover:text-bsi-950">Lihat Semua Logbook</Link>
+        </div>
+        <div className="grid-pusat mt-6">
+          {loading
+            ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
+            : urutkanTanggal(logs, 'terbaru').slice(0, 6).map(function (l) {
+                return (
+                  <div key={l.id} className="kolom-kartu">
+                    <LogbookCard log={l} onDetail={function () { setDetail(l) }} />
+                  </div>
+                )
+              })}
+          {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum Ada Logbook Publik" desc="Logbook yang sudah dibagikan akan tampil di sini." /></div> : null}
+        </div>
+        <div className="mt-8 flex justify-center">
+          <Link to="/logbook" className="rounded-xl bg-bsi-800 px-5 py-2.5 text-xs font-bold text-white hover:bg-bsi-900 sm:rounded-2xl sm:px-6 sm:py-3 sm:text-sm">Lihat Semua Logbook</Link>
+        </div>
+      </section>
+
+      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
+        {detail ? <LogbookDetail log={detail} /> : null}
       </Modal>
     </div>
   )
@@ -6061,7 +6079,7 @@ body { background-color: #f4f8f4; background-image: linear-gradient(160deg, #dff
 .bsi-chip-c2 { bottom: 64px; right: 260px; animation-delay: 1.2s; }
 .bsi-chip-c3 { top: 130px; right: 20px; animation-delay: 2.1s; }
 @media (prefers-reduced-motion: reduce) { .bsi-chip { animation: none; } }
-@media (max-width: 960px) { .bsi-chip-c1, .bsi-hero-art { display: none; } }
+@media (max-width: 960px) { .bsi-hero-art { display: none; } }
 .bsi-mini-card { width: 212px; border-radius: 20px; padding: 18px; box-shadow: 0 24px 48px -24px rgba(15,42,29,.25); }
 .bsi-mini-green { background: linear-gradient(135deg, #27c06d, #135033); color: #fff; }
 .bsi-mini-white { background: #fff; color: #0f2a1d; margin-top: 40px; border: 1px solid rgba(15,42,29,.10); }
@@ -6106,6 +6124,40 @@ body { background-color: #f4f8f4; background-image: linear-gradient(160deg, #dff
 }
 
 .bsi-mini-white { margin-top: 56px; }
+
+/* hero-art-v2: cluster kartu + chip meregang setinggi hero, elemen tersebar atas-tengah-bawah supaya tidak ada pita kosong */
+.bsi-hero-art .bsi-mini-white { margin-top: 0; }
+.bsi-chip-c1 { top: 0; left: 52%; right: auto; bottom: auto; }
+.bsi-chip-c3 { top: 24%; right: -6px; left: auto; bottom: auto; }
+.bsi-chip-c2 { bottom: 84px; left: 30%; right: auto; top: auto; }
+.bsi-pill-card { position: absolute; left: 8px; right: 24px; bottom: 8px; display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 16px; background: rgba(255,255,255,.65); border: 1px solid rgba(15,42,29,.10); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); color: #0f2a1d; box-shadow: 0 10px 24px -12px rgba(15,42,29,.18); }
+.dark .bsi-pill-card { background: rgba(16,42,29,.6); border-color: rgba(234,244,238,.10); color: #eaf4ee; }
+.bsi-dot { width: 22px; height: 22px; border-radius: 50%; display: block; border: 2px solid #fff; }
+.dark .bsi-dot { border-color: #0f241b; }
+
+/* dot-profil-v1: bulatan pill tim memakai foto profil asli dari database */
+.bsi-dot-foto { object-fit: cover; object-position: center; display: block; }
+.bsi-dot-inisial { display: grid; place-items: center; color: #fff; font-size: 10px; font-weight: 800; line-height: 1; }
+.bsi-dot-lebih { display: grid; place-items: center; background: rgba(15,42,29,.12); color: #0f2a1d; font-size: 9px; font-weight: 800; line-height: 1; }
+.dark .bsi-dot-lebih { background: rgba(234,244,238,.16); color: #eaf4ee; }
+
+/* hero-chip-mobile-v4: tiap chip menempel tepi berbeda (pojok kanan, tepi atas, tepi kiri) supaya tidak ada kolom vertikal */
+.bsi-chip-mobile-1 { top: 36px; right: 50px; }
+.bsi-chip-mobile-2 { bottom: 24px; right: 120px; }
+.bsi-chip-mobile-3 { top: 135px; right: 20px; }
+@media (max-width: 960px) {
+  .bsi-chip-mobile-1 { width: 40px; height: 40px; font-size: 17px; border-radius: 13px; }
+  .bsi-chip-mobile-2 { width: 40px; height: 40px; font-size: 14px; border-radius: 11px; }
+  .bsi-chip-mobile-3 { width: 38px; height: 38px; font-size: 12px; border-radius: 10px; }
+}
+
+/* chip-miring-v1: tiap chip mobile punya kemiringan & ayunan sendiri supaya tidak terasa copy-paste */
+@keyframes bsiFloatM1 { 0%, 100% { transform: translateY(0) rotate(7deg); } 50% { transform: translateY(-12px) rotate(2deg); } }
+@keyframes bsiFloatM2 { 0%, 100% { transform: translateY(0) rotate(-8deg); } 50% { transform: translateY(-10px) rotate(-2deg); } }
+@keyframes bsiFloatM3 { 0%, 100% { transform: translateY(0) rotate(-4deg); } 50% { transform: translateY(-14px) rotate(5deg); } }
+.bsi-chip-mobile-1 { animation-name: bsiFloatM1; }
+.bsi-chip-mobile-2 { animation-name: bsiFloatM2; animation-delay: 1.2s; }
+.bsi-chip-mobile-3 { animation-name: bsiFloatM3; animation-delay: 2.1s; }
 ````
 
 ## File: src/components/ui.jsx

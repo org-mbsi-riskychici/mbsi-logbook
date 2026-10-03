@@ -50,12 +50,12 @@ export default function LoginPage() {
 
   return (
     <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr] items-start">
-      <div className="card-hover rounded-[2rem] bg-bsi-900 text-white p-5 sm:p-8 lg:p-10">
-        <span className="inline-flex px-3 py-1.5 rounded-full bg-white/10 text-[10px] font-semibold uppercase tracking-wide sm:px-4 sm:py-2 sm:text-xs">Khusus Peserta Magang</span>
-        <h1 className="mt-6 text-2xl sm:text-3xl lg:text-4xl font-black leading-tight">Masuk untuk Mengisi Logbook, Galeri, dan Daftar Hadir</h1>
-        <p className="mt-3 text-sm leading-relaxed text-white/80 sm:mt-4 sm:text-base">Halaman ini khusus mahasiswa magang. Dosen pembimbing dan kaprodi dapat melihat halaman umum tanpa masuk.</p>
+      <div className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8 lg:p-10">
+        <span className="bsi-pill">Khusus Peserta Magang</span>
+        <h1 className="mt-6 text-2xl sm:text-3xl lg:text-4xl font-black leading-tight text-slate-900">Masuk untuk Mengisi Logbook, Galeri, dan Daftar Hadir</h1>
+        <p className="mt-3 text-sm leading-relaxed text-slate-600 sm:mt-4 sm:text-base">Halaman ini khusus mahasiswa magang. Dosen pembimbing dan kaprodi dapat melihat halaman umum tanpa masuk.</p>
       </div>
-      <div className="card-hover bg-white rounded-[2rem] border border-slate-200 shadow-sm p-5 sm:p-8 lg:p-10">
+      <div className="card-hover bsi-panel rounded-[2rem] p-5 sm:p-8 lg:p-10">
         <h2 className="text-xl sm:text-2xl font-black text-slate-900">Masuk Akun Magang</h2>
         {error ? (
           <div className="mt-3 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

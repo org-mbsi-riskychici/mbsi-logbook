@@ -849,3 +849,8 @@ body { background-color: #f4f8f4; background-image: linear-gradient(160deg, #dff
 .bsi-chip-mobile-1 { animation-name: bsiFloatM1; }
 .bsi-chip-mobile-2 { animation-name: bsiFloatM2; animation-delay: 1.2s; }
 .bsi-chip-mobile-3 { animation-name: bsiFloatM3; animation-delay: 2.1s; }
+/* ===== panel-kaca-v1: panel konten & stat kecil mengikuti bahasa visual hero Opsi B ===== */
+.bsi-panel { background: rgba(255,255,255,.6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(15,42,29,.10); box-shadow: 0 10px 24px -12px rgba(15,42,29,.18); }
+.dark .bsi-panel { background: rgba(16,42,29,.6); border-color: rgba(234,244,238,.10); box-shadow: 0 10px 24px -12px rgba(0,0,0,.5); }
+.bsi-stat-sm { background: rgba(255,255,255,.55); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(15,42,29,.10); }
+.dark .bsi-stat-sm { background: rgba(16,42,29,.55); border-color: rgba(234,244,238,.10); }

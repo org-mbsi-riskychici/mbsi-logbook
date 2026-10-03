@@ -45,7 +45,7 @@ export function LogbookCard(props) {
   const slides = slidesFromItems(items)
   const preview = items.slice(0, 2)
   return (
-    <article className="card-hover bg-white rounded-3xl border border-slate-200 shadow-sm p-6 flex flex-col gap-4">
+    <article className="card-hover bsi-panel rounded-3xl p-6 flex flex-col gap-4">
       {slides.length ? <Carousel slides={slides} /> : null}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-1.5">
@@ -136,7 +136,7 @@ export function LogbookDetail(props) {
 export function GalleryCard(props) {
   const item = props.item
   return (
-    <article onClick={props.onDetail} className="clickable cursor-pointer bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full">
+    <article onClick={props.onDetail} className="clickable cursor-pointer bsi-panel rounded-3xl overflow-hidden flex flex-col h-full">
       <div className="relative aspect-video w-full overflow-hidden bg-slate-900">
         {item.media_source === 'youtube' ? (
         <MediaYouTube src={item.media_path} alt={item.judul} />
@@ -202,7 +202,7 @@ export function GalleryDetail(props) {
 export function AttendanceCard(props) {
   const row = props.row
   return (
-    <div className="card-hover bg-white rounded-3xl border border-slate-200 shadow-sm p-5 flex flex-col h-full">
+    <div className="card-hover bsi-panel rounded-3xl p-5 flex flex-col h-full">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm text-slate-600 pb-4">{formatTanggal(row.tanggal)}</p>

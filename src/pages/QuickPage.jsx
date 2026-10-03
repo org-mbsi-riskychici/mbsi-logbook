@@ -204,14 +204,14 @@ export default function QuickPage() {
   const infoHadir = infoTerakhir(lastHadirTanggal)
 
   const tabCls = function (t) {
-    return 'flex-1 px-4 py-2.5 rounded-xl text-xs sm:rounded-2xl sm:py-3 sm:text-sm font-bold ' + (tab === t ? 'bg-white text-bsi-900' : 'bg-white/10 text-white hover:bg-white/20')
+    return 'flex-1 px-4 py-2.5 rounded-xl text-xs sm:rounded-2xl sm:py-3 sm:text-sm font-bold ' + (tab === t ? 'bg-bsi-800 text-white shadow-sm' : 'bsi-panel text-slate-600 hover:text-bsi-800')
   }
 
   return (
     <div className="mx-auto w-full max-w-xl space-y-5">
-      <section className="rounded-[2rem] bg-bsi-900 p-5 text-white sm:p-8">
-        <h1 className="text-xl font-black sm:text-2xl">Isi Cepat</h1>
-        <p className="mt-1 text-sm text-white/80">{formatTanggal(tanggal)}</p>
+      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8">
+        <h1 className="text-xl font-black text-slate-900 sm:text-2xl">Isi Cepat</h1>
+        <p className="mt-1 text-sm text-slate-600">{formatTanggal(tanggal)}</p>
         <div className="mt-4 flex gap-2">
           <button type="button" onClick={function () { setTab('logbook') }} className={tabCls('logbook')}>Logbook</button>
           <button type="button" onClick={function () { setTab('absen') }} className={tabCls('absen')}>Daftar Hadir</button>
@@ -219,7 +219,7 @@ export default function QuickPage() {
       </section>
 
       {tab === 'logbook' ? (
-        <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
+        <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
           <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoLog.lama ? 'text-amber-600' : 'text-slate-500')}>
             <SizedIcon name="calendar" size={13} />
             Terakhir mengisi logbook: {infoLog.teks}
@@ -283,7 +283,7 @@ export default function QuickPage() {
       ) : null}
 
       {tab === 'absen' ? (
-        <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
+        <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
           <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoHadir.lama ? 'text-amber-600' : 'text-slate-500')}>
             <SizedIcon name="clipboard" size={13} />
             Terakhir mengisi daftar hadir: {infoHadir.teks}

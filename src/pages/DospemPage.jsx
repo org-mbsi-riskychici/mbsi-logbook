@@ -40,31 +40,31 @@ export default function DospemPage() {
 
   return (
     <div>
-      <section className="card-hover rounded-[2rem] bg-bsi-900 text-white p-5 sm:p-5 sm:p-8 lg:p-12">
-        <span className="inline-flex px-3 py-1.5 rounded-full bg-white/10 text-[10px] font-semibold uppercase tracking-wide sm:px-4 sm:py-2 sm:text-xs">Untuk Dospem & Kaprodi</span>
-        <h1 className="mt-6 text-2xl sm:text-2xl sm:text-3xl lg:text-5xl font-black max-w-3xl leading-tight">Ringkasan Kegiatan Magang Tim di Bank BSI</h1>
-        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-white/80 sm:mt-4 sm:text-base">Halaman ini dapat diakses tanpa login.</p>
+      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8 lg:p-12">
+        <span className="bsi-pill">Untuk Dospem & Kaprodi</span>
+        <h1 className="mt-6 text-2xl sm:text-2xl sm:text-3xl lg:text-5xl font-black max-w-3xl leading-tight text-slate-900">Ringkasan Kegiatan Magang Tim di Bank BSI</h1>
+        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-600 sm:mt-4 sm:text-base">Halaman ini dapat diakses tanpa login.</p>
         <div className="mt-5 grid grid-cols-2 gap-2.5 sm:mt-8 sm:gap-4 xl:grid-cols-4">
           {loading
             ? [0, 1, 2, 3].map(function (i) {
                 return (
-                  <div key={i} className="rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5">
-                    <div className="skeleton skeleton-on-dark h-4 w-24"></div>
-                    <div className="skeleton skeleton-on-dark h-9 w-14 mt-2"></div>
+                  <div key={i} className="bsi-stat-sm rounded-2xl p-4 sm:rounded-[1.5rem] sm:p-5">
+                    <div className="skeleton h-4 w-24"></div>
+                    <div className="skeleton h-9 w-14 mt-2"></div>
                   </div>
                 )
               })
             : [
-                <div key="mahasiswa" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Total Mahasiswa</p><p className="mt-1 text-2xl sm:text-3xl font-black">{people.length}</p></div>,
-                <div key="logbook" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Logbook Publik</p><p className="mt-1 text-2xl sm:text-3xl font-black">{logs.length}</p></div>,
-                <div key="galeri" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Media Galeri</p><p className="mt-1 text-2xl sm:text-3xl font-black">{galCount}</p></div>,
-                <div key="hadir" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Catatan Hadir</p><p className="mt-1 text-2xl sm:text-3xl font-black">{hadirCount}</p></div>
+                <div key="mahasiswa" className="card-hover bsi-stat-sm rounded-2xl p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-slate-600">Total Mahasiswa</p><p className="mt-1 text-2xl sm:text-3xl font-black">{people.length}</p></div>,
+                <div key="logbook" className="card-hover bsi-stat-sm rounded-2xl p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-slate-600">Logbook Publik</p><p className="mt-1 text-2xl sm:text-3xl font-black">{logs.length}</p></div>,
+                <div key="galeri" className="card-hover bsi-stat-sm rounded-2xl p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-slate-600">Media Galeri</p><p className="mt-1 text-2xl sm:text-3xl font-black">{galCount}</p></div>,
+                <div key="hadir" className="card-hover bsi-stat-sm rounded-2xl p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-slate-600">Catatan Hadir</p><p className="mt-1 text-2xl sm:text-3xl font-black">{hadirCount}</p></div>
               ]}
         </div>
         <div className="mt-6 flex flex-wrap gap-2 sm:mt-8 sm:gap-3">
           <Link to="/logbook" className="px-4 py-2 rounded-xl bg-gold-500 text-slate-900 text-xs font-bold hover:bg-gold-400 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat Logbook</Link>
-          <Link to="/galeri" className="px-4 py-2 rounded-xl bg-white/10 text-white text-xs font-bold hover:bg-white/20 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat Galeri</Link>
-          <Link to="/absen" className="px-4 py-2 rounded-xl bg-white/10 text-white text-xs font-bold hover:bg-white/20 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat Daftar Hadir</Link>
+          <Link to="/galeri" className="px-4 py-2 rounded-xl bsi-panel text-slate-700 text-xs font-bold hover:text-bsi-800 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat Galeri</Link>
+          <Link to="/absen" className="px-4 py-2 rounded-xl bsi-panel text-slate-700 text-xs font-bold hover:text-bsi-800 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat Daftar Hadir</Link>
         </div>
       </section>
 
@@ -80,7 +80,7 @@ const totalGal = galRows.filter(function (x) { return x.mahasiswa_id === p.id })
 const totalHadir = hadirRows.filter(function (x) { return x.mahasiswa_id === p.id }).length
 return (
 <div key={p.id} className="kolom-kartu-rapat">
-<div className="card-hover rounded-3xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col h-full">
+<div className="card-hover bsi-panel rounded-3xl p-5 flex flex-col h-full">
 <div className="flex items-center gap-4">
 <Avatar src={p.foto_profil || null} nama={p.nama} size="lg" />
 <div className="min-w-0 flex-1">
