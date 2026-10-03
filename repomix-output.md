@@ -90,7 +90,6 @@ supabase/
 .env.example
 .gitignore
 index.html
-mvp-opsi-b.html
 package.json
 postcss.config.js
 README.md
@@ -298,339 +297,6 @@ export const supabase = createClient(
 )
 ````
 
-## File: src/pages/QuickPage.jsx
-````javascript
-import { useEffect, useRef, useState } from 'react'
-import { supabase } from '../lib/supabase.js'
-import { useAuth } from '../lib/auth.js'
-import { uploadMedia } from '../lib/upload.js'
-import { syncGaleriFromLogbook } from '../lib/logbook.js'
-import { urlPratinjau } from '../lib/konversi.js'
-import { todayInput, formatTanggal } from '../lib/format.js'
-import { KATEGORI } from '../lib/constants.js'
-import { inputCls, labelCls, btnPrimary, useToast, AutoTextArea, LabelProses } from '../components/ui.jsx'
-import { CustomSelect } from '../components/controls.jsx'
-import { SizedIcon } from '../components/icons.jsx'
-
-const STATUS_HADIR = ['Masuk', 'Izin', 'Bolos']
-
-export default function QuickPage() {
-  const { mahasiswa } = useAuth()
-  const toast = useToast()
-  const tanggal = todayInput()
-
-  const [tab, setTab] = useState('logbook')
-  const [loading, setLoading] = useState(true)
-  const [todayLog, setTodayLog] = useState(null)
-  const [hadirHariIni, setHadirHariIni] = useState(null)
-  const [lastLogTanggal, setLastLogTanggal] = useState(null)
-  const [lastHadirTanggal, setLastHadirTanggal] = useState(null)
-
-  const [kategori, setKategori] = useState('')
-  const [judulKegiatan, setJudulKegiatan] = useState('')
-  const [deskripsi, setDeskripsi] = useState('')
-  const [file, setFile] = useState(null)
-  const [preview, setPreview] = useState('')
-  const [showGal, setShowGal] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [info, setInfo] = useState('')
-
-  const [status, setStatus] = useState('Masuk')
-  const [alasan, setAlasan] = useState('')
-
-  const cameraRef = useRef(null)
-  const galeriRef = useRef(null)
-
-  async function muatData(mhs, senyap) {
-    if (!senyap) setLoading(true)
-    const l = await supabase
-      .from('logbooks')
-      .select('*, logbook_items(*)')
-      .eq('mahasiswa_id', mhs.id)
-      .eq('tanggal', tanggal)
-      .order('created_at', { ascending: false })
-      .limit(1)
-    const log = (l.data || [])[0] || null
-    if (log) {
-      log.logbook_items = (log.logbook_items || []).sort(function (a, b) { return (a.urutan || 0) - (b.urutan || 0) })
-    }
-    const h = await supabase
-      .from('daftar_hadir')
-      .select('*')
-      .eq('mahasiswa_id', mhs.id)
-      .eq('tanggal', tanggal)
-      .limit(1)
-    const hadir = (h.data || [])[0] || null
-    const ll = await supabase
-      .from('logbooks')
-      .select('tanggal')
-      .eq('mahasiswa_id', mhs.id)
-      .order('tanggal', { ascending: false })
-      .limit(1)
-    const lh = await supabase
-      .from('daftar_hadir')
-      .select('tanggal')
-      .eq('mahasiswa_id', mhs.id)
-      .order('tanggal', { ascending: false })
-      .limit(1)
-    setTodayLog(log)
-    setHadirHariIni(hadir)
-    setLastLogTanggal(ll.data && ll.data[0] ? ll.data[0].tanggal : null)
-    setLastHadirTanggal(lh.data && lh.data[0] ? lh.data[0].tanggal : null)
-    if (hadir) {
-      setStatus(hadir.status)
-      setAlasan(hadir.alasan || '')
-    }
-    if (!senyap) setLoading(false)
-  }
-
-  useEffect(function () {
-    if (mahasiswa) muatData(mahasiswa)
-  }, [mahasiswa])
-
-  async function pilihFile(e) {
-    const f = e.target.files[0]
-    e.target.value = ''
-    if (!f) return
-    if (preview && preview.indexOf('blob:') === 0) URL.revokeObjectURL(preview)
-    setFile(f)
-    setPreview(await urlPratinjau(f))
-  }
-
-  function hapusFile() {
-    if (preview && preview.indexOf('blob:') === 0) URL.revokeObjectURL(preview)
-    setFile(null)
-    setPreview('')
-    setShowGal(false)
-  }
-
-  async function submitLogbook(e) {
-    e.preventDefault()
-    if (!todayLog && !kategori) { toast.gagal('Pilih kategori terlebih dahulu.'); return }
-    if (!judulKegiatan.trim()) { toast.gagal('Judul kegiatan wajib diisi.'); return }
-    setBusy(true)
-    try {
-      let mediaPath = null
-      let mediaThumb = null
-      if (file) {
-        const up = await uploadMedia(file, 'logbook', setInfo)
-        mediaPath = up.publicUrl
-        mediaThumb = up.thumbUrl || null
-      }
-      let logId = todayLog ? todayLog.id : null
-      if (!todayLog) {
-        const ins = await supabase.from('logbooks').insert({
-          mahasiswa_id: mahasiswa.id, tanggal: tanggal, unit: '', kategori: kategori,
-          judul: judulKegiatan.trim(), kendala: '', solusi: '', pembelajaran: '', status: 'publik'
-        }).select().single()
-        if (ins.error) throw new Error(ins.error.message)
-        logId = ins.data.id
-      }
-      const urutan = todayLog ? todayLog.logbook_items.reduce(function (m, it) { return Math.max(m, it.urutan || 0) }, 0) + 1 : 1
-      const insItem = await supabase.from('logbook_items').insert({
-        logbook_id: logId,
-        urutan: urutan,
-        judul: judulKegiatan.trim(),
-        deskripsi: deskripsi.trim(),
-        hasil: '',
-        media_path: mediaPath,
-        media_type: mediaPath ? 'foto' : null,
-        media_thumb: mediaThumb,
-        media_source: 'r2',
-        youtube_id: null,
-        drive_id: null,
-        show_in_gallery: showGal && !!mediaPath
-      }).select().single()
-      if (insItem.error) throw new Error(insItem.error.message)
-      if (todayLog && todayLog.status !== 'publik') {
-        await supabase.from('logbooks').update({ status: 'publik' }).eq('id', todayLog.id)
-      }
-      if (showGal && mediaPath) {
-        await syncGaleriFromLogbook(mahasiswa.id, [insItem.data], {
-          tanggal: tanggal,
-          kategori: todayLog ? todayLog.kategori : kategori
-        })
-      }
-      const pertama = !todayLog
-      setJudulKegiatan('')
-      setDeskripsi('')
-      hapusFile()
-      if (pertama) setKategori('')
-      await muatData(mahasiswa, true)
-      toast.sukses(pertama ? 'Logbook hari ini berhasil dibuat' : 'Kegiatan baru berhasil ditambahkan')
-    } catch (err) {
-      toast.gagal('Gagal menyimpan logbook: ' + err.message)
-    }
-    setInfo('')
-    setBusy(false)
-  }
-
-  async function submitAbsen(e) {
-    e.preventDefault()
-    setBusy(true)
-    try {
-      const payload = {
-        mahasiswa_id: mahasiswa.id,
-        tanggal: tanggal,
-        status: status,
-        alasan: status === 'Masuk' ? '' : alasan.trim()
-      }
-      let res
-      if (hadirHariIni) {
-        res = await supabase.from('daftar_hadir').update(payload).eq('id', hadirHariIni.id)
-      } else {
-        res = await supabase.from('daftar_hadir').insert(payload)
-      }
-      if (res.error) throw new Error(res.error.message)
-      await muatData(mahasiswa, true)
-      toast.sukses(hadirHariIni ? 'Daftar hadir berhasil diperbarui' : 'Daftar hadir berhasil disimpan')
-    } catch (err) {
-      toast.gagal('Gagal menyimpan kehadiran: ' + err.message)
-    }
-    setBusy(false)
-  }
-
-  function infoTerakhir(tgl) {
-    if (!tgl) return { teks: 'belum pernah', lama: true }
-    const selisih = Math.round((new Date(tanggal + 'T00:00:00').getTime() - new Date(tgl + 'T00:00:00').getTime()) / 86400000)
-    if (selisih <= 0) return { teks: 'hari ini', lama: false }
-    if (selisih === 1) return { teks: 'kemarin', lama: false }
-    return { teks: selisih + ' hari yang lalu', lama: true }
-  }
-
-  if (loading) {
-    return <div className="grid min-h-[50vh] place-items-center"><div className="h-10 w-10 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div></div>
-  }
-
-  const infoLog = infoTerakhir(lastLogTanggal)
-  const infoHadir = infoTerakhir(lastHadirTanggal)
-
-  const tabCls = function (t) {
-    return 'flex-1 px-4 py-2.5 rounded-xl text-xs sm:rounded-2xl sm:py-3 sm:text-sm font-bold ' + (tab === t ? 'bg-white text-bsi-900' : 'bg-white/10 text-white hover:bg-white/20')
-  }
-
-  return (
-    <div className="mx-auto w-full max-w-xl space-y-5">
-      <section className="rounded-[2rem] bg-bsi-900 p-5 text-white sm:p-8">
-        <h1 className="text-xl font-black sm:text-2xl">Isi Cepat</h1>
-        <p className="mt-1 text-sm text-white/80">{formatTanggal(tanggal)}</p>
-        <div className="mt-4 flex gap-2">
-          <button type="button" onClick={function () { setTab('logbook') }} className={tabCls('logbook')}>Logbook</button>
-          <button type="button" onClick={function () { setTab('absen') }} className={tabCls('absen')}>Daftar Hadir</button>
-        </div>
-      </section>
-
-      {tab === 'logbook' ? (
-        <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
-          <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoLog.lama ? 'text-amber-600' : 'text-slate-500')}>
-            <SizedIcon name="calendar" size={13} />
-            Terakhir mengisi logbook: {infoLog.teks}
-          </p>
-          {todayLog ? (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-              <p className="text-sm font-bold text-emerald-800">Logbook hari ini sudah ada</p>
-              <p className="mt-1 text-sm text-emerald-800">{todayLog.judul} • {todayLog.logbook_items.length} kegiatan</p>
-              <div className="mt-2 space-y-1">
-                {todayLog.logbook_items.map(function (it, i) {
-                  return <p key={it.id} className="truncate text-xs text-emerald-800">{i + 1}. {it.judul}</p>
-                })}
-              </div>
-              <p className="mt-2 text-xs text-emerald-800">Kegiatan baru ditambahkan di bawahnya tanpa menghapus kegiatan lama.</p>
-              {todayLog.status !== 'publik' ? <p className="mt-1 text-xs font-semibold text-emerald-800">Status masih draf — akan otomatis dipublikasikan.</p> : null}
-            </div>
-          ) : (
-            <div>
-              <label className={labelCls}>Kategori Utama <span className="text-red-500">*</span></label>
-              <div className="mt-1.5">
-                <CustomSelect placeholder="Pilih Kategori" value={kategori} onChange={setKategori} options={KATEGORI.map(function (k) { return { value: k, label: k } })} />
-              </div>
-            </div>
-          )}
-
-          <form onSubmit={submitLogbook} className="mt-5 space-y-4">
-            <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-xs font-bold text-bsi-800">{todayLog ? 'Kegiatan Baru (kegiatan ' + (todayLog.logbook_items.length + 1) + ')' : 'Kegiatan'}</p>
-              <input className={inputCls} value={judulKegiatan} onChange={function (e) { setJudulKegiatan(e.target.value) }} aria-label="Judul Kegiatan" placeholder="Judul kegiatan" />
-              <AutoTextArea className={inputCls} value={deskripsi} onChange={function (e) { setDeskripsi(e.target.value) }} aria-label="Deskripsi Kegiatan" placeholder="Deskripsi singkat kegiatan" />
-              {preview ? (
-                <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-900">
-                  <img src={preview} alt="Pratinjau" className="absolute inset-0 h-full w-full object-contain" />
-                  <button type="button" onClick={hapusFile} title="Hapus Gambar" className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-red-500 text-white hover:bg-red-600">
-                    <SizedIcon name="close" size={14} />
-                  </button>
-                </div>
-              ) : null}
-              <div className="grid grid-cols-2 gap-3">
-                <button type="button" onClick={function () { cameraRef.current.click() }} className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-3 py-3.5 text-sm font-semibold text-slate-700 hover:border-bsi-500 hover:bg-slate-100">
-                  <SizedIcon name="camera" size={18} /> Ambil Foto
-                </button>
-                <button type="button" onClick={function () { galeriRef.current.click() }} className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-3 py-3.5 text-sm font-semibold text-slate-700 hover:border-bsi-500 hover:bg-slate-100">
-                  <SizedIcon name="image" size={18} /> Dari Galeri
-                </button>
-              </div>
-              <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={pilihFile} />
-              <input ref={galeriRef} type="file" accept="image/*" className="hidden" onChange={pilihFile} />
-              {preview ? (
-                <label className="flex w-full cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 p-3">
-                  <input type="checkbox" checked={showGal} onChange={function (e) { setShowGal(e.target.checked) }} className="mt-0.5 h-4 w-4 rounded accent-bsi-800" />
-                  <span className="text-sm font-semibold text-slate-800">Tampilkan kegiatan ini di galeri</span>
-                </label>
-              ) : null}
-            </div>
-            <button type="submit" disabled={busy} className={btnPrimary}>
-              {busy ? <LabelProses teks={info || 'Menyimpan'} /> : (todayLog ? 'Tambah Kegiatan' : 'Simpan Logbook')}
-            </button>
-          </form>
-        </section>
-      ) : null}
-
-      {tab === 'absen' ? (
-        <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
-          <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoHadir.lama ? 'text-amber-600' : 'text-slate-500')}>
-            <SizedIcon name="clipboard" size={13} />
-            Terakhir mengisi daftar hadir: {infoHadir.teks}
-          </p>
-          {hadirHariIni ? (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-              <p className="text-sm font-bold text-emerald-800">Kamu sudah mengisi daftar hadir hari ini ({hadirHariIni.status})</p>
-              <p className="mt-1 text-xs text-emerald-800">Form di bawah bisa dipakai untuk memperbarui status bila ada perubahan.</p>
-            </div>
-          ) : null}
-          <form onSubmit={submitAbsen} className={'space-y-4 ' + (hadirHariIni ? 'mt-5' : '')}>
-            <div>
-              <label className={labelCls}>Status Kehadiran <span className="text-red-500">*</span></label>
-              <div className="mt-1.5 flex gap-2">
-                {STATUS_HADIR.map(function (s) {
-                  const aktif = status === s
-                  const warna = aktif
-                    ? (s === 'Masuk' ? 'bg-emerald-500 text-white' : s === 'Izin' ? 'bg-amber-500 text-white' : 'bg-red-500 text-white')
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  return <button type="button" key={s} onClick={function () { setStatus(s) }} className={'flex-1 rounded-2xl px-3 py-3 text-sm font-bold ' + warna}>{s}</button>
-                })}
-              </div>
-            </div>
-            <div>
-              <label className={labelCls}>Alasan atau Keterangan</label>
-              <AutoTextArea
-                className={inputCls + (status === 'Masuk' ? ' cursor-not-allowed opacity-60' : '')}
-                value={alasan}
-                onChange={function (e) { setAlasan(e.target.value) }}
-                aria-label="Alasan atau Keterangan"
-                placeholder={status === 'Masuk' ? 'Status Masuk tidak memerlukan alasan' : 'Contoh: Keperluan keluarga, sakit.'}
-                disabled={status === 'Masuk'}
-              />
-            </div>
-            <button type="submit" disabled={busy} className={btnPrimary}>
-              {busy ? <LabelProses teks="Menyimpan" /> : (hadirHariIni ? 'Perbarui Daftar Hadir' : 'Simpan Daftar Hadir')}
-            </button>
-          </form>
-        </section>
-      ) : null}
-    </div>
-  )
-}
-````
-
 ## File: supabase/migrasi-drive-download.sql
 ````sql
 -- Migrasi fitur download Google Drive
@@ -650,354 +316,6 @@ R2_ACCESS_KEY_ID=
 R2_SECRET_ACCESS_KEY=
 R2_BUCKET_NAME=mbsi-media
 R2_PUBLIC_BASE_URL=
-````
-
-## File: mvp-opsi-b.html
-````html
-<!DOCTYPE html>
-<html lang="id">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MVP Opsi B — Hybrid BSI | Logbook Magang BSI</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
-<style>
-  :root{
-    --bg:#F4F8F4;
-    --bg-grad:linear-gradient(160deg,#DFF3E6 0%,#F2FBF4 45%,#FBF3E2 100%);
-    --glass:rgba(255,255,255,.65);
-    --card:#FFFFFF;
-    --ink:#0F2A1D; --ink-2:#5F6F64;
-    --brand:#177C48; --brand-2:#1A9E57; --brand-soft:rgba(39,192,109,.12);
-    --gold:#D97706; --gold-soft:rgba(245,158,11,.14);
-    --green:#059669; --green-soft:rgba(16,185,129,.14);
-    --amber:#D97706; --amber-soft:rgba(245,158,11,.16);
-    --red:#DC2626; --red-soft:rgba(239,68,68,.12);
-    --neutral-soft:rgba(15,42,29,.06);
-    --border:rgba(15,42,29,.10);
-    --input-bg:#FAFDF9;
-    --btn-bg:#16623C; --btn-fg:#FFFFFF;
-    --hero-grad:linear-gradient(135deg,#E7F6EC 0%,#F4FBEE 55%,#FDF4E3 100%);
-    --shadow:0 24px 48px -24px rgba(15,42,29,.25);
-    --shadow-sm:0 10px 24px -12px rgba(15,42,29,.18);
-  }
-  html.dark{
-    --bg:#081A13;
-    --bg-grad:linear-gradient(160deg,#0C2418 0%,#081A13 45%,#0A1F16 100%);
-    --glass:rgba(16,42,29,.6);
-    --card:#0F241B;
-    --ink:#EAF4EE; --ink-2:#9DB4A6;
-    --brand:#86ECB0; --brand-2:#27C06D; --brand-soft:rgba(39,192,109,.18);
-    --gold:#FBBF24; --gold-soft:rgba(251,191,36,.16);
-    --green:#34D399; --green-soft:rgba(52,211,153,.16);
-    --amber:#FBBF24; --amber-soft:rgba(251,191,36,.16);
-    --red:#F87171; --red-soft:rgba(248,113,113,.16);
-    --neutral-soft:rgba(234,244,238,.07);
-    --border:rgba(234,244,238,.10);
-    --input-bg:#0B1E15;
-    --btn-bg:#27C06D; --btn-fg:#06281A;
-    --hero-grad:linear-gradient(135deg,#103021 0%,#0E2A1C 55%,#0B2019 100%);
-    --shadow:0 24px 48px -24px rgba(0,0,0,.6);
-    --shadow-sm:0 10px 24px -12px rgba(0,0,0,.5);
-  }
-  *{margin:0;padding:0;box-sizing:border-box}
-  body{
-    font-family:'Plus Jakarta Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
-    background-color:var(--bg);background-image:var(--bg-grad);background-attachment:fixed;
-    color:var(--ink);min-height:100vh;transition:background-color .3s,color .3s;
-  }
-  .wrap{max-width:1120px;margin:0 auto;padding:0 20px}
-  .note{background:var(--btn-bg);color:var(--btn-fg);font-size:12px;font-weight:600;padding:8px 16px;display:flex;align-items:center;justify-content:center;gap:12px;text-align:center}
-  .note button{background:rgba(255,255,255,.2);border:none;color:inherit;border-radius:8px;padding:3px 10px;font-size:11px;cursor:pointer;font-weight:700}
-  /* ===== Navbar glass ===== */
-  .nav{position:sticky;top:0;z-index:50;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);background:var(--glass);border-bottom:1px solid var(--border)}
-  .nav-in{display:flex;align-items:center;gap:14px;height:64px}
-  .logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:15px}
-  .logo small{display:block;font-size:11px;font-weight:600;color:var(--ink-2)}
-  .logo-tile{width:38px;height:38px;border-radius:12px;background:linear-gradient(135deg,#16623C,#F59E0B);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:800;box-shadow:var(--shadow-sm)}
-  .nav-links{display:flex;gap:4px;margin-left:auto}
-  .nav-links a{padding:8px 12px;border-radius:12px;font-size:14px;font-weight:600;color:var(--ink-2);text-decoration:none}
-  .nav-links a.active,.nav-links a:hover{background:var(--brand-soft);color:var(--brand)}
-  .nav-act{display:flex;gap:8px;align-items:center;margin-left:auto}
-  .nav-links + .nav-act{margin-left:0}
-  .icon-btn{width:38px;height:38px;border-radius:12px;border:1px solid var(--border);background:transparent;display:grid;place-items:center;cursor:pointer;color:var(--ink-2);font-size:15px}
-  /* ===== Tombol ===== */
-  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:none;cursor:pointer;font-weight:700;border-radius:14px;padding:10px 18px;font-size:14px;font-family:inherit;transition:.2s}
-  .btn:hover{transform:translateY(-1px)}
-  .btn-primary{background:var(--btn-bg);color:var(--btn-fg);box-shadow:var(--shadow-sm)}
-  .btn-glass{background:var(--glass);color:var(--ink);border:1px solid var(--border);backdrop-filter:blur(8px)}
-  .btn-white{background:var(--card);color:var(--brand);box-shadow:var(--shadow-sm)}
-  .btn-soft{background:var(--brand-soft);color:var(--brand)}
-  .btn-danger{background:var(--red-soft);color:var(--red)}
-  .btn-xs{padding:7px 12px;font-size:12px;border-radius:10px}
-  /* ===== Hero ===== */
-  .hero{position:relative;margin-top:28px;border-radius:32px;padding:56px 48px;overflow:hidden;background:var(--hero-grad);box-shadow:var(--shadow)}
-  .pill{display:inline-flex;align-items:center;gap:6px;background:var(--glass);border:1px solid var(--border);color:var(--brand);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.14em;padding:7px 14px;border-radius:999px;backdrop-filter:blur(8px)}
-  .hero h1{font-size:clamp(2rem,5vw,3.3rem);font-weight:800;letter-spacing:-.02em;line-height:1.12;margin-top:18px;max-width:560px}
-  .hl{background:linear-gradient(90deg,var(--brand-2),var(--gold));-webkit-background-clip:text;background-clip:text;color:transparent}
-  .hero p{color:var(--ink-2);max-width:500px;margin:16px 0 26px;font-size:15px;line-height:1.7}
-  .hero-actions{display:flex;gap:12px;flex-wrap:wrap}
-  .chip{position:absolute;width:54px;height:54px;border-radius:16px;display:grid;place-items:center;color:#fff;font-size:20px;box-shadow:var(--shadow);animation:float 6s ease-in-out infinite}
-  .chip.green{background:linear-gradient(135deg,#86ECB0,#1A9E57)}
-  .chip.gold{background:linear-gradient(135deg,#FBBF24,#D97706)}
-  .chip.deep{background:linear-gradient(135deg,#27C06D,#135033)}
-  .c1{top:36px;right:330px}
-  .c2{bottom:44px;right:90px;animation-delay:1.2s}
-  .c3{top:130px;right:20px;animation-delay:2.1s}
-  @keyframes float{0%,100%{transform:translateY(0) rotate(6deg)}50%{transform:translateY(-12px) rotate(-5deg)}}
-  @media (prefers-reduced-motion: reduce){.chip{animation:none}}
-  .hero-art{position:absolute;right:56px;top:50%;transform:translateY(-50%);display:flex;gap:16px;align-items:flex-start}
-  .mini-card{width:212px;border-radius:20px;padding:18px;box-shadow:var(--shadow)}
-  .mini-card.green{background:linear-gradient(135deg,#27C06D,#135033);color:#fff}
-  .mini-card.white{background:var(--card);color:var(--ink);margin-top:40px;border:1px solid var(--border)}
-  .mini-card .lbl{font-size:11px;font-weight:700;opacity:.8}
-  .mini-card .val{font-size:26px;font-weight:800;margin-top:4px}
-  .mini-card .sub{font-size:11px;opacity:.75;margin-top:6px}
-  /* ===== Stat ===== */
-  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:20px}
-  .stat{background:var(--glass);border:1px solid var(--border);border-radius:24px;padding:20px;backdrop-filter:blur(10px)}
-  .stat .lbl{font-size:11px;font-weight:800;color:var(--ink-2);text-transform:uppercase;letter-spacing:.08em}
-  .stat .val{font-size:32px;font-weight:800;margin-top:6px}
-  .stat .sub{font-size:12px;color:var(--ink-2);margin-top:4px}
-  /* ===== Blok & kartu ===== */
-  .block{margin-top:48px}
-  .eyebrow{display:inline-flex;align-items:center;gap:6px;background:var(--gold-soft);color:var(--gold);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.14em;padding:6px 12px;border-radius:999px}
-  .block h2{font-size:24px;font-weight:800;margin-top:10px}
-  .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:18px}
-  .grid-2{display:grid;grid-template-columns:1.1fr .9fr;gap:16px;margin-top:18px}
-  .card{background:var(--card);border:1px solid var(--border);border-radius:24px;padding:18px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:12px}
-  .media{aspect-ratio:16/9;border-radius:16px;background:linear-gradient(135deg,var(--brand-soft),var(--gold-soft));display:grid;place-items:center;color:var(--brand);font-size:30px}
-  .media.video{background:linear-gradient(135deg,#1A9E57,#135033);color:#fff}
-  .badges{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-  .badge{font-size:11px;font-weight:700;padding:5px 10px;border-radius:999px}
-  .badge.brand{background:var(--brand-soft);color:var(--brand)}
-  .badge.gold{background:var(--gold-soft);color:var(--gold)}
-  .badge.green{background:var(--green-soft);color:var(--green)}
-  .badge.amber{background:var(--amber-soft);color:var(--amber)}
-  .badge.red{background:var(--red-soft);color:var(--red)}
-  .badge.neutral{background:var(--neutral-soft);color:var(--ink-2)}
-  .date{font-size:12px;color:var(--ink-2)}
-  .title{font-size:17px;font-weight:800;line-height:1.35}
-  .items{font-size:12px;color:var(--ink-2);display:grid;gap:4px}
-  .items b{color:var(--brand)}
-  .card-foot{margin-top:auto;display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid var(--border);padding-top:12px}
-  .person{display:flex;align-items:center;gap:10px;min-width:0}
-  .avatar{width:36px;height:36px;border-radius:12px;display:grid;place-items:center;color:#fff;font-size:12px;font-weight:800;flex-shrink:0}
-  .avatar.g{background:linear-gradient(135deg,#86ECB0,#1A9E57)}
-  .avatar.y{background:linear-gradient(135deg,#FBBF24,#D97706)}
-  .avatar.d{background:linear-gradient(135deg,#27C06D,#135033)}
-  .person .nm{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .person .nim{font-size:11px;color:var(--ink-2)}
-  .actions{display:flex;gap:6px;flex-shrink:0}
-  /* ===== Kehadiran ===== */
-  .reason{background:var(--neutral-soft);border-radius:16px;padding:12px 14px;font-size:13px;color:var(--ink-2)}
-  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;font-weight:700;color:var(--ink-2)}
-  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
-  .stack{display:flex;height:12px;border-radius:999px;overflow:hidden;margin-top:14px}
-  .bars{display:flex;align-items:flex-end;gap:8px;height:120px;margin-top:16px}
-  .bars i{flex:1;border-radius:8px 8px 4px 4px;background:linear-gradient(180deg,var(--brand-2),var(--brand));opacity:.9}
-  /* ===== Form ===== */
-  .form-card{background:var(--card);border:1px solid var(--border);border-radius:28px;padding:24px;box-shadow:var(--shadow-sm);max-width:660px;margin-top:18px}
-  .tabs{display:flex;gap:6px;background:var(--neutral-soft);padding:6px;border-radius:16px;width:max-content}
-  .tab{padding:8px 16px;border-radius:12px;border:none;background:transparent;color:var(--ink-2);font-weight:700;font-size:13px;cursor:pointer;font-family:inherit}
-  .tab.active{background:var(--card);color:var(--brand);box-shadow:var(--shadow-sm)}
-  .info-lama{margin-top:14px;font-size:12px;font-weight:700;color:var(--amber)}
-  .field{margin-top:14px}
-  .label{font-size:12px;font-weight:700;color:var(--ink-2);display:block;margin-bottom:6px}
-  .input{width:100%;border:1px solid var(--border);background:var(--input-bg);border-radius:14px;padding:11px 14px;font-size:14px;color:var(--ink);outline:none;font-family:inherit;transition:.2s}
-  .input:focus{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
-  .input:disabled{opacity:.55;cursor:not-allowed}
-  textarea.input{resize:none}
-  .media-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-  .dashed{border:2px dashed var(--border);background:transparent;border-radius:16px;padding:12px;font-weight:700;font-size:13px;color:var(--ink-2);cursor:pointer;font-family:inherit}
-  .dashed:hover{border-color:var(--brand);color:var(--brand)}
-  .check{display:flex;gap:10px;align-items:flex-start;margin-top:14px;font-size:13px;font-weight:600}
-  .check input{accent-color:var(--brand);width:16px;height:16px;margin-top:2px}
-  .seg{display:flex;gap:8px}
-  .seg button{flex:1;padding:11px;border-radius:14px;border:1px solid var(--border);background:var(--neutral-soft);color:var(--ink-2);font-weight:800;font-size:13px;cursor:pointer;font-family:inherit}
-  .seg button.on-green{background:var(--green);border-color:var(--green);color:#fff}
-  footer{margin-top:56px;padding:26px 0;text-align:center;font-size:12px;color:var(--ink-2)}
-  @media (max-width:960px){.hero-art,.c1{display:none}.grid-3,.grid-2{grid-template-columns:1fr}.stats{grid-template-columns:1fr}}
-  @media (max-width:800px){.nav-links{display:none}}
-  @media (max-width:600px){.hero{padding:36px 24px}}
-</style>
-</head>
-<body>
-<div class="note">Pratinjau statis Opsi B (hybrid): teknik visual pastel fintech + warna brand BSI hijau-gold. <button onclick="this.parentElement.remove()">Tutup</button></div>
-
-<header class="nav">
-  <div class="wrap nav-in">
-    <div class="logo"><span class="logo-tile">BSI</span><span>Logbook Magang<small>Bank Syariah Indonesia</small></span></div>
-    <nav class="nav-links">
-      <a href="#" class="active">Beranda</a><a href="#">Logbook</a><a href="#">Galeri</a><a href="#">Daftar Hadir</a><a href="#">Tim & Dospem</a>
-    </nav>
-    <div class="nav-act">
-      <button class="icon-btn" id="toggleTema" title="Ganti Tema">🌙</button>
-      <button class="btn btn-primary btn-xs" style="padding:9px 16px">Dashboard</button>
-    </div>
-  </div>
-</header>
-
-<main class="wrap">
-  <!-- HERO -->
-  <section class="hero">
-    <span class="chip green c1">▦</span>
-    <span class="chip gold c2">▶</span>
-    <span class="chip deep c3">✦</span>
-    <span class="pill">✦ Magang Bank BSI</span>
-    <h1>Logbook, Galeri, dan Daftar Hadir Magang dalam <span class="hl">Satu Portal</span></h1>
-    <p>Portal ini mencatat kegiatan harian, dokumentasi media, dan kehadiran tim magang selama membantu operasional Bank BSI.</p>
-    <div class="hero-actions">
-      <button class="btn btn-primary">Lihat Logbook</button>
-      <button class="btn btn-glass">Lihat Galeri</button>
-      <button class="btn btn-white">Masuk Akun</button>
-    </div>
-    <div class="hero-art">
-      <div class="mini-card green">
-        <p class="lbl">LOGBOOK BULAN INI</p>
-        <p class="val">24</p>
-        <p class="sub">4 media baru minggu ini</p>
-      </div>
-      <div class="mini-card white">
-        <p class="lbl">KEHADIRAN TIM</p>
-        <p class="val">96%</p>
-        <div class="stack" style="margin-top:10px">
-          <i style="width:78%;background:var(--green)"></i><i style="width:14%;background:var(--amber)"></i><i style="width:8%;background:var(--red)"></i>
-        </div>
-        <p class="sub">Masuk 78 • Izin 14 • Bolos 8</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- STAT -->
-  <section class="stats">
-    <div class="stat"><p class="lbl">Total Mahasiswa</p><p class="val">12</p><p class="sub">Mahasiswa terdaftar dalam tim</p></div>
-    <div class="stat"><p class="lbl">Logbook Publik</p><p class="val">186</p><p class="sub">Catatan kegiatan harian</p></div>
-    <div class="stat"><p class="lbl">Media Galeri</p><p class="val">342</p><p class="sub">Foto dan video dokumentasi</p></div>
-  </section>
-
-  <!-- LOGBOOK -->
-  <section class="block">
-    <span class="eyebrow">🏆 Kegiatan terbaru</span>
-    <h2>Logbook Terbaru Tim</h2>
-    <div class="grid-3">
-      <article class="card">
-        <div class="media">🖼</div>
-        <div class="badges"><span class="badge brand">Layanan Nasabah</span><span class="badge green">Publik</span></div>
-        <div><p class="date">Kamis, 2 Oktober 2026</p><p class="title" style="margin-top:6px">Mendampingi pembukaan rekening nasabah prioritas</p></div>
-        <div class="items"><span>1. Verifikasi dokumen nasabah</span><span>2. Input data CIF ke sistem</span><span><b>+1 kegiatan lainnya</b></span></div>
-        <div class="card-foot">
-          <div class="person"><span class="avatar g">RC</span><span><span class="nm">Risky Chici</span><br><span class="nim">NIM 24070041</span></span></div>
-          <div class="actions"><button class="btn btn-soft btn-xs">Detail</button></div>
-        </div>
-      </article>
-      <article class="card">
-        <div class="media video">▶</div>
-        <div class="badges"><span class="badge brand">Dokumentasi</span><span class="badge green">Publik</span></div>
-        <div><p class="date">Rabu, 1 Oktober 2026</p><p class="title" style="margin-top:6px">Dokumentasi video edukasi produk payroll di aula cabang</p></div>
-        <div class="items"><span>1. Setup kamera dan pencahayaan</span><span>2. Rekaman sesi edukasi</span></div>
-        <div class="card-foot">
-          <div class="person"><span class="avatar y">NS</span><span><span class="nm">Nadia Safitri</span><br><span class="nim">NIM 24070038</span></span></div>
-          <div class="actions"><button class="btn btn-soft btn-xs">Detail</button></div>
-        </div>
-      </article>
-      <article class="card">
-        <div class="media">📷</div>
-        <div class="badges"><span class="badge brand">Edukasi</span><span class="badge gold">Dari Logbook</span></div>
-        <div><p class="date">1 Okt 2026</p><p class="title" style="margin-top:6px">Sosialisasi mobile banking untuk nasabah pensiunan</p></div>
-        <p class="items"><span>Foto suasana sosialisasi bersama tim frontliner di ruang edukasi.</span></p>
-        <div class="card-foot">
-          <div class="person"><span class="avatar d">AP</span><span><span class="nm">Andre Pratama</span><br><span class="nim">NIM 24070052</span></span></div>
-          <span class="badge neutral">Klik untuk detail</span>
-        </div>
-      </article>
-    </div>
-  </section>
-
-  <!-- KEHADIRAN -->
-  <section class="block">
-    <span class="eyebrow">📋 Daftar hadir</span>
-    <h2>Rekap Kehadiran Tim Magang</h2>
-    <div class="grid-2">
-      <article class="card">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
-          <div><p class="date">Kamis, 2 Oktober 2026</p>
-            <div class="person" style="margin-top:10px"><span class="avatar g">RC</span><span><span class="nm">Risky Chici</span><br><span class="nim">NIM 24070041</span></span></div>
-          </div>
-          <span class="badge green">Masuk</span>
-        </div>
-        <div class="reason"><b style="color:var(--ink)">Alasan atau keterangan:</b><br>Tidak ada alasan.</div>
-        <div class="card-foot" style="margin-top:0">
-          <div class="actions"><button class="btn btn-soft btn-xs">Detail</button><button class="btn btn-xs" style="background:var(--btn-bg);color:var(--btn-fg)">Edit</button><button class="btn btn-danger btn-xs">Hapus</button></div>
-        </div>
-      </article>
-      <article class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-          <p class="title">Grafik Kehadiran per Mahasiswa</p>
-          <div class="legend">
-            <span><i class="dot" style="background:var(--green)"></i>Masuk</span>
-            <span><i class="dot" style="background:var(--amber)"></i>Izin</span>
-            <span><i class="dot" style="background:var(--red)"></i>Bolos</span>
-          </div>
-        </div>
-        <div class="stack"><i style="width:78%;background:var(--green)"></i><i style="width:14%;background:var(--amber)"></i><i style="width:8%;background:var(--red)"></i></div>
-        <div class="bars"><i style="height:60%"></i><i style="height:85%"></i><i style="height:45%"></i><i style="height:95%"></i><i style="height:70%"></i><i style="height:55%"></i><i style="height:80%"></i></div>
-        <p class="date" style="text-align:center">Min • Sen • Sel • Rab • Kam • Jum • Sab</p>
-      </article>
-    </div>
-  </section>
-
-  <!-- FORM CEPAT -->
-  <section class="block">
-    <span class="eyebrow">⚡ Isi cepat via QR</span>
-    <h2>Form Isi Cepat</h2>
-    <div class="form-card">
-      <div class="tabs">
-        <button class="tab active" data-panel="p-log">Logbook</button>
-        <button class="tab" data-panel="p-absen">Daftar Hadir</button>
-      </div>
-      <div id="p-log">
-        <p class="info-lama">📅 Terakhir mengisi logbook: 3 hari yang lalu</p>
-        <div class="field"><label class="label">Kategori Utama *</label><select class="input"><option>Pilih Kategori</option><option>Layanan Nasabah</option><option>Dokumentasi</option></select></div>
-        <div class="field"><label class="label">Judul kegiatan *</label><input class="input" placeholder="Judul kegiatan"></div>
-        <div class="field"><label class="label">Deskripsi singkat</label><textarea class="input" rows="2" placeholder="Deskripsi singkat kegiatan"></textarea></div>
-        <div class="field"><div class="media-btns"><button class="dashed">📷 Ambil Foto</button><button class="dashed">🖼 Dari Galeri</button></div></div>
-        <label class="check"><input type="checkbox"><span>Tampilkan kegiatan ini di galeri</span></label>
-        <div class="field"><button class="btn btn-primary" style="width:100%">Simpan Logbook</button></div>
-      </div>
-      <div id="p-absen" hidden>
-        <p class="info-lama">📋 Terakhir mengisi daftar hadir: kemarin</p>
-        <div class="field"><label class="label">Status Kehadiran *</label>
-          <div class="seg"><button class="on-green">Masuk</button><button>Izin</button><button>Bolos</button></div>
-        </div>
-        <div class="field"><label class="label">Alasan atau Keterangan</label><textarea class="input" rows="2" disabled placeholder="Status Masuk tidak memerlukan alasan"></textarea></div>
-        <div class="field"><button class="btn btn-primary" style="width:100%">Simpan Daftar Hadir</button></div>
-      </div>
-    </div>
-  </section>
-</main>
-
-<footer>© 2026 Tim Magang BSI — Pratinjau MVP Opsi B (hybrid)</footer>
-
-<script>
-  const root = document.documentElement
-  const btnTema = document.getElementById('toggleTema')
-  btnTema.addEventListener('click', function () {
-    root.classList.toggle('dark')
-    btnTema.textContent = root.classList.contains('dark') ? '☀️' : '🌙'
-  })
-  document.querySelectorAll('.tab').forEach(function (t) {
-    t.addEventListener('click', function () {
-      document.querySelectorAll('.tab').forEach(function (x) { x.classList.remove('active') })
-      t.classList.add('active')
-      document.getElementById('p-log').hidden = t.dataset.panel !== 'p-log'
-      document.getElementById('p-absen').hidden = t.dataset.panel !== 'p-absen'
-    })
-  })
-</script>
-</body>
-</html>
 ````
 
 ## File: postcss.config.js
@@ -1240,6 +558,339 @@ export async function ambilTokenSesi() {
   } catch (e) {
     return ''
   }
+}
+````
+
+## File: src/pages/QuickPage.jsx
+````javascript
+import { useEffect, useRef, useState } from 'react'
+import { supabase } from '../lib/supabase.js'
+import { useAuth } from '../lib/auth.js'
+import { uploadMedia } from '../lib/upload.js'
+import { syncGaleriFromLogbook } from '../lib/logbook.js'
+import { urlPratinjau } from '../lib/konversi.js'
+import { todayInput, formatTanggal } from '../lib/format.js'
+import { KATEGORI } from '../lib/constants.js'
+import { inputCls, labelCls, btnPrimary, useToast, AutoTextArea, LabelProses } from '../components/ui.jsx'
+import { CustomSelect } from '../components/controls.jsx'
+import { SizedIcon } from '../components/icons.jsx'
+
+const STATUS_HADIR = ['Masuk', 'Izin', 'Bolos']
+
+export default function QuickPage() {
+  const { mahasiswa } = useAuth()
+  const toast = useToast()
+  const tanggal = todayInput()
+
+  const [tab, setTab] = useState('logbook')
+  const [loading, setLoading] = useState(true)
+  const [todayLog, setTodayLog] = useState(null)
+  const [hadirHariIni, setHadirHariIni] = useState(null)
+  const [lastLogTanggal, setLastLogTanggal] = useState(null)
+  const [lastHadirTanggal, setLastHadirTanggal] = useState(null)
+
+  const [kategori, setKategori] = useState('')
+  const [judulKegiatan, setJudulKegiatan] = useState('')
+  const [deskripsi, setDeskripsi] = useState('')
+  const [file, setFile] = useState(null)
+  const [preview, setPreview] = useState('')
+  const [showGal, setShowGal] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [info, setInfo] = useState('')
+
+  const [status, setStatus] = useState('Masuk')
+  const [alasan, setAlasan] = useState('')
+
+  const cameraRef = useRef(null)
+  const galeriRef = useRef(null)
+
+  async function muatData(mhs, senyap) {
+    if (!senyap) setLoading(true)
+    const l = await supabase
+      .from('logbooks')
+      .select('*, logbook_items(*)')
+      .eq('mahasiswa_id', mhs.id)
+      .eq('tanggal', tanggal)
+      .order('created_at', { ascending: false })
+      .limit(1)
+    const log = (l.data || [])[0] || null
+    if (log) {
+      log.logbook_items = (log.logbook_items || []).sort(function (a, b) { return (a.urutan || 0) - (b.urutan || 0) })
+    }
+    const h = await supabase
+      .from('daftar_hadir')
+      .select('*')
+      .eq('mahasiswa_id', mhs.id)
+      .eq('tanggal', tanggal)
+      .limit(1)
+    const hadir = (h.data || [])[0] || null
+    const ll = await supabase
+      .from('logbooks')
+      .select('tanggal')
+      .eq('mahasiswa_id', mhs.id)
+      .order('tanggal', { ascending: false })
+      .limit(1)
+    const lh = await supabase
+      .from('daftar_hadir')
+      .select('tanggal')
+      .eq('mahasiswa_id', mhs.id)
+      .order('tanggal', { ascending: false })
+      .limit(1)
+    setTodayLog(log)
+    setHadirHariIni(hadir)
+    setLastLogTanggal(ll.data && ll.data[0] ? ll.data[0].tanggal : null)
+    setLastHadirTanggal(lh.data && lh.data[0] ? lh.data[0].tanggal : null)
+    if (hadir) {
+      setStatus(hadir.status)
+      setAlasan(hadir.alasan || '')
+    }
+    if (!senyap) setLoading(false)
+  }
+
+  useEffect(function () {
+    if (mahasiswa) muatData(mahasiswa)
+  }, [mahasiswa])
+
+  async function pilihFile(e) {
+    const f = e.target.files[0]
+    e.target.value = ''
+    if (!f) return
+    if (preview && preview.indexOf('blob:') === 0) URL.revokeObjectURL(preview)
+    setFile(f)
+    setPreview(await urlPratinjau(f))
+  }
+
+  function hapusFile() {
+    if (preview && preview.indexOf('blob:') === 0) URL.revokeObjectURL(preview)
+    setFile(null)
+    setPreview('')
+    setShowGal(false)
+  }
+
+  async function submitLogbook(e) {
+    e.preventDefault()
+    if (!todayLog && !kategori) { toast.gagal('Pilih kategori terlebih dahulu.'); return }
+    if (!judulKegiatan.trim()) { toast.gagal('Judul kegiatan wajib diisi.'); return }
+    setBusy(true)
+    try {
+      let mediaPath = null
+      let mediaThumb = null
+      if (file) {
+        const up = await uploadMedia(file, 'logbook', setInfo)
+        mediaPath = up.publicUrl
+        mediaThumb = up.thumbUrl || null
+      }
+      let logId = todayLog ? todayLog.id : null
+      if (!todayLog) {
+        const ins = await supabase.from('logbooks').insert({
+          mahasiswa_id: mahasiswa.id, tanggal: tanggal, unit: '', kategori: kategori,
+          judul: judulKegiatan.trim(), kendala: '', solusi: '', pembelajaran: '', status: 'publik'
+        }).select().single()
+        if (ins.error) throw new Error(ins.error.message)
+        logId = ins.data.id
+      }
+      const urutan = todayLog ? todayLog.logbook_items.reduce(function (m, it) { return Math.max(m, it.urutan || 0) }, 0) + 1 : 1
+      const insItem = await supabase.from('logbook_items').insert({
+        logbook_id: logId,
+        urutan: urutan,
+        judul: judulKegiatan.trim(),
+        deskripsi: deskripsi.trim(),
+        hasil: '',
+        media_path: mediaPath,
+        media_type: mediaPath ? 'foto' : null,
+        media_thumb: mediaThumb,
+        media_source: 'r2',
+        youtube_id: null,
+        drive_id: null,
+        show_in_gallery: showGal && !!mediaPath
+      }).select().single()
+      if (insItem.error) throw new Error(insItem.error.message)
+      if (todayLog && todayLog.status !== 'publik') {
+        await supabase.from('logbooks').update({ status: 'publik' }).eq('id', todayLog.id)
+      }
+      if (showGal && mediaPath) {
+        await syncGaleriFromLogbook(mahasiswa.id, [insItem.data], {
+          tanggal: tanggal,
+          kategori: todayLog ? todayLog.kategori : kategori
+        })
+      }
+      const pertama = !todayLog
+      setJudulKegiatan('')
+      setDeskripsi('')
+      hapusFile()
+      if (pertama) setKategori('')
+      await muatData(mahasiswa, true)
+      toast.sukses(pertama ? 'Logbook hari ini berhasil dibuat' : 'Kegiatan baru berhasil ditambahkan')
+    } catch (err) {
+      toast.gagal('Gagal menyimpan logbook: ' + err.message)
+    }
+    setInfo('')
+    setBusy(false)
+  }
+
+  async function submitAbsen(e) {
+    e.preventDefault()
+    setBusy(true)
+    try {
+      const payload = {
+        mahasiswa_id: mahasiswa.id,
+        tanggal: tanggal,
+        status: status,
+        alasan: status === 'Masuk' ? '' : alasan.trim()
+      }
+      let res
+      if (hadirHariIni) {
+        res = await supabase.from('daftar_hadir').update(payload).eq('id', hadirHariIni.id)
+      } else {
+        res = await supabase.from('daftar_hadir').insert(payload)
+      }
+      if (res.error) throw new Error(res.error.message)
+      await muatData(mahasiswa, true)
+      toast.sukses(hadirHariIni ? 'Daftar hadir berhasil diperbarui' : 'Daftar hadir berhasil disimpan')
+    } catch (err) {
+      toast.gagal('Gagal menyimpan kehadiran: ' + err.message)
+    }
+    setBusy(false)
+  }
+
+  function infoTerakhir(tgl) {
+    if (!tgl) return { teks: 'belum pernah', lama: true }
+    const selisih = Math.round((new Date(tanggal + 'T00:00:00').getTime() - new Date(tgl + 'T00:00:00').getTime()) / 86400000)
+    if (selisih <= 0) return { teks: 'hari ini', lama: false }
+    if (selisih === 1) return { teks: 'kemarin', lama: false }
+    return { teks: selisih + ' hari yang lalu', lama: true }
+  }
+
+  if (loading) {
+    return <div className="grid min-h-[50vh] place-items-center"><div className="h-10 w-10 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div></div>
+  }
+
+  const infoLog = infoTerakhir(lastLogTanggal)
+  const infoHadir = infoTerakhir(lastHadirTanggal)
+
+  const tabCls = function (t) {
+    return 'flex-1 px-4 py-2.5 rounded-xl text-xs sm:rounded-2xl sm:py-3 sm:text-sm font-bold ' + (tab === t ? 'bg-bsi-800 text-white shadow-sm' : 'bsi-panel text-slate-600 hover:text-bsi-800')
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-xl space-y-5">
+      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8">
+        <h1 className="text-xl font-black text-slate-900 sm:text-2xl">Isi Cepat</h1>
+        <p className="mt-1 text-sm text-slate-600">{formatTanggal(tanggal)}</p>
+        <div className="mt-4 flex gap-2">
+          <button type="button" onClick={function () { setTab('logbook') }} className={tabCls('logbook')}>Logbook</button>
+          <button type="button" onClick={function () { setTab('absen') }} className={tabCls('absen')}>Daftar Hadir</button>
+        </div>
+      </section>
+
+      {tab === 'logbook' ? (
+        <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
+          <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoLog.lama ? 'text-amber-600' : 'text-slate-500')}>
+            <SizedIcon name="calendar" size={13} />
+            Terakhir mengisi logbook: {infoLog.teks}
+          </p>
+          {todayLog ? (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+              <p className="text-sm font-bold text-emerald-800">Logbook hari ini sudah ada</p>
+              <p className="mt-1 text-sm text-emerald-800">{todayLog.judul} • {todayLog.logbook_items.length} kegiatan</p>
+              <div className="mt-2 space-y-1">
+                {todayLog.logbook_items.map(function (it, i) {
+                  return <p key={it.id} className="truncate text-xs text-emerald-800">{i + 1}. {it.judul}</p>
+                })}
+              </div>
+              <p className="mt-2 text-xs text-emerald-800">Kegiatan baru ditambahkan di bawahnya tanpa menghapus kegiatan lama.</p>
+              {todayLog.status !== 'publik' ? <p className="mt-1 text-xs font-semibold text-emerald-800">Status masih draf — akan otomatis dipublikasikan.</p> : null}
+            </div>
+          ) : (
+            <div>
+              <label className={labelCls}>Kategori Utama <span className="text-red-500">*</span></label>
+              <div className="mt-1.5">
+                <CustomSelect placeholder="Pilih Kategori" value={kategori} onChange={setKategori} options={KATEGORI.map(function (k) { return { value: k, label: k } })} />
+              </div>
+            </div>
+          )}
+
+          <form onSubmit={submitLogbook} className="mt-5 space-y-4">
+            <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-bold text-bsi-800">{todayLog ? 'Kegiatan Baru (kegiatan ' + (todayLog.logbook_items.length + 1) + ')' : 'Kegiatan'}</p>
+              <input className={inputCls} value={judulKegiatan} onChange={function (e) { setJudulKegiatan(e.target.value) }} aria-label="Judul Kegiatan" placeholder="Judul kegiatan" />
+              <AutoTextArea className={inputCls} value={deskripsi} onChange={function (e) { setDeskripsi(e.target.value) }} aria-label="Deskripsi Kegiatan" placeholder="Deskripsi singkat kegiatan" />
+              {preview ? (
+                <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-900">
+                  <img src={preview} alt="Pratinjau" className="absolute inset-0 h-full w-full object-contain" />
+                  <button type="button" onClick={hapusFile} title="Hapus Gambar" className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-red-500 text-white hover:bg-red-600">
+                    <SizedIcon name="close" size={14} />
+                  </button>
+                </div>
+              ) : null}
+              <div className="grid grid-cols-2 gap-3">
+                <button type="button" onClick={function () { cameraRef.current.click() }} className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-3 py-3.5 text-sm font-semibold text-slate-700 hover:border-bsi-500 hover:bg-slate-100">
+                  <SizedIcon name="camera" size={18} /> Ambil Foto
+                </button>
+                <button type="button" onClick={function () { galeriRef.current.click() }} className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-3 py-3.5 text-sm font-semibold text-slate-700 hover:border-bsi-500 hover:bg-slate-100">
+                  <SizedIcon name="image" size={18} /> Dari Galeri
+                </button>
+              </div>
+              <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={pilihFile} />
+              <input ref={galeriRef} type="file" accept="image/*" className="hidden" onChange={pilihFile} />
+              {preview ? (
+                <label className="flex w-full cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 p-3">
+                  <input type="checkbox" checked={showGal} onChange={function (e) { setShowGal(e.target.checked) }} className="mt-0.5 h-4 w-4 rounded accent-bsi-800" />
+                  <span className="text-sm font-semibold text-slate-800">Tampilkan kegiatan ini di galeri</span>
+                </label>
+              ) : null}
+            </div>
+            <button type="submit" disabled={busy} className={btnPrimary}>
+              {busy ? <LabelProses teks={info || 'Menyimpan'} /> : (todayLog ? 'Tambah Kegiatan' : 'Simpan Logbook')}
+            </button>
+          </form>
+        </section>
+      ) : null}
+
+      {tab === 'absen' ? (
+        <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
+          <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoHadir.lama ? 'text-amber-600' : 'text-slate-500')}>
+            <SizedIcon name="clipboard" size={13} />
+            Terakhir mengisi daftar hadir: {infoHadir.teks}
+          </p>
+          {hadirHariIni ? (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+              <p className="text-sm font-bold text-emerald-800">Kamu sudah mengisi daftar hadir hari ini ({hadirHariIni.status})</p>
+              <p className="mt-1 text-xs text-emerald-800">Form di bawah bisa dipakai untuk memperbarui status bila ada perubahan.</p>
+            </div>
+          ) : null}
+          <form onSubmit={submitAbsen} className={'space-y-4 ' + (hadirHariIni ? 'mt-5' : '')}>
+            <div>
+              <label className={labelCls}>Status Kehadiran <span className="text-red-500">*</span></label>
+              <div className="mt-1.5 flex gap-2">
+                {STATUS_HADIR.map(function (s) {
+                  const aktif = status === s
+                  const warna = aktif
+                    ? (s === 'Masuk' ? 'bg-emerald-500 text-white' : s === 'Izin' ? 'bg-amber-500 text-white' : 'bg-red-500 text-white')
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  return <button type="button" key={s} onClick={function () { setStatus(s) }} className={'flex-1 rounded-2xl px-3 py-3 text-sm font-bold ' + warna}>{s}</button>
+                })}
+              </div>
+            </div>
+            <div>
+              <label className={labelCls}>Alasan atau Keterangan</label>
+              <AutoTextArea
+                className={inputCls + (status === 'Masuk' ? ' cursor-not-allowed opacity-60' : '')}
+                value={alasan}
+                onChange={function (e) { setAlasan(e.target.value) }}
+                aria-label="Alasan atau Keterangan"
+                placeholder={status === 'Masuk' ? 'Status Masuk tidak memerlukan alasan' : 'Contoh: Keperluan keluarga, sakit.'}
+                disabled={status === 'Masuk'}
+              />
+            </div>
+            <button type="submit" disabled={busy} className={btnPrimary}>
+              {busy ? <LabelProses teks="Menyimpan" /> : (hadirHariIni ? 'Perbarui Daftar Hadir' : 'Simpan Daftar Hadir')}
+            </button>
+          </form>
+        </section>
+      ) : null}
+    </div>
+  )
 }
 ````
 
@@ -1942,246 +1593,6 @@ Setiap project YouTube mendapat kuota **5 upload/hari** (zona waktu Pacific). Ta
 Proyek internal untuk kegiatan magang Bank Syariah Indonesia. Hak cipta © 2026 Tim Magang BSI.
 ````
 
-## File: src/components/Skeleton.jsx
-````javascript
-export function SkeletonLogbookCard() {
-  return (
-    <div className="card-hover flex h-full flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-      {/* Media / carousel */}
-      <div className="skeleton aspect-video w-full rounded-2xl"></div>
-
-      {/* Badge kategori, unit, dan status */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-1.5">
-          <div className="skeleton h-6 w-24 rounded-full"></div>
-          <div className="skeleton h-6 w-20 rounded-full"></div>
-        </div>
-        <div className="skeleton h-6 w-20 rounded-full"></div>
-      </div>
-
-      {/* Tanggal, judul, dan daftar kegiatan */}
-      <div>
-        <div className="skeleton h-4 w-36 rounded-full"></div>
-        <div className="skeleton mt-2 h-6 w-4/5 rounded-full"></div>
-        <div className="skeleton mt-3 h-3 w-28 rounded-full"></div>
-        <div className="mt-2 space-y-1">
-          <div className="skeleton h-3 w-full rounded-full"></div>
-          <div className="skeleton h-3 w-2/3 rounded-full"></div>
-        </div>
-      </div>
-
-      {/* Footer: profil + tombol detail */}
-      <div className="mt-auto flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-4">
-        <div className="flex items-center gap-3">
-          <div className="skeleton h-11 w-11 shrink-0" style={{ borderRadius: '28%' }}></div>
-          <div className="space-y-1.5">
-            <div className="skeleton h-3.5 w-28 rounded-full"></div>
-            <div className="skeleton h-3 w-20 rounded-full"></div>
-          </div>
-        </div>
-        <div className="skeleton h-8 w-16 rounded-xl"></div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonGalleryCard() {
-  return (
-    <div className="card-hover flex h-full flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-      {/* Media menempel tepi atas sesuai GalleryCard asli */}
-      <div className="skeleton aspect-video w-full"></div>
-
-      <div className="flex flex-1 flex-col gap-3 p-5">
-        {/* Badge kegiatan dan tanggal */}
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap gap-1.5">
-            <div className="skeleton h-6 w-24 rounded-full"></div>
-            <div className="skeleton h-5 w-20 rounded-full"></div>
-          </div>
-          <div className="skeleton h-3 w-16 rounded-full"></div>
-        </div>
-
-        {/* Judul dan deskripsi */}
-        <div className="skeleton h-5 w-3/4 rounded-full"></div>
-        <div className="space-y-1.5">
-          <div className="skeleton h-3.5 w-full rounded-full"></div>
-          <div className="skeleton h-3.5 w-2/3 rounded-full"></div>
-        </div>
-
-        {/* Footer: profil + keterangan */}
-        <div className="mt-auto space-y-3 border-t border-slate-100 pt-3">
-          <div className="flex items-center gap-3">
-            <div className="skeleton h-11 w-11 shrink-0" style={{ borderRadius: '28%' }}></div>
-            <div className="space-y-1.5">
-              <div className="skeleton h-3.5 w-28 rounded-full"></div>
-              <div className="skeleton h-3 w-20 rounded-full"></div>
-            </div>
-          </div>
-          <div className="skeleton h-3 w-40 rounded-full"></div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonAttendanceCard() {
-  return (
-    <div className="card-hover flex h-full flex-col rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-      {/* Tanggal + profil + badge status */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="skeleton h-4 w-40 rounded-full"></div>
-          <div className="mt-4 flex items-center gap-3">
-            <div className="skeleton h-11 w-11 shrink-0" style={{ borderRadius: '28%' }}></div>
-            <div className="space-y-1.5">
-              <div className="skeleton h-4 w-28 rounded-full"></div>
-              <div className="skeleton h-3 w-20 rounded-full"></div>
-            </div>
-          </div>
-        </div>
-        <div className="skeleton h-6 w-16 rounded-full"></div>
-      </div>
-
-      {/* Box alasan / keterangan */}
-      <div className="mt-4 flex-1 rounded-2xl bg-slate-50 p-4">
-        <div className="skeleton h-3 w-32 rounded-full"></div>
-        <div className="skeleton mt-2 h-3.5 w-3/4 rounded-full"></div>
-      </div>
-
-      {/* Tombol aksi */}
-      <div className="mt-4 flex gap-2">
-        <div className="skeleton h-8 w-16 rounded-xl"></div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonPersonCard() {
-  return (
-    <div className="card-hover flex h-full flex-col rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-      {/* Profil mahasiswa */}
-      <div className="flex items-center gap-4">
-        <div className="skeleton h-14 w-14 shrink-0" style={{ borderRadius: '28%' }}></div>
-        <div className="min-w-0 flex-1 space-y-1.5">
-          <div className="skeleton h-5 w-36 rounded-full"></div>
-          <div className="skeleton h-3 w-24 rounded-full"></div>
-          <div className="skeleton h-5 w-20 rounded-full"></div>
-        </div>
-      </div>
-
-      {/* Statistik logbook dan media */}
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <div className="rounded-2xl bg-slate-50 p-3">
-          <div className="skeleton h-3 w-16 rounded-full"></div>
-          <div className="skeleton mt-1.5 h-5 w-8 rounded-full"></div>
-        </div>
-        <div className="rounded-2xl bg-slate-50 p-3">
-          <div className="skeleton h-3 w-16 rounded-full"></div>
-          <div className="skeleton mt-1.5 h-5 w-8 rounded-full"></div>
-        </div>
-      </div>
-
-      {/* Rekap kehadiran */}
-      <div className="mt-3 border-t border-slate-100 pt-3">
-        <div className="skeleton h-3 w-24 rounded-full"></div>
-        <div className="mt-2 grid grid-cols-3 gap-2">
-          <div className="rounded-xl bg-slate-50 p-2">
-            <div className="skeleton h-3 w-full rounded-full"></div>
-            <div className="skeleton mx-auto mt-1.5 h-4 w-6 rounded-full"></div>
-          </div>
-          <div className="rounded-xl bg-slate-50 p-2">
-            <div className="skeleton h-3 w-full rounded-full"></div>
-            <div className="skeleton mx-auto mt-1.5 h-4 w-6 rounded-full"></div>
-          </div>
-          <div className="rounded-xl bg-slate-50 p-2">
-            <div className="skeleton h-3 w-full rounded-full"></div>
-            <div className="skeleton mx-auto mt-1.5 h-4 w-6 rounded-full"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonDashboard() {
-  return (
-    <div className="space-y-6">
-      {/* Header profil + tab */}
-      <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-8 lg:p-10">
-        <div className="flex flex-wrap items-center gap-4 sm:gap-6">
-          <div className="skeleton h-14 w-14 shrink-0 sm:h-24 sm:w-24" style={{ borderRadius: '28%' }}></div>
-          <div className="min-w-0 flex-1 space-y-2">
-            <div className="skeleton h-5 w-48 rounded-full sm:h-6"></div>
-            <div className="skeleton h-3.5 w-28 rounded-full"></div>
-            <div className="skeleton h-3.5 w-32 rounded-full"></div>
-          </div>
-        </div>
-        <div className="mt-6 flex flex-wrap gap-2 sm:mt-8">
-          <div className="skeleton h-9 w-24 rounded-2xl"></div>
-          <div className="skeleton h-9 w-20 rounded-2xl"></div>
-          <div className="skeleton h-9 w-28 rounded-2xl"></div>
-          <div className="skeleton h-9 w-20 rounded-2xl"></div>
-        </div>
-      </div>
-
-      {/* Form logbook + daftar logbook */}
-      <div className="grid items-start gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-        <div className="space-y-4 rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
-          <div className="skeleton h-6 w-48 rounded-full"></div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="skeleton h-11 w-full rounded-2xl"></div>
-            <div className="skeleton h-11 w-full rounded-2xl"></div>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="skeleton h-11 w-full rounded-2xl"></div>
-            <div className="skeleton h-11 w-full rounded-2xl"></div>
-          </div>
-          <div className="skeleton h-11 w-full rounded-2xl"></div>
-          <div className="skeleton h-40 w-full rounded-2xl"></div>
-          <div className="skeleton h-11 w-full rounded-2xl"></div>
-        </div>
-        <div className="space-y-5">
-          <div className="skeleton h-6 w-32 rounded-full"></div>
-          <div className="skeleton h-12 w-full rounded-3xl"></div>
-          <div className="skeleton h-4 w-28 rounded-full"></div>
-          <div className="grid gap-5 md:grid-cols-2 kartu-grid">
-            <SkeletonLogbookCard />
-            <SkeletonLogbookCard />
-            <SkeletonLogbookCard />
-            <SkeletonLogbookCard />
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonStatCard() {
-  return (
-    <div className="card-hover rounded-3xl border border-slate-200 bg-white p-3 shadow-sm sm:p-6">
-      <div className="skeleton h-3 w-3/4 rounded-full sm:h-4 sm:w-28"></div>
-      <div className="skeleton mt-1 h-6 w-1/2 rounded-full sm:mt-3 sm:h-9 sm:w-16"></div>
-      <div className="skeleton mt-2 h-3 w-36 rounded-full hidden sm:block"></div>
-    </div>
-  )
-}
-
-export function SkeletonChartRow() {
-  return (
-    <div className="card-hover rounded-[1.5rem] border border-slate-200 bg-white p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="space-y-1.5">
-          <div className="skeleton h-4 w-32 rounded-full"></div>
-          <div className="skeleton h-3 w-20 rounded-full"></div>
-        </div>
-        <div className="skeleton h-3 w-36 rounded-full"></div>
-      </div>
-      <div className="skeleton mt-4 h-4 w-full rounded-full"></div>
-    </div>
-  )
-}
-````
-
 ## File: src/lib/format.js
 ````javascript
 export function formatTanggal(s) {
@@ -2399,6 +1810,246 @@ export async function deleteMedia(key) {
     throw new Error('Gagal hapus media di R2 (status ' + res.status + '): ' + text)
   }
   return res.json()
+}
+````
+
+## File: src/components/Skeleton.jsx
+````javascript
+export function SkeletonLogbookCard() {
+  return (
+    <div className="card-hover bsi-panel flex h-full flex-col gap-4 rounded-3xl p-6">
+      {/* Media / carousel */}
+      <div className="skeleton aspect-video w-full rounded-2xl"></div>
+
+      {/* Badge kategori, unit, dan status */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-1.5">
+          <div className="skeleton h-6 w-24 rounded-full"></div>
+          <div className="skeleton h-6 w-20 rounded-full"></div>
+        </div>
+        <div className="skeleton h-6 w-20 rounded-full"></div>
+      </div>
+
+      {/* Tanggal, judul, dan daftar kegiatan */}
+      <div>
+        <div className="skeleton h-4 w-36 rounded-full"></div>
+        <div className="skeleton mt-2 h-6 w-4/5 rounded-full"></div>
+        <div className="skeleton mt-3 h-3 w-28 rounded-full"></div>
+        <div className="mt-2 space-y-1">
+          <div className="skeleton h-3 w-full rounded-full"></div>
+          <div className="skeleton h-3 w-2/3 rounded-full"></div>
+        </div>
+      </div>
+
+      {/* Footer: profil + tombol detail */}
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-4">
+        <div className="flex items-center gap-3">
+          <div className="skeleton h-11 w-11 shrink-0" style={{ borderRadius: '28%' }}></div>
+          <div className="space-y-1.5">
+            <div className="skeleton h-3.5 w-28 rounded-full"></div>
+            <div className="skeleton h-3 w-20 rounded-full"></div>
+          </div>
+        </div>
+        <div className="skeleton h-8 w-16 rounded-xl"></div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonGalleryCard() {
+  return (
+    <div className="card-hover bsi-panel flex h-full flex-col overflow-hidden rounded-3xl">
+      {/* Media menempel tepi atas sesuai GalleryCard asli */}
+      <div className="skeleton aspect-video w-full"></div>
+
+      <div className="flex flex-1 flex-col gap-3 p-5">
+        {/* Badge kegiatan dan tanggal */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap gap-1.5">
+            <div className="skeleton h-6 w-24 rounded-full"></div>
+            <div className="skeleton h-5 w-20 rounded-full"></div>
+          </div>
+          <div className="skeleton h-3 w-16 rounded-full"></div>
+        </div>
+
+        {/* Judul dan deskripsi */}
+        <div className="skeleton h-5 w-3/4 rounded-full"></div>
+        <div className="space-y-1.5">
+          <div className="skeleton h-3.5 w-full rounded-full"></div>
+          <div className="skeleton h-3.5 w-2/3 rounded-full"></div>
+        </div>
+
+        {/* Footer: profil + keterangan */}
+        <div className="mt-auto space-y-3 border-t border-slate-100 pt-3">
+          <div className="flex items-center gap-3">
+            <div className="skeleton h-11 w-11 shrink-0" style={{ borderRadius: '28%' }}></div>
+            <div className="space-y-1.5">
+              <div className="skeleton h-3.5 w-28 rounded-full"></div>
+              <div className="skeleton h-3 w-20 rounded-full"></div>
+            </div>
+          </div>
+          <div className="skeleton h-3 w-40 rounded-full"></div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonAttendanceCard() {
+  return (
+    <div className="card-hover bsi-panel flex h-full flex-col rounded-3xl p-5">
+      {/* Tanggal + profil + badge status */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="skeleton h-4 w-40 rounded-full"></div>
+          <div className="mt-4 flex items-center gap-3">
+            <div className="skeleton h-11 w-11 shrink-0" style={{ borderRadius: '28%' }}></div>
+            <div className="space-y-1.5">
+              <div className="skeleton h-4 w-28 rounded-full"></div>
+              <div className="skeleton h-3 w-20 rounded-full"></div>
+            </div>
+          </div>
+        </div>
+        <div className="skeleton h-6 w-16 rounded-full"></div>
+      </div>
+
+      {/* Box alasan / keterangan */}
+      <div className="mt-4 flex-1 rounded-2xl bg-slate-50 p-4">
+        <div className="skeleton h-3 w-32 rounded-full"></div>
+        <div className="skeleton mt-2 h-3.5 w-3/4 rounded-full"></div>
+      </div>
+
+      {/* Tombol aksi */}
+      <div className="mt-4 flex gap-2">
+        <div className="skeleton h-8 w-16 rounded-xl"></div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonPersonCard() {
+  return (
+    <div className="card-hover bsi-panel flex h-full flex-col rounded-3xl p-5">
+      {/* Profil mahasiswa */}
+      <div className="flex items-center gap-4">
+        <div className="skeleton h-14 w-14 shrink-0" style={{ borderRadius: '28%' }}></div>
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <div className="skeleton h-5 w-36 rounded-full"></div>
+          <div className="skeleton h-3 w-24 rounded-full"></div>
+          <div className="skeleton h-5 w-20 rounded-full"></div>
+        </div>
+      </div>
+
+      {/* Statistik logbook dan media */}
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <div className="rounded-2xl bg-slate-50 p-3">
+          <div className="skeleton h-3 w-16 rounded-full"></div>
+          <div className="skeleton mt-1.5 h-5 w-8 rounded-full"></div>
+        </div>
+        <div className="rounded-2xl bg-slate-50 p-3">
+          <div className="skeleton h-3 w-16 rounded-full"></div>
+          <div className="skeleton mt-1.5 h-5 w-8 rounded-full"></div>
+        </div>
+      </div>
+
+      {/* Rekap kehadiran */}
+      <div className="mt-3 border-t border-slate-100 pt-3">
+        <div className="skeleton h-3 w-24 rounded-full"></div>
+        <div className="mt-2 grid grid-cols-3 gap-2">
+          <div className="rounded-xl bg-slate-50 p-2">
+            <div className="skeleton h-3 w-full rounded-full"></div>
+            <div className="skeleton mx-auto mt-1.5 h-4 w-6 rounded-full"></div>
+          </div>
+          <div className="rounded-xl bg-slate-50 p-2">
+            <div className="skeleton h-3 w-full rounded-full"></div>
+            <div className="skeleton mx-auto mt-1.5 h-4 w-6 rounded-full"></div>
+          </div>
+          <div className="rounded-xl bg-slate-50 p-2">
+            <div className="skeleton h-3 w-full rounded-full"></div>
+            <div className="skeleton mx-auto mt-1.5 h-4 w-6 rounded-full"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonDashboard() {
+  return (
+    <div className="space-y-6">
+      {/* Header profil + tab */}
+      <div className="bsi-panel rounded-[2rem] p-5 shadow-sm sm:p-8 lg:p-10">
+        <div className="flex flex-wrap items-center gap-4 sm:gap-6">
+          <div className="skeleton h-14 w-14 shrink-0 sm:h-24 sm:w-24" style={{ borderRadius: '28%' }}></div>
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="skeleton h-5 w-48 rounded-full sm:h-6"></div>
+            <div className="skeleton h-3.5 w-28 rounded-full"></div>
+            <div className="skeleton h-3.5 w-32 rounded-full"></div>
+          </div>
+        </div>
+        <div className="mt-6 flex flex-wrap gap-2 sm:mt-8">
+          <div className="skeleton h-9 w-24 rounded-2xl"></div>
+          <div className="skeleton h-9 w-20 rounded-2xl"></div>
+          <div className="skeleton h-9 w-28 rounded-2xl"></div>
+          <div className="skeleton h-9 w-20 rounded-2xl"></div>
+        </div>
+      </div>
+
+      {/* Form logbook + daftar logbook */}
+      <div className="grid items-start gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+        <div className="space-y-4 bsi-panel rounded-[2rem] p-5 shadow-sm sm:p-8">
+          <div className="skeleton h-6 w-48 rounded-full"></div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="skeleton h-11 w-full rounded-2xl"></div>
+            <div className="skeleton h-11 w-full rounded-2xl"></div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="skeleton h-11 w-full rounded-2xl"></div>
+            <div className="skeleton h-11 w-full rounded-2xl"></div>
+          </div>
+          <div className="skeleton h-11 w-full rounded-2xl"></div>
+          <div className="skeleton h-40 w-full rounded-2xl"></div>
+          <div className="skeleton h-11 w-full rounded-2xl"></div>
+        </div>
+        <div className="space-y-5">
+          <div className="skeleton h-6 w-32 rounded-full"></div>
+          <div className="skeleton h-12 w-full rounded-3xl"></div>
+          <div className="skeleton h-4 w-28 rounded-full"></div>
+          <div className="grid gap-5 md:grid-cols-2 kartu-grid">
+            <SkeletonLogbookCard />
+            <SkeletonLogbookCard />
+            <SkeletonLogbookCard />
+            <SkeletonLogbookCard />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonStatCard() {
+  return (
+    <div className="card-hover bsi-panel rounded-3xl p-3 shadow-sm sm:p-6">
+      <div className="skeleton h-3 w-3/4 rounded-full sm:h-4 sm:w-28"></div>
+      <div className="skeleton mt-1 h-6 w-1/2 rounded-full sm:mt-3 sm:h-9 sm:w-16"></div>
+      <div className="skeleton mt-2 h-3 w-36 rounded-full hidden sm:block"></div>
+    </div>
+  )
+}
+
+export function SkeletonChartRow() {
+  return (
+    <div className="card-hover bsi-panel rounded-[1.5rem] p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="space-y-1.5">
+          <div className="skeleton h-4 w-32 rounded-full"></div>
+          <div className="skeleton h-3 w-20 rounded-full"></div>
+        </div>
+        <div className="skeleton h-3 w-36 rounded-full"></div>
+      </div>
+      <div className="skeleton mt-4 h-4 w-full rounded-full"></div>
+    </div>
+  )
 }
 ````
 
@@ -3259,128 +2910,6 @@ export function SumberVideo(props) {
 }
 ````
 
-## File: src/components/FilterBar.jsx
-````javascript
-import { useEffect, useState } from 'react'
-import { ICONS } from './icons.jsx'
-import { CustomSelect, CustomDateInput } from './controls.jsx'
-
-export function FilterSelect(props) {
-  return (
-    <CustomSelect
-      icon={props.icon}
-      value={props.value}
-      onChange={props.onChange}
-      options={props.options}
-      className="min-w-[190px]"
-      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
-    />
-  )
-}
-
-export function FilterDate(props) {
-  return (
-    <CustomDateInput
-      mode={props.mode || 'date'}
-      value={props.value}
-      onChange={props.onChange}
-      className="min-w-[170px]"
-      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
-    />
-  )
-}
-
-export function TimeFilter(props) {
-  const f = props.filter
-  const set = props.set
-  return (
-    <div className="flex flex-wrap items-center gap-3">
-      <div className="time-toggle">
-        <button type="button" className={f.timeMode === 'bulan' ? 'active' : ''}
-          onClick={function () { set(Object.assign({}, f, { timeMode: 'bulan', bulan: '', dari: '', sampai: '' })) }}>Bulan</button>
-        <button type="button" className={f.timeMode === 'rentang' ? 'active' : ''}
-          onClick={function () { set(Object.assign({}, f, { timeMode: 'rentang', bulan: '', dari: '', sampai: '' })) }}>Rentang Waktu</button>
-      </div>
-      {f.timeMode === 'bulan'
-        ? <div key="bulan" className="anim-ganti-bulan flex flex-wrap items-center gap-2">
-<FilterDate mode="month" value={f.bulan} onChange={function (v) { set(Object.assign({}, f, { bulan: v })) }} />
-</div>
-        : <div key="rentang" className="anim-ganti-rentang flex flex-wrap items-center gap-2">
-            <FilterDate value={f.dari} onChange={function (v) { set(Object.assign({}, f, { dari: v })) }} />
-            <span className="text-slate-600 text-sm">sampai</span>
-            <FilterDate value={f.sampai} onChange={function (v) { set(Object.assign({}, f, { sampai: v })) }} />
-          </div>}
-    </div>
-  )
-}
-
-export function FilterBar(props) {
-  const [settled, setSettled] = useState(false)
-  useEffect(function () {
-    if (props.open) {
-      const t = setTimeout(function () { setSettled(true) }, 400)
-      return function () { clearTimeout(t) }
-    }
-    setSettled(false)
-    return undefined
-  }, [props.open])
-  return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-4 lg:p-5 shadow-sm">
-      <div className="flex items-center justify-between gap-3">
-        <button onClick={props.onToggle}
-          className="xl:hidden flex items-center gap-2 px-4 py-2.5 rounded-2xl border border-slate-200 bg-slate-50 text-sm font-semibold text-slate-700 hover:bg-slate-100">
-          <span className="text-bsi-700">{ICONS.funnel}</span>
-          <span>Filter</span>
-          {props.activeCount > 0 ? (
-            <span className="inline-flex items-center justify-center h-6 min-w-6 px-2 rounded-full bg-bsi-800 text-white text-xs font-bold">{props.activeCount}</span>
-          ) : null}
-          <span className={'transition-transform duration-200 text-slate-600 ' + (props.open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
-        </button>
-        <div className="hidden xl:block text-sm text-slate-600">
-          {props.activeCount > 0
-            ? <span className="inline-flex items-center gap-2"><span className="text-bsi-700">{ICONS.funnel}</span><span><strong className="text-slate-900">{props.activeCount}</strong> filter aktif</span></span>
-            : <span className="inline-flex items-center gap-2"><span className="text-slate-600">{ICONS.funnel}</span><span>Belum ada filter aktif</span></span>}
-        </div>
-      </div>
-            <div className={'filter-wrap' + (props.open ? ' filter-wrap-buka' : '')}>
-        <div className={'filter-dalam' + (props.open && settled ? ' filter-dalam-santai' : '')}>
-          <div className="filter-isi flex flex-wrap items-center gap-3">
-            {props.children}
-            {props.activeCount > 0 ? (
-              <button onClick={props.onReset}
-                className="inline-flex items-center gap-2 rounded-2xl bg-red-50 border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100">
-                {ICONS.close}<span>Hapus Filter</span>
-              </button>
-            ) : null}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export function SortSelect(props) {
-  return (
-    <CustomSelect
-      icon={ICONS.sort}
-      value={props.value}
-      onChange={props.onChange}
-      options={[{ value: 'terbaru', label: 'Terbaru' }, { value: 'terlama', label: 'Terlama' }]}
-      className="min-w-[150px]"
-      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
-    />
-  )
-}
-export function countActiveFilters(o) {
-  let c = 0
-  for (const k in o) {
-    if (k === 'timeMode') continue
-    if (o[k]) c++
-  }
-  return c
-}
-````
-
 ## File: src/components/icons.jsx
 ````javascript
 function svg(inner, size) {
@@ -3828,6 +3357,128 @@ export default defineConfig(function ({ mode }) {
 })
 ````
 
+## File: src/components/FilterBar.jsx
+````javascript
+import { useEffect, useState } from 'react'
+import { ICONS } from './icons.jsx'
+import { CustomSelect, CustomDateInput } from './controls.jsx'
+
+export function FilterSelect(props) {
+  return (
+    <CustomSelect
+      icon={props.icon}
+      value={props.value}
+      onChange={props.onChange}
+      options={props.options}
+      className="min-w-[190px]"
+      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+    />
+  )
+}
+
+export function FilterDate(props) {
+  return (
+    <CustomDateInput
+      mode={props.mode || 'date'}
+      value={props.value}
+      onChange={props.onChange}
+      className="min-w-[170px]"
+      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+    />
+  )
+}
+
+export function TimeFilter(props) {
+  const f = props.filter
+  const set = props.set
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <div className="time-toggle">
+        <button type="button" className={f.timeMode === 'bulan' ? 'active' : ''}
+          onClick={function () { set(Object.assign({}, f, { timeMode: 'bulan', bulan: '', dari: '', sampai: '' })) }}>Bulan</button>
+        <button type="button" className={f.timeMode === 'rentang' ? 'active' : ''}
+          onClick={function () { set(Object.assign({}, f, { timeMode: 'rentang', bulan: '', dari: '', sampai: '' })) }}>Rentang Waktu</button>
+      </div>
+      {f.timeMode === 'bulan'
+        ? <div key="bulan" className="anim-ganti-bulan flex flex-wrap items-center gap-2">
+<FilterDate mode="month" value={f.bulan} onChange={function (v) { set(Object.assign({}, f, { bulan: v })) }} />
+</div>
+        : <div key="rentang" className="anim-ganti-rentang flex flex-wrap items-center gap-2">
+            <FilterDate value={f.dari} onChange={function (v) { set(Object.assign({}, f, { dari: v })) }} />
+            <span className="text-slate-600 text-sm">sampai</span>
+            <FilterDate value={f.sampai} onChange={function (v) { set(Object.assign({}, f, { sampai: v })) }} />
+          </div>}
+    </div>
+  )
+}
+
+export function FilterBar(props) {
+  const [settled, setSettled] = useState(false)
+  useEffect(function () {
+    if (props.open) {
+      const t = setTimeout(function () { setSettled(true) }, 400)
+      return function () { clearTimeout(t) }
+    }
+    setSettled(false)
+    return undefined
+  }, [props.open])
+  return (
+    <div className="bsi-panel rounded-3xl p-4 lg:p-5">
+      <div className="flex items-center justify-between gap-3">
+        <button onClick={props.onToggle}
+          className="xl:hidden flex items-center gap-2 px-4 py-2.5 rounded-2xl border border-slate-200 bg-slate-50 text-sm font-semibold text-slate-700 hover:bg-slate-100">
+          <span className="text-bsi-700">{ICONS.funnel}</span>
+          <span>Filter</span>
+          {props.activeCount > 0 ? (
+            <span className="inline-flex items-center justify-center h-6 min-w-6 px-2 rounded-full bg-bsi-800 text-white text-xs font-bold">{props.activeCount}</span>
+          ) : null}
+          <span className={'transition-transform duration-200 text-slate-600 ' + (props.open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
+        </button>
+        <div className="hidden xl:block text-sm text-slate-600">
+          {props.activeCount > 0
+            ? <span className="inline-flex items-center gap-2"><span className="text-bsi-700">{ICONS.funnel}</span><span><strong className="text-slate-900">{props.activeCount}</strong> filter aktif</span></span>
+            : <span className="inline-flex items-center gap-2"><span className="text-slate-600">{ICONS.funnel}</span><span>Belum ada filter aktif</span></span>}
+        </div>
+      </div>
+            <div className={'filter-wrap' + (props.open ? ' filter-wrap-buka' : '')}>
+        <div className={'filter-dalam' + (props.open && settled ? ' filter-dalam-santai' : '')}>
+          <div className="filter-isi flex flex-wrap items-center gap-3">
+            {props.children}
+            {props.activeCount > 0 ? (
+              <button onClick={props.onReset}
+                className="inline-flex items-center gap-2 rounded-2xl bg-red-50 border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100">
+                {ICONS.close}<span>Hapus Filter</span>
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function SortSelect(props) {
+  return (
+    <CustomSelect
+      icon={ICONS.sort}
+      value={props.value}
+      onChange={props.onChange}
+      options={[{ value: 'terbaru', label: 'Terbaru' }, { value: 'terlama', label: 'Terlama' }]}
+      className="min-w-[150px]"
+      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+    />
+  )
+}
+export function countActiveFilters(o) {
+  let c = 0
+  for (const k in o) {
+    if (k === 'timeMode') continue
+    if (o[k]) c++
+  }
+  return c
+}
+````
+
 ## File: src/main.jsx
 ````javascript
 import React from 'react'
@@ -4173,12 +3824,12 @@ export default function LoginPage() {
 
   return (
     <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr] items-start">
-      <div className="card-hover rounded-[2rem] bg-bsi-900 text-white p-5 sm:p-8 lg:p-10">
-        <span className="inline-flex px-3 py-1.5 rounded-full bg-white/10 text-[10px] font-semibold uppercase tracking-wide sm:px-4 sm:py-2 sm:text-xs">Khusus Peserta Magang</span>
-        <h1 className="mt-6 text-2xl sm:text-3xl lg:text-4xl font-black leading-tight">Masuk untuk Mengisi Logbook, Galeri, dan Daftar Hadir</h1>
-        <p className="mt-3 text-sm leading-relaxed text-white/80 sm:mt-4 sm:text-base">Halaman ini khusus mahasiswa magang. Dosen pembimbing dan kaprodi dapat melihat halaman umum tanpa masuk.</p>
+      <div className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8 lg:p-10">
+        <span className="bsi-pill">Khusus Peserta Magang</span>
+        <h1 className="mt-6 text-2xl sm:text-3xl lg:text-4xl font-black leading-tight text-slate-900">Masuk untuk Mengisi Logbook, Galeri, dan Daftar Hadir</h1>
+        <p className="mt-3 text-sm leading-relaxed text-slate-600 sm:mt-4 sm:text-base">Halaman ini khusus mahasiswa magang. Dosen pembimbing dan kaprodi dapat melihat halaman umum tanpa masuk.</p>
       </div>
-      <div className="card-hover bg-white rounded-[2rem] border border-slate-200 shadow-sm p-5 sm:p-8 lg:p-10">
+      <div className="card-hover bsi-panel rounded-[2rem] p-5 sm:p-8 lg:p-10">
         <h2 className="text-xl sm:text-2xl font-black text-slate-900">Masuk Akun Magang</h2>
         {error ? (
           <div className="mt-3 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -4269,31 +3920,31 @@ export default function DospemPage() {
 
   return (
     <div>
-      <section className="card-hover rounded-[2rem] bg-bsi-900 text-white p-5 sm:p-5 sm:p-8 lg:p-12">
-        <span className="inline-flex px-3 py-1.5 rounded-full bg-white/10 text-[10px] font-semibold uppercase tracking-wide sm:px-4 sm:py-2 sm:text-xs">Untuk Dospem & Kaprodi</span>
-        <h1 className="mt-6 text-2xl sm:text-2xl sm:text-3xl lg:text-5xl font-black max-w-3xl leading-tight">Ringkasan Kegiatan Magang Tim di Bank BSI</h1>
-        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-white/80 sm:mt-4 sm:text-base">Halaman ini dapat diakses tanpa login.</p>
+      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8 lg:p-12">
+        <span className="bsi-pill">Untuk Dospem & Kaprodi</span>
+        <h1 className="mt-6 text-2xl sm:text-2xl sm:text-3xl lg:text-5xl font-black max-w-3xl leading-tight text-slate-900">Ringkasan Kegiatan Magang Tim di Bank BSI</h1>
+        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-600 sm:mt-4 sm:text-base">Halaman ini dapat diakses tanpa login.</p>
         <div className="mt-5 grid grid-cols-2 gap-2.5 sm:mt-8 sm:gap-4 xl:grid-cols-4">
           {loading
             ? [0, 1, 2, 3].map(function (i) {
                 return (
-                  <div key={i} className="rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5">
-                    <div className="skeleton skeleton-on-dark h-4 w-24"></div>
-                    <div className="skeleton skeleton-on-dark h-9 w-14 mt-2"></div>
+                  <div key={i} className="bsi-stat-sm rounded-2xl p-4 sm:rounded-[1.5rem] sm:p-5">
+                    <div className="skeleton h-4 w-24"></div>
+                    <div className="skeleton h-9 w-14 mt-2"></div>
                   </div>
                 )
               })
             : [
-                <div key="mahasiswa" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Total Mahasiswa</p><p className="mt-1 text-2xl sm:text-3xl font-black">{people.length}</p></div>,
-                <div key="logbook" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Logbook Publik</p><p className="mt-1 text-2xl sm:text-3xl font-black">{logs.length}</p></div>,
-                <div key="galeri" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Media Galeri</p><p className="mt-1 text-2xl sm:text-3xl font-black">{galCount}</p></div>,
-                <div key="hadir" className="card-hover rounded-2xl bg-white/10 p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-white/80">Catatan Hadir</p><p className="mt-1 text-2xl sm:text-3xl font-black">{hadirCount}</p></div>
+                <div key="mahasiswa" className="card-hover bsi-stat-sm rounded-2xl p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-slate-600">Total Mahasiswa</p><p className="mt-1 text-2xl sm:text-3xl font-black">{people.length}</p></div>,
+                <div key="logbook" className="card-hover bsi-stat-sm rounded-2xl p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-slate-600">Logbook Publik</p><p className="mt-1 text-2xl sm:text-3xl font-black">{logs.length}</p></div>,
+                <div key="galeri" className="card-hover bsi-stat-sm rounded-2xl p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-slate-600">Media Galeri</p><p className="mt-1 text-2xl sm:text-3xl font-black">{galCount}</p></div>,
+                <div key="hadir" className="card-hover bsi-stat-sm rounded-2xl p-4 sm:rounded-[1.5rem] sm:p-5"><p className="text-xs sm:text-sm text-slate-600">Catatan Hadir</p><p className="mt-1 text-2xl sm:text-3xl font-black">{hadirCount}</p></div>
               ]}
         </div>
         <div className="mt-6 flex flex-wrap gap-2 sm:mt-8 sm:gap-3">
           <Link to="/logbook" className="px-4 py-2 rounded-xl bg-gold-500 text-slate-900 text-xs font-bold hover:bg-gold-400 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat Logbook</Link>
-          <Link to="/galeri" className="px-4 py-2 rounded-xl bg-white/10 text-white text-xs font-bold hover:bg-white/20 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat Galeri</Link>
-          <Link to="/absen" className="px-4 py-2 rounded-xl bg-white/10 text-white text-xs font-bold hover:bg-white/20 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat Daftar Hadir</Link>
+          <Link to="/galeri" className="px-4 py-2 rounded-xl bsi-panel text-slate-700 text-xs font-bold hover:text-bsi-800 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat Galeri</Link>
+          <Link to="/absen" className="px-4 py-2 rounded-xl bsi-panel text-slate-700 text-xs font-bold hover:text-bsi-800 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat Daftar Hadir</Link>
         </div>
       </section>
 
@@ -4309,7 +3960,7 @@ const totalGal = galRows.filter(function (x) { return x.mahasiswa_id === p.id })
 const totalHadir = hadirRows.filter(function (x) { return x.mahasiswa_id === p.id }).length
 return (
 <div key={p.id} className="kolom-kartu-rapat">
-<div className="card-hover rounded-3xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col h-full">
+<div className="card-hover bsi-panel rounded-3xl p-5 flex flex-col h-full">
 <div className="flex items-center gap-4">
 <Avatar src={p.foto_profil || null} nama={p.nama} size="lg" />
 <div className="min-w-0 flex-1">
@@ -4371,116 +4022,6 @@ return (
           <Link to="/logbook" className="rounded-xl bg-bsi-800 px-5 py-2.5 text-xs font-bold text-white hover:bg-bsi-900 sm:rounded-2xl sm:px-6 sm:py-3 sm:text-sm">Lihat Semua Logbook</Link>
         </div>
       </section>
-      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
-        {detail ? <LogbookDetail log={detail} /> : null}
-      </Modal>
-    </div>
-  )
-}
-````
-
-## File: src/pages/LogbookPage.jsx
-````javascript
-import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase.js'
-import { useAuth } from '../lib/auth.js'
-import { EmptyState, Modal, Pagination } from '../components/ui.jsx'
-import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
-import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
-import { ICONS } from '../components/icons.jsx'
-import { matchesDateFilters, urutkanTanggal } from '../lib/format.js'
-import { KATEGORI } from '../lib/constants.js'
-import { SkeletonLogbookCard } from '../components/Skeleton.jsx'
-
-const INITIAL = { mahasiswa: '', kategori: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
-const PER_PAGE = 12
-
-export default function LogbookPage() {
-  const { mahasiswa } = useAuth()
-  const [all, setAll] = useState([])
-  const [people, setPeople] = useState([])
-  const [filter, setFilter] = useState(INITIAL)
-  const [sort, setSort] = useState('terbaru')
-  const [open, setOpen] = useState(false)
-  const [detail, setDetail] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [page, setPage] = useState(1)
-
-  useEffect(function () {
-    async function load() {
-      const l = await supabase
-        .from('logbooks')
-        .select('*, mahasiswa(*), logbook_items(*)')
-        .eq('status', 'publik')
-        .order('tanggal', { ascending: false })
-        .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
-      const p = await supabase.from('mahasiswa').select('id, nama').order('nama')
-      setAll(l.data || [])
-      setPeople(p.data || [])
-      setLoading(false)
-    }
-    load()
-  }, [])
-
-  useEffect(function () {
-    setPage(1)
-  }, [filter, sort])
-  function gantiHalaman(p) {
-    setPage(p)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-  const logs = all.filter(function (l) {
-    if (filter.mahasiswa && l.mahasiswa_id !== filter.mahasiswa) return false
-    if (filter.kategori && l.kategori !== filter.kategori) return false
-    return matchesDateFilters(l.tanggal, filter)
-  })
-  const active = countActiveFilters(filter)
-  const sortedLogs = urutkanTanggal(logs, sort)
-  const totalData = sortedLogs.length
-  const totalPages = Math.ceil(totalData / PER_PAGE)
-  const pageAman = Math.min(page, Math.max(1, totalPages))
-  const paginatedLogs = sortedLogs.slice((pageAman - 1) * PER_PAGE, pageAman * PER_PAGE)
-
-  return (
-    <div>
-      <section className="rounded-[2rem] bg-white border border-slate-200 p-5 sm:p-8 lg:p-10 shadow-sm">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600 dark:text-gold-400">Logbook Publik</p>
-        <h1 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Catatan Kegiatan Magang</h1>
-        <p className="mt-2 text-sm text-slate-600 max-w-2xl sm:mt-3 sm:text-base">Satu logbook mewakili satu hari kerja dan bisa berisi beberapa kegiatan.</p>
-      </section>
-
-      <section className="mt-6">
-        <FilterBar open={open} onToggle={function () { setOpen(function (o) { return !o }) }} activeCount={active}
-          onReset={function () { setFilter(INITIAL) }}>
-          <FilterSelect icon={ICONS.user} value={filter.mahasiswa} onChange={function (v) { setFilter(Object.assign({}, filter, { mahasiswa: v })) }}
-            options={[{ value: '', label: 'Semua Mahasiswa' }].concat(people.map(function (p) { return { value: p.id, label: p.nama } }))} />
-          <FilterSelect icon={ICONS.tag} value={filter.kategori} onChange={function (v) { setFilter(Object.assign({}, filter, { kategori: v })) }}
-            options={[{ value: '', label: 'Semua Kategori' }].concat(KATEGORI.map(function (k) { return { value: k, label: k } }))} />
-          <TimeFilter filter={filter} set={setFilter} />
-          <SortSelect value={sort} onChange={setSort} />
-        </FilterBar>
-      </section>
-
-      <section className="grid-pusat mt-8">
-        {loading
-          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
-          : paginatedLogs.map(function (l) {
-              return (
-                <div key={l.id} className="kolom-kartu">
-                  <LogbookCard log={l} isOwner={mahasiswa && mahasiswa.id === l.mahasiswa_id}
-                    onDetail={function () { setDetail(l) }} />
-                </div>
-              )
-            })}
-        {!loading && !logs.length ? <div className="w-full"><EmptyState title="Logbook Tidak Ditemukan" desc="Coba reset filter atau pilih filter lain." /></div> : null}
-      </section>
-      {!loading && totalData > 0 ? (
-        <div className="mt-6 text-center text-sm text-slate-600">
-          Total {totalData} logbook{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}
-        </div>
-      ) : null}
-      {!loading ? <Pagination totalItems={totalData} perPage={PER_PAGE} page={pageAman} onPageChange={gantiHalaman} /> : null}
-
       <Modal open={!!detail} onClose={function () { setDetail(null) }}>
         {detail ? <LogbookDetail log={detail} /> : null}
       </Modal>
@@ -4619,22 +4160,23 @@ export default function Layout() {
 }
 ````
 
-## File: src/pages/AttendancePage.jsx
+## File: src/pages/LogbookPage.jsx
 ````javascript
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../lib/auth.js'
-import { StatCard, EmptyState, Modal, Pagination } from '../components/ui.jsx'
-import { AttendanceCard, AttendanceDetail } from '../components/cards.jsx'
+import { EmptyState, Modal, Pagination } from '../components/ui.jsx'
+import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
 import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
 import { ICONS } from '../components/icons.jsx'
 import { matchesDateFilters, urutkanTanggal } from '../lib/format.js'
-import { SkeletonStatCard, SkeletonChartRow, SkeletonAttendanceCard } from '../components/Skeleton.jsx'
+import { KATEGORI } from '../lib/constants.js'
+import { SkeletonLogbookCard } from '../components/Skeleton.jsx'
 
-const INITIAL = { mahasiswa: '', status: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
+const INITIAL = { mahasiswa: '', kategori: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
 const PER_PAGE = 12
 
-export default function AttendancePage() {
+export default function LogbookPage() {
   const { mahasiswa } = useAuth()
   const [all, setAll] = useState([])
   const [people, setPeople] = useState([])
@@ -4647,9 +4189,14 @@ export default function AttendancePage() {
 
   useEffect(function () {
     async function load() {
-      const a = await supabase.from('daftar_hadir').select('*, mahasiswa(*)').order('tanggal', { ascending: false })
-      const p = await supabase.from('mahasiswa').select('id, nama, nim').order('nama')
-      setAll(a.data || [])
+      const l = await supabase
+        .from('logbooks')
+        .select('*, mahasiswa(*), logbook_items(*)')
+        .eq('status', 'publik')
+        .order('tanggal', { ascending: false })
+        .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
+      const p = await supabase.from('mahasiswa').select('id, nama').order('nama')
+      setAll(l.data || [])
       setPeople(p.data || [])
       setLoading(false)
     }
@@ -4663,45 +4210,24 @@ export default function AttendancePage() {
     setPage(p)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
-  const rows = all.filter(function (r) {
-    if (filter.mahasiswa && r.mahasiswa_id !== filter.mahasiswa) return false
-    if (filter.status && r.status !== filter.status) return false
-    return matchesDateFilters(r.tanggal, filter)
+  const logs = all.filter(function (l) {
+    if (filter.mahasiswa && l.mahasiswa_id !== filter.mahasiswa) return false
+    if (filter.kategori && l.kategori !== filter.kategori) return false
+    return matchesDateFilters(l.tanggal, filter)
   })
   const active = countActiveFilters(filter)
-  const sortedRows = urutkanTanggal(rows, sort)
-  const totalData = sortedRows.length
+  const sortedLogs = urutkanTanggal(logs, sort)
+  const totalData = sortedLogs.length
   const totalPages = Math.ceil(totalData / PER_PAGE)
   const pageAman = Math.min(page, Math.max(1, totalPages))
-  const paginatedRows = sortedRows.slice((pageAman - 1) * PER_PAGE, pageAman * PER_PAGE)
-
-  const counts = rows.reduce(function (acc, r) {
-    acc[r.status] = (acc[r.status] || 0) + 1
-    return acc
-  }, {})
-
-  const perPerson = people.map(function (p) {
-    const mine = rows.filter(function (r) { return r.mahasiswa_id === p.id })
-    const c = mine.reduce(function (acc, r) { acc[r.status] = (acc[r.status] || 0) + 1; return acc }, {})
-    return { nama: p.nama, nim: p.nim, Masuk: c.Masuk || 0, Izin: c.Izin || 0, Bolos: c.Bolos || 0, total: mine.length }
-  })
-  const maxTotal = Math.max.apply(null, perPerson.map(function (p) { return p.total }).concat([1]))
+  const paginatedLogs = sortedLogs.slice((pageAman - 1) * PER_PAGE, pageAman * PER_PAGE)
 
   return (
     <div>
-      <section className="rounded-[2rem] bg-white border border-slate-200 p-5 sm:p-5 sm:p-8 lg:p-10 shadow-sm">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600 dark:text-gold-400">Daftar hadir</p>
-        <h1 className="mt-2 text-2xl sm:text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Rekap Kehadiran Tim Magang</h1>
-        <div className="mt-5 grid grid-cols-2 gap-2.5 sm:mt-8 sm:gap-4 xl:grid-cols-4">
-          {loading
-            ? [0, 1, 2, 3].map(function (i) { return <SkeletonStatCard key={i} /> })
-            : [
-                <StatCard key="total" label="Total Catatan Hadir" value={rows.length} sub="Sesuai Filter Aktif" />,
-                <StatCard key="masuk" label="Masuk" value={counts.Masuk || 0} sub="Mahasiswa Hadir" />,
-                <StatCard key="izin" label="Izin" value={counts.Izin || 0} sub="Dengan Keterangan" />,
-                <StatCard key="bolos" label="Bolos" value={counts.Bolos || 0} sub="Tanpa Keterangan" />
-              ]}
-        </div>
+      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8 lg:p-10">
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600 dark:text-gold-400">Logbook Publik</p>
+        <h1 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Catatan Kegiatan Magang</h1>
+        <p className="mt-2 text-sm text-slate-600 max-w-2xl sm:mt-3 sm:text-base">Satu logbook mewakili satu hari kerja dan bisa berisi beberapa kegiatan.</p>
       </section>
 
       <section className="mt-6">
@@ -4709,71 +4235,35 @@ export default function AttendancePage() {
           onReset={function () { setFilter(INITIAL) }}>
           <FilterSelect icon={ICONS.user} value={filter.mahasiswa} onChange={function (v) { setFilter(Object.assign({}, filter, { mahasiswa: v })) }}
             options={[{ value: '', label: 'Semua Mahasiswa' }].concat(people.map(function (p) { return { value: p.id, label: p.nama } }))} />
-          <FilterSelect icon={ICONS.check} value={filter.status} onChange={function (v) { setFilter(Object.assign({}, filter, { status: v })) }}
-            options={[{ value: '', label: 'Semua Status' }, { value: 'Masuk', label: 'Masuk' }, { value: 'Izin', label: 'Izin' }, { value: 'Bolos', label: 'Bolos' }]} />
+          <FilterSelect icon={ICONS.tag} value={filter.kategori} onChange={function (v) { setFilter(Object.assign({}, filter, { kategori: v })) }}
+            options={[{ value: '', label: 'Semua Kategori' }].concat(KATEGORI.map(function (k) { return { value: k, label: k } }))} />
           <TimeFilter filter={filter} set={setFilter} />
           <SortSelect value={sort} onChange={setSort} />
         </FilterBar>
       </section>
 
-      <section className="mt-8 card-hover rounded-[2rem] bg-white border border-slate-200 p-5 sm:p-5 sm:p-8 lg:p-10 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <h2 className="text-xl sm:text-2xl font-black text-slate-900">Grafik Kehadiran per Mahasiswa</h2>
-          <div className="flex flex-wrap gap-3 text-xs font-semibold">
-            <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-emerald-500" />Masuk</span>
-            <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-amber-500" />Izin</span>
-            <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-red-500" />Bolos</span>
-          </div>
-        </div>
-        <div className="mt-6 space-y-4">
-          {loading
-            ? [0, 1, 2].map(function (i) { return <SkeletonChartRow key={i} /> })
-            : perPerson.map(function (p) {
-                return (
-                  <div key={p.nim} className="card-hover rounded-[1.5rem] border border-slate-200 p-5">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <p className="font-bold text-slate-900">{p.nama}</p>
-                        <p className="text-xs text-slate-600">NIM {p.nim}</p>
-                      </div>
-                      <div className="text-xs text-slate-600">Masuk: {p.Masuk} | Izin: {p.Izin} | Bolos: {p.Bolos}</div>
-                    </div>
-                    <div className="mt-4 flex h-4 w-full overflow-hidden rounded-full bg-slate-100">
-                      <div className="bg-emerald-500 transition-all duration-500" style={{ width: (p.Masuk / maxTotal) * 100 + '%' }} />
-                      <div className="bg-amber-500 transition-all duration-500" style={{ width: (p.Izin / maxTotal) * 100 + '%' }} />
-                      <div className="bg-red-500 transition-all duration-500" style={{ width: (p.Bolos / maxTotal) * 100 + '%' }} />
-                    </div>
-                  </div>
-                )
-              })}
-        </div>
-      </section>
-
-      <section className="mt-8">
-        <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Daftar Kehadiran sesuai Filter</h2>
-        <div className="grid-pusat-rapat mt-6">
-          {loading
-            ? [0, 1, 2].map(function (i) { return <div key={i} className="kolom-kartu-rapat"><SkeletonAttendanceCard /></div> })
-            : paginatedRows.map(function (r) {
-                return (
-                  <div key={r.id} className="kolom-kartu-rapat">
-                    <AttendanceCard row={r} isOwner={mahasiswa && mahasiswa.id === r.mahasiswa_id}
-                      onDetail={function () { setDetail(r) }} />
-                  </div>
-                )
-              })}
-          {!loading && !rows.length ? <div className="w-full"><EmptyState icon="clipboard" title="Belum Ada Data Kehadiran" desc="Data kehadiran akan tampil setelah mahasiswa mengisi daftar hadir." /></div> : null}
-        </div>
+      <section className="grid-pusat mt-8">
+        {loading
+          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
+          : paginatedLogs.map(function (l) {
+              return (
+                <div key={l.id} className="kolom-kartu">
+                  <LogbookCard log={l} isOwner={mahasiswa && mahasiswa.id === l.mahasiswa_id}
+                    onDetail={function () { setDetail(l) }} />
+                </div>
+              )
+            })}
+        {!loading && !logs.length ? <div className="w-full"><EmptyState title="Logbook Tidak Ditemukan" desc="Coba reset filter atau pilih filter lain." /></div> : null}
       </section>
       {!loading && totalData > 0 ? (
         <div className="mt-6 text-center text-sm text-slate-600">
-          Total {totalData} catatan{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}
+          Total {totalData} logbook{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}
         </div>
       ) : null}
       {!loading ? <Pagination totalItems={totalData} perPage={PER_PAGE} page={pageAman} onPageChange={gantiHalaman} /> : null}
 
       <Modal open={!!detail} onClose={function () { setDetail(null) }}>
-        {detail ? <AttendanceDetail row={detail} /> : null}
+        {detail ? <LogbookDetail log={detail} /> : null}
       </Modal>
     </div>
   )
@@ -4957,6 +4447,167 @@ export default function HomePage() {
 }
 ````
 
+## File: src/pages/AttendancePage.jsx
+````javascript
+import { useEffect, useState } from 'react'
+import { supabase } from '../lib/supabase.js'
+import { useAuth } from '../lib/auth.js'
+import { StatCard, EmptyState, Modal, Pagination } from '../components/ui.jsx'
+import { AttendanceCard, AttendanceDetail } from '../components/cards.jsx'
+import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
+import { ICONS } from '../components/icons.jsx'
+import { matchesDateFilters, urutkanTanggal } from '../lib/format.js'
+import { SkeletonStatCard, SkeletonChartRow, SkeletonAttendanceCard } from '../components/Skeleton.jsx'
+
+const INITIAL = { mahasiswa: '', status: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
+const PER_PAGE = 12
+
+export default function AttendancePage() {
+  const { mahasiswa } = useAuth()
+  const [all, setAll] = useState([])
+  const [people, setPeople] = useState([])
+  const [filter, setFilter] = useState(INITIAL)
+  const [sort, setSort] = useState('terbaru')
+  const [open, setOpen] = useState(false)
+  const [detail, setDetail] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
+
+  useEffect(function () {
+    async function load() {
+      const a = await supabase.from('daftar_hadir').select('*, mahasiswa(*)').order('tanggal', { ascending: false })
+      const p = await supabase.from('mahasiswa').select('id, nama, nim').order('nama')
+      setAll(a.data || [])
+      setPeople(p.data || [])
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  useEffect(function () {
+    setPage(1)
+  }, [filter, sort])
+  function gantiHalaman(p) {
+    setPage(p)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+  const rows = all.filter(function (r) {
+    if (filter.mahasiswa && r.mahasiswa_id !== filter.mahasiswa) return false
+    if (filter.status && r.status !== filter.status) return false
+    return matchesDateFilters(r.tanggal, filter)
+  })
+  const active = countActiveFilters(filter)
+  const sortedRows = urutkanTanggal(rows, sort)
+  const totalData = sortedRows.length
+  const totalPages = Math.ceil(totalData / PER_PAGE)
+  const pageAman = Math.min(page, Math.max(1, totalPages))
+  const paginatedRows = sortedRows.slice((pageAman - 1) * PER_PAGE, pageAman * PER_PAGE)
+
+  const counts = rows.reduce(function (acc, r) {
+    acc[r.status] = (acc[r.status] || 0) + 1
+    return acc
+  }, {})
+
+  const perPerson = people.map(function (p) {
+    const mine = rows.filter(function (r) { return r.mahasiswa_id === p.id })
+    const c = mine.reduce(function (acc, r) { acc[r.status] = (acc[r.status] || 0) + 1; return acc }, {})
+    return { nama: p.nama, nim: p.nim, Masuk: c.Masuk || 0, Izin: c.Izin || 0, Bolos: c.Bolos || 0, total: mine.length }
+  })
+  const maxTotal = Math.max.apply(null, perPerson.map(function (p) { return p.total }).concat([1]))
+
+  return (
+    <div>
+      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8 lg:p-10">
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600 dark:text-gold-400">Daftar hadir</p>
+        <h1 className="mt-2 text-2xl sm:text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Rekap Kehadiran Tim Magang</h1>
+        <div className="mt-5 grid grid-cols-2 gap-2.5 sm:mt-8 sm:gap-4 xl:grid-cols-4">
+          {loading
+            ? [0, 1, 2, 3].map(function (i) { return <SkeletonStatCard key={i} /> })
+            : [
+                <StatCard key="total" label="Total Catatan Hadir" value={rows.length} sub="Sesuai Filter Aktif" />,
+                <StatCard key="masuk" label="Masuk" value={counts.Masuk || 0} sub="Mahasiswa Hadir" />,
+                <StatCard key="izin" label="Izin" value={counts.Izin || 0} sub="Dengan Keterangan" />,
+                <StatCard key="bolos" label="Bolos" value={counts.Bolos || 0} sub="Tanpa Keterangan" />
+              ]}
+        </div>
+      </section>
+
+      <section className="mt-6">
+        <FilterBar open={open} onToggle={function () { setOpen(function (o) { return !o }) }} activeCount={active}
+          onReset={function () { setFilter(INITIAL) }}>
+          <FilterSelect icon={ICONS.user} value={filter.mahasiswa} onChange={function (v) { setFilter(Object.assign({}, filter, { mahasiswa: v })) }}
+            options={[{ value: '', label: 'Semua Mahasiswa' }].concat(people.map(function (p) { return { value: p.id, label: p.nama } }))} />
+          <FilterSelect icon={ICONS.check} value={filter.status} onChange={function (v) { setFilter(Object.assign({}, filter, { status: v })) }}
+            options={[{ value: '', label: 'Semua Status' }, { value: 'Masuk', label: 'Masuk' }, { value: 'Izin', label: 'Izin' }, { value: 'Bolos', label: 'Bolos' }]} />
+          <TimeFilter filter={filter} set={setFilter} />
+          <SortSelect value={sort} onChange={setSort} />
+        </FilterBar>
+      </section>
+
+      <section className="mt-8 bsi-panel rounded-[2rem] p-5 sm:p-8 lg:p-10">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <h2 className="text-xl sm:text-2xl font-black text-slate-900">Grafik Kehadiran per Mahasiswa</h2>
+          <div className="flex flex-wrap gap-3 text-xs font-semibold">
+            <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-emerald-500" />Masuk</span>
+            <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-amber-500" />Izin</span>
+            <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-red-500" />Bolos</span>
+          </div>
+        </div>
+        <div className="mt-6 space-y-4">
+          {loading
+            ? [0, 1, 2].map(function (i) { return <SkeletonChartRow key={i} /> })
+            : perPerson.map(function (p) {
+                return (
+                  <div key={p.nim} className="card-hover rounded-[1.5rem] border border-slate-200 p-5">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="font-bold text-slate-900">{p.nama}</p>
+                        <p className="text-xs text-slate-600">NIM {p.nim}</p>
+                      </div>
+                      <div className="text-xs text-slate-600">Masuk: {p.Masuk} | Izin: {p.Izin} | Bolos: {p.Bolos}</div>
+                    </div>
+                    <div className="mt-4 flex h-4 w-full overflow-hidden rounded-full bg-slate-100">
+                      <div className="bg-emerald-500 transition-all duration-500" style={{ width: (p.Masuk / maxTotal) * 100 + '%' }} />
+                      <div className="bg-amber-500 transition-all duration-500" style={{ width: (p.Izin / maxTotal) * 100 + '%' }} />
+                      <div className="bg-red-500 transition-all duration-500" style={{ width: (p.Bolos / maxTotal) * 100 + '%' }} />
+                    </div>
+                  </div>
+                )
+              })}
+        </div>
+      </section>
+
+      <section className="mt-8">
+        <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Daftar Kehadiran sesuai Filter</h2>
+        <div className="grid-pusat-rapat mt-6">
+          {loading
+            ? [0, 1, 2].map(function (i) { return <div key={i} className="kolom-kartu-rapat"><SkeletonAttendanceCard /></div> })
+            : paginatedRows.map(function (r) {
+                return (
+                  <div key={r.id} className="kolom-kartu-rapat">
+                    <AttendanceCard row={r} isOwner={mahasiswa && mahasiswa.id === r.mahasiswa_id}
+                      onDetail={function () { setDetail(r) }} />
+                  </div>
+                )
+              })}
+          {!loading && !rows.length ? <div className="w-full"><EmptyState icon="clipboard" title="Belum Ada Data Kehadiran" desc="Data kehadiran akan tampil setelah mahasiswa mengisi daftar hadir." /></div> : null}
+        </div>
+      </section>
+      {!loading && totalData > 0 ? (
+        <div className="mt-6 text-center text-sm text-slate-600">
+          Total {totalData} catatan{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}
+        </div>
+      ) : null}
+      {!loading ? <Pagination totalItems={totalData} perPage={PER_PAGE} page={pageAman} onPageChange={gantiHalaman} /> : null}
+
+      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
+        {detail ? <AttendanceDetail row={detail} /> : null}
+      </Modal>
+    </div>
+  )
+}
+````
+
 ## File: src/pages/GalleryPage.jsx
 ````javascript
 import { useEffect, useState } from 'react'
@@ -5013,7 +4664,7 @@ export default function GalleryPage() {
 
   return (
     <div>
-      <section className="rounded-[2rem] bg-white border border-slate-200 p-5 sm:p-8 lg:p-10 shadow-sm">
+      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8 lg:p-10">
         <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600 dark:text-gold-400">Galeri dokumentasi</p>
         <h1 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Foto dan Video Kegiatan Magang</h1>
         <p className="mt-2 text-sm text-slate-600 max-w-2xl sm:mt-3 sm:text-base">Setiap foto atau video mewakili satu kegiatan. Klik untuk melihat detail.</p>
@@ -5108,7 +4759,7 @@ export function LogbookCard(props) {
   const slides = slidesFromItems(items)
   const preview = items.slice(0, 2)
   return (
-    <article className="card-hover bg-white rounded-3xl border border-slate-200 shadow-sm p-6 flex flex-col gap-4">
+    <article className="card-hover bsi-panel rounded-3xl p-6 flex flex-col gap-4">
       {slides.length ? <Carousel slides={slides} /> : null}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-1.5">
@@ -5199,7 +4850,7 @@ export function LogbookDetail(props) {
 export function GalleryCard(props) {
   const item = props.item
   return (
-    <article onClick={props.onDetail} className="clickable cursor-pointer bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full">
+    <article onClick={props.onDetail} className="clickable cursor-pointer bsi-panel rounded-3xl overflow-hidden flex flex-col h-full">
       <div className="relative aspect-video w-full overflow-hidden bg-slate-900">
         {item.media_source === 'youtube' ? (
         <MediaYouTube src={item.media_path} alt={item.judul} />
@@ -5265,7 +4916,7 @@ export function GalleryDetail(props) {
 export function AttendanceCard(props) {
   const row = props.row
   return (
-    <div className="card-hover bg-white rounded-3xl border border-slate-200 shadow-sm p-5 flex flex-col h-full">
+    <div className="card-hover bsi-panel rounded-3xl p-5 flex flex-col h-full">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm text-slate-600 pb-4">{formatTanggal(row.tanggal)}</p>
@@ -6158,6 +5809,11 @@ body { background-color: #f4f8f4; background-image: linear-gradient(160deg, #dff
 .bsi-chip-mobile-1 { animation-name: bsiFloatM1; }
 .bsi-chip-mobile-2 { animation-name: bsiFloatM2; animation-delay: 1.2s; }
 .bsi-chip-mobile-3 { animation-name: bsiFloatM3; animation-delay: 2.1s; }
+/* ===== panel-kaca-v1: panel konten & stat kecil mengikuti bahasa visual hero Opsi B ===== */
+.bsi-panel { background: rgba(255,255,255,.6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(15,42,29,.10); box-shadow: 0 10px 24px -12px rgba(15,42,29,.18); }
+.dark .bsi-panel { background: rgba(16,42,29,.6); border-color: rgba(234,244,238,.10); box-shadow: 0 10px 24px -12px rgba(0,0,0,.5); }
+.bsi-stat-sm { background: rgba(255,255,255,.55); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(15,42,29,.10); }
+.dark .bsi-stat-sm { background: rgba(16,42,29,.55); border-color: rgba(234,244,238,.10); }
 ````
 
 ## File: src/components/ui.jsx
@@ -6183,7 +5839,7 @@ export const inputCls = 'mt-1.5 w-full rounded-2xl border border-slate-300 bg-wh
 export const labelCls = 'text-sm font-semibold text-slate-700'
 export const btnPrimary = 'w-full rounded-xl bg-bsi-800 px-5 py-3 text-sm sm:rounded-2xl sm:px-6 sm:py-4 sm:text-base text-white font-bold hover:bg-bsi-900'
 export const btnSmall = 'px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-semibold'
-export const cardCls = 'card-hover bg-white rounded-3xl border border-slate-200 shadow-sm'
+export const cardCls = 'card-hover bsi-panel rounded-3xl'
 
 export function StatCard(props) {
   const rapat = props.rapat
@@ -7638,7 +7294,7 @@ async function executeDelete() {
 
   return (
     <div>
-      <section className="card-hover rounded-[2rem] bg-white border border-slate-200 p-5 sm:p-8 lg:p-10 shadow-sm">
+      <section className="card-hover bsi-panel rounded-[2rem] p-5 sm:p-8 lg:p-10">
         <div className="flex flex-wrap items-center justify-between gap-4 sm:gap-6">
           <div>
             <div className="flex flex-wrap items-center gap-4 sm:gap-6">
@@ -7661,7 +7317,7 @@ async function executeDelete() {
 
       {tab === 'profil' ? (
         <section className="anim-tab mt-8 grid gap-6 lg:grid-cols-[0.85fr_1.15fr] items-start">
-          <div className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 shadow-sm flex flex-col items-center text-center">
+          <div className="card-hover bsi-panel rounded-[2rem] p-8 flex flex-col items-center text-center">
             <div className="avatar-profil-tab"><Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="2xl" /></div>
             <h2 className="mt-4 text-xl font-black text-slate-900">{mahasiswa.nama}</h2>
             <p className="mt-1 text-sm text-slate-600">NIM {mahasiswa.nim}</p>
@@ -7691,7 +7347,7 @@ async function executeDelete() {
               </div>
             </div>
           </div>
-          <div className="card-hover rounded-[2rem] bg-white border border-slate-200 p-8 shadow-sm">
+          <div className="card-hover bsi-panel rounded-[2rem] p-8">
             <h2 className="text-lg font-black text-slate-900">Ringkasan Aktivitas Magang</h2>
             <div className="stats-profil-grid mt-4 grid grid-cols-3 gap-2">
               <div className="rounded-xl bg-slate-50 p-2 text-center"><p className="text-[10px] font-bold text-slate-600 uppercase tracking-wide">Logbook</p><p className="text-base font-black text-bsi-800">{typeof logs !== 'undefined' ? logs.length : 0}</p></div>
@@ -7709,7 +7365,7 @@ async function executeDelete() {
 
       {tab === 'logbook' ? (
         <section className="anim-tab mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
-          <div ref={refFormLog} className={'card-hover scroll-mt-24 bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editLogId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
+          <div ref={refFormLog} className={'card-hover scroll-mt-24 bsi-panel rounded-[2rem] p-8 min-w-0 ' + (editLogId ? 'ring-2 ring-gold-500' : '')}>
             <ModeIndicator edit={!!editLogId} onCancel={cobaCancelEditLog} />
             <h2 className="mt-3 text-xl sm:text-2xl font-black text-slate-900">{editLogId ? 'Ubah Logbook Harian' : 'Tambah Logbook Harian'}</h2>
             <form onSubmit={submitLogbook} className="mt-6 space-y-4">
@@ -7842,7 +7498,7 @@ async function executeDelete() {
 
       {tab === 'galeri' ? (
         <section className="anim-tab mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
-          <div ref={refFormGal} className={'card-hover scroll-mt-24 bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editGalId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
+          <div ref={refFormGal} className={'card-hover scroll-mt-24 bsi-panel rounded-[2rem] p-8 min-w-0 ' + (editGalId ? 'ring-2 ring-gold-500' : '')}>
             <ModeIndicator edit={!!editGalId} onCancel={cobaCancelEditGal} />
             <h2 className="mt-3 text-xl sm:text-2xl font-black text-slate-900">{editGalId ? 'Ubah Media Galeri' : 'Tambah Media Galeri'}</h2>
             <form onSubmit={submitGaleri} className="mt-6 space-y-4">
@@ -7942,7 +7598,7 @@ async function executeDelete() {
 
       {tab === 'absen' ? (
         <section className="anim-tab mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
-          <div ref={refFormHadir} className={'card-hover scroll-mt-24 bg-white rounded-[2rem] border shadow-sm p-8 min-w-0 ' + (editHadirId ? 'border-gold-500 ring-1 ring-gold-500' : 'border-slate-200')}>
+          <div ref={refFormHadir} className={'card-hover scroll-mt-24 bsi-panel rounded-[2rem] p-8 min-w-0 ' + (editHadirId ? 'ring-2 ring-gold-500' : '')}>
             <ModeIndicator edit={!!editHadirId} onCancel={cobaCancelEditHadir} />
             <h2 className="mt-3 text-xl sm:text-2xl font-black text-slate-900">{editHadirId ? 'Ubah Daftar Hadir' : 'Isi Daftar Hadir'}</h2>
             <form onSubmit={submitHadir} className="mt-6 space-y-4">

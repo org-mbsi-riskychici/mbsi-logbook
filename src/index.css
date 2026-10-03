@@ -240,6 +240,9 @@ textarea {
 .grid-pusat-rapat { display: flex; flex-wrap: wrap; justify-content: center; gap: 1rem; }
 .kolom-kartu, .kolom-kartu-rapat { width: 100%; display: flex; }
 .kolom-kartu > *, .kolom-kartu-rapat > * { width: 100%; }
+.kartu-grid > * { min-width: 0; }
+.kolom-kartu, .kolom-kartu-rapat { min-width: 0; }
+.kartu-grid, .grid-pusat, .grid-pusat-rapat { overflow-wrap: anywhere; }
 @media (min-width: 768px) {
   .kolom-kartu { width: calc(50% - 0.625rem); }
   .kolom-kartu-rapat { width: calc(50% - 0.5rem); }
