@@ -19,7 +19,14 @@ export default function QrPrintTab() {
         scale: 3,
         useCORS: true,
         backgroundColor: null,
-        logging: false
+        logging: false,
+        onclone: function (clonedDoc) {
+          const url = clonedDoc.querySelector('.qr-print-card .font-mono')
+          if (!url) return
+          const box = url.parentElement
+          box.style.paddingTop = '6px'
+          box.style.paddingBottom = '18px'
+        }
       })
       const url = canvas.toDataURL('image/png', 1.0)
       const a = document.createElement('a')

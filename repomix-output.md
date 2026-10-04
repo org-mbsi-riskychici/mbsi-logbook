@@ -291,216 +291,6 @@ User-agent: PerplexityBot
 Allow: /
 ````
 
-## File: src/components/QrPrintTab.jsx
-````javascript
-import { useRef, useState } from 'react'
-import { QRCodeSVG } from 'qrcode.react'
-import { useAuth } from '../lib/auth.js'
-import { SizedIcon } from './icons.jsx'
-
-export default function QrPrintTab() {
-  const { mahasiswa } = useAuth()
-  const cardRef = useRef(null)
-  const [unduh, setUnduh] = useState(false)
-
-  const targetUrl = window.location.origin + '/qr'
-
-  async function unduhPng() {
-  if (!cardRef.current || unduh) return
-  setUnduh(true)
-  try {
-    const html2canvas = (await import('html2canvas')).default
-    const canvas = await html2canvas(cardRef.current, {
-      scale: 3,
-      useCORS: true,
-      backgroundColor: null,
-      logging: false,
-      onclone: function (clonedDoc) {
-        const url =
-          clonedDoc.querySelector('.qr-print-card .font-mono') ||
-          clonedDoc.querySelector('.font-mono')
-        const label = url ? url.previousElementSibling : null
-        /* Kompensasi: geser kedua teks NAIK hanya di dokumen klonian,
-           supaya di PNG center terhadap wadahnya. Layar & print tidak terpengaruh. */
-        if (label) {
-          label.style.position = 'relative'
-          label.style.top = '-3px'
-        }
-        if (url) {
-          url.style.position = 'relative'
-          url.style.top = '-3px'
-        }
-      }
-    })
-    const imageDataUrl = canvas.toDataURL('image/png', 1.0)
-    const link = document.createElement('a')
-    link.href = imageDataUrl
-    link.download = 'Standee-QR-' + (mahasiswa ? mahasiswa.nama.replace(/\s+/g, '-') : 'mahasiswa') + '.png'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  } catch (e) {
-    console.error(e)
-    alert('Gagal membuat PNG: ' + e.message)
-  } finally {
-    setUnduh(false)
-  }
-}
-
-  return (
-    <>
-      {/* === Print CSS: hanya kartu QR yang dicetak === */}
-      <style>{`
-        @media print {
-          @page {
-            size: A4 portrait;
-            margin: 1.5cm;
-          }
-          *, *::before, *::after {
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-            color-adjust: exact !important;
-          }
-          html body,
-html.dark body {
-  background-color: #ffffff !important;
-  background-image: none !important;
-}
-html, body {
-  height: 100% !important;
-  overflow: hidden !important;
-}
-          body * {
-            visibility: hidden !important;
-          }
-          .qr-print-card,
-          .qr-print-card * {
-            visibility: visible !important;
-          }
-.qr-print-card {
-  position: fixed !important;
-  top: 0 !important;
-  bottom: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  margin: auto !important;
-  height: fit-content !important;
-  box-shadow: none !important;
-  background: linear-gradient(135deg, #e7f6ec 0%, #f4fbee 55%, #fdf4e3 100%) !important;
-}
-/* Paksa warna light mode saat print (aman dari dark mode) */
-.qr-print-card .text-slate-900 { color: #0f172a !important; }
-.qr-print-card .text-slate-700 { color: #334155 !important; }
-.qr-print-card .text-slate-500 { color: #64748b !important; }
-.qr-print-card .text-slate-400 { color: #94a3b8 !important; }
-        }
-
-        /* Kartu QR selalu bertema terang: batalkan override dark mode di dalam kartu saja */
-.dark .qr-print-card { border-color: rgba(15,42,29,.10) !important; }
-.dark .qr-print-card .text-slate-900,
-.dark .qr-print-card .text-slate-700 { color: #0f2a1d !important; }
-.dark .qr-print-card .text-slate-500,
-.dark .qr-print-card .text-slate-400 { color: #5f6f64 !important; }
-.dark .qr-print-card .text-bsi-800 { color: #177c48 !important; }
-.dark .qr-print-card .bg-bsi-800 { background-color: #16623c !important; }
-.dark .qr-print-card .bg-slate-50 { background-color: rgba(15,42,29,.06) !important; }
-.dark .qr-print-card .border-slate-100,
-.dark .qr-print-card .border-slate-200 { border-color: rgba(15,42,29,.10) !important; }
-      `}</style>
-
-      <div className="anim-tab mt-8 space-y-6">
-        {/* Kartu Poster Siap Cetak */}
-        <section
-  ref={cardRef}
-    className="qr-print-card isolate mx-auto w-full max-w-md rounded-[2rem] p-8 shadow-xl border border-slate-200 flex flex-col items-center text-center relative overflow-hidden"
-  style={{ background: 'linear-gradient(135deg, #e7f6ec 0%, #f4fbee 55%, #fdf4e3 100%)' }}
->
-  {/* Accent Top Bar */}
-  <div className="absolute top-0 inset-x-0 h-2 bg-bsi-800" />
-
-  {/* Aksen dekoratif sudut (terinspirasi logo.svg) */}
-<div className="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full opacity-20 -z-10" style={{ background: '#f59e0b' }} />
-<div className="pointer-events-none absolute -bottom-10 -left-10 h-36 w-36 rounded-full opacity-20 -z-10" style={{ background: '#16623c' }} />
-
-          {/* Header Branding */}
-          <div className="flex flex-col items-center gap-3 mt-4">
-            <div className="h-16 w-16 rounded-2xl bg-bsi-800 text-white grid place-items-center shadow-md">
-              <svg className="w-9 h-9" viewBox="0 0 24 24" fill="none">
-                <path d="M4 7V17C4 18.1 4.9 19 6 19H18C19.1 19 20 18.1 20 17V7" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M4 7L12 12L20 7" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M12 12V19" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </div>
-            <div className="flex flex-col items-center">
-              <h2 className="text-2xl font-black tracking-tight text-slate-900 uppercase flex items-center gap-2">
-                <span className="text-bsi-800">GANK</span>
-                <span className="text-slate-700">SKUYY</span>
-              </h2>
-              <p className="text-[11px] font-bold text-slate-500 tracking-[0.2em] uppercase mt-1.5">
-                Portal Presensi &amp; Logbook
-              </p>
-            </div>
-          </div>
-
-          <hr className="w-full border-slate-100 my-6" />
-
-          <div className="space-y-1">
-            <p className="text-xs font-bold text-bsi-800 uppercase tracking-widest">
-              Scan QR Code di Bawah Ini
-            </p>
-            <p className="text-xs text-slate-500">
-              Untuk mengisi Logbook harian & Presensi magang
-            </p>
-          </div>
-
-          <div className="my-6 p-4 border-2 border-dashed border-bsi-300 rounded-3xl" style={{ background: '#ffffff' }}>
-            <QRCodeSVG
-              value={targetUrl}
-              size={200}
-              bgColor="#ffffff"
-              fgColor="#16623c"
-              level="H"
-            />
-          </div>
-
-          <div className="w-full max-w-[20rem] border border-slate-200 px-4 py-3 rounded-2xl" style={{ background: '#ffffff' }}>
-<p className="qr-url-label text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-  Akses Tautan Manual
-</p>
-<p className="qr-url-text text-xs font-mono font-bold text-slate-700 break-all leading-normal mt-1">
-  {targetUrl}
-</p>
-          </div>
-        </section>
-
-        {/* Tombol Aksi (tidak ikut tercetak / terunduh) */}
-        <section className="mx-auto w-full max-w-md bsi-panel rounded-2xl p-5 flex flex-col sm:flex-row gap-3">
-          <button
-            type="button"
-            onClick={unduhPng}
-            disabled={unduh}
-            className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 transition disabled:opacity-60"
-          >
-            <SizedIcon name="download" size={16} />
-            {unduh ? 'Mengunduh...' : 'Unduh PNG'}
-          </button>
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-bsi-800 px-4 py-3 text-sm font-bold text-white hover:bg-bsi-900 transition"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-            </svg>
-            Cetak PDF
-          </button>
-        </section>
-      </div>
-    </>
-  )
-}
-````
-
 ## File: src/lib/profil.js
 ````javascript
 import { supabase } from './supabase.js'
@@ -889,6 +679,207 @@ export default async function handler(req, res) {
   if (!key) return res.status(400).json({ error: 'Key tidak ada' })
   await s3.send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key }))
   return res.status(200).json({ ok: true })
+}
+````
+
+## File: src/components/QrPrintTab.jsx
+````javascript
+import { useRef, useState } from 'react'
+import { QRCodeSVG } from 'qrcode.react'
+import { useAuth } from '../lib/auth.js'
+import { SizedIcon } from './icons.jsx'
+
+export default function QrPrintTab() {
+  const { mahasiswa } = useAuth()
+  const cardRef = useRef(null)
+  const [unduh, setUnduh] = useState(false)
+
+  const targetUrl = window.location.origin + '/qr'
+
+  async function unduhPng() {
+    if (!cardRef.current || unduh) return
+    setUnduh(true)
+    try {
+      const html2canvas = (await import('html2canvas')).default
+      const canvas = await html2canvas(cardRef.current, {
+        scale: 3,
+        useCORS: true,
+        backgroundColor: null,
+        logging: false,
+        onclone: function (clonedDoc) {
+          const url = clonedDoc.querySelector('.qr-print-card .font-mono')
+          if (!url) return
+          const box = url.parentElement
+          box.style.paddingTop = '6px'
+          box.style.paddingBottom = '18px'
+        }
+      })
+      const url = canvas.toDataURL('image/png', 1.0)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'Standee-QR-' + (mahasiswa ? mahasiswa.nama.replace(/\s+/g, '-') : 'mahasiswa') + '.png'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+    } catch (e) {
+      console.error(e)
+      alert('Gagal membuat PNG: ' + e.message)
+    } finally {
+      setUnduh(false)
+    }
+  }
+
+  return (
+    <>
+      {/* === Print CSS: hanya kartu QR yang dicetak === */}
+      <style>{`
+        @media print {
+          @page {
+            size: A4 portrait;
+            margin: 1.5cm;
+          }
+          *, *::before, *::after {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          html body,
+html.dark body {
+  background-color: #ffffff !important;
+  background-image: none !important;
+}
+html, body {
+  height: 100% !important;
+  overflow: hidden !important;
+}
+          body * {
+            visibility: hidden !important;
+          }
+          .qr-print-card,
+          .qr-print-card * {
+            visibility: visible !important;
+          }
+.qr-print-card {
+  position: fixed !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  margin: auto !important;
+  height: fit-content !important;
+  box-shadow: none !important;
+  background: linear-gradient(135deg, #e7f6ec 0%, #f4fbee 55%, #fdf4e3 100%) !important;
+}
+/* Paksa warna light mode saat print (aman dari dark mode) */
+.qr-print-card .text-slate-900 { color: #0f172a !important; }
+.qr-print-card .text-slate-700 { color: #334155 !important; }
+.qr-print-card .text-slate-500 { color: #64748b !important; }
+.qr-print-card .text-slate-400 { color: #94a3b8 !important; }
+        }
+
+        /* Kartu QR selalu bertema terang: batalkan override dark mode di dalam kartu saja */
+.dark .qr-print-card { border-color: rgba(15,42,29,.10) !important; }
+.dark .qr-print-card .text-slate-900,
+.dark .qr-print-card .text-slate-700 { color: #0f2a1d !important; }
+.dark .qr-print-card .text-slate-500,
+.dark .qr-print-card .text-slate-400 { color: #5f6f64 !important; }
+.dark .qr-print-card .text-bsi-800 { color: #177c48 !important; }
+.dark .qr-print-card .bg-bsi-800 { background-color: #16623c !important; }
+.dark .qr-print-card .bg-slate-50 { background-color: rgba(15,42,29,.06) !important; }
+.dark .qr-print-card .border-slate-100,
+.dark .qr-print-card .border-slate-200 { border-color: rgba(15,42,29,.10) !important; }
+      `}</style>
+
+      <div className="anim-tab mt-8 space-y-6">
+        {/* Kartu Poster Siap Cetak */}
+        <section
+  ref={cardRef}
+    className="qr-print-card isolate mx-auto w-full max-w-md rounded-[2rem] p-8 shadow-xl border border-slate-200 flex flex-col items-center text-center relative overflow-hidden"
+  style={{ background: 'linear-gradient(135deg, #e7f6ec 0%, #f4fbee 55%, #fdf4e3 100%)' }}
+>
+  {/* Accent Top Bar */}
+  <div className="absolute top-0 inset-x-0 h-2 bg-bsi-800" />
+
+  {/* Aksen dekoratif sudut (terinspirasi logo.svg) */}
+<div className="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full opacity-20 -z-10" style={{ background: '#f59e0b' }} />
+<div className="pointer-events-none absolute -bottom-10 -left-10 h-36 w-36 rounded-full opacity-20 -z-10" style={{ background: '#16623c' }} />
+
+          {/* Header Branding */}
+          <div className="flex flex-col items-center gap-3 mt-4">
+            <div className="h-16 w-16 rounded-2xl bg-bsi-800 text-white grid place-items-center shadow-md">
+              <svg className="w-9 h-9" viewBox="0 0 24 24" fill="none">
+                <path d="M4 7V17C4 18.1 4.9 19 6 19H18C19.1 19 20 18.1 20 17V7" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M4 7L12 12L20 7" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M12 12V19" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <div className="flex flex-col items-center">
+              <h2 className="text-2xl font-black tracking-tight text-slate-900 uppercase flex items-center gap-2">
+                <span className="text-bsi-800">GANK</span>
+                <span className="text-slate-700">SKUYY</span>
+              </h2>
+              <p className="text-[11px] font-bold text-slate-500 tracking-[0.2em] uppercase mt-1.5">
+                Portal Presensi &amp; Logbook
+              </p>
+            </div>
+          </div>
+
+          <hr className="w-full border-slate-100 my-6" />
+
+          <div className="space-y-1">
+            <p className="text-xs font-bold text-bsi-800 uppercase tracking-widest">
+              Scan QR Code di Bawah Ini
+            </p>
+            <p className="text-xs text-slate-500">
+              Untuk mengisi Logbook harian & Presensi magang
+            </p>
+          </div>
+
+          <div className="my-6 p-4 border-2 border-dashed border-bsi-300 rounded-3xl" style={{ background: '#ffffff' }}>
+            <QRCodeSVG
+              value={targetUrl}
+              size={200}
+              bgColor="#ffffff"
+              fgColor="#16623c"
+              level="H"
+            />
+          </div>
+
+          <div className="w-full max-w-[20rem] border border-slate-200 px-4 py-3 rounded-2xl" style={{ background: '#ffffff' }}>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+              Akses Tautan Manual
+            </p>
+            <p className="text-xs font-mono font-bold text-slate-700 break-all leading-normal mt-1">
+              {targetUrl}
+            </p>
+          </div>
+        </section>
+
+        {/* Tombol Aksi (tidak ikut tercetak / terunduh) */}
+        <section className="mx-auto w-full max-w-md bsi-panel rounded-2xl p-5 flex flex-col sm:flex-row gap-3">
+          <button
+            type="button"
+            onClick={unduhPng}
+            disabled={unduh}
+            className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 transition disabled:opacity-60"
+          >
+            <SizedIcon name="download" size={16} />
+            {unduh ? 'Mengunduh...' : 'Unduh PNG'}
+          </button>
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-bsi-800 px-4 py-3 text-sm font-bold text-white hover:bg-bsi-900 transition"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+            </svg>
+            Cetak PDF
+          </button>
+        </section>
+      </div>
+    </>
+  )
 }
 ````
 
@@ -1538,51 +1529,6 @@ export function useTheme() {
 }
 ````
 
-## File: index.html
-````html
-<!DOCTYPE html>
-<html lang="id">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="robots" content="index, follow" />
-    <meta name="description" content="Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia. Catatan kegiatan harian, dokumentasi media, dan monitoring kehadiran tim magang dalam satu portal." />
-    <meta name="theme-color" content="#16623c" />
-    <meta property="og:type" content="website" />
-    <meta property="og:title" content="Logbook Magang BSI" />
-    <meta property="og:description" content="Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia." />
-    <meta property="og:locale" content="id_ID" />
-    <link rel="preconnect" href="https://i.ytimg.com" crossorigin />
-    <link rel="preconnect" href="https://drive.google.com" crossorigin />
-    <link rel="dns-prefetch" href="https://drive.usercontent.google.com" />
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%3E%3Crect%20width='24'%20height='24'%20rx='5'%20fill='%2316623c'/%3E%3Cg%20fill='none'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M4%207V17C4%2018.1%204.9%2019%206%2019H18C19.1%2019%2020%2018.1%2020%2017V7'%20stroke='%23ffffff'/%3E%3Cpath%20d='M4%207L12%2012L20%207'%20stroke='%23fbbf24'/%3E%3Cpath%20d='M12%2012V19'%20stroke='%23ffffff'/%3E%3C/g%3E%3C/svg%3E" />
-    <title>Portal Magang BSI</title>
-      <script type="application/ld+json">
-    {"@context":"https://schema.org","@type":"WebSite","name":"Portal Magang BSI","alternateName":"Portal Logbook Magang Bank Syariah Indonesia","description":"Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia.","inLanguage":"id-ID"}
-    </script>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet" />
-</head>
-  <body class="text-slate-800 min-h-screen antialiased">
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-      <noscript>
-      <div style="max-width:640px;margin:48px auto;padding:24px;font-family:sans-serif;line-height:1.6">
-        <h1>Logbook Magang BSI</h1>
-        <p>Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia. Aktifkan JavaScript untuk menggunakan portal ini secara penuh.</p>
-        <ul>
-          <li><a href="/logbook">Logbook publik</a></li>
-          <li><a href="/galeri">Galeri dokumentasi</a></li>
-          <li><a href="/absen">Daftar hadir tim</a></li>
-          <li><a href="/dospem">Ringkasan untuk dosen pembimbing dan kaprodi</a></li>
-        </ul>
-      </div>
-    </noscript>
-  </body>
-</html>
-````
-
 ## File: package.json
 ````json
 {
@@ -1944,6 +1890,51 @@ export async function deleteMedia(key) {
   }
   return res.json()
 }
+````
+
+## File: index.html
+````html
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="index, follow" />
+    <meta name="description" content="Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia. Catatan kegiatan harian, dokumentasi media, dan monitoring kehadiran tim magang dalam satu portal." />
+    <meta name="theme-color" content="#16623c" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Logbook Magang BSI" />
+    <meta property="og:description" content="Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia." />
+    <meta property="og:locale" content="id_ID" />
+    <link rel="preconnect" href="https://i.ytimg.com" crossorigin />
+    <link rel="preconnect" href="https://drive.google.com" crossorigin />
+    <link rel="dns-prefetch" href="https://drive.usercontent.google.com" />
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%3E%3Crect%20width='24'%20height='24'%20rx='5'%20fill='%2316623c'/%3E%3Cg%20fill='none'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M4%207V17C4%2018.1%204.9%2019%206%2019H18C19.1%2019%2020%2018.1%2020%2017V7'%20stroke='%23ffffff'/%3E%3Cpath%20d='M4%207L12%2012L20%207'%20stroke='%23fbbf24'/%3E%3Cpath%20d='M12%2012V19'%20stroke='%23ffffff'/%3E%3C/g%3E%3C/svg%3E" />
+    <title>Portal Magang BSI</title>
+      <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"WebSite","name":"Portal Magang BSI","alternateName":"Portal Logbook Magang Bank Syariah Indonesia","description":"Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia.","inLanguage":"id-ID"}
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet" />
+</head>
+  <body class="text-slate-800 min-h-screen antialiased">
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+      <noscript>
+      <div style="max-width:640px;margin:48px auto;padding:24px;font-family:sans-serif;line-height:1.6">
+        <h1>Logbook Magang BSI</h1>
+        <p>Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia. Aktifkan JavaScript untuk menggunakan portal ini secara penuh.</p>
+        <ul>
+          <li><a href="/logbook">Logbook publik</a></li>
+          <li><a href="/galeri">Galeri dokumentasi</a></li>
+          <li><a href="/absen">Daftar hadir tim</a></li>
+          <li><a href="/dospem">Ringkasan untuk dosen pembimbing dan kaprodi</a></li>
+        </ul>
+      </div>
+    </noscript>
+  </body>
+</html>
 ````
 
 ## File: src/components/PengingatBanner.jsx
@@ -4846,6 +4837,116 @@ return (
 }
 ````
 
+## File: src/pages/LogbookPage.jsx
+````javascript
+import { useEffect, useState } from 'react'
+import { supabase } from '../lib/supabase.js'
+import { useAuth } from '../lib/auth.js'
+import { EmptyState, Modal, Pagination } from '../components/ui.jsx'
+import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
+import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
+import { ICONS } from '../components/icons.jsx'
+import { matchesDateFilters, urutkanTanggal } from '../lib/format.js'
+import { KATEGORI } from '../lib/constants.js'
+import { SkeletonLogbookCard } from '../components/Skeleton.jsx'
+
+const INITIAL = { mahasiswa: '', kategori: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
+const PER_PAGE = 12
+
+export default function LogbookPage() {
+  const { mahasiswa } = useAuth()
+  const [all, setAll] = useState([])
+  const [people, setPeople] = useState([])
+  const [filter, setFilter] = useState(INITIAL)
+  const [sort, setSort] = useState('terbaru')
+  const [open, setOpen] = useState(false)
+  const [detail, setDetail] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
+
+  useEffect(function () {
+    async function load() {
+      const l = await supabase
+        .from('logbooks')
+        .select('*, mahasiswa(*), logbook_items(*)')
+        .eq('status', 'publik')
+        .order('tanggal', { ascending: false })
+        .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
+      const p = await supabase.from('mahasiswa').select('id, nama').order('nama')
+      setAll(l.data || [])
+      setPeople(p.data || [])
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  useEffect(function () {
+    setPage(1)
+  }, [filter, sort])
+  function gantiHalaman(p) {
+    setPage(p)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+  const logs = all.filter(function (l) {
+    if (filter.mahasiswa && l.mahasiswa_id !== filter.mahasiswa) return false
+    if (filter.kategori && l.kategori !== filter.kategori) return false
+    return matchesDateFilters(l.tanggal, filter)
+  })
+  const active = countActiveFilters(filter)
+  const sortedLogs = urutkanTanggal(logs, sort)
+  const totalData = sortedLogs.length
+  const totalPages = Math.ceil(totalData / PER_PAGE)
+  const pageAman = Math.min(page, Math.max(1, totalPages))
+  const paginatedLogs = sortedLogs.slice((pageAman - 1) * PER_PAGE, pageAman * PER_PAGE)
+
+  return (
+    <div>
+      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8 lg:p-10">
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600 dark:text-gold-400">Logbook Publik</p>
+        <h1 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Catatan Kegiatan Magang</h1>
+        <p className="mt-2 text-sm text-slate-600 max-w-2xl sm:mt-3 sm:text-base">Satu logbook mewakili satu hari kerja dan bisa berisi beberapa kegiatan.</p>
+      </section>
+
+      <section className="mt-6">
+        <FilterBar open={open} onToggle={function () { setOpen(function (o) { return !o }) }} activeCount={active}
+          onReset={function () { setFilter(INITIAL) }}>
+          <FilterSelect icon={ICONS.user} value={filter.mahasiswa} onChange={function (v) { setFilter(Object.assign({}, filter, { mahasiswa: v })) }}
+            options={[{ value: '', label: 'Semua Mahasiswa' }].concat(people.map(function (p) { return { value: p.id, label: p.nama } }))} />
+          <FilterSelect icon={ICONS.tag} value={filter.kategori} onChange={function (v) { setFilter(Object.assign({}, filter, { kategori: v })) }}
+            options={[{ value: '', label: 'Semua Kategori' }].concat(KATEGORI.map(function (k) { return { value: k, label: k } }))} />
+          <TimeFilter filter={filter} set={setFilter} />
+          <SortSelect value={sort} onChange={setSort} />
+        </FilterBar>
+      </section>
+
+      <section className="grid-pusat mt-8">
+        {loading
+          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
+          : paginatedLogs.map(function (l) {
+              return (
+                <div key={l.id} className="kolom-kartu">
+                  <LogbookCard log={l} isOwner={mahasiswa && mahasiswa.id === l.mahasiswa_id}
+                    onDetail={function () { setDetail(l) }} />
+                </div>
+              )
+            })}
+        {!loading && !logs.length ? <div className="w-full"><EmptyState title="Logbook Tidak Ditemukan" desc="Coba reset filter atau pilih filter lain." /></div> : null}
+      </section>
+      {!loading && totalData > 0 ? (
+        <div className="mt-6 text-center text-sm text-slate-600">
+          Total {totalData} logbook{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}
+        </div>
+      ) : null}
+      {!loading ? <Pagination totalItems={totalData} perPage={PER_PAGE} page={pageAman} onPageChange={gantiHalaman} /> : null}
+
+      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
+        {detail ? <LogbookDetail log={detail} /> : null}
+      </Modal>
+    </div>
+  )
+}
+````
+
 ## File: src/components/Layout.jsx
 ````javascript
 import { Outlet, Link, NavLink, useNavigate } from 'react-router-dom'
@@ -4977,116 +5078,6 @@ export default function Layout() {
   onCancel={function () { setKonfirmasiKeluar(false) }}
   onConfirm={benarKeluar}
 />
-    </div>
-  )
-}
-````
-
-## File: src/pages/LogbookPage.jsx
-````javascript
-import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase.js'
-import { useAuth } from '../lib/auth.js'
-import { EmptyState, Modal, Pagination } from '../components/ui.jsx'
-import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
-import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
-import { ICONS } from '../components/icons.jsx'
-import { matchesDateFilters, urutkanTanggal } from '../lib/format.js'
-import { KATEGORI } from '../lib/constants.js'
-import { SkeletonLogbookCard } from '../components/Skeleton.jsx'
-
-const INITIAL = { mahasiswa: '', kategori: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
-const PER_PAGE = 12
-
-export default function LogbookPage() {
-  const { mahasiswa } = useAuth()
-  const [all, setAll] = useState([])
-  const [people, setPeople] = useState([])
-  const [filter, setFilter] = useState(INITIAL)
-  const [sort, setSort] = useState('terbaru')
-  const [open, setOpen] = useState(false)
-  const [detail, setDetail] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [page, setPage] = useState(1)
-
-  useEffect(function () {
-    async function load() {
-      const l = await supabase
-        .from('logbooks')
-        .select('*, mahasiswa(*), logbook_items(*)')
-        .eq('status', 'publik')
-        .order('tanggal', { ascending: false })
-        .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
-      const p = await supabase.from('mahasiswa').select('id, nama').order('nama')
-      setAll(l.data || [])
-      setPeople(p.data || [])
-      setLoading(false)
-    }
-    load()
-  }, [])
-
-  useEffect(function () {
-    setPage(1)
-  }, [filter, sort])
-  function gantiHalaman(p) {
-    setPage(p)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-  const logs = all.filter(function (l) {
-    if (filter.mahasiswa && l.mahasiswa_id !== filter.mahasiswa) return false
-    if (filter.kategori && l.kategori !== filter.kategori) return false
-    return matchesDateFilters(l.tanggal, filter)
-  })
-  const active = countActiveFilters(filter)
-  const sortedLogs = urutkanTanggal(logs, sort)
-  const totalData = sortedLogs.length
-  const totalPages = Math.ceil(totalData / PER_PAGE)
-  const pageAman = Math.min(page, Math.max(1, totalPages))
-  const paginatedLogs = sortedLogs.slice((pageAman - 1) * PER_PAGE, pageAman * PER_PAGE)
-
-  return (
-    <div>
-      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8 lg:p-10">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600 dark:text-gold-400">Logbook Publik</p>
-        <h1 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Catatan Kegiatan Magang</h1>
-        <p className="mt-2 text-sm text-slate-600 max-w-2xl sm:mt-3 sm:text-base">Satu logbook mewakili satu hari kerja dan bisa berisi beberapa kegiatan.</p>
-      </section>
-
-      <section className="mt-6">
-        <FilterBar open={open} onToggle={function () { setOpen(function (o) { return !o }) }} activeCount={active}
-          onReset={function () { setFilter(INITIAL) }}>
-          <FilterSelect icon={ICONS.user} value={filter.mahasiswa} onChange={function (v) { setFilter(Object.assign({}, filter, { mahasiswa: v })) }}
-            options={[{ value: '', label: 'Semua Mahasiswa' }].concat(people.map(function (p) { return { value: p.id, label: p.nama } }))} />
-          <FilterSelect icon={ICONS.tag} value={filter.kategori} onChange={function (v) { setFilter(Object.assign({}, filter, { kategori: v })) }}
-            options={[{ value: '', label: 'Semua Kategori' }].concat(KATEGORI.map(function (k) { return { value: k, label: k } }))} />
-          <TimeFilter filter={filter} set={setFilter} />
-          <SortSelect value={sort} onChange={setSort} />
-        </FilterBar>
-      </section>
-
-      <section className="grid-pusat mt-8">
-        {loading
-          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
-          : paginatedLogs.map(function (l) {
-              return (
-                <div key={l.id} className="kolom-kartu">
-                  <LogbookCard log={l} isOwner={mahasiswa && mahasiswa.id === l.mahasiswa_id}
-                    onDetail={function () { setDetail(l) }} />
-                </div>
-              )
-            })}
-        {!loading && !logs.length ? <div className="w-full"><EmptyState title="Logbook Tidak Ditemukan" desc="Coba reset filter atau pilih filter lain." /></div> : null}
-      </section>
-      {!loading && totalData > 0 ? (
-        <div className="mt-6 text-center text-sm text-slate-600">
-          Total {totalData} logbook{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}
-        </div>
-      ) : null}
-      {!loading ? <Pagination totalItems={totalData} perPage={PER_PAGE} page={pageAman} onPageChange={gantiHalaman} /> : null}
-
-      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
-        {detail ? <LogbookDetail log={detail} /> : null}
-      </Modal>
     </div>
   )
 }
