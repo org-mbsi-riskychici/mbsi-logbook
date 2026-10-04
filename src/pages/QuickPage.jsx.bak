@@ -218,6 +218,13 @@ export default function QuickPage() {
 
   return (
     <div className="mx-auto w-full max-w-xl space-y-5">
+      {!loading ? (
+        <PengingatBanner
+          tanggalLogbook={tanggalLogs}
+          hadir={hadirRows}
+          onIsi={function (t) { navigate('/dashboard?isi=' + t) }}
+        />
+      ) : null}
       <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8">
         <h1 className="text-xl font-black text-slate-900 sm:text-2xl">Isi Cepat</h1>
         <p className="mt-1 text-sm text-slate-600">{formatTanggal(tanggal)}</p>
@@ -228,15 +235,6 @@ export default function QuickPage() {
       </section>
 
       {tab === 'logbook' ? (
-        <>
-        {!loading ? (
-          <PengingatBanner
-            tipe="logbook"
-            tanggalLogbook={tanggalLogs}
-            hadir={hadirRows}
-            onIsi={function (t) { navigate('/dashboard?isi=' + t) }}
-          />
-        ) : null}
         <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
           <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoLog.lama ? 'text-amber-600' : 'text-slate-500')}>
             <SizedIcon name="calendar" size={13} />
@@ -298,19 +296,9 @@ export default function QuickPage() {
             </button>
           </form>
         </section>
-        </>
       ) : null}
 
       {tab === 'absen' ? (
-        <>
-        {!loading ? (
-          <PengingatBanner
-            tipe="hadir"
-            tanggalLogbook={tanggalLogs}
-            hadir={hadirRows}
-            onIsi={function (t) { navigate('/dashboard?isiHadir=' + t) }}
-          />
-        ) : null}
         <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
           <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoHadir.lama ? 'text-amber-600' : 'text-slate-500')}>
             <SizedIcon name="clipboard" size={13} />
@@ -351,7 +339,6 @@ export default function QuickPage() {
             </button>
           </form>
         </section>
-        </>
       ) : null}
     </div>
   )

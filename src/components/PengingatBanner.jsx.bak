@@ -41,22 +41,6 @@ export function hitungTanggalTerlewat(tanggalLogbook, hadir) {
   return hasil
 }
 
-/* Daftar hari kerja (Sen-Jum) dari MULAI_MAGANG s/d kemarin yang belum punya
-   catatan hadir sama sekali (status Masuk, Izin, maupun Bolos dianggap sudah isi). */
-export function hitungTanggalTerlewatHadir(hadir) {
-  const punyaHadir = new Set((hadir || []).map(function (h) { return h.tanggal }))
-  const hasil = []
-  const d = new Date(MULAI_MAGANG + 'T00:00:00')
-  const batas = new Date(kemarinIso() + 'T00:00:00')
-  while (d <= batas) {
-    const iso = isoDari(d)
-    const hari = d.getDay()
-    if (hari !== 0 && hari !== 6 && !punyaHadir.has(iso)) hasil.push(iso)
-    d.setDate(d.getDate() + 1)
-  }
-  return hasil
-}
-
 /* gulir-atas-dulu-v1: saat daftar tambahan ditutup, gulir internal dinaikkan
    mulus ke puncak dulu; aksi penutup dipanggil setelah gulir selesai (atau
    jatuh tempo) supaya tinggi banner baru menyusut sesudahnya */
@@ -77,7 +61,6 @@ function gulirKeAtasLalu(el, selesai) {
   setTimeout(cek, 80)
 }
 export default function PengingatBanner(props) {
-  const tipe = props.tipe || 'logbook'
   const [tutup, setTutup] = useState(false)
   const [lihatSemua, setLihatSemua] = useState(false)
   const [buka, setBuka] = useState(false)
@@ -89,22 +72,11 @@ export default function PengingatBanner(props) {
   const refTiga = useRef(null)
   const [tinggiTiga, setTinggiTiga] = useState(0)
   const [capBuka, setCapBuka] = useState(311)
-  const mentah = tipe === 'hadir' ? hitungTanggalTerlewatHadir(props.hadir) : hitungTanggalTerlewat(props.tanggalLogbook, props.hadir)
+  const mentah = hitungTanggalTerlewat(props.tanggalLogbook, props.hadir)
   if (mentah.length && !tutup) simpanRef.current = mentah
   const harusHilang = tutup || !mentah.length
   /* saat menghilang, pakai salinan terakhir supaya isi banner tetap utuh selama animasi keluar */
   const terlewat = mentah.length ? mentah : (simpanRef.current || [])
-  const konfigurasi = tipe === 'hadir'
-    ? {
-        judul: terlewat.length + ' hari kerja belum punya catatan hadir',
-        deskripsi: 'Sabtu-Minggu tidak dihitung. Isi daftar hadir untuk tanggal di bawah supaya catatan kehadiranmu lengkap.',
-        aksi: 'Isi Daftar Hadir'
-      }
-    : {
-        judul: terlewat.length + ' hari kerja belum punya logbook',
-        deskripsi: 'Sabtu-Minggu serta hari berstatus Izin atau Bolos tidak dihitung. Isi logbook untuk tanggal di bawah supaya catatan magangmu lengkap.',
-        aksi: 'Isi Logbook'
-      }
   /* ukur tinggi 3 item pertama supaya tinggi lipatan presisi di semua lebar layar */
   useLayoutEffect(function () {
     function ukur() {
@@ -143,10 +115,10 @@ export default function PengingatBanner(props) {
           </span>
           <div>
             <h2 className="text-base font-black text-amber-800 sm:text-lg">
-              {konfigurasi.judul}
+              {terlewat.length} hari kerja belum punya logbook
             </h2>
             <p className="mt-1 text-xs text-amber-800 sm:text-sm">
-              {konfigurasi.deskripsi}
+              Sabtu-Minggu serta hari berstatus Izin atau Bolos tidak dihitung. Isi logbook untuk tanggal di bawah supaya catatan magangmu lengkap.
             </p>
           </div>
         </div>
@@ -164,7 +136,7 @@ export default function PengingatBanner(props) {
           <span className="sm:hidden">{formatTanggalMobile(t)}</span>
         </p>
               <button type="button" onClick={function () { props.onIsi(t) }} className="rounded-xl bg-bsi-800 px-3.5 py-2 text-xs font-bold text-white hover:bg-bsi-900 sm:text-sm">
-                {konfigurasi.aksi}
+                Isi Logbook
               </button>
             </li>
           )
@@ -180,7 +152,7 @@ export default function PengingatBanner(props) {
                         <span className="sm:hidden">{formatTanggalMobile(t)}</span>
                       </p>
                       <button type="button" onClick={function () { props.onIsi(t) }} className="rounded-xl bg-bsi-800 px-3.5 py-2 text-xs font-bold text-white hover:bg-bsi-900 sm:text-sm">
-                        {konfigurasi.aksi}
+                        Isi Logbook
                       </button>
                     </li>
                   )

@@ -296,17 +296,11 @@ export default function DashboardPage() {
    useEffect(function () {
      if (!mahasiswa || !dataSiap) return
      const t = searchParams.get('isi')
-     const tHadir = searchParams.get('isiHadir')
-     if (!t && !tHadir) return
+     if (!t) return
      setSearchParams({}, { replace: true })
-     if (t) {
-       const pesan = pesanTanggalTerlarang(t, batas.min, batas.max)
-       if (pesan) { toast.gagal(pesan) } else { isiLogbookTanggal(t, true) }
-     }
-     if (tHadir) {
-       const pesanHadir = pesanTanggalTerlarang(tHadir, batas.min, batas.max)
-       if (pesanHadir) { toast.gagal(pesanHadir) } else { isiHadirTanggal(tHadir, true) }
-     }
+     const pesan = pesanTanggalTerlarang(t, batas.min, batas.max)
+     if (pesan) { toast.gagal(pesan); return }
+     isiLogbookTanggal(t, true)
    }, [mahasiswa, dataSiap])
 
   if (loading || !mahasiswa) {
@@ -577,25 +571,6 @@ export default function DashboardPage() {
      terapkanIsiTanggal(t, tunda)
    }
 
-
-  function terapkanIsiHadirTanggal(t, tunda) {
-  cancelEditHadir()
-  setHadirForm(function (f) { return Object.assign({}, f, { tanggal: t }) })
-  setTab('absen')
-  if (tunda) gulirKeFormTunda(refFormHadir, 450)
-  else gulirKeForm(refFormHadir)
-}
-function isiHadirTanggal(t, tunda) {
-  if (isHadirDirty()) {
-    setKonfirmasiEdit({
-      judul: 'Ganti Draf Daftar Hadir?',
-      pesan: 'Isian form daftar hadir yang belum disimpan akan hilang dan diganti dengan tanggal terlewat yang kamu pilih.',
-      aksi: function () { terapkanIsiHadirTanggal(t, tunda) }
-    })
-    return
-  }
-  terapkanIsiHadirTanggal(t, tunda)
-}
 
   function deleteLog(log) { setPendingDelete({ type: 'log', data: log }) }
 
@@ -888,6 +863,13 @@ async function executeDelete() {
           </div>
         </div>
       </section>
+       {dataSiap ? (
+         <PengingatBanner
+           tanggalLogbook={logs.map(function (l) { return l.tanggal })}
+           hadir={hadir}
+           onIsi={isiLogbookTanggal}
+         />
+       ) : null}
 
       {tab === 'profil' ? (
         <section className="anim-tab mt-8 grid gap-6 lg:grid-cols-[0.85fr_1.15fr] items-start">
@@ -938,15 +920,6 @@ async function executeDelete() {
       ) : null}
 
       {tab === 'logbook' ? (
-        <>
-        {dataSiap ? (
-          <PengingatBanner
-            tipe="logbook"
-            tanggalLogbook={logs.map(function (l) { return l.tanggal })}
-            hadir={hadir}
-            onIsi={isiLogbookTanggal}
-          />
-        ) : null}
         <section className="anim-tab mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
           <div ref={refFormLog} className={'card-hover scroll-mt-24 bsi-panel rounded-[2rem] p-8 min-w-0 ' + (editLogId ? 'ring-2 ring-gold-500' : '')}>
             <ModeIndicator edit={!!editLogId} onCancel={cobaCancelEditLog} />
@@ -1077,7 +1050,6 @@ async function executeDelete() {
             <Pagination totalItems={logTotal} perPage={PER_PAGE_DASH} page={logPageAman} onPageChange={gantiHalamanLog} />
           </div>
         </section>
-        </>
       ) : null}
 
       {tab === 'galeri' ? (
@@ -1181,15 +1153,6 @@ async function executeDelete() {
       ) : null}
 
       {tab === 'absen' ? (
-        <>
-        {dataSiap ? (
-          <PengingatBanner
-            tipe="hadir"
-            tanggalLogbook={logs.map(function (l) { return l.tanggal })}
-            hadir={hadir}
-            onIsi={isiHadirTanggal}
-          />
-        ) : null}
         <section className="anim-tab mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
           <div ref={refFormHadir} className={'card-hover scroll-mt-24 bsi-panel rounded-[2rem] p-8 min-w-0 ' + (editHadirId ? 'ring-2 ring-gold-500' : '')}>
             <ModeIndicator edit={!!editHadirId} onCancel={cobaCancelEditHadir} />
@@ -1238,7 +1201,6 @@ async function executeDelete() {
             <Pagination totalItems={hadirTotal} perPage={PER_PAGE_DASH} page={hadirPageAman} onPageChange={gantiHalamanHadir} />
           </div>
         </section>
-        </>
       ) : null}
 
       <Modal open={!!detail} onClose={function () { setDetail(null) }}>
