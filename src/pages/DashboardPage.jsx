@@ -17,6 +17,7 @@ import { CustomSelect, CustomDateInput, FileInput, ToggleModeMedia, SumberVideo 
 import { SizedIcon, ICONS } from '../components/icons.jsx'
 import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
 import PengingatBanner from '../components/PengingatBanner.jsx'
+import QrPrintTab from '../components/QrPrintTab.jsx'
 
 function newItem() {
   return { key: Math.random().toString(36).slice(2), judul: '', deskripsi: '', hasil: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false, show: false, mode: 'foto', ytLink: '', oldYtId: null, oldSource: 'r2', driveLink: '' }
@@ -885,6 +886,7 @@ async function executeDelete() {
             <button onClick={function () { gantiTab('galeri') }} className={tabCls('galeri')}>Galeri</button>
             <button onClick={function () { gantiTab('absen') }} className={tabCls('absen')}>Daftar Hadir</button>
             <button onClick={function () { gantiTab('profil') }} className={tabCls('profil')}>Profil</button>
+             <button onClick={function () { gantiTab('qr') }} className={tabCls('qr')}>Cetak QR</button>
           </div>
         </div>
       </section>
@@ -1240,6 +1242,8 @@ async function executeDelete() {
           </div>
         </section>
       ) : null}
+       {tab === 'qr' ? <QrPrintTab /> : null}
+
 
       <Modal open={!!detail} onClose={function () { setDetail(null) }}>
         {detail && detail.type === 'log' ? <LogbookDetail log={detail.data} /> : null}
