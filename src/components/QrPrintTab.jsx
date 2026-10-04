@@ -50,9 +50,15 @@ export default function QrPrintTab() {
             print-color-adjust: exact !important;
             color-adjust: exact !important;
           }
-          html, body {
-            background: white !important;
-          }
+          html body,
+html.dark body {
+  background-color: #ffffff !important;
+  background-image: none !important;
+}
+html, body {
+  height: 100% !important;
+  overflow: hidden !important;
+}
           body * {
             visibility: hidden !important;
           }

@@ -59,9 +59,15 @@ export default function Layout() {
         <div className="max-w-7xl mx-auto px-4">
           <div className="h-16 flex items-center justify-between gap-4">
             <Link to="/" className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-gradient-to-tr from-bsi-800 to-gold-500 text-white grid place-items-center font-black">BSI</div>
+<div className="h-10 w-10 rounded-2xl grid place-items-center shadow-md" style={{ background: '#16623c' }}>
+  <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M4 7V17C4 18.1 4.9 19 6 19H18C19.1 19 20 18.1 20 17V7" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M4 7L12 12L20 7" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M12 12V19" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+</div>
               <div>
-                <p className="font-bold leading-none text-slate-900">Logbook Magang</p>
+                <p className="font-bold leading-none text-slate-900">Portal Magang</p>
                 <p className="text-xs text-slate-600 mt-1">Bank Syariah Indonesia</p>
               </div>
             </Link>

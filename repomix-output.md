@@ -61,6 +61,7 @@ src/
     Layout.jsx
     PemutarVideo.jsx
     PengingatBanner.jsx
+    QrPrintTab.jsx
     Skeleton.jsx
     ui.jsx
   lib/
@@ -104,6 +105,130 @@ vite.config.js
 
 # Files
 
+## File: api/_lib/sesi.js
+````javascript
+import { createClient } from '@supabase/supabase-js'
+
+export async function cekSesi(env, authHeader) {
+  const header = authHeader || ''
+  const token = header.replace('Bearer ', '')
+  if (!token) return null
+  const supabase = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: header } }
+  })
+  const r = await supabase.auth.getUser(token)
+  return r.error || !r.data.user ? null : r.data.user
+}
+
+export function bacaBody(req) {
+  return new Promise(function (resolve) {
+    let data = ''
+    req.on('data', function (c) { data += c })
+    req.on('end', function () {
+      try { resolve(JSON.parse(data || '{}')) } catch (e) { resolve({}) }
+    })
+  })
+}
+````
+
+## File: api/_lib/youtube.js
+````javascript
+export const LIMIT_PER_PROJECT = 5
+
+export function ptToday() {
+  const now = new Date()
+  const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
+  const y = pt.getFullYear()
+  const m = String(pt.getMonth() + 1).padStart(2, '0')
+  const d = String(pt.getDate()).padStart(2, '0')
+  return y + '-' + m + '-' + d
+}
+
+export function daftarKredensial(env) {
+  const list = []
+  for (let n = 1; n <= 6; n++) {
+    const id = env['YOUTUBE_CLIENT_ID_' + n]
+    const secret = env['YOUTUBE_CLIENT_SECRET_' + n]
+    const refresh = env['YOUTUBE_REFRESH_TOKEN_' + n]
+    if (id && secret && refresh) list.push({ n: n, id: id, secret: secret, refresh: refresh })
+  }
+  if (!list.length && env.YOUTUBE_CLIENT_ID && env.YOUTUBE_CLIENT_SECRET && env.YOUTUBE_REFRESH_TOKEN) {
+    list.push({ n: 1, id: env.YOUTUBE_CLIENT_ID, secret: env.YOUTUBE_CLIENT_SECRET, refresh: env.YOUTUBE_REFRESH_TOKEN })
+  }
+  return list
+}
+
+const cacheToken = {}
+export async function getAccessToken(kred) {
+  const now = Date.now()
+  const c = cacheToken[kred.n]
+  if (c && c.expire > now + 60000) return c.token
+  const params = new URLSearchParams()
+  params.set('client_id', kred.id)
+  params.set('client_secret', kred.secret)
+  params.set('refresh_token', kred.refresh)
+  params.set('grant_type', 'refresh_token')
+  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
+  if (!r.ok) throw new Error('refresh token project ' + kred.n + ' gagal (status ' + r.status + ')')
+  const j = await r.json()
+  cacheToken[kred.n] = { token: j.access_token, expire: now + (j.expires_in || 3600) * 1000 }
+  return j.access_token
+}
+````
+
+## File: api/r2/file.js
+````javascript
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+
+const s3 = new S3Client({
+  region: 'auto',
+  endpoint: 'https://' + process.env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
+  }
+})
+
+/* Media disajikan lewat domain aplikasi sendiri:
+   default 302 ke presigned GET R2 (untuk <img>/<video>),
+   ?unduh=1 mem-proxy byte supaya unduhan Lightbox tetap same-origin. */
+export default async function handler(req, res) {
+  if (req.method !== 'GET') {
+    res.statusCode = 405
+    res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
+    return
+  }
+  const url = new URL(req.url, 'http://localhost')
+  const key = url.searchParams.get('key')
+  if (!key) {
+    res.statusCode = 400
+    res.end(JSON.stringify({ error: 'Key tidak ada' }))
+    return
+  }
+  const cmd = new GetObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key })
+  if (url.searchParams.get('unduh') !== '1') {
+    const signed = await getSignedUrl(s3, cmd, { expiresIn: 300 })
+    res.statusCode = 302
+    res.setHeader('Location', signed)
+    res.setHeader('Cache-Control', 'public, max-age=60')
+    res.end()
+    return
+  }
+  try {
+    const obj = await s3.send(cmd)
+    res.statusCode = 200
+    res.setHeader('Content-Type', obj.ContentType || 'application/octet-stream')
+    if (obj.ContentLength) res.setHeader('Content-Length', String(obj.ContentLength))
+    res.setHeader('Cache-Control', 'public, max-age=3600')
+    obj.Body.pipe(res)
+  } catch (e) {
+    res.statusCode = 404
+    res.end(JSON.stringify({ error: 'Media tidak ditemukan' }))
+  }
+}
+````
+
 ## File: public/logo-1.svg
 ````xml
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -140,6 +265,310 @@ vite.config.js
 </clipPath>
 </defs>
 </svg>
+````
+
+## File: public/robots.txt
+````
+User-agent: *
+Allow: /
+
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+````
+
+## File: src/components/QrPrintTab.jsx
+````javascript
+import { useRef, useState } from 'react'
+import { QRCodeSVG } from 'qrcode.react'
+import { useAuth } from '../lib/auth.js'
+import { SizedIcon } from './icons.jsx'
+
+export default function QrPrintTab() {
+  const { mahasiswa } = useAuth()
+  const cardRef = useRef(null)
+  const [unduh, setUnduh] = useState(false)
+
+  const targetUrl = window.location.origin + '/qr'
+
+  async function unduhPng() {
+  if (!cardRef.current || unduh) return
+  setUnduh(true)
+  try {
+    const html2canvas = (await import('html2canvas')).default
+    const canvas = await html2canvas(cardRef.current, {
+      scale: 3,
+      useCORS: true,
+      backgroundColor: null,
+      logging: false,
+      onclone: function (clonedDoc) {
+        const url =
+          clonedDoc.querySelector('.qr-print-card .font-mono') ||
+          clonedDoc.querySelector('.font-mono')
+        const label = url ? url.previousElementSibling : null
+        /* Kompensasi: geser kedua teks NAIK hanya di dokumen klonian,
+           supaya di PNG center terhadap wadahnya. Layar & print tidak terpengaruh. */
+        if (label) {
+          label.style.position = 'relative'
+          label.style.top = '-3px'
+        }
+        if (url) {
+          url.style.position = 'relative'
+          url.style.top = '-3px'
+        }
+      }
+    })
+    const imageDataUrl = canvas.toDataURL('image/png', 1.0)
+    const link = document.createElement('a')
+    link.href = imageDataUrl
+    link.download = 'Standee-QR-' + (mahasiswa ? mahasiswa.nama.replace(/\s+/g, '-') : 'mahasiswa') + '.png'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  } catch (e) {
+    console.error(e)
+    alert('Gagal membuat PNG: ' + e.message)
+  } finally {
+    setUnduh(false)
+  }
+}
+
+  return (
+    <>
+      {/* === Print CSS: hanya kartu QR yang dicetak === */}
+      <style>{`
+        @media print {
+          @page {
+            size: A4 portrait;
+            margin: 1.5cm;
+          }
+          *, *::before, *::after {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          html body,
+html.dark body {
+  background-color: #ffffff !important;
+  background-image: none !important;
+}
+html, body {
+  height: 100% !important;
+  overflow: hidden !important;
+}
+          body * {
+            visibility: hidden !important;
+          }
+          .qr-print-card,
+          .qr-print-card * {
+            visibility: visible !important;
+          }
+.qr-print-card {
+  position: fixed !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  margin: auto !important;
+  height: fit-content !important;
+  box-shadow: none !important;
+  background: linear-gradient(135deg, #e7f6ec 0%, #f4fbee 55%, #fdf4e3 100%) !important;
+}
+/* Paksa warna light mode saat print (aman dari dark mode) */
+.qr-print-card .text-slate-900 { color: #0f172a !important; }
+.qr-print-card .text-slate-700 { color: #334155 !important; }
+.qr-print-card .text-slate-500 { color: #64748b !important; }
+.qr-print-card .text-slate-400 { color: #94a3b8 !important; }
+        }
+
+        /* Kartu QR selalu bertema terang: batalkan override dark mode di dalam kartu saja */
+.dark .qr-print-card { border-color: rgba(15,42,29,.10) !important; }
+.dark .qr-print-card .text-slate-900,
+.dark .qr-print-card .text-slate-700 { color: #0f2a1d !important; }
+.dark .qr-print-card .text-slate-500,
+.dark .qr-print-card .text-slate-400 { color: #5f6f64 !important; }
+.dark .qr-print-card .text-bsi-800 { color: #177c48 !important; }
+.dark .qr-print-card .bg-bsi-800 { background-color: #16623c !important; }
+.dark .qr-print-card .bg-slate-50 { background-color: rgba(15,42,29,.06) !important; }
+.dark .qr-print-card .border-slate-100,
+.dark .qr-print-card .border-slate-200 { border-color: rgba(15,42,29,.10) !important; }
+      `}</style>
+
+      <div className="anim-tab mt-8 space-y-6">
+        {/* Kartu Poster Siap Cetak */}
+        <section
+  ref={cardRef}
+    className="qr-print-card isolate mx-auto w-full max-w-md rounded-[2rem] p-8 shadow-xl border border-slate-200 flex flex-col items-center text-center relative overflow-hidden"
+  style={{ background: 'linear-gradient(135deg, #e7f6ec 0%, #f4fbee 55%, #fdf4e3 100%)' }}
+>
+  {/* Accent Top Bar */}
+  <div className="absolute top-0 inset-x-0 h-2 bg-bsi-800" />
+
+  {/* Aksen dekoratif sudut (terinspirasi logo.svg) */}
+<div className="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full opacity-20 -z-10" style={{ background: '#f59e0b' }} />
+<div className="pointer-events-none absolute -bottom-10 -left-10 h-36 w-36 rounded-full opacity-20 -z-10" style={{ background: '#16623c' }} />
+
+          {/* Header Branding */}
+          <div className="flex flex-col items-center gap-3 mt-4">
+            <div className="h-16 w-16 rounded-2xl bg-bsi-800 text-white grid place-items-center shadow-md">
+              <svg className="w-9 h-9" viewBox="0 0 24 24" fill="none">
+                <path d="M4 7V17C4 18.1 4.9 19 6 19H18C19.1 19 20 18.1 20 17V7" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M4 7L12 12L20 7" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M12 12V19" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <div className="flex flex-col items-center">
+              <h2 className="text-2xl font-black tracking-tight text-slate-900 uppercase flex items-center gap-2">
+                <span className="text-bsi-800">GANK</span>
+                <span className="text-slate-700">SKUYY</span>
+              </h2>
+              <p className="text-[11px] font-bold text-slate-500 tracking-[0.2em] uppercase mt-1.5">
+                Portal Presensi &amp; Logbook
+              </p>
+            </div>
+          </div>
+
+          <hr className="w-full border-slate-100 my-6" />
+
+          <div className="space-y-1">
+            <p className="text-xs font-bold text-bsi-800 uppercase tracking-widest">
+              Scan QR Code di Bawah Ini
+            </p>
+            <p className="text-xs text-slate-500">
+              Untuk mengisi Logbook harian & Presensi magang
+            </p>
+          </div>
+
+          <div className="my-6 p-4 border-2 border-dashed border-bsi-300 rounded-3xl" style={{ background: '#ffffff' }}>
+            <QRCodeSVG
+              value={targetUrl}
+              size={200}
+              bgColor="#ffffff"
+              fgColor="#16623c"
+              level="H"
+            />
+          </div>
+
+          <div className="w-full max-w-[20rem] border border-slate-200 px-4 py-3 rounded-2xl" style={{ background: '#ffffff' }}>
+<p className="qr-url-label text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+  Akses Tautan Manual
+</p>
+<p className="qr-url-text text-xs font-mono font-bold text-slate-700 break-all leading-normal mt-1">
+  {targetUrl}
+</p>
+          </div>
+        </section>
+
+        {/* Tombol Aksi (tidak ikut tercetak / terunduh) */}
+        <section className="mx-auto w-full max-w-md bsi-panel rounded-2xl p-5 flex flex-col sm:flex-row gap-3">
+          <button
+            type="button"
+            onClick={unduhPng}
+            disabled={unduh}
+            className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 transition disabled:opacity-60"
+          >
+            <SizedIcon name="download" size={16} />
+            {unduh ? 'Mengunduh...' : 'Unduh PNG'}
+          </button>
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-bsi-800 px-4 py-3 text-sm font-bold text-white hover:bg-bsi-900 transition"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+            </svg>
+            Cetak PDF
+          </button>
+        </section>
+      </div>
+    </>
+  )
+}
+````
+
+## File: src/lib/profil.js
+````javascript
+import { supabase } from './supabase.js'
+import { siapkanFotoProfil } from './konversi.js'
+
+const MAKS_FOTO_PROFIL = 5 * 1024 * 1024
+
+export async function uploadFotoProfil(file, userId) {
+  if (!file) throw new Error('File foto tidak ditemukan')
+  const tipe = String(file.type || '').toLowerCase()
+  if (tipe.indexOf('image/') !== 0) throw new Error('File harus berupa gambar')
+  if (file.size > MAKS_FOTO_PROFIL) throw new Error('Ukuran foto maksimal 5 MB')
+  const siap = await siapkanFotoProfil(file, 640, 0.85)
+  const namaFile = userId + '/profil-' + Date.now() + '.webp'
+  const { error } = await supabase.storage
+    .from('foto-profil')
+    .upload(namaFile, siap, { upsert: true, contentType: siap.type })
+  if (error) throw new Error(error.message)
+  const { data } = supabase.storage.from('foto-profil').getPublicUrl(namaFile)
+  return data.publicUrl
+}
+
+export async function updateFotoProfilMahasiswa(mahasiswaId, fotoUrl) {
+  const { error } = await supabase.from('mahasiswa').update({ foto_profil: fotoUrl }).eq('id', mahasiswaId)
+  if (error) throw new Error(error.message)
+}
+
+export async function hapusFotoProfil(mahasiswaId, fotoUrl) {
+  if (fotoUrl) {
+    const bagian = String(fotoUrl).split('/foto-profil/')
+    if (bagian[1]) {
+      await supabase.storage.from('foto-profil').remove([decodeURIComponent(bagian[1])])
+    }
+  }
+  const { error } = await supabase.from('mahasiswa').update({ foto_profil: null }).eq('id', mahasiswaId)
+  if (error) throw new Error(error.message)
+}
+````
+
+## File: src/lib/supabase.js
+````javascript
+import { createClient } from '@supabase/supabase-js'
+
+export const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+)
+````
+
+## File: supabase/migrasi-drive-download.sql
+````sql
+-- Migrasi fitur download Google Drive
+-- Jalankan SQL ini di Supabase Dashboard > SQL Editor
+-- jika kolom drive_id belum ada.
+
+alter table public.logbook_items add column if not exists drive_id text;
+alter table public.galeri add column if not exists drive_id text;
+````
+
+## File: .env.example
+````
+VITE_SUPABASE_URL=
+VITE_SUPABASE_ANON_KEY=
+R2_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET_NAME=mbsi-media
+R2_PUBLIC_BASE_URL=
 ````
 
 ## File: mvp-qr.html
@@ -421,224 +850,6 @@ vite.config.js
 </html>
 ````
 
-## File: api/_lib/sesi.js
-````javascript
-import { createClient } from '@supabase/supabase-js'
-
-export async function cekSesi(env, authHeader) {
-  const header = authHeader || ''
-  const token = header.replace('Bearer ', '')
-  if (!token) return null
-  const supabase = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: header } }
-  })
-  const r = await supabase.auth.getUser(token)
-  return r.error || !r.data.user ? null : r.data.user
-}
-
-export function bacaBody(req) {
-  return new Promise(function (resolve) {
-    let data = ''
-    req.on('data', function (c) { data += c })
-    req.on('end', function () {
-      try { resolve(JSON.parse(data || '{}')) } catch (e) { resolve({}) }
-    })
-  })
-}
-````
-
-## File: api/_lib/youtube.js
-````javascript
-export const LIMIT_PER_PROJECT = 5
-
-export function ptToday() {
-  const now = new Date()
-  const pt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
-  const y = pt.getFullYear()
-  const m = String(pt.getMonth() + 1).padStart(2, '0')
-  const d = String(pt.getDate()).padStart(2, '0')
-  return y + '-' + m + '-' + d
-}
-
-export function daftarKredensial(env) {
-  const list = []
-  for (let n = 1; n <= 6; n++) {
-    const id = env['YOUTUBE_CLIENT_ID_' + n]
-    const secret = env['YOUTUBE_CLIENT_SECRET_' + n]
-    const refresh = env['YOUTUBE_REFRESH_TOKEN_' + n]
-    if (id && secret && refresh) list.push({ n: n, id: id, secret: secret, refresh: refresh })
-  }
-  if (!list.length && env.YOUTUBE_CLIENT_ID && env.YOUTUBE_CLIENT_SECRET && env.YOUTUBE_REFRESH_TOKEN) {
-    list.push({ n: 1, id: env.YOUTUBE_CLIENT_ID, secret: env.YOUTUBE_CLIENT_SECRET, refresh: env.YOUTUBE_REFRESH_TOKEN })
-  }
-  return list
-}
-
-const cacheToken = {}
-export async function getAccessToken(kred) {
-  const now = Date.now()
-  const c = cacheToken[kred.n]
-  if (c && c.expire > now + 60000) return c.token
-  const params = new URLSearchParams()
-  params.set('client_id', kred.id)
-  params.set('client_secret', kred.secret)
-  params.set('refresh_token', kred.refresh)
-  params.set('grant_type', 'refresh_token')
-  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params })
-  if (!r.ok) throw new Error('refresh token project ' + kred.n + ' gagal (status ' + r.status + ')')
-  const j = await r.json()
-  cacheToken[kred.n] = { token: j.access_token, expire: now + (j.expires_in || 3600) * 1000 }
-  return j.access_token
-}
-````
-
-## File: api/r2/file.js
-````javascript
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
-
-const s3 = new S3Client({
-  region: 'auto',
-  endpoint: 'https://' + process.env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
-  }
-})
-
-/* Media disajikan lewat domain aplikasi sendiri:
-   default 302 ke presigned GET R2 (untuk <img>/<video>),
-   ?unduh=1 mem-proxy byte supaya unduhan Lightbox tetap same-origin. */
-export default async function handler(req, res) {
-  if (req.method !== 'GET') {
-    res.statusCode = 405
-    res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
-    return
-  }
-  const url = new URL(req.url, 'http://localhost')
-  const key = url.searchParams.get('key')
-  if (!key) {
-    res.statusCode = 400
-    res.end(JSON.stringify({ error: 'Key tidak ada' }))
-    return
-  }
-  const cmd = new GetObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key })
-  if (url.searchParams.get('unduh') !== '1') {
-    const signed = await getSignedUrl(s3, cmd, { expiresIn: 300 })
-    res.statusCode = 302
-    res.setHeader('Location', signed)
-    res.setHeader('Cache-Control', 'public, max-age=60')
-    res.end()
-    return
-  }
-  try {
-    const obj = await s3.send(cmd)
-    res.statusCode = 200
-    res.setHeader('Content-Type', obj.ContentType || 'application/octet-stream')
-    if (obj.ContentLength) res.setHeader('Content-Length', String(obj.ContentLength))
-    res.setHeader('Cache-Control', 'public, max-age=3600')
-    obj.Body.pipe(res)
-  } catch (e) {
-    res.statusCode = 404
-    res.end(JSON.stringify({ error: 'Media tidak ditemukan' }))
-  }
-}
-````
-
-## File: public/robots.txt
-````
-User-agent: *
-Allow: /
-
-User-agent: GPTBot
-Allow: /
-
-User-agent: ChatGPT-User
-Allow: /
-
-User-agent: ClaudeBot
-Allow: /
-
-User-agent: Claude-Web
-Allow: /
-
-User-agent: Google-Extended
-Allow: /
-
-User-agent: PerplexityBot
-Allow: /
-````
-
-## File: src/lib/profil.js
-````javascript
-import { supabase } from './supabase.js'
-import { siapkanFotoProfil } from './konversi.js'
-
-const MAKS_FOTO_PROFIL = 5 * 1024 * 1024
-
-export async function uploadFotoProfil(file, userId) {
-  if (!file) throw new Error('File foto tidak ditemukan')
-  const tipe = String(file.type || '').toLowerCase()
-  if (tipe.indexOf('image/') !== 0) throw new Error('File harus berupa gambar')
-  if (file.size > MAKS_FOTO_PROFIL) throw new Error('Ukuran foto maksimal 5 MB')
-  const siap = await siapkanFotoProfil(file, 640, 0.85)
-  const namaFile = userId + '/profil-' + Date.now() + '.webp'
-  const { error } = await supabase.storage
-    .from('foto-profil')
-    .upload(namaFile, siap, { upsert: true, contentType: siap.type })
-  if (error) throw new Error(error.message)
-  const { data } = supabase.storage.from('foto-profil').getPublicUrl(namaFile)
-  return data.publicUrl
-}
-
-export async function updateFotoProfilMahasiswa(mahasiswaId, fotoUrl) {
-  const { error } = await supabase.from('mahasiswa').update({ foto_profil: fotoUrl }).eq('id', mahasiswaId)
-  if (error) throw new Error(error.message)
-}
-
-export async function hapusFotoProfil(mahasiswaId, fotoUrl) {
-  if (fotoUrl) {
-    const bagian = String(fotoUrl).split('/foto-profil/')
-    if (bagian[1]) {
-      await supabase.storage.from('foto-profil').remove([decodeURIComponent(bagian[1])])
-    }
-  }
-  const { error } = await supabase.from('mahasiswa').update({ foto_profil: null }).eq('id', mahasiswaId)
-  if (error) throw new Error(error.message)
-}
-````
-
-## File: src/lib/supabase.js
-````javascript
-import { createClient } from '@supabase/supabase-js'
-
-export const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-)
-````
-
-## File: supabase/migrasi-drive-download.sql
-````sql
--- Migrasi fitur download Google Drive
--- Jalankan SQL ini di Supabase Dashboard > SQL Editor
--- jika kolom drive_id belum ada.
-
-alter table public.logbook_items add column if not exists drive_id text;
-alter table public.galeri add column if not exists drive_id text;
-````
-
-## File: .env.example
-````
-VITE_SUPABASE_URL=
-VITE_SUPABASE_ANON_KEY=
-R2_ACCOUNT_ID=
-R2_ACCESS_KEY_ID=
-R2_SECRET_ACCESS_KEY=
-R2_BUCKET_NAME=mbsi-media
-R2_PUBLIC_BASE_URL=
-````
-
 ## File: postcss.config.js
 ````javascript
 export default {
@@ -679,29 +890,6 @@ export default async function handler(req, res) {
   await s3.send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key }))
   return res.status(200).json({ ok: true })
 }
-````
-
-## File: public/llms.txt
-````
-# Logbook Magang BSI
-Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia.
-Aplikasi single page berbasis React dengan data tersimpan di Supabase dan media di Cloudflare R2, YouTube, serta Google Drive.
-
-## Halaman publik
-- / : beranda, ringkasan statistik dan logbook terbaru tim
-- /logbook : daftar logbook publik lengkap dengan filter mahasiswa, kategori, dan tanggal
-- /galeri : galeri foto dan video kegiatan magang
-- /absen : daftar hadir tim beserta grafik kehadiran per mahasiswa
-- /dospem : ringkasan kegiatan untuk dosen pembimbing dan kaprodi tanpa login
-
-## Area intern
-- /login : masuk mahasiswa menggunakan NIM dan kode akses
-- /dashboard : pengelolaan logbook, galeri, daftar hadir, dan foto profil, memerlukan sesi login
-- /cepat : form cepat berbasis QR untuk menambah kegiatan logbook hari ini dan daftar hadir tanpa membuka dashboard, memerlukan sesi login
-
-## Catatan teknis
-- Seluruh konten dimuat lewat JavaScript, tersedia blok noscript berisi tautan halaman utama.
-- robots.txt mengizinkan perayap umum dan agen AI.
 ````
 
 ## File: src/lib/drive.js
@@ -1133,6 +1321,29 @@ export default async function handler(req, res) {
 }
 ````
 
+## File: public/llms.txt
+````
+# Logbook Magang BSI
+Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia.
+Aplikasi single page berbasis React dengan data tersimpan di Supabase dan media di Cloudflare R2, YouTube, serta Google Drive.
+
+## Halaman publik
+- / : beranda, ringkasan statistik dan logbook terbaru tim
+- /logbook : daftar logbook publik lengkap dengan filter mahasiswa, kategori, dan tanggal
+- /galeri : galeri foto dan video kegiatan magang
+- /absen : daftar hadir tim beserta grafik kehadiran per mahasiswa
+- /dospem : ringkasan kegiatan untuk dosen pembimbing dan kaprodi tanpa login
+
+## Area intern
+- /login : masuk mahasiswa menggunakan NIM dan kode akses
+- /dashboard : pengelolaan logbook, galeri, daftar hadir, dan foto profil, memerlukan sesi login
+- /qr : form cepat berbasis QR untuk menambah kegiatan logbook hari ini dan daftar hadir tanpa membuka dashboard, memerlukan sesi login
+
+## Catatan teknis
+- Seluruh konten dimuat lewat JavaScript, tersedia blok noscript berisi tautan halaman utama.
+- robots.txt mengizinkan perayap umum dan agen AI.
+````
+
 ## File: src/lib/constants.js
 ````javascript
 export const KATEGORI = [
@@ -1172,37 +1383,6 @@ dist
 *.log
 .env.youtube-*
 repomix-output.md
-````
-
-## File: package.json
-````json
-{
-  "name": "mbsi-logbook",
-  "private": true,
-  "version": "1.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite --host",
-    "build": "vite build",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "@aws-sdk/client-s3": "^3.600.0",
-    "@aws-sdk/s3-request-presigner": "^3.600.0",
-    "@supabase/supabase-js": "^2.45.0",
-    "heic2any": "^0.0.4",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-router-dom": "^6.26.0"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.1",
-    "autoprefixer": "^10.4.19",
-    "postcss": "^8.4.38",
-    "tailwindcss": "^3.4.10",
-    "vite": "^5.4.0"
-  }
-}
 ````
 
 ## File: src/lib/auth.js
@@ -1375,10 +1555,10 @@ export function useTheme() {
     <link rel="preconnect" href="https://i.ytimg.com" crossorigin />
     <link rel="preconnect" href="https://drive.google.com" crossorigin />
     <link rel="dns-prefetch" href="https://drive.usercontent.google.com" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='14'%20fill='%2316623c'/%3E%3Ctext%20x='32'%20y='44'%20font-size='34'%20font-weight='700'%20text-anchor='middle'%20fill='%23ffffff'%20font-family='Arial,%20sans-serif'%3EB%3C/text%3E%3C/svg%3E" />
-    <title>Logbook Magang BSI</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%3E%3Crect%20width='24'%20height='24'%20rx='5'%20fill='%2316623c'/%3E%3Cg%20fill='none'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M4%207V17C4%2018.1%204.9%2019%206%2019H18C19.1%2019%2020%2018.1%2020%2017V7'%20stroke='%23ffffff'/%3E%3Cpath%20d='M4%207L12%2012L20%207'%20stroke='%23fbbf24'/%3E%3Cpath%20d='M12%2012V19'%20stroke='%23ffffff'/%3E%3C/g%3E%3C/svg%3E" />
+    <title>Portal Magang BSI</title>
       <script type="application/ld+json">
-    {"@context":"https://schema.org","@type":"WebSite","name":"Logbook Magang BSI","alternateName":"Portal Logbook Magang Bank Syariah Indonesia","description":"Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia.","inLanguage":"id-ID"}
+    {"@context":"https://schema.org","@type":"WebSite","name":"Portal Magang BSI","alternateName":"Portal Logbook Magang Bank Syariah Indonesia","description":"Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia.","inLanguage":"id-ID"}
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -1401,6 +1581,39 @@ export function useTheme() {
     </noscript>
   </body>
 </html>
+````
+
+## File: package.json
+````json
+{
+  "name": "mbsi-logbook",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.600.0",
+    "@aws-sdk/s3-request-presigner": "^3.600.0",
+    "@supabase/supabase-js": "^2.45.0",
+    "heic2any": "^0.0.4",
+    "html2canvas": "^1.4.1",
+    "qrcode.react": "^4.2.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.10",
+    "vite": "^5.4.0"
+  }
+}
 ````
 
 ## File: README.md
@@ -4362,7 +4575,7 @@ export default function App() {
             <Route path="/tim" element={<Navigate to="/dospem" replace />} />
             <Route path="/login" element={<RequireGuest><LoginPage /></RequireGuest>} />
             <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
-            <Route path="/cepat" element={<RequireAuth><QuickPage /></RequireAuth>} />
+            <Route path="/qr" element={<RequireAuth><QuickPage /></RequireAuth>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
@@ -4696,9 +4909,15 @@ export default function Layout() {
         <div className="max-w-7xl mx-auto px-4">
           <div className="h-16 flex items-center justify-between gap-4">
             <Link to="/" className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-gradient-to-tr from-bsi-800 to-gold-500 text-white grid place-items-center font-black">BSI</div>
+<div className="h-10 w-10 rounded-2xl grid place-items-center shadow-md" style={{ background: '#16623c' }}>
+  <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M4 7V17C4 18.1 4.9 19 6 19H18C19.1 19 20 18.1 20 17V7" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M4 7L12 12L20 7" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M12 12V19" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+</div>
               <div>
-                <p className="font-bold leading-none text-slate-900">Logbook Magang</p>
+                <p className="font-bold leading-none text-slate-900">Portal Magang</p>
                 <p className="text-xs text-slate-600 mt-1">Bank Syariah Indonesia</p>
               </div>
             </Link>
@@ -7200,6 +7419,7 @@ import { CustomSelect, CustomDateInput, FileInput, ToggleModeMedia, SumberVideo 
 import { SizedIcon, ICONS } from '../components/icons.jsx'
 import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
 import PengingatBanner from '../components/PengingatBanner.jsx'
+import QrPrintTab from '../components/QrPrintTab.jsx'
 
 function newItem() {
   return { key: Math.random().toString(36).slice(2), judul: '', deskripsi: '', hasil: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false, show: false, mode: 'foto', ytLink: '', oldYtId: null, oldSource: 'r2', driveLink: '' }
@@ -8068,6 +8288,7 @@ async function executeDelete() {
             <button onClick={function () { gantiTab('galeri') }} className={tabCls('galeri')}>Galeri</button>
             <button onClick={function () { gantiTab('absen') }} className={tabCls('absen')}>Daftar Hadir</button>
             <button onClick={function () { gantiTab('profil') }} className={tabCls('profil')}>Profil</button>
+             <button onClick={function () { gantiTab('qr') }} className={tabCls('qr')}>Cetak QR</button>
           </div>
         </div>
       </section>
@@ -8423,6 +8644,8 @@ async function executeDelete() {
           </div>
         </section>
       ) : null}
+       {tab === 'qr' ? <QrPrintTab /> : null}
+
 
       <Modal open={!!detail} onClose={function () { setDetail(null) }}>
         {detail && detail.type === 'log' ? <LogbookDetail log={detail.data} /> : null}
