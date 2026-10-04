@@ -857,3 +857,61 @@ body { background-color: #f4f8f4; background-image: linear-gradient(160deg, #dff
 .dark .bsi-panel { background: rgba(16,42,29,.6); border-color: rgba(234,244,238,.10); box-shadow: 0 10px 24px -12px rgba(0,0,0,.5); }
 .bsi-stat-sm { background: rgba(255,255,255,.55); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(15,42,29,.10); }
 .dark .bsi-stat-sm { background: rgba(16,42,29,.55); border-color: rgba(234,244,238,.10); }
+
+/* pengingat-animasi-v1: daftar tambahan banner pengingat mengembang dan merapat mulus seperti panel filter mobile */
+.pengingat-extra {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.36s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.pengingat-extra-buka { grid-template-rows: 1fr; }
+.pengingat-extra-dalam {
+  overflow: hidden;
+  min-height: 0;
+  visibility: hidden;
+  transition: visibility 0.36s;
+}
+.pengingat-extra-buka .pengingat-extra-dalam { visibility: visible; }
+.pengingat-extra ul {
+  opacity: 0;
+  transform: translateY(-8px);
+  transition: opacity 0.2s ease, transform 0.24s cubic-bezier(0.32, 0.72, 0, 1);
+  /* pengingat-extra-scroll: saat terbuka, daftar hanya memperlihatkan ±4,5 item
+     (item berikutnya terlihat setengah sebagai penanda); sisanya digulir
+     di dalam area pengingat saja sehingga halaman tidak ikut memanjang.
+     112px untuk desktop, 104px untuk mobile yang itemnya sedikit lebih pendek */
+  max-height: 112px;
+  overflow-y: auto;
+}
+@media (max-width: 639px) {
+  .pengingat-extra ul { max-height: 104px; }
+}
+.pengingat-extra-buka ul {
+  opacity: 1;
+  transform: none;
+  transition: opacity 0.34s ease 0.06s, transform 0.4s cubic-bezier(0.32, 0.72, 0, 1) 0.04s;
+}
+
+/* pengingat-masuk-keluar-v1: banner pengingat muncul dan menghilang dengan animasi halus */
+@keyframes pengingatMasuk {
+  from { opacity: 0; transform: translateY(-10px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes pengingatKeluar {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(-8px) scale(0.98); }
+}
+.pengingat-masuk { animation: pengingatMasuk 0.3s cubic-bezier(0.22, 1, 0.36, 1); }
+.pengingat-keluar { animation: pengingatKeluar 0.22s ease-in forwards; pointer-events: none; }
+/* pengingat-geser-v1: tinggi banner pengingat dianimasikan lewat grid rows
+   supaya konten di bawahnya bergeser mulus saat banner muncul dan menghilang */
+.pengingat-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.36s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.pengingat-wrap-buka { grid-template-rows: 1fr; }
+.pengingat-wrap-dalam {
+  overflow: hidden;
+  min-height: 0;
+}

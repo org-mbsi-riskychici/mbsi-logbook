@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { SizedIcon } from './icons.jsx'
 import { formatTanggal } from '../lib/format.js'
 import { MULAI_MAGANG } from '../lib/constants.js'
@@ -44,13 +44,38 @@ export function hitungTanggalTerlewat(tanggalLogbook, hadir) {
 export default function PengingatBanner(props) {
   const [tutup, setTutup] = useState(false)
   const [lihatSemua, setLihatSemua] = useState(false)
-  const terlewat = hitungTanggalTerlewat(props.tanggalLogbook, props.hadir)
-  const tampil = lihatSemua ? terlewat : terlewat.slice(0, 3)
-  if (tutup || !terlewat.length) return null
+  const [buka, setBuka] = useState(false)
+  const [keluar, setKeluar] = useState(false)
+  const [hilang, setHilang] = useState(false)
+  const simpanRef = useRef(null)
+  const mentah = hitungTanggalTerlewat(props.tanggalLogbook, props.hadir)
+  if (mentah.length && !tutup) simpanRef.current = mentah
+  const harusHilang = tutup || !mentah.length
+  /* saat menghilang, pakai salinan terakhir supaya isi banner tetap utuh selama animasi keluar */
+  const terlewat = mentah.length ? mentah : (simpanRef.current || [])
+  /* masuk: wrapper dibiarkan terlipat satu frame lalu dibuka supaya transisi tinggi
+     berjalan dan konten di bawah bergeser mulus; keluar: wrapper merapat bersamaan
+     dengan isi yang memudar, komponen dilepas setelah keduanya selesai */
+  useEffect(function () {
+    if (harusHilang) return undefined
+    const r = requestAnimationFrame(function () { setBuka(true) })
+    return function () { cancelAnimationFrame(r) }
+  }, [harusHilang])
+  useEffect(function () {
+    if (!harusHilang) { setKeluar(false); setHilang(false); return undefined }
+    if (!terlewat.length) { setHilang(true); return undefined }
+    setBuka(false)
+    setKeluar(true)
+    const t = setTimeout(function () { setHilang(true) }, 400)
+    return function () { clearTimeout(t) }
+  }, [harusHilang])
+  if (hilang || (harusHilang && !terlewat.length)) return null
   return (
-    <section className="mt-6 rounded-[2rem] border border-amber-200 bg-amber-50 p-5 sm:p-6">
+    <div className={'pengingat-wrap' + (buka ? ' pengingat-wrap-buka' : '')}>
+      <div className="pengingat-wrap-dalam">
+    <section className={'mt-6 rounded-[2rem] border border-amber-200 bg-amber-50 p-5 sm:p-6 ' + (keluar ? 'pengingat-keluar' : 'pengingat-masuk')}>
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
           <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-800">
             <SizedIcon name="clipboard" size={18} />
           </span>
@@ -67,8 +92,9 @@ export default function PengingatBanner(props) {
           <SizedIcon name="close" size={14} />
         </button>
       </div>
-      <ul className="mt-4 max-h-72 space-y-2 overflow-y-auto pr-1">
-        {tampil.map(function (t) {
+      <div className="mt-4">
+        <ul className="space-y-2">
+        {terlewat.slice(0, 3).map(function (t) {
           return (
             <li key={t} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-200 bg-white p-3">
               <p className="text-sm font-semibold text-slate-800">
@@ -82,11 +108,35 @@ export default function PengingatBanner(props) {
           )
         })}
       </ul>
+        {terlewat.length > 3 ? (
+          <div className={'pengingat-extra' + (lihatSemua ? ' pengingat-extra-buka' : '')}>
+            <div className="pengingat-extra-dalam">
+              <ul className="space-y-2 pt-2">
+                {terlewat.slice(3).map(function (t) {
+                  return (
+                    <li key={t} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-200 bg-white p-3">
+                      <p className="text-sm font-semibold text-slate-800">
+                        <span className="hidden sm:inline">{formatTanggal(t)}</span>
+                        <span className="sm:hidden">{formatTanggalMobile(t)}</span>
+                      </p>
+                      <button type="button" onClick={function () { props.onIsi(t) }} className="rounded-xl bg-bsi-800 px-3.5 py-2 text-xs font-bold text-white hover:bg-bsi-900 sm:text-sm">
+                        Isi Logbook
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          </div>
+        ) : null}
+      </div>
       {terlewat.length > 3 ? (
         <button type="button" onClick={function () { setLihatSemua(function (v) { return !v }) }} className="mt-3 w-full rounded-xl border border-amber-300 bg-white px-4 py-2.5 text-xs font-bold text-amber-800 hover:bg-amber-100 sm:text-sm">
           {lihatSemua ? 'Sembunyikan' : 'Lihat Semua (' + terlewat.length + ' tanggal)'}
         </button>
       ) : null}
     </section>
+      </div>
+    </div>
   )
 }
