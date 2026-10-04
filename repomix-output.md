@@ -82,6 +82,7 @@ src/
     LogbookPage.jsx
     LoginPage.jsx
     QuickPage.jsx
+    QuickPage.jsx.bak3
   App.jsx
   index.css
   main.jsx
@@ -92,6 +93,7 @@ supabase/
 .gitignore
 index.html
 package.json
+patch-7-quickpage-jarak.cjs
 postcss.config.js
 README.md
 tailwind.config.js
@@ -100,6 +102,448 @@ vite.config.js
 ````
 
 # Files
+
+## File: src/pages/QuickPage.jsx.bak3
+````
+import { useEffect, useRef, useState } from 'react'
+import { supabase } from '../lib/supabase.js'
+import { useAuth } from '../lib/auth.js'
+import { uploadMedia } from '../lib/upload.js'
+import { syncGaleriFromLogbook } from '../lib/logbook.js'
+import { urlPratinjau } from '../lib/konversi.js'
+import { todayInput, formatTanggal } from '../lib/format.js'
+import { KATEGORI } from '../lib/constants.js'
+import { inputCls, labelCls, btnPrimary, useToast, AutoTextArea, LabelProses } from '../components/ui.jsx'
+import { CustomSelect } from '../components/controls.jsx'
+import { SizedIcon } from '../components/icons.jsx'
+import { useNavigate } from 'react-router-dom'
+import PengingatBanner from '../components/PengingatBanner.jsx'
+
+const STATUS_HADIR = ['Masuk', 'Izin', 'Bolos']
+
+export default function QuickPage() {
+  const { mahasiswa } = useAuth()
+  const toast = useToast()
+  const tanggal = todayInput()
+
+  const [tab, setTab] = useState('logbook')
+  const [loading, setLoading] = useState(true)
+  const [todayLog, setTodayLog] = useState(null)
+  const [hadirHariIni, setHadirHariIni] = useState(null)
+  const [lastLogTanggal, setLastLogTanggal] = useState(null)
+  const [lastHadirTanggal, setLastHadirTanggal] = useState(null)
+
+  const [kategori, setKategori] = useState('')
+  const [judulKegiatan, setJudulKegiatan] = useState('')
+  const [deskripsi, setDeskripsi] = useState('')
+  const [file, setFile] = useState(null)
+  const [preview, setPreview] = useState('')
+  const [showGal, setShowGal] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [info, setInfo] = useState('')
+
+  const [status, setStatus] = useState('Masuk')
+  const [alasan, setAlasan] = useState('')
+  const navigate = useNavigate()
+  const [tanggalLogs, setTanggalLogs] = useState([])
+  const [hadirRows, setHadirRows] = useState([])
+
+  const cameraRef = useRef(null)
+  const galeriRef = useRef(null)
+
+  async function muatData(mhs, senyap) {
+    if (!senyap) setLoading(true)
+    const l = await supabase
+      .from('logbooks')
+      .select('*, logbook_items(*)')
+      .eq('mahasiswa_id', mhs.id)
+      .eq('tanggal', tanggal)
+      .order('created_at', { ascending: false })
+      .limit(1)
+    const log = (l.data || [])[0] || null
+    if (log) {
+      log.logbook_items = (log.logbook_items || []).sort(function (a, b) { return (a.urutan || 0) - (b.urutan || 0) })
+    }
+    const h = await supabase
+      .from('daftar_hadir')
+      .select('*')
+      .eq('mahasiswa_id', mhs.id)
+      .eq('tanggal', tanggal)
+      .limit(1)
+    const hadir = (h.data || [])[0] || null
+    const ll = await supabase
+      .from('logbooks')
+      .select('tanggal')
+      .eq('mahasiswa_id', mhs.id)
+      .order('tanggal', { ascending: false })
+      .limit(1)
+    const lh = await supabase
+      .from('daftar_hadir')
+      .select('tanggal')
+      .eq('mahasiswa_id', mhs.id)
+      .order('tanggal', { ascending: false })
+      .limit(1)
+    setTodayLog(log)
+    setHadirHariIni(hadir)
+    setLastLogTanggal(ll.data && ll.data[0] ? ll.data[0].tanggal : null)
+    setLastHadirTanggal(lh.data && lh.data[0] ? lh.data[0].tanggal : null)
+    if (hadir) {
+      setStatus(hadir.status)
+      setAlasan(hadir.alasan || '')
+    }
+        const pg = await supabase.from('logbooks').select('tanggal').eq('mahasiswa_id', mhs.id)
+    const ph = await supabase.from('daftar_hadir').select('tanggal, status').eq('mahasiswa_id', mhs.id)
+    setTanggalLogs((pg.data || []).map(function (x) { return x.tanggal }))
+    setHadirRows(ph.data || [])
+    if (!senyap) setLoading(false)
+  }
+
+  useEffect(function () {
+    if (mahasiswa) muatData(mahasiswa)
+  }, [mahasiswa])
+
+  async function pilihFile(e) {
+    const f = e.target.files[0]
+    e.target.value = ''
+    if (!f) return
+    if (preview && preview.indexOf('blob:') === 0) URL.revokeObjectURL(preview)
+    setFile(f)
+    setPreview(await urlPratinjau(f))
+  }
+
+  function hapusFile() {
+    if (preview && preview.indexOf('blob:') === 0) URL.revokeObjectURL(preview)
+    setFile(null)
+    setPreview('')
+    setShowGal(false)
+  }
+
+  async function submitLogbook(e) {
+    e.preventDefault()
+    if (!todayLog && !kategori) { toast.gagal('Pilih kategori terlebih dahulu.'); return }
+    if (!judulKegiatan.trim()) { toast.gagal('Judul kegiatan wajib diisi.'); return }
+    setBusy(true)
+    try {
+      let mediaPath = null
+      let mediaThumb = null
+      if (file) {
+        const up = await uploadMedia(file, 'logbook', setInfo)
+        mediaPath = up.publicUrl
+        mediaThumb = up.thumbUrl || null
+      }
+      let logId = todayLog ? todayLog.id : null
+      if (!todayLog) {
+        const ins = await supabase.from('logbooks').insert({
+          mahasiswa_id: mahasiswa.id, tanggal: tanggal, unit: '', kategori: kategori,
+          judul: judulKegiatan.trim(), kendala: '', solusi: '', pembelajaran: '', status: 'publik'
+        }).select().single()
+        if (ins.error) throw new Error(ins.error.message)
+        logId = ins.data.id
+      }
+      const urutan = todayLog ? todayLog.logbook_items.reduce(function (m, it) { return Math.max(m, it.urutan || 0) }, 0) + 1 : 1
+      const insItem = await supabase.from('logbook_items').insert({
+        logbook_id: logId,
+        urutan: urutan,
+        judul: judulKegiatan.trim(),
+        deskripsi: deskripsi.trim(),
+        hasil: '',
+        media_path: mediaPath,
+        media_type: mediaPath ? 'foto' : null,
+        media_thumb: mediaThumb,
+        media_source: 'r2',
+        youtube_id: null,
+        drive_id: null,
+        show_in_gallery: showGal && !!mediaPath
+      }).select().single()
+      if (insItem.error) throw new Error(insItem.error.message)
+      if (todayLog && todayLog.status !== 'publik') {
+        await supabase.from('logbooks').update({ status: 'publik' }).eq('id', todayLog.id)
+      }
+      if (showGal && mediaPath) {
+        await syncGaleriFromLogbook(mahasiswa.id, [insItem.data], {
+          tanggal: tanggal,
+          kategori: todayLog ? todayLog.kategori : kategori
+        })
+      }
+      const pertama = !todayLog
+      setJudulKegiatan('')
+      setDeskripsi('')
+      hapusFile()
+      if (pertama) setKategori('')
+      await muatData(mahasiswa, true)
+      toast.sukses(pertama ? 'Logbook hari ini berhasil dibuat' : 'Kegiatan baru berhasil ditambahkan')
+    } catch (err) {
+      toast.gagal('Gagal menyimpan logbook: ' + err.message)
+    }
+    setInfo('')
+    setBusy(false)
+  }
+
+  async function submitAbsen(e) {
+    e.preventDefault()
+    setBusy(true)
+    try {
+      const payload = {
+        mahasiswa_id: mahasiswa.id,
+        tanggal: tanggal,
+        status: status,
+        alasan: status === 'Masuk' ? '' : alasan.trim()
+      }
+      let res
+      if (hadirHariIni) {
+        res = await supabase.from('daftar_hadir').update(payload).eq('id', hadirHariIni.id)
+      } else {
+        res = await supabase.from('daftar_hadir').insert(payload)
+      }
+      if (res.error) throw new Error(res.error.message)
+      await muatData(mahasiswa, true)
+      toast.sukses(hadirHariIni ? 'Daftar hadir berhasil diperbarui' : 'Daftar hadir berhasil disimpan')
+    } catch (err) {
+      toast.gagal('Gagal menyimpan kehadiran: ' + err.message)
+    }
+    setBusy(false)
+  }
+
+  function infoTerakhir(tgl) {
+    if (!tgl) return { teks: 'belum pernah', lama: true }
+    const selisih = Math.round((new Date(tanggal + 'T00:00:00').getTime() - new Date(tgl + 'T00:00:00').getTime()) / 86400000)
+    if (selisih <= 0) return { teks: 'hari ini', lama: false }
+    if (selisih === 1) return { teks: 'kemarin', lama: false }
+    return { teks: selisih + ' hari yang lalu', lama: true }
+  }
+
+  if (loading) {
+    return <div className="grid min-h-[50vh] place-items-center"><div className="h-10 w-10 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div></div>
+  }
+
+  const infoLog = infoTerakhir(lastLogTanggal)
+  const infoHadir = infoTerakhir(lastHadirTanggal)
+
+  const tabCls = function (t) {
+    return 'flex-1 px-4 py-2.5 rounded-xl text-xs sm:rounded-2xl sm:py-3 sm:text-sm font-bold ' + (tab === t ? 'bg-bsi-800 text-white shadow-sm' : 'bsi-panel text-slate-600 hover:text-bsi-800')
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-xl space-y-5">
+      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8">
+        <h1 className="text-xl font-black text-slate-900 sm:text-2xl">Isi Cepat</h1>
+        <p className="mt-1 text-sm text-slate-600">{formatTanggal(tanggal)}</p>
+        <div className="mt-4 flex gap-2">
+          <button type="button" onClick={function () { setTab('logbook') }} className={tabCls('logbook')}>Logbook</button>
+          <button type="button" onClick={function () { setTab('absen') }} className={tabCls('absen')}>Daftar Hadir</button>
+        </div>
+      </section>
+
+      <div className={tab === 'logbook' ? '' : 'hidden'}>
+        {!loading ? (
+          <PengingatBanner
+            tipe="logbook"
+            tanggalLogbook={tanggalLogs}
+            hadir={hadirRows}
+            onIsi={function (t) { navigate('/dashboard?isi=' + t) }}
+          />
+        ) : null}
+      </div>
+      <div className={tab === 'absen' ? '' : 'hidden'}>
+        {!loading ? (
+          <PengingatBanner
+            tipe="hadir"
+            tanggalLogbook={tanggalLogs}
+            hadir={hadirRows}
+            onIsi={function (t) { navigate('/dashboard?isiHadir=' + t) }}
+          />
+        ) : null}
+      </div>
+      {tab === 'logbook' ? (
+        <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
+          <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoLog.lama ? 'text-amber-600' : 'text-slate-500')}>
+            <SizedIcon name="calendar" size={13} />
+            Terakhir mengisi logbook: {infoLog.teks}
+          </p>
+          {todayLog ? (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+              <p className="text-sm font-bold text-emerald-800">Logbook hari ini sudah ada</p>
+              <p className="mt-1 text-sm text-emerald-800">{todayLog.judul} • {todayLog.logbook_items.length} kegiatan</p>
+              <div className="mt-2 space-y-1">
+                {todayLog.logbook_items.map(function (it, i) {
+                  return <p key={it.id} className="truncate text-xs text-emerald-800">{i + 1}. {it.judul}</p>
+                })}
+              </div>
+              <p className="mt-2 text-xs text-emerald-800">Kegiatan baru ditambahkan di bawahnya tanpa menghapus kegiatan lama.</p>
+              {todayLog.status !== 'publik' ? <p className="mt-1 text-xs font-semibold text-emerald-800">Status masih draf — akan otomatis dipublikasikan.</p> : null}
+            </div>
+          ) : (
+            <div>
+              <label className={labelCls}>Kategori Utama <span className="text-red-500">*</span></label>
+              <div className="mt-1.5">
+                <CustomSelect placeholder="Pilih Kategori" value={kategori} onChange={setKategori} options={KATEGORI.map(function (k) { return { value: k, label: k } })} />
+              </div>
+            </div>
+          )}
+
+          <form onSubmit={submitLogbook} className="mt-5 space-y-4">
+            <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-bold text-bsi-800">{todayLog ? 'Kegiatan Baru (kegiatan ' + (todayLog.logbook_items.length + 1) + ')' : 'Kegiatan'}</p>
+              <input className={inputCls} value={judulKegiatan} onChange={function (e) { setJudulKegiatan(e.target.value) }} aria-label="Judul Kegiatan" placeholder="Judul kegiatan" />
+              <AutoTextArea className={inputCls} value={deskripsi} onChange={function (e) { setDeskripsi(e.target.value) }} aria-label="Deskripsi Kegiatan" placeholder="Deskripsi singkat kegiatan" />
+              {preview ? (
+                <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-900">
+                  <img src={preview} alt="Pratinjau" className="absolute inset-0 h-full w-full object-contain" />
+                  <button type="button" onClick={hapusFile} title="Hapus Gambar" className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-red-500 text-white hover:bg-red-600">
+                    <SizedIcon name="close" size={14} />
+                  </button>
+                </div>
+              ) : null}
+              <div className="grid grid-cols-2 gap-3">
+                <button type="button" onClick={function () { cameraRef.current.click() }} className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-3 py-3.5 text-sm font-semibold text-slate-700 hover:border-bsi-500 hover:bg-slate-100">
+                  <SizedIcon name="camera" size={18} /> Ambil Foto
+                </button>
+                <button type="button" onClick={function () { galeriRef.current.click() }} className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-3 py-3.5 text-sm font-semibold text-slate-700 hover:border-bsi-500 hover:bg-slate-100">
+                  <SizedIcon name="image" size={18} /> Dari Galeri
+                </button>
+              </div>
+              <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={pilihFile} />
+              <input ref={galeriRef} type="file" accept="image/*" className="hidden" onChange={pilihFile} />
+              {preview ? (
+                <label className="flex w-full cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 p-3">
+                  <input type="checkbox" checked={showGal} onChange={function (e) { setShowGal(e.target.checked) }} className="mt-0.5 h-4 w-4 rounded accent-bsi-800" />
+                  <span className="text-sm font-semibold text-slate-800">Tampilkan kegiatan ini di galeri</span>
+                </label>
+              ) : null}
+            </div>
+            <button type="submit" disabled={busy} className={btnPrimary}>
+              {busy ? <LabelProses teks={info || 'Menyimpan'} /> : (todayLog ? 'Tambah Kegiatan' : 'Simpan Logbook')}
+            </button>
+          </form>
+        </section>
+      ) : null}
+
+      {tab === 'absen' ? (
+        <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
+          <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoHadir.lama ? 'text-amber-600' : 'text-slate-500')}>
+            <SizedIcon name="clipboard" size={13} />
+            Terakhir mengisi daftar hadir: {infoHadir.teks}
+          </p>
+          {hadirHariIni ? (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+              <p className="text-sm font-bold text-emerald-800">Kamu sudah mengisi daftar hadir hari ini ({hadirHariIni.status})</p>
+              <p className="mt-1 text-xs text-emerald-800">Form di bawah bisa dipakai untuk memperbarui status bila ada perubahan.</p>
+            </div>
+          ) : null}
+          <form onSubmit={submitAbsen} className={'space-y-4 ' + (hadirHariIni ? 'mt-5' : '')}>
+            <div>
+              <label className={labelCls}>Status Kehadiran <span className="text-red-500">*</span></label>
+              <div className="mt-1.5 flex gap-2">
+                {STATUS_HADIR.map(function (s) {
+                  const aktif = status === s
+                  const warna = aktif
+                    ? (s === 'Masuk' ? 'bg-emerald-500 text-white' : s === 'Izin' ? 'bg-amber-500 text-white' : 'bg-red-500 text-white')
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  return <button type="button" key={s} onClick={function () { setStatus(s) }} className={'flex-1 rounded-2xl px-3 py-3 text-sm font-bold ' + warna}>{s}</button>
+                })}
+              </div>
+            </div>
+            <div>
+              <label className={labelCls}>Alasan atau Keterangan</label>
+              <AutoTextArea
+                className={inputCls + (status === 'Masuk' ? ' cursor-not-allowed opacity-60' : '')}
+                value={alasan}
+                onChange={function (e) { setAlasan(e.target.value) }}
+                aria-label="Alasan atau Keterangan"
+                placeholder={status === 'Masuk' ? 'Status Masuk tidak memerlukan alasan' : 'Contoh: Keperluan keluarga, sakit.'}
+                disabled={status === 'Masuk'}
+              />
+            </div>
+            <button type="submit" disabled={busy} className={btnPrimary}>
+              {busy ? <LabelProses teks="Menyimpan" /> : (hadirHariIni ? 'Perbarui Daftar Hadir' : 'Simpan Daftar Hadir')}
+            </button>
+          </form>
+        </section>
+      ) : null}
+    </div>
+  )
+}
+````
+
+## File: patch-7-quickpage-jarak.cjs
+````javascript
+/* ============================================================
+   PATCH 7 — src/pages/QuickPage.jsx
+   Masalah: saat banner pengingat di /cepat ditutup, form terhentak
+            ke atas di akhir animasi. Penyebab: wrapper banner masih
+            memegang margin-top dari space-y-5 di luar area animasi;
+            margin itu hilang seketika saat banner dilepas dari DOM.
+   Solusi : nol-kan margin-top kedua wrapper banner supaya seluruh
+            jejak banner (termasuk jarak) ikut terlipat bersama
+            animasi grid-rows komponen.
+   Jalankan dari folder root project:
+     node patch-7-quickpage-jarak.cjs
+   ============================================================ */
+const fs = require('fs')
+const path = require('path')
+
+const FILE_RELATIF = path.join('src', 'pages', 'QuickPage.jsx')
+const MARKER = 'style={{ marginTop: 0 }}'
+
+function gagal(pesan) {
+  console.error('\nGAGAL: ' + pesan)
+  console.error('Tidak ada file yang diubah.')
+  process.exit(1)
+}
+
+function cariRoot() {
+  const kandidat = [process.cwd(), __dirname]
+  for (let i = 0; i < kandidat.length; i++) {
+    if (fs.existsSync(path.join(kandidat[i], FILE_RELATIF))) return kandidat[i]
+  }
+  gagal(FILE_RELATIF + ' tidak ditemukan. Jalankan dari folder root project.')
+}
+
+function hitung(isi, cari) { return isi.split(cari).length - 1 }
+
+const root = cariRoot()
+const pathFile = path.join(root, FILE_RELATIF)
+const asli = fs.readFileSync(pathFile, 'utf8')
+
+if (asli.indexOf(MARKER) !== -1) {
+  console.log('Patch 7 sudah pernah diterapkan — dilewati.')
+  process.exit(0)
+}
+
+let isi = asli
+
+function gantiUnik(cari, jadi, label) {
+  const n = hitung(isi, cari)
+  if (n !== 1) gagal('[' + label + '] teks ditemukan ' + n + ' kali, diharapkan tepat 1.')
+  isi = isi.replace(cari, jadi)
+  console.log('OK  ' + label)
+}
+
+/* Langkah 1: nol-kan margin-top wrapper banner logbook */
+gantiUnik(
+  "className={tab === 'logbook' ? '' : 'hidden'}",
+  "className={tab === 'logbook' ? '' : 'hidden'} style={{ marginTop: 0 }}",
+  'margin-top wrapper banner logbook dinolkan'
+)
+
+/* Langkah 2: nol-kan margin-top wrapper banner daftar hadir */
+gantiUnik(
+  "className={tab === 'absen' ? '' : 'hidden'}",
+  "className={tab === 'absen' ? '' : 'hidden'} style={{ marginTop: 0 }}",
+  'margin-top wrapper banner daftar hadir dinolkan'
+)
+
+/* Validasi akhir */
+if (hitung(isi, MARKER) !== 2) gagal('validasi akhir: style marginTop harus muncul 2 kali.')
+if (hitung(isi, "className={tab === 'logbook' ? '' : 'hidden'} style={{ marginTop: 0 }}") !== 1) gagal('validasi akhir: wrapper logbook tidak sesuai.')
+if (hitung(isi, "className={tab === 'absen' ? '' : 'hidden'} style={{ marginTop: 0 }}") !== 1) gagal('validasi akhir: wrapper hadir tidak sesuai.')
+
+if (!fs.existsSync(pathFile + '.bak3')) fs.writeFileSync(pathFile + '.bak3', asli)
+fs.writeFileSync(pathFile, isi)
+console.log('\nPatch 7 selesai: ' + FILE_RELATIF)
+console.log('Backup tersimpan: ' + FILE_RELATIF + '.bak3')
+console.log('Lanjut uji dengan: npm run dev')
+````
 
 ## File: api/_lib/sesi.js
 ````javascript
@@ -843,368 +1287,6 @@ export const GALERI_KEGIATAN = [
 export const MULAI_MAGANG = '2026-09-08'
 ````
 
-## File: src/pages/QuickPage.jsx
-````javascript
-import { useEffect, useRef, useState } from 'react'
-import { supabase } from '../lib/supabase.js'
-import { useAuth } from '../lib/auth.js'
-import { uploadMedia } from '../lib/upload.js'
-import { syncGaleriFromLogbook } from '../lib/logbook.js'
-import { urlPratinjau } from '../lib/konversi.js'
-import { todayInput, formatTanggal } from '../lib/format.js'
-import { KATEGORI } from '../lib/constants.js'
-import { inputCls, labelCls, btnPrimary, useToast, AutoTextArea, LabelProses } from '../components/ui.jsx'
-import { CustomSelect } from '../components/controls.jsx'
-import { SizedIcon } from '../components/icons.jsx'
-import { useNavigate } from 'react-router-dom'
-import PengingatBanner from '../components/PengingatBanner.jsx'
-
-const STATUS_HADIR = ['Masuk', 'Izin', 'Bolos']
-
-export default function QuickPage() {
-  const { mahasiswa } = useAuth()
-  const toast = useToast()
-  const tanggal = todayInput()
-
-  const [tab, setTab] = useState('logbook')
-  const [loading, setLoading] = useState(true)
-  const [todayLog, setTodayLog] = useState(null)
-  const [hadirHariIni, setHadirHariIni] = useState(null)
-  const [lastLogTanggal, setLastLogTanggal] = useState(null)
-  const [lastHadirTanggal, setLastHadirTanggal] = useState(null)
-
-  const [kategori, setKategori] = useState('')
-  const [judulKegiatan, setJudulKegiatan] = useState('')
-  const [deskripsi, setDeskripsi] = useState('')
-  const [file, setFile] = useState(null)
-  const [preview, setPreview] = useState('')
-  const [showGal, setShowGal] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [info, setInfo] = useState('')
-
-  const [status, setStatus] = useState('Masuk')
-  const [alasan, setAlasan] = useState('')
-  const navigate = useNavigate()
-  const [tanggalLogs, setTanggalLogs] = useState([])
-  const [hadirRows, setHadirRows] = useState([])
-
-  const cameraRef = useRef(null)
-  const galeriRef = useRef(null)
-
-  async function muatData(mhs, senyap) {
-    if (!senyap) setLoading(true)
-    const l = await supabase
-      .from('logbooks')
-      .select('*, logbook_items(*)')
-      .eq('mahasiswa_id', mhs.id)
-      .eq('tanggal', tanggal)
-      .order('created_at', { ascending: false })
-      .limit(1)
-    const log = (l.data || [])[0] || null
-    if (log) {
-      log.logbook_items = (log.logbook_items || []).sort(function (a, b) { return (a.urutan || 0) - (b.urutan || 0) })
-    }
-    const h = await supabase
-      .from('daftar_hadir')
-      .select('*')
-      .eq('mahasiswa_id', mhs.id)
-      .eq('tanggal', tanggal)
-      .limit(1)
-    const hadir = (h.data || [])[0] || null
-    const ll = await supabase
-      .from('logbooks')
-      .select('tanggal')
-      .eq('mahasiswa_id', mhs.id)
-      .order('tanggal', { ascending: false })
-      .limit(1)
-    const lh = await supabase
-      .from('daftar_hadir')
-      .select('tanggal')
-      .eq('mahasiswa_id', mhs.id)
-      .order('tanggal', { ascending: false })
-      .limit(1)
-    setTodayLog(log)
-    setHadirHariIni(hadir)
-    setLastLogTanggal(ll.data && ll.data[0] ? ll.data[0].tanggal : null)
-    setLastHadirTanggal(lh.data && lh.data[0] ? lh.data[0].tanggal : null)
-    if (hadir) {
-      setStatus(hadir.status)
-      setAlasan(hadir.alasan || '')
-    }
-        const pg = await supabase.from('logbooks').select('tanggal').eq('mahasiswa_id', mhs.id)
-    const ph = await supabase.from('daftar_hadir').select('tanggal, status').eq('mahasiswa_id', mhs.id)
-    setTanggalLogs((pg.data || []).map(function (x) { return x.tanggal }))
-    setHadirRows(ph.data || [])
-    if (!senyap) setLoading(false)
-  }
-
-  useEffect(function () {
-    if (mahasiswa) muatData(mahasiswa)
-  }, [mahasiswa])
-
-  async function pilihFile(e) {
-    const f = e.target.files[0]
-    e.target.value = ''
-    if (!f) return
-    if (preview && preview.indexOf('blob:') === 0) URL.revokeObjectURL(preview)
-    setFile(f)
-    setPreview(await urlPratinjau(f))
-  }
-
-  function hapusFile() {
-    if (preview && preview.indexOf('blob:') === 0) URL.revokeObjectURL(preview)
-    setFile(null)
-    setPreview('')
-    setShowGal(false)
-  }
-
-  async function submitLogbook(e) {
-    e.preventDefault()
-    if (!todayLog && !kategori) { toast.gagal('Pilih kategori terlebih dahulu.'); return }
-    if (!judulKegiatan.trim()) { toast.gagal('Judul kegiatan wajib diisi.'); return }
-    setBusy(true)
-    try {
-      let mediaPath = null
-      let mediaThumb = null
-      if (file) {
-        const up = await uploadMedia(file, 'logbook', setInfo)
-        mediaPath = up.publicUrl
-        mediaThumb = up.thumbUrl || null
-      }
-      let logId = todayLog ? todayLog.id : null
-      if (!todayLog) {
-        const ins = await supabase.from('logbooks').insert({
-          mahasiswa_id: mahasiswa.id, tanggal: tanggal, unit: '', kategori: kategori,
-          judul: judulKegiatan.trim(), kendala: '', solusi: '', pembelajaran: '', status: 'publik'
-        }).select().single()
-        if (ins.error) throw new Error(ins.error.message)
-        logId = ins.data.id
-      }
-      const urutan = todayLog ? todayLog.logbook_items.reduce(function (m, it) { return Math.max(m, it.urutan || 0) }, 0) + 1 : 1
-      const insItem = await supabase.from('logbook_items').insert({
-        logbook_id: logId,
-        urutan: urutan,
-        judul: judulKegiatan.trim(),
-        deskripsi: deskripsi.trim(),
-        hasil: '',
-        media_path: mediaPath,
-        media_type: mediaPath ? 'foto' : null,
-        media_thumb: mediaThumb,
-        media_source: 'r2',
-        youtube_id: null,
-        drive_id: null,
-        show_in_gallery: showGal && !!mediaPath
-      }).select().single()
-      if (insItem.error) throw new Error(insItem.error.message)
-      if (todayLog && todayLog.status !== 'publik') {
-        await supabase.from('logbooks').update({ status: 'publik' }).eq('id', todayLog.id)
-      }
-      if (showGal && mediaPath) {
-        await syncGaleriFromLogbook(mahasiswa.id, [insItem.data], {
-          tanggal: tanggal,
-          kategori: todayLog ? todayLog.kategori : kategori
-        })
-      }
-      const pertama = !todayLog
-      setJudulKegiatan('')
-      setDeskripsi('')
-      hapusFile()
-      if (pertama) setKategori('')
-      await muatData(mahasiswa, true)
-      toast.sukses(pertama ? 'Logbook hari ini berhasil dibuat' : 'Kegiatan baru berhasil ditambahkan')
-    } catch (err) {
-      toast.gagal('Gagal menyimpan logbook: ' + err.message)
-    }
-    setInfo('')
-    setBusy(false)
-  }
-
-  async function submitAbsen(e) {
-    e.preventDefault()
-    setBusy(true)
-    try {
-      const payload = {
-        mahasiswa_id: mahasiswa.id,
-        tanggal: tanggal,
-        status: status,
-        alasan: status === 'Masuk' ? '' : alasan.trim()
-      }
-      let res
-      if (hadirHariIni) {
-        res = await supabase.from('daftar_hadir').update(payload).eq('id', hadirHariIni.id)
-      } else {
-        res = await supabase.from('daftar_hadir').insert(payload)
-      }
-      if (res.error) throw new Error(res.error.message)
-      await muatData(mahasiswa, true)
-      toast.sukses(hadirHariIni ? 'Daftar hadir berhasil diperbarui' : 'Daftar hadir berhasil disimpan')
-    } catch (err) {
-      toast.gagal('Gagal menyimpan kehadiran: ' + err.message)
-    }
-    setBusy(false)
-  }
-
-  function infoTerakhir(tgl) {
-    if (!tgl) return { teks: 'belum pernah', lama: true }
-    const selisih = Math.round((new Date(tanggal + 'T00:00:00').getTime() - new Date(tgl + 'T00:00:00').getTime()) / 86400000)
-    if (selisih <= 0) return { teks: 'hari ini', lama: false }
-    if (selisih === 1) return { teks: 'kemarin', lama: false }
-    return { teks: selisih + ' hari yang lalu', lama: true }
-  }
-
-  if (loading) {
-    return <div className="grid min-h-[50vh] place-items-center"><div className="h-10 w-10 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div></div>
-  }
-
-  const infoLog = infoTerakhir(lastLogTanggal)
-  const infoHadir = infoTerakhir(lastHadirTanggal)
-
-  const tabCls = function (t) {
-    return 'flex-1 px-4 py-2.5 rounded-xl text-xs sm:rounded-2xl sm:py-3 sm:text-sm font-bold ' + (tab === t ? 'bg-bsi-800 text-white shadow-sm' : 'bsi-panel text-slate-600 hover:text-bsi-800')
-  }
-
-  return (
-    <div className="mx-auto w-full max-w-xl space-y-5">
-      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8">
-        <h1 className="text-xl font-black text-slate-900 sm:text-2xl">Isi Cepat</h1>
-        <p className="mt-1 text-sm text-slate-600">{formatTanggal(tanggal)}</p>
-        <div className="mt-4 flex gap-2">
-          <button type="button" onClick={function () { setTab('logbook') }} className={tabCls('logbook')}>Logbook</button>
-          <button type="button" onClick={function () { setTab('absen') }} className={tabCls('absen')}>Daftar Hadir</button>
-        </div>
-      </section>
-
-      {tab === 'logbook' ? (
-        <>
-        {!loading ? (
-          <PengingatBanner
-            tipe="logbook"
-            tanggalLogbook={tanggalLogs}
-            hadir={hadirRows}
-            onIsi={function (t) { navigate('/dashboard?isi=' + t) }}
-          />
-        ) : null}
-        <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
-          <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoLog.lama ? 'text-amber-600' : 'text-slate-500')}>
-            <SizedIcon name="calendar" size={13} />
-            Terakhir mengisi logbook: {infoLog.teks}
-          </p>
-          {todayLog ? (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-              <p className="text-sm font-bold text-emerald-800">Logbook hari ini sudah ada</p>
-              <p className="mt-1 text-sm text-emerald-800">{todayLog.judul} • {todayLog.logbook_items.length} kegiatan</p>
-              <div className="mt-2 space-y-1">
-                {todayLog.logbook_items.map(function (it, i) {
-                  return <p key={it.id} className="truncate text-xs text-emerald-800">{i + 1}. {it.judul}</p>
-                })}
-              </div>
-              <p className="mt-2 text-xs text-emerald-800">Kegiatan baru ditambahkan di bawahnya tanpa menghapus kegiatan lama.</p>
-              {todayLog.status !== 'publik' ? <p className="mt-1 text-xs font-semibold text-emerald-800">Status masih draf — akan otomatis dipublikasikan.</p> : null}
-            </div>
-          ) : (
-            <div>
-              <label className={labelCls}>Kategori Utama <span className="text-red-500">*</span></label>
-              <div className="mt-1.5">
-                <CustomSelect placeholder="Pilih Kategori" value={kategori} onChange={setKategori} options={KATEGORI.map(function (k) { return { value: k, label: k } })} />
-              </div>
-            </div>
-          )}
-
-          <form onSubmit={submitLogbook} className="mt-5 space-y-4">
-            <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-xs font-bold text-bsi-800">{todayLog ? 'Kegiatan Baru (kegiatan ' + (todayLog.logbook_items.length + 1) + ')' : 'Kegiatan'}</p>
-              <input className={inputCls} value={judulKegiatan} onChange={function (e) { setJudulKegiatan(e.target.value) }} aria-label="Judul Kegiatan" placeholder="Judul kegiatan" />
-              <AutoTextArea className={inputCls} value={deskripsi} onChange={function (e) { setDeskripsi(e.target.value) }} aria-label="Deskripsi Kegiatan" placeholder="Deskripsi singkat kegiatan" />
-              {preview ? (
-                <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-900">
-                  <img src={preview} alt="Pratinjau" className="absolute inset-0 h-full w-full object-contain" />
-                  <button type="button" onClick={hapusFile} title="Hapus Gambar" className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-red-500 text-white hover:bg-red-600">
-                    <SizedIcon name="close" size={14} />
-                  </button>
-                </div>
-              ) : null}
-              <div className="grid grid-cols-2 gap-3">
-                <button type="button" onClick={function () { cameraRef.current.click() }} className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-3 py-3.5 text-sm font-semibold text-slate-700 hover:border-bsi-500 hover:bg-slate-100">
-                  <SizedIcon name="camera" size={18} /> Ambil Foto
-                </button>
-                <button type="button" onClick={function () { galeriRef.current.click() }} className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-3 py-3.5 text-sm font-semibold text-slate-700 hover:border-bsi-500 hover:bg-slate-100">
-                  <SizedIcon name="image" size={18} /> Dari Galeri
-                </button>
-              </div>
-              <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={pilihFile} />
-              <input ref={galeriRef} type="file" accept="image/*" className="hidden" onChange={pilihFile} />
-              {preview ? (
-                <label className="flex w-full cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 p-3">
-                  <input type="checkbox" checked={showGal} onChange={function (e) { setShowGal(e.target.checked) }} className="mt-0.5 h-4 w-4 rounded accent-bsi-800" />
-                  <span className="text-sm font-semibold text-slate-800">Tampilkan kegiatan ini di galeri</span>
-                </label>
-              ) : null}
-            </div>
-            <button type="submit" disabled={busy} className={btnPrimary}>
-              {busy ? <LabelProses teks={info || 'Menyimpan'} /> : (todayLog ? 'Tambah Kegiatan' : 'Simpan Logbook')}
-            </button>
-          </form>
-        </section>
-        </>
-      ) : null}
-
-      {tab === 'absen' ? (
-        <>
-        {!loading ? (
-          <PengingatBanner
-            tipe="hadir"
-            tanggalLogbook={tanggalLogs}
-            hadir={hadirRows}
-            onIsi={function (t) { navigate('/dashboard?isiHadir=' + t) }}
-          />
-        ) : null}
-        <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
-          <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoHadir.lama ? 'text-amber-600' : 'text-slate-500')}>
-            <SizedIcon name="clipboard" size={13} />
-            Terakhir mengisi daftar hadir: {infoHadir.teks}
-          </p>
-          {hadirHariIni ? (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-              <p className="text-sm font-bold text-emerald-800">Kamu sudah mengisi daftar hadir hari ini ({hadirHariIni.status})</p>
-              <p className="mt-1 text-xs text-emerald-800">Form di bawah bisa dipakai untuk memperbarui status bila ada perubahan.</p>
-            </div>
-          ) : null}
-          <form onSubmit={submitAbsen} className={'space-y-4 ' + (hadirHariIni ? 'mt-5' : '')}>
-            <div>
-              <label className={labelCls}>Status Kehadiran <span className="text-red-500">*</span></label>
-              <div className="mt-1.5 flex gap-2">
-                {STATUS_HADIR.map(function (s) {
-                  const aktif = status === s
-                  const warna = aktif
-                    ? (s === 'Masuk' ? 'bg-emerald-500 text-white' : s === 'Izin' ? 'bg-amber-500 text-white' : 'bg-red-500 text-white')
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  return <button type="button" key={s} onClick={function () { setStatus(s) }} className={'flex-1 rounded-2xl px-3 py-3 text-sm font-bold ' + warna}>{s}</button>
-                })}
-              </div>
-            </div>
-            <div>
-              <label className={labelCls}>Alasan atau Keterangan</label>
-              <AutoTextArea
-                className={inputCls + (status === 'Masuk' ? ' cursor-not-allowed opacity-60' : '')}
-                value={alasan}
-                onChange={function (e) { setAlasan(e.target.value) }}
-                aria-label="Alasan atau Keterangan"
-                placeholder={status === 'Masuk' ? 'Status Masuk tidak memerlukan alasan' : 'Contoh: Keperluan keluarga, sakit.'}
-                disabled={status === 'Masuk'}
-              />
-            </div>
-            <button type="submit" disabled={busy} className={btnPrimary}>
-              {busy ? <LabelProses teks="Menyimpan" /> : (hadirHariIni ? 'Perbarui Daftar Hadir' : 'Simpan Daftar Hadir')}
-            </button>
-          </form>
-        </section>
-        </>
-      ) : null}
-    </div>
-  )
-}
-````
-
 ## File: .gitignore
 ````
 node_modules
@@ -1244,210 +1326,6 @@ repomix-output.md
     "tailwindcss": "^3.4.10",
     "vite": "^5.4.0"
   }
-}
-````
-
-## File: src/components/PengingatBanner.jsx
-````javascript
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { SizedIcon } from './icons.jsx'
-import { formatTanggal } from '../lib/format.js'
-import { MULAI_MAGANG } from '../lib/constants.js'
-
-const HARI_PENDEK = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
-const BULAN_PENDEK = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agt', 'Sept', 'Okt', 'Nov', 'Des']
-function formatTanggalMobile(s) {
-  if (!s) return ''
-  const d = new Date(s + 'T00:00:00')
-  if (Number.isNaN(d.getTime())) return s
-  return HARI_PENDEK[d.getDay()] + ', ' + d.getDate() + ' ' + BULAN_PENDEK[d.getMonth()] + ' ' + d.getFullYear()
-}
-
-function pad2(n) { return (n < 10 ? '0' : '') + n }
-function isoDari(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) }
-/* Batas akhir pengingat = kemarin; hari ini belum dianggap terlewat karena masih bisa diisi */
-function kemarinIso() {
-  const d = new Date()
-  d.setDate(d.getDate() - 1)
-  return isoDari(d)
-}
-
-/* Daftar hari kerja (Sen-Jum) dari MULAI_MAGANG s/d kemarin yang tidak punya
-   logbook dan tidak berstatus Izin/Bolos pada daftar hadir. */
-export function hitungTanggalTerlewat(tanggalLogbook, hadir) {
-  const punyaLog = new Set(tanggalLogbook || [])
-  const absen = new Set()
-  ;(hadir || []).forEach(function (h) {
-    if (h.status === 'Izin' || h.status === 'Bolos') absen.add(h.tanggal)
-  })
-  const hasil = []
-  const d = new Date(MULAI_MAGANG + 'T00:00:00')
-  const batas = new Date(kemarinIso() + 'T00:00:00')
-  while (d <= batas) {
-    const iso = isoDari(d)
-    const hari = d.getDay()
-    if (hari !== 0 && hari !== 6 && !punyaLog.has(iso) && !absen.has(iso)) hasil.push(iso)
-    d.setDate(d.getDate() + 1)
-  }
-  return hasil
-}
-
-/* Daftar hari kerja (Sen-Jum) dari MULAI_MAGANG s/d kemarin yang belum punya
-   catatan hadir sama sekali (status Masuk, Izin, maupun Bolos dianggap sudah isi). */
-export function hitungTanggalTerlewatHadir(hadir) {
-  const punyaHadir = new Set((hadir || []).map(function (h) { return h.tanggal }))
-  const hasil = []
-  const d = new Date(MULAI_MAGANG + 'T00:00:00')
-  const batas = new Date(kemarinIso() + 'T00:00:00')
-  while (d <= batas) {
-    const iso = isoDari(d)
-    const hari = d.getDay()
-    if (hari !== 0 && hari !== 6 && !punyaHadir.has(iso)) hasil.push(iso)
-    d.setDate(d.getDate() + 1)
-  }
-  return hasil
-}
-
-/* gulir-atas-dulu-v1: saat daftar tambahan ditutup, gulir internal dinaikkan
-   mulus ke puncak dulu; aksi penutup dipanggil setelah gulir selesai (atau
-   jatuh tempo) supaya tinggi banner baru menyusut sesudahnya */
-function gulirKeAtasLalu(el, selesai) {
-  if (!el || el.scrollTop <= 0) { selesai(); return }
-  const reduksi = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  if (reduksi) { el.scrollTop = 0; selesai(); return }
-  let done = false
-  const panggil = function () { if (done) return; done = true; selesai() }
-  el.addEventListener('scrollend', panggil, { once: true })
-  el.scrollTo({ top: 0, behavior: 'smooth' })
-  const mulai = Date.now()
-  const cek = function () {
-    if (done) return
-    if (el.scrollTop <= 0 || Date.now() - mulai > 700) { panggil(); return }
-    setTimeout(cek, 80)
-  }
-  setTimeout(cek, 80)
-}
-export default function PengingatBanner(props) {
-  const tipe = props.tipe || 'logbook'
-  const [tutup, setTutup] = useState(false)
-  const [lihatSemua, setLihatSemua] = useState(false)
-  const [buka, setBuka] = useState(false)
-  const [keluar, setKeluar] = useState(false)
-  const [hilang, setHilang] = useState(false)
-  const simpanRef = useRef(null)
-  const refScroll = useRef(null)
-  const sedangTutup = useRef(false)
-  const refTiga = useRef(null)
-  const [tinggiTiga, setTinggiTiga] = useState(0)
-  const [capBuka, setCapBuka] = useState(311)
-  const mentah = tipe === 'hadir' ? hitungTanggalTerlewatHadir(props.hadir) : hitungTanggalTerlewat(props.tanggalLogbook, props.hadir)
-  if (mentah.length && !tutup) simpanRef.current = mentah
-  const harusHilang = tutup || !mentah.length
-  /* saat menghilang, pakai salinan terakhir supaya isi banner tetap utuh selama animasi keluar */
-  const terlewat = mentah.length ? mentah : (simpanRef.current || [])
-  const konfigurasi = tipe === 'hadir'
-    ? {
-        judul: terlewat.length + ' hari kerja belum punya catatan hadir',
-        deskripsi: 'Sabtu-Minggu tidak dihitung. Isi daftar hadir untuk tanggal di bawah supaya catatan kehadiranmu lengkap.',
-        aksi: 'Isi Daftar Hadir'
-      }
-    : {
-        judul: terlewat.length + ' hari kerja belum punya logbook',
-        deskripsi: 'Sabtu-Minggu serta hari berstatus Izin atau Bolos tidak dihitung. Isi logbook untuk tanggal di bawah supaya catatan magangmu lengkap.',
-        aksi: 'Isi Logbook'
-      }
-  /* ukur tinggi 3 item pertama supaya tinggi lipatan presisi di semua lebar layar */
-  useLayoutEffect(function () {
-    function ukur() {
-      if (refTiga.current) setTinggiTiga(refTiga.current.offsetHeight)
-      setCapBuka(window.matchMedia('(max-width: 639px)').matches ? 293 : 311)
-    }
-    ukur()
-    window.addEventListener('resize', ukur)
-    return function () { window.removeEventListener('resize', ukur) }
-  }, [terlewat.length])
-  /* masuk: wrapper dibiarkan terlipat satu frame lalu dibuka supaya transisi tinggi
-     berjalan dan konten di bawah bergeser mulus; keluar: wrapper merapat bersamaan
-     dengan isi yang memudar, komponen dilepas setelah keduanya selesai */
-  useEffect(function () {
-    if (harusHilang) return undefined
-    const r = requestAnimationFrame(function () { setBuka(true) })
-    return function () { cancelAnimationFrame(r) }
-  }, [harusHilang])
-  useEffect(function () {
-    if (!harusHilang) { setKeluar(false); setHilang(false); return undefined }
-    if (!terlewat.length) { setHilang(true); return undefined }
-    setBuka(false)
-    setKeluar(true)
-    const t = setTimeout(function () { setHilang(true) }, 400)
-    return function () { clearTimeout(t) }
-  }, [harusHilang])
-  if (hilang || (harusHilang && !terlewat.length)) return null
-  return (
-    <div className={'pengingat-wrap' + (buka ? ' pengingat-wrap-buka' : '')}>
-      <div className="pengingat-wrap-dalam">
-    <section className={'mt-6 rounded-[2rem] border border-amber-200 bg-amber-50 p-5 sm:p-6 ' + (keluar ? 'pengingat-keluar' : 'pengingat-masuk')}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex min-w-0 flex-1 items-start gap-3">
-          <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-800">
-            <SizedIcon name="clipboard" size={18} />
-          </span>
-          <div>
-            <h2 className="text-base font-black text-amber-800 sm:text-lg">
-              {konfigurasi.judul}
-            </h2>
-            <p className="mt-1 text-xs text-amber-800 sm:text-sm">
-              {konfigurasi.deskripsi}
-            </p>
-          </div>
-        </div>
-        <button type="button" onClick={function () { setTutup(true) }} title="Sembunyikan Pengingat" className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-amber-100 text-amber-800 hover:bg-amber-200">
-          <SizedIcon name="close" size={14} />
-        </button>
-      </div>
-      <div ref={refScroll} className={'mt-4 pengingat-scroll' + (lihatSemua ? ' pengingat-scroll-buka' : '')} style={{ maxHeight: lihatSemua ? capBuka : (tinggiTiga || undefined) }}>
-        <ul ref={refTiga} className="space-y-2">
-        {terlewat.slice(0, 3).map(function (t) {
-          return (
-            <li key={t} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-200 bg-white p-3">
-              <p className="text-sm font-semibold text-slate-800">
-          <span className="hidden sm:inline">{formatTanggal(t)}</span>
-          <span className="sm:hidden">{formatTanggalMobile(t)}</span>
-        </p>
-              <button type="button" onClick={function () { props.onIsi(t) }} className="rounded-xl bg-bsi-800 px-3.5 py-2 text-xs font-bold text-white hover:bg-bsi-900 sm:text-sm">
-                {konfigurasi.aksi}
-              </button>
-            </li>
-          )
-        })}
-      </ul>
-        {terlewat.length > 3 ? (
-              <ul className="pengingat-daftar-extra space-y-2 pt-2">
-                {terlewat.slice(3).map(function (t) {
-                  return (
-                    <li key={t} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-200 bg-white p-3">
-                      <p className="text-sm font-semibold text-slate-800">
-                        <span className="hidden sm:inline">{formatTanggal(t)}</span>
-                        <span className="sm:hidden">{formatTanggalMobile(t)}</span>
-                      </p>
-                      <button type="button" onClick={function () { props.onIsi(t) }} className="rounded-xl bg-bsi-800 px-3.5 py-2 text-xs font-bold text-white hover:bg-bsi-900 sm:text-sm">
-                        {konfigurasi.aksi}
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
-        ) : null}
-      </div>
-      {terlewat.length > 3 ? (
-        <button type="button" onClick={function () { if (!lihatSemua) { setLihatSemua(true); return } if (sedangTutup.current) return; sedangTutup.current = true; gulirKeAtasLalu(refScroll.current, function () { sedangTutup.current = false; setLihatSemua(false) }) }} className="mt-3 w-full rounded-xl border border-amber-300 bg-white px-4 py-2.5 text-xs font-bold text-amber-800 hover:bg-amber-100 sm:text-sm">
-          {lihatSemua ? 'Sembunyikan' : 'Lihat Semua (' + terlewat.length + ' tanggal)'}
-        </button>
-      ) : null}
-    </section>
-      </div>
-    </div>
-  )
 }
 ````
 
@@ -1976,6 +1854,578 @@ export async function deleteMedia(key) {
     throw new Error('Gagal hapus media di R2 (status ' + res.status + '): ' + text)
   }
   return res.json()
+}
+````
+
+## File: src/pages/QuickPage.jsx
+````javascript
+import { useEffect, useRef, useState } from 'react'
+import { supabase } from '../lib/supabase.js'
+import { useAuth } from '../lib/auth.js'
+import { uploadMedia } from '../lib/upload.js'
+import { syncGaleriFromLogbook } from '../lib/logbook.js'
+import { urlPratinjau } from '../lib/konversi.js'
+import { todayInput, formatTanggal } from '../lib/format.js'
+import { KATEGORI } from '../lib/constants.js'
+import { inputCls, labelCls, btnPrimary, useToast, AutoTextArea, LabelProses } from '../components/ui.jsx'
+import { CustomSelect } from '../components/controls.jsx'
+import { SizedIcon } from '../components/icons.jsx'
+import { useNavigate } from 'react-router-dom'
+import PengingatBanner from '../components/PengingatBanner.jsx'
+
+const STATUS_HADIR = ['Masuk', 'Izin', 'Bolos']
+
+export default function QuickPage() {
+  const { mahasiswa } = useAuth()
+  const toast = useToast()
+  const tanggal = todayInput()
+
+  const [tab, setTab] = useState('logbook')
+  const [loading, setLoading] = useState(true)
+  const [todayLog, setTodayLog] = useState(null)
+  const [hadirHariIni, setHadirHariIni] = useState(null)
+  const [lastLogTanggal, setLastLogTanggal] = useState(null)
+  const [lastHadirTanggal, setLastHadirTanggal] = useState(null)
+
+  const [kategori, setKategori] = useState('')
+  const [judulKegiatan, setJudulKegiatan] = useState('')
+  const [deskripsi, setDeskripsi] = useState('')
+  const [file, setFile] = useState(null)
+  const [preview, setPreview] = useState('')
+  const [showGal, setShowGal] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [info, setInfo] = useState('')
+
+  const [status, setStatus] = useState('Masuk')
+  const [alasan, setAlasan] = useState('')
+  const navigate = useNavigate()
+  const [tanggalLogs, setTanggalLogs] = useState([])
+  const [hadirRows, setHadirRows] = useState([])
+
+  const cameraRef = useRef(null)
+  const galeriRef = useRef(null)
+
+  async function muatData(mhs, senyap) {
+    if (!senyap) setLoading(true)
+    const l = await supabase
+      .from('logbooks')
+      .select('*, logbook_items(*)')
+      .eq('mahasiswa_id', mhs.id)
+      .eq('tanggal', tanggal)
+      .order('created_at', { ascending: false })
+      .limit(1)
+    const log = (l.data || [])[0] || null
+    if (log) {
+      log.logbook_items = (log.logbook_items || []).sort(function (a, b) { return (a.urutan || 0) - (b.urutan || 0) })
+    }
+    const h = await supabase
+      .from('daftar_hadir')
+      .select('*')
+      .eq('mahasiswa_id', mhs.id)
+      .eq('tanggal', tanggal)
+      .limit(1)
+    const hadir = (h.data || [])[0] || null
+    const ll = await supabase
+      .from('logbooks')
+      .select('tanggal')
+      .eq('mahasiswa_id', mhs.id)
+      .order('tanggal', { ascending: false })
+      .limit(1)
+    const lh = await supabase
+      .from('daftar_hadir')
+      .select('tanggal')
+      .eq('mahasiswa_id', mhs.id)
+      .order('tanggal', { ascending: false })
+      .limit(1)
+    setTodayLog(log)
+    setHadirHariIni(hadir)
+    setLastLogTanggal(ll.data && ll.data[0] ? ll.data[0].tanggal : null)
+    setLastHadirTanggal(lh.data && lh.data[0] ? lh.data[0].tanggal : null)
+    if (hadir) {
+      setStatus(hadir.status)
+      setAlasan(hadir.alasan || '')
+    }
+        const pg = await supabase.from('logbooks').select('tanggal').eq('mahasiswa_id', mhs.id)
+    const ph = await supabase.from('daftar_hadir').select('tanggal, status').eq('mahasiswa_id', mhs.id)
+    setTanggalLogs((pg.data || []).map(function (x) { return x.tanggal }))
+    setHadirRows(ph.data || [])
+    if (!senyap) setLoading(false)
+  }
+
+  useEffect(function () {
+    if (mahasiswa) muatData(mahasiswa)
+  }, [mahasiswa])
+
+  async function pilihFile(e) {
+    const f = e.target.files[0]
+    e.target.value = ''
+    if (!f) return
+    if (preview && preview.indexOf('blob:') === 0) URL.revokeObjectURL(preview)
+    setFile(f)
+    setPreview(await urlPratinjau(f))
+  }
+
+  function hapusFile() {
+    if (preview && preview.indexOf('blob:') === 0) URL.revokeObjectURL(preview)
+    setFile(null)
+    setPreview('')
+    setShowGal(false)
+  }
+
+  async function submitLogbook(e) {
+    e.preventDefault()
+    if (!todayLog && !kategori) { toast.gagal('Pilih kategori terlebih dahulu.'); return }
+    if (!judulKegiatan.trim()) { toast.gagal('Judul kegiatan wajib diisi.'); return }
+    setBusy(true)
+    try {
+      let mediaPath = null
+      let mediaThumb = null
+      if (file) {
+        const up = await uploadMedia(file, 'logbook', setInfo)
+        mediaPath = up.publicUrl
+        mediaThumb = up.thumbUrl || null
+      }
+      let logId = todayLog ? todayLog.id : null
+      if (!todayLog) {
+        const ins = await supabase.from('logbooks').insert({
+          mahasiswa_id: mahasiswa.id, tanggal: tanggal, unit: '', kategori: kategori,
+          judul: judulKegiatan.trim(), kendala: '', solusi: '', pembelajaran: '', status: 'publik'
+        }).select().single()
+        if (ins.error) throw new Error(ins.error.message)
+        logId = ins.data.id
+      }
+      const urutan = todayLog ? todayLog.logbook_items.reduce(function (m, it) { return Math.max(m, it.urutan || 0) }, 0) + 1 : 1
+      const insItem = await supabase.from('logbook_items').insert({
+        logbook_id: logId,
+        urutan: urutan,
+        judul: judulKegiatan.trim(),
+        deskripsi: deskripsi.trim(),
+        hasil: '',
+        media_path: mediaPath,
+        media_type: mediaPath ? 'foto' : null,
+        media_thumb: mediaThumb,
+        media_source: 'r2',
+        youtube_id: null,
+        drive_id: null,
+        show_in_gallery: showGal && !!mediaPath
+      }).select().single()
+      if (insItem.error) throw new Error(insItem.error.message)
+      if (todayLog && todayLog.status !== 'publik') {
+        await supabase.from('logbooks').update({ status: 'publik' }).eq('id', todayLog.id)
+      }
+      if (showGal && mediaPath) {
+        await syncGaleriFromLogbook(mahasiswa.id, [insItem.data], {
+          tanggal: tanggal,
+          kategori: todayLog ? todayLog.kategori : kategori
+        })
+      }
+      const pertama = !todayLog
+      setJudulKegiatan('')
+      setDeskripsi('')
+      hapusFile()
+      if (pertama) setKategori('')
+      await muatData(mahasiswa, true)
+      toast.sukses(pertama ? 'Logbook hari ini berhasil dibuat' : 'Kegiatan baru berhasil ditambahkan')
+    } catch (err) {
+      toast.gagal('Gagal menyimpan logbook: ' + err.message)
+    }
+    setInfo('')
+    setBusy(false)
+  }
+
+  async function submitAbsen(e) {
+    e.preventDefault()
+    setBusy(true)
+    try {
+      const payload = {
+        mahasiswa_id: mahasiswa.id,
+        tanggal: tanggal,
+        status: status,
+        alasan: status === 'Masuk' ? '' : alasan.trim()
+      }
+      let res
+      if (hadirHariIni) {
+        res = await supabase.from('daftar_hadir').update(payload).eq('id', hadirHariIni.id)
+      } else {
+        res = await supabase.from('daftar_hadir').insert(payload)
+      }
+      if (res.error) throw new Error(res.error.message)
+      await muatData(mahasiswa, true)
+      toast.sukses(hadirHariIni ? 'Daftar hadir berhasil diperbarui' : 'Daftar hadir berhasil disimpan')
+    } catch (err) {
+      toast.gagal('Gagal menyimpan kehadiran: ' + err.message)
+    }
+    setBusy(false)
+  }
+
+  function infoTerakhir(tgl) {
+    if (!tgl) return { teks: 'belum pernah', lama: true }
+    const selisih = Math.round((new Date(tanggal + 'T00:00:00').getTime() - new Date(tgl + 'T00:00:00').getTime()) / 86400000)
+    if (selisih <= 0) return { teks: 'hari ini', lama: false }
+    if (selisih === 1) return { teks: 'kemarin', lama: false }
+    return { teks: selisih + ' hari yang lalu', lama: true }
+  }
+
+  if (loading) {
+    return <div className="grid min-h-[50vh] place-items-center"><div className="h-10 w-10 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div></div>
+  }
+
+  const infoLog = infoTerakhir(lastLogTanggal)
+  const infoHadir = infoTerakhir(lastHadirTanggal)
+
+  const tabCls = function (t) {
+    return 'flex-1 px-4 py-2.5 rounded-xl text-xs sm:rounded-2xl sm:py-3 sm:text-sm font-bold ' + (tab === t ? 'bg-bsi-800 text-white shadow-sm' : 'bsi-panel text-slate-600 hover:text-bsi-800')
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-xl space-y-5">
+      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8">
+        <h1 className="text-xl font-black text-slate-900 sm:text-2xl">Isi Cepat</h1>
+        <p className="mt-1 text-sm text-slate-600">{formatTanggal(tanggal)}</p>
+        <div className="mt-4 flex gap-2">
+          <button type="button" onClick={function () { setTab('logbook') }} className={tabCls('logbook')}>Logbook</button>
+          <button type="button" onClick={function () { setTab('absen') }} className={tabCls('absen')}>Daftar Hadir</button>
+        </div>
+      </section>
+
+      <div className={tab === 'logbook' ? '' : 'hidden'} style={{ marginTop: 0 }}>
+        {!loading ? (
+          <PengingatBanner
+            tipe="logbook"
+            tanggalLogbook={tanggalLogs}
+            hadir={hadirRows}
+            onIsi={function (t) { navigate('/dashboard?isi=' + t) }}
+          />
+        ) : null}
+      </div>
+      <div className={tab === 'absen' ? '' : 'hidden'} style={{ marginTop: 0 }}>
+        {!loading ? (
+          <PengingatBanner
+            tipe="hadir"
+            tanggalLogbook={tanggalLogs}
+            hadir={hadirRows}
+            onIsi={function (t) { navigate('/dashboard?isiHadir=' + t) }}
+          />
+        ) : null}
+      </div>
+      {tab === 'logbook' ? (
+        <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
+          <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoLog.lama ? 'text-amber-600' : 'text-slate-500')}>
+            <SizedIcon name="calendar" size={13} />
+            Terakhir mengisi logbook: {infoLog.teks}
+          </p>
+          {todayLog ? (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+              <p className="text-sm font-bold text-emerald-800">Logbook hari ini sudah ada</p>
+              <p className="mt-1 text-sm text-emerald-800">{todayLog.judul} • {todayLog.logbook_items.length} kegiatan</p>
+              <div className="mt-2 space-y-1">
+                {todayLog.logbook_items.map(function (it, i) {
+                  return <p key={it.id} className="truncate text-xs text-emerald-800">{i + 1}. {it.judul}</p>
+                })}
+              </div>
+              <p className="mt-2 text-xs text-emerald-800">Kegiatan baru ditambahkan di bawahnya tanpa menghapus kegiatan lama.</p>
+              {todayLog.status !== 'publik' ? <p className="mt-1 text-xs font-semibold text-emerald-800">Status masih draf — akan otomatis dipublikasikan.</p> : null}
+            </div>
+          ) : (
+            <div>
+              <label className={labelCls}>Kategori Utama <span className="text-red-500">*</span></label>
+              <div className="mt-1.5">
+                <CustomSelect placeholder="Pilih Kategori" value={kategori} onChange={setKategori} options={KATEGORI.map(function (k) { return { value: k, label: k } })} />
+              </div>
+            </div>
+          )}
+
+          <form onSubmit={submitLogbook} className="mt-5 space-y-4">
+            <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-bold text-bsi-800">{todayLog ? 'Kegiatan Baru (kegiatan ' + (todayLog.logbook_items.length + 1) + ')' : 'Kegiatan'}</p>
+              <input className={inputCls} value={judulKegiatan} onChange={function (e) { setJudulKegiatan(e.target.value) }} aria-label="Judul Kegiatan" placeholder="Judul kegiatan" />
+              <AutoTextArea className={inputCls} value={deskripsi} onChange={function (e) { setDeskripsi(e.target.value) }} aria-label="Deskripsi Kegiatan" placeholder="Deskripsi singkat kegiatan" />
+              {preview ? (
+                <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-900">
+                  <img src={preview} alt="Pratinjau" className="absolute inset-0 h-full w-full object-contain" />
+                  <button type="button" onClick={hapusFile} title="Hapus Gambar" className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-red-500 text-white hover:bg-red-600">
+                    <SizedIcon name="close" size={14} />
+                  </button>
+                </div>
+              ) : null}
+              <div className="grid grid-cols-2 gap-3">
+                <button type="button" onClick={function () { cameraRef.current.click() }} className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-3 py-3.5 text-sm font-semibold text-slate-700 hover:border-bsi-500 hover:bg-slate-100">
+                  <SizedIcon name="camera" size={18} /> Ambil Foto
+                </button>
+                <button type="button" onClick={function () { galeriRef.current.click() }} className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-3 py-3.5 text-sm font-semibold text-slate-700 hover:border-bsi-500 hover:bg-slate-100">
+                  <SizedIcon name="image" size={18} /> Dari Galeri
+                </button>
+              </div>
+              <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={pilihFile} />
+              <input ref={galeriRef} type="file" accept="image/*" className="hidden" onChange={pilihFile} />
+              {preview ? (
+                <label className="flex w-full cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 p-3">
+                  <input type="checkbox" checked={showGal} onChange={function (e) { setShowGal(e.target.checked) }} className="mt-0.5 h-4 w-4 rounded accent-bsi-800" />
+                  <span className="text-sm font-semibold text-slate-800">Tampilkan kegiatan ini di galeri</span>
+                </label>
+              ) : null}
+            </div>
+            <button type="submit" disabled={busy} className={btnPrimary}>
+              {busy ? <LabelProses teks={info || 'Menyimpan'} /> : (todayLog ? 'Tambah Kegiatan' : 'Simpan Logbook')}
+            </button>
+          </form>
+        </section>
+      ) : null}
+
+      {tab === 'absen' ? (
+        <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
+          <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoHadir.lama ? 'text-amber-600' : 'text-slate-500')}>
+            <SizedIcon name="clipboard" size={13} />
+            Terakhir mengisi daftar hadir: {infoHadir.teks}
+          </p>
+          {hadirHariIni ? (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+              <p className="text-sm font-bold text-emerald-800">Kamu sudah mengisi daftar hadir hari ini ({hadirHariIni.status})</p>
+              <p className="mt-1 text-xs text-emerald-800">Form di bawah bisa dipakai untuk memperbarui status bila ada perubahan.</p>
+            </div>
+          ) : null}
+          <form onSubmit={submitAbsen} className={'space-y-4 ' + (hadirHariIni ? 'mt-5' : '')}>
+            <div>
+              <label className={labelCls}>Status Kehadiran <span className="text-red-500">*</span></label>
+              <div className="mt-1.5 flex gap-2">
+                {STATUS_HADIR.map(function (s) {
+                  const aktif = status === s
+                  const warna = aktif
+                    ? (s === 'Masuk' ? 'bg-emerald-500 text-white' : s === 'Izin' ? 'bg-amber-500 text-white' : 'bg-red-500 text-white')
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  return <button type="button" key={s} onClick={function () { setStatus(s) }} className={'flex-1 rounded-2xl px-3 py-3 text-sm font-bold ' + warna}>{s}</button>
+                })}
+              </div>
+            </div>
+            <div>
+              <label className={labelCls}>Alasan atau Keterangan</label>
+              <AutoTextArea
+                className={inputCls + (status === 'Masuk' ? ' cursor-not-allowed opacity-60' : '')}
+                value={alasan}
+                onChange={function (e) { setAlasan(e.target.value) }}
+                aria-label="Alasan atau Keterangan"
+                placeholder={status === 'Masuk' ? 'Status Masuk tidak memerlukan alasan' : 'Contoh: Keperluan keluarga, sakit.'}
+                disabled={status === 'Masuk'}
+              />
+            </div>
+            <button type="submit" disabled={busy} className={btnPrimary}>
+              {busy ? <LabelProses teks="Menyimpan" /> : (hadirHariIni ? 'Perbarui Daftar Hadir' : 'Simpan Daftar Hadir')}
+            </button>
+          </form>
+        </section>
+      ) : null}
+    </div>
+  )
+}
+````
+
+## File: src/components/PengingatBanner.jsx
+````javascript
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { SizedIcon } from './icons.jsx'
+import { formatTanggal } from '../lib/format.js'
+import { MULAI_MAGANG } from '../lib/constants.js'
+
+const HARI_PENDEK = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
+const BULAN_PENDEK = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agt', 'Sept', 'Okt', 'Nov', 'Des']
+function formatTanggalMobile(s) {
+  if (!s) return ''
+  const d = new Date(s + 'T00:00:00')
+  if (Number.isNaN(d.getTime())) return s
+  return HARI_PENDEK[d.getDay()] + ', ' + d.getDate() + ' ' + BULAN_PENDEK[d.getMonth()] + ' ' + d.getFullYear()
+}
+
+function pad2(n) { return (n < 10 ? '0' : '') + n }
+function isoDari(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) }
+/* Batas akhir pengingat = kemarin; hari ini belum dianggap terlewat karena masih bisa diisi */
+function kemarinIso() {
+  const d = new Date()
+  d.setDate(d.getDate() - 1)
+  return isoDari(d)
+}
+
+/* Daftar hari kerja (Sen-Jum) dari MULAI_MAGANG s/d kemarin yang tidak punya
+   logbook dan tidak berstatus Izin/Bolos pada daftar hadir. */
+export function hitungTanggalTerlewat(tanggalLogbook, hadir) {
+  const punyaLog = new Set(tanggalLogbook || [])
+  const absen = new Set()
+  ;(hadir || []).forEach(function (h) {
+    if (h.status === 'Izin' || h.status === 'Bolos') absen.add(h.tanggal)
+  })
+  const hasil = []
+  const d = new Date(MULAI_MAGANG + 'T00:00:00')
+  const batas = new Date(kemarinIso() + 'T00:00:00')
+  while (d <= batas) {
+    const iso = isoDari(d)
+    const hari = d.getDay()
+    if (hari !== 0 && hari !== 6 && !punyaLog.has(iso) && !absen.has(iso)) hasil.push(iso)
+    d.setDate(d.getDate() + 1)
+  }
+  return hasil
+}
+
+/* Daftar hari kerja (Sen-Jum) dari MULAI_MAGANG s/d kemarin yang belum punya
+   catatan hadir sama sekali (status Masuk, Izin, maupun Bolos dianggap sudah isi). */
+export function hitungTanggalTerlewatHadir(hadir) {
+  const punyaHadir = new Set((hadir || []).map(function (h) { return h.tanggal }))
+  const hasil = []
+  const d = new Date(MULAI_MAGANG + 'T00:00:00')
+  const batas = new Date(kemarinIso() + 'T00:00:00')
+  while (d <= batas) {
+    const iso = isoDari(d)
+    const hari = d.getDay()
+    if (hari !== 0 && hari !== 6 && !punyaHadir.has(iso)) hasil.push(iso)
+    d.setDate(d.getDate() + 1)
+  }
+  return hasil
+}
+
+/* gulir-atas-dulu-v1: saat daftar tambahan ditutup, gulir internal dinaikkan
+   mulus ke puncak dulu; aksi penutup dipanggil setelah gulir selesai (atau
+   jatuh tempo) supaya tinggi banner baru menyusut sesudahnya */
+function gulirKeAtasLalu(el, selesai) {
+  if (!el || el.scrollTop <= 0) { selesai(); return }
+  const reduksi = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (reduksi) { el.scrollTop = 0; selesai(); return }
+  let done = false
+  const panggil = function () { if (done) return; done = true; selesai() }
+  el.addEventListener('scrollend', panggil, { once: true })
+  el.scrollTo({ top: 0, behavior: 'smooth' })
+  const mulai = Date.now()
+  const cek = function () {
+    if (done) return
+    if (el.scrollTop <= 0 || Date.now() - mulai > 700) { panggil(); return }
+    setTimeout(cek, 80)
+  }
+  setTimeout(cek, 80)
+}
+export default function PengingatBanner(props) {
+  const tipe = props.tipe || 'logbook'
+  const [tutup, setTutup] = useState(false)
+  const [lihatSemua, setLihatSemua] = useState(false)
+  const [buka, setBuka] = useState(false)
+  const [keluar, setKeluar] = useState(false)
+  const [hilang, setHilang] = useState(false)
+  const simpanRef = useRef(null)
+  const refScroll = useRef(null)
+  const sedangTutup = useRef(false)
+  const refTiga = useRef(null)
+  const [tinggiTiga, setTinggiTiga] = useState(0)
+  const [capBuka, setCapBuka] = useState(311)
+  const mentah = tipe === 'hadir' ? hitungTanggalTerlewatHadir(props.hadir) : hitungTanggalTerlewat(props.tanggalLogbook, props.hadir)
+  if (mentah.length && !tutup) simpanRef.current = mentah
+  const harusHilang = tutup || !mentah.length
+  /* saat menghilang, pakai salinan terakhir supaya isi banner tetap utuh selama animasi keluar */
+  const terlewat = mentah.length ? mentah : (simpanRef.current || [])
+  const konfigurasi = tipe === 'hadir'
+    ? {
+        judul: terlewat.length + ' hari kerja belum punya catatan hadir',
+        deskripsi: 'Sabtu-Minggu tidak dihitung. Isi daftar hadir untuk tanggal di bawah supaya catatan kehadiranmu lengkap.',
+        aksi: 'Isi Daftar Hadir'
+      }
+    : {
+        judul: terlewat.length + ' hari kerja belum punya logbook',
+        deskripsi: 'Sabtu-Minggu serta hari berstatus Izin atau Bolos tidak dihitung. Isi logbook untuk tanggal di bawah supaya catatan magangmu lengkap.',
+        aksi: 'Isi Logbook'
+      }
+  /* ukur tinggi 3 item pertama supaya tinggi lipatan presisi di semua lebar layar */
+  useLayoutEffect(function () {
+    function ukur() {
+      if (refTiga.current) setTinggiTiga(refTiga.current.offsetHeight)
+      setCapBuka(window.matchMedia('(max-width: 639px)').matches ? 293 : 311)
+    }
+    ukur()
+    window.addEventListener('resize', ukur)
+    /* ukur ulang saat banner berubah dari tersembunyi menjadi terlihat (misal pindah tab) */
+    let ro = null
+    if (refTiga.current && typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(ukur)
+      ro.observe(refTiga.current)
+    }
+    return function () { window.removeEventListener('resize', ukur); if (ro) ro.disconnect() }
+  }, [terlewat.length])
+  /* masuk: wrapper dibiarkan terlipat satu frame lalu dibuka supaya transisi tinggi
+     berjalan dan konten di bawah bergeser mulus; keluar: wrapper merapat bersamaan
+     dengan isi yang memudar, komponen dilepas setelah keduanya selesai */
+  useEffect(function () {
+    if (harusHilang) return undefined
+    const r = requestAnimationFrame(function () { setBuka(true) })
+    return function () { cancelAnimationFrame(r) }
+  }, [harusHilang])
+  useEffect(function () {
+    if (!harusHilang) { setKeluar(false); setHilang(false); return undefined }
+    if (!terlewat.length) { setHilang(true); return undefined }
+    setBuka(false)
+    setKeluar(true)
+    const t = setTimeout(function () { setHilang(true) }, 400)
+    return function () { clearTimeout(t) }
+  }, [harusHilang])
+  if (hilang || (harusHilang && !terlewat.length)) return null
+  return (
+    <div className={'pengingat-wrap' + (buka ? ' pengingat-wrap-buka' : '')}>
+      <div className="pengingat-wrap-dalam">
+    <section className={'mt-6 rounded-[2rem] border border-amber-200 bg-amber-50 p-5 sm:p-6 ' + (keluar ? 'pengingat-keluar' : 'pengingat-masuk')}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-800">
+            <SizedIcon name="clipboard" size={18} />
+          </span>
+          <div>
+            <h2 className="text-base font-black text-amber-800 sm:text-lg">
+              {konfigurasi.judul}
+            </h2>
+            <p className="mt-1 text-xs text-amber-800 sm:text-sm">
+              {konfigurasi.deskripsi}
+            </p>
+          </div>
+        </div>
+        <button type="button" onClick={function () { setTutup(true) }} title="Sembunyikan Pengingat" className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-amber-100 text-amber-800 hover:bg-amber-200">
+          <SizedIcon name="close" size={14} />
+        </button>
+      </div>
+      <div ref={refScroll} className={'mt-4 pengingat-scroll' + (lihatSemua ? ' pengingat-scroll-buka' : '')} style={{ maxHeight: lihatSemua ? capBuka : (tinggiTiga || undefined) }}>
+        <ul ref={refTiga} className="space-y-2">
+        {terlewat.slice(0, 3).map(function (t) {
+          return (
+            <li key={t} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-200 bg-white p-3">
+              <p className="text-sm font-semibold text-slate-800">
+          <span className="hidden sm:inline">{formatTanggal(t)}</span>
+          <span className="sm:hidden">{formatTanggalMobile(t)}</span>
+        </p>
+              <button type="button" onClick={function () { props.onIsi(t) }} className="rounded-xl bg-bsi-800 px-3.5 py-2 text-xs font-bold text-white hover:bg-bsi-900 sm:text-sm">
+                {konfigurasi.aksi}
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+        {terlewat.length > 3 ? (
+              <ul className="pengingat-daftar-extra space-y-2 pt-2">
+                {terlewat.slice(3).map(function (t) {
+                  return (
+                    <li key={t} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-200 bg-white p-3">
+                      <p className="text-sm font-semibold text-slate-800">
+                        <span className="hidden sm:inline">{formatTanggal(t)}</span>
+                        <span className="sm:hidden">{formatTanggalMobile(t)}</span>
+                      </p>
+                      <button type="button" onClick={function () { props.onIsi(t) }} className="rounded-xl bg-bsi-800 px-3.5 py-2 text-xs font-bold text-white hover:bg-bsi-900 sm:text-sm">
+                        {konfigurasi.aksi}
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+        ) : null}
+      </div>
+      {terlewat.length > 3 ? (
+        <button type="button" onClick={function () { if (!lihatSemua) { setLihatSemua(true); return } if (sedangTutup.current) return; sedangTutup.current = true; gulirKeAtasLalu(refScroll.current, function () { sedangTutup.current = false; setLihatSemua(false) }) }} className="mt-3 w-full rounded-xl border border-amber-300 bg-white px-4 py-2.5 text-xs font-bold text-amber-800 hover:bg-amber-100 sm:text-sm">
+          {lihatSemua ? 'Sembunyikan' : 'Lihat Semua (' + terlewat.length + ' tanggal)'}
+        </button>
+      ) : null}
+    </section>
+      </div>
+    </div>
+  )
 }
 ````
 
@@ -7730,6 +8180,26 @@ async function executeDelete() {
         </div>
       </section>
 
+      <div className={tab === 'logbook' ? '' : 'hidden'}>
+        {dataSiap ? (
+          <PengingatBanner
+            tipe="logbook"
+            tanggalLogbook={logs.map(function (l) { return l.tanggal })}
+            hadir={hadir}
+            onIsi={isiLogbookTanggal}
+          />
+        ) : null}
+      </div>
+      <div className={tab === 'absen' ? '' : 'hidden'}>
+        {dataSiap ? (
+          <PengingatBanner
+            tipe="hadir"
+            tanggalLogbook={logs.map(function (l) { return l.tanggal })}
+            hadir={hadir}
+            onIsi={isiHadirTanggal}
+          />
+        ) : null}
+      </div>
       {tab === 'profil' ? (
         <section className="anim-tab mt-8 grid gap-6 lg:grid-cols-[0.85fr_1.15fr] items-start">
           <div className="card-hover bsi-panel rounded-[2rem] p-8 flex flex-col items-center text-center">
@@ -7779,15 +8249,6 @@ async function executeDelete() {
       ) : null}
 
       {tab === 'logbook' ? (
-        <>
-        {dataSiap ? (
-          <PengingatBanner
-            tipe="logbook"
-            tanggalLogbook={logs.map(function (l) { return l.tanggal })}
-            hadir={hadir}
-            onIsi={isiLogbookTanggal}
-          />
-        ) : null}
         <section className="anim-tab mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
           <div ref={refFormLog} className={'card-hover scroll-mt-24 bsi-panel rounded-[2rem] p-8 min-w-0 ' + (editLogId ? 'ring-2 ring-gold-500' : '')}>
             <ModeIndicator edit={!!editLogId} onCancel={cobaCancelEditLog} />
@@ -7918,7 +8379,6 @@ async function executeDelete() {
             <Pagination totalItems={logTotal} perPage={PER_PAGE_DASH} page={logPageAman} onPageChange={gantiHalamanLog} />
           </div>
         </section>
-        </>
       ) : null}
 
       {tab === 'galeri' ? (
@@ -8022,15 +8482,6 @@ async function executeDelete() {
       ) : null}
 
       {tab === 'absen' ? (
-        <>
-        {dataSiap ? (
-          <PengingatBanner
-            tipe="hadir"
-            tanggalLogbook={logs.map(function (l) { return l.tanggal })}
-            hadir={hadir}
-            onIsi={isiHadirTanggal}
-          />
-        ) : null}
         <section className="anim-tab mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
           <div ref={refFormHadir} className={'card-hover scroll-mt-24 bsi-panel rounded-[2rem] p-8 min-w-0 ' + (editHadirId ? 'ring-2 ring-gold-500' : '')}>
             <ModeIndicator edit={!!editHadirId} onCancel={cobaCancelEditHadir} />
@@ -8079,7 +8530,6 @@ async function executeDelete() {
             <Pagination totalItems={hadirTotal} perPage={PER_PAGE_DASH} page={hadirPageAman} onPageChange={gantiHalamanHadir} />
           </div>
         </section>
-        </>
       ) : null}
 
       <Modal open={!!detail} onClose={function () { setDetail(null) }}>

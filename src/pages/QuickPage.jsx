@@ -227,7 +227,7 @@ export default function QuickPage() {
         </div>
       </section>
 
-      <div className={tab === 'logbook' ? '' : 'hidden'}>
+      <div className={tab === 'logbook' ? '' : 'hidden'} style={{ marginTop: 0 }}>
         {!loading ? (
           <PengingatBanner
             tipe="logbook"
@@ -237,7 +237,7 @@ export default function QuickPage() {
           />
         ) : null}
       </div>
-      <div className={tab === 'absen' ? '' : 'hidden'}>
+      <div className={tab === 'absen' ? '' : 'hidden'} style={{ marginTop: 0 }}>
         {!loading ? (
           <PengingatBanner
             tipe="hadir"
