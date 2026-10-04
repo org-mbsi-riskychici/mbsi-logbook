@@ -9,7 +9,7 @@ import { parseYouTubeId, ytThumb, fetchYouTubeQuota, unggahVideoYouTube } from '
 import { parseDriveId, driveThumbUrl, driveViewUrl } from '../lib/drive.js'
 import { uploadFotoProfil, updateFotoProfilMahasiswa, hapusFotoProfil } from '../lib/profil.js'
 import { urlPratinjau } from '../lib/konversi.js'
-import { todayInput, detectMediaType, matchesDateFilters, urutkanTanggal } from '../lib/format.js'
+import { todayInput, detectMediaType, matchesDateFilters, urutkanTanggal, batasTanggalPilihan, pesanTanggalTerlarang } from '../lib/format.js'
 import { KATEGORI, UNIT, GALERI_KEGIATAN } from '../lib/constants.js'
 import { Avatar, LabelProses, EmptyState, Modal, ConfirmModal, inputCls, labelCls, btnPrimary, AutoTextArea, Pagination, useToast } from '../components/ui.jsx'
 import { LogbookCard, LogbookDetail, GalleryCard, GalleryDetail, AttendanceCard, AttendanceDetail } from '../components/cards.jsx'
@@ -63,6 +63,8 @@ function ModeIndicator(props) {
 export default function DashboardPage() {
   const { mahasiswa, loading } = useAuth()
   const toast = useToast()
+  const batas = batasTanggalPilihan()
+  function tolakTanggal(pesan) { toast.gagal(pesan) }
   const [tab, setTab] = useState('logbook')
   const [logs, setLogs] = useState([])
   const [galeri, setGaleri] = useState([])
@@ -334,6 +336,8 @@ export default function DashboardPage() {
 
   async function submitLogbook(e) {
     e.preventDefault()
+    const pesanTgl = pesanTanggalTerlarang(form.tanggal, batas.min, batas.max)
+    if (pesanTgl) { toast.gagal(pesanTgl); return }
     setBusy(true)
     const menambahLog = !editLogId
     try {
@@ -527,6 +531,8 @@ export default function DashboardPage() {
 
   async function submitGaleri(e) {
     e.preventDefault()
+    const pesanTgl = pesanTanggalTerlarang(galForm.tanggal, batas.min, batas.max)
+    if (pesanTgl) { toast.gagal(pesanTgl); return }
     setBusy(true)
     const menambahGal = !editGalId
     try {
@@ -640,6 +646,8 @@ export default function DashboardPage() {
 
   async function submitHadir(e) {
     e.preventDefault()
+    const pesanTgl = pesanTanggalTerlarang(hadirForm.tanggal, batas.min, batas.max)
+    if (pesanTgl) { toast.gagal(pesanTgl); return }
     setBusy(true)
     const menambahHadir = !editHadirId
     const payload = { mahasiswa_id: mahasiswa.id, tanggal: hadirForm.tanggal, status: hadirForm.status, alasan: hadirForm.status === 'Masuk' ? '' : hadirForm.alasan }
@@ -868,7 +876,7 @@ async function executeDelete() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label className={labelCls}>Tanggal <span className="text-red-500">*</span></label>
-                  <div className="mt-1.5"><CustomDateInput value={form.tanggal} onChange={function (v) { setForm(Object.assign({}, form, { tanggal: v })) }} /></div>
+                  <div className="mt-1.5"><CustomDateInput value={form.tanggal} onChange={function (v) { setForm(Object.assign({}, form, { tanggal: v })) }} min={batas.min} max={batas.max} onTerlarang={tolakTanggal} /></div>
                 </div>
                 <div>
                   <label className={labelCls}>Unit Utama</label>
@@ -1058,7 +1066,7 @@ async function executeDelete() {
                 <div><label className={labelCls}>Judul (Opsional)</label><input className={inputCls} value={galForm.judul} onChange={function (e) { setGalForm(Object.assign({}, galForm, { judul: e.target.value })) }} aria-label="Judul Media" placeholder="Kosongkan untuk judul otomatis" /></div>
                 <div>
                   <label className={labelCls}>Tanggal (Opsional)</label>
-                  <div className="mt-1.5"><CustomDateInput value={galForm.tanggal} onChange={function (v) { setGalForm(Object.assign({}, galForm, { tanggal: v })) }} /></div>
+                  <div className="mt-1.5"><CustomDateInput value={galForm.tanggal} onChange={function (v) { setGalForm(Object.assign({}, galForm, { tanggal: v })) }} min={batas.min} max={batas.max} onTerlarang={tolakTanggal} /></div>
                 </div>
               </div>
               <div>
@@ -1101,7 +1109,7 @@ async function executeDelete() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label className={labelCls}>Tanggal <span className="text-red-500">*</span></label>
-                  <div className="mt-1.5"><CustomDateInput value={hadirForm.tanggal} onChange={function (v) { setHadirForm(Object.assign({}, hadirForm, { tanggal: v })) }} /></div>
+                  <div className="mt-1.5"><CustomDateInput value={hadirForm.tanggal} onChange={function (v) { setHadirForm(Object.assign({}, hadirForm, { tanggal: v })) }} min={batas.min} max={batas.max} onTerlarang={tolakTanggal} /></div>
                 </div>
                 <div>
                   <label className={labelCls}>Status Kehadiran <span className="text-red-500">*</span></label>

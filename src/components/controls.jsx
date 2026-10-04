@@ -1,3 +1,4 @@
+import { pesanTanggalTerlarang } from '../lib/format.js'
 import { SelubungPanel } from './ui.jsx'
 import { useEffect, useRef, useState } from 'react'
 import { ICONS } from './icons.jsx'
@@ -86,6 +87,8 @@ export function CustomSelect(props) {
 export function CustomDateInput(props) {
   const mode = props.mode || 'date'
   const [open, setOpen] = useState(false)
+  const [alignRight, setAlignRight] = useState(false)
+
   const [view, setView] = useState(function () {
     const p = parseValue(props.value, mode)
     const t = new Date()
@@ -101,6 +104,12 @@ export function CustomDateInput(props) {
     if (!open) {
       const p = parseValue(props.value, mode)
       if (p) setView({ y: p.y, m: p.m })
+      if (boxRef.current) {
+        const r = boxRef.current.getBoundingClientRect()
+        const wadah = boxRef.current.closest('.filter-isi')
+        const batasKanan = wadah ? wadah.getBoundingClientRect().right : window.innerWidth - 8
+        setAlignRight(r.left + 296 > batasKanan)
+      }
     }
     setOpen(function (o) { return !o })
   }
@@ -116,8 +125,14 @@ export function CustomDateInput(props) {
     })
   }
 
-  function pickDay(d) {
-    props.onChange(view.y + '-' + pad(view.m + 1) + '-' + pad(d))
+    function pickDay(d) {
+    const ds = view.y + '-' + pad(view.m + 1) + '-' + pad(d)
+    const pesan = pesanTanggalTerlarang(ds, props.min, props.max)
+    if (pesan) {
+      if (props.onTerlarang) props.onTerlarang(pesan)
+      return
+    }
+    props.onChange(ds)
     setOpen(false)
   }
 
@@ -153,7 +168,7 @@ export function CustomDateInput(props) {
         <span className={'shrink-0 text-slate-600 transition-transform duration-200 ' + (open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
       </button>
       <SelubungPanel open={open}>
-<div className="anim-modal absolute z-30 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
+<div className={'anim-modal absolute z-30 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl ' + (alignRight ? 'right-0' : '')}>
           <div className="flex items-center justify-between">
             <button type="button" onClick={function () { shift(-1) }} className="grid h-8 w-8 place-items-center rounded-lg text-slate-600 hover:bg-slate-100">&#8249;</button>
             <p className="text-sm font-bold text-slate-800">
@@ -167,16 +182,18 @@ export function CustomDateInput(props) {
               {HARI_NAMA.map(function (h) {
                 return <span key={h} className="py-1 text-[11px] font-semibold text-slate-600">{h}</span>
               })}
-              {cells.map(function (d, i) {
+                            {cells.map(function (d, i) {
                 if (d === null) return <span key={'kosong' + i} />
                 const isSel = sel && sel.y === view.y && sel.m === view.m && sel.d === d
                 const isToday = today.getFullYear() === view.y && today.getMonth() === view.m && today.getDate() === d
+                const terlarang = pesanTanggalTerlarang(view.y + '-' + pad(view.m + 1) + '-' + pad(d), props.min, props.max)
                 return (
                   <button
                     key={d}
                     type="button"
                     onClick={function () { pickDay(d) }}
-                    className={'mx-auto grid h-8 w-8 place-items-center rounded-lg text-sm ' + (isSel ? 'bg-bsi-800 font-semibold text-white' : isToday ? 'font-bold text-bsi-700 ring-1 ring-bsi-500' : 'text-slate-700 hover:bg-slate-100')}
+                    title={terlarang || undefined}
+                    className={'mx-auto grid h-8 w-8 place-items-center rounded-lg text-sm ' + (terlarang ? 'opacity-35 cursor-not-allowed ' : '') + (isSel ? 'bg-bsi-800 font-semibold text-white' : isToday ? 'font-bold text-bsi-700 ring-1 ring-bsi-500' : 'text-slate-700 hover:bg-slate-100')}
                   >
                     {d}
                   </button>

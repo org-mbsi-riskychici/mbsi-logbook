@@ -1,3 +1,4 @@
+import { MULAI_MAGANG } from './constants.js'
 export function formatTanggal(s) {
   if (!s) return 'Tanggal belum diisi'
   const d = new Date(s + 'T00:00:00')
@@ -18,6 +19,24 @@ export function todayInput() {
   const day = ('0' + d.getDate()).slice(-2)
   return d.getFullYear() + '-' + m + '-' + day
 }
+/* Batas pilihan tanggal form: tidak sebelum hari pertama magang, tidak setelah hari ini.
+   Dinamis karena max diambil dari tanggal perangkat saat web dibuka. */
+export function batasTanggalPilihan() {
+  return { min: MULAI_MAGANG, max: todayInput() }
+}
+/* Mengembalikan pesan error bila tanggal di luar batas, atau null bila valid.
+   Perbandingan string aman karena format tanggal ISO (YYYY-MM-DD). */
+export function pesanTanggalTerlarang(value, min, max) {
+  if (!value) return null
+  if (max && value > max) {
+    return 'Tanggal ini belum kamu lewati!'
+  }
+  if (min && value < min) {
+    return 'Hari pertama magang tanggal (8 September 2026).'
+  }
+  return null
+}
+
 
 export function detectMediaType(u) {
   let s = String(u || '')

@@ -91,6 +91,7 @@ supabase/
 .gitignore
 index.html
 package.json
+patch-tanggal-valid-v1.cjs
 postcss.config.js
 README.md
 tailwind.config.js
@@ -99,6 +100,137 @@ vite.config.js
 ````
 
 # Files
+
+## File: patch-tanggal-valid-v1.cjs
+````javascript
+#!/usr/bin/env node
+/* patch-tanggal-valid-v1.cjs
+   Pemakaian: node patch-tanggal-valid-v1.cjs   (jalankan dari root repo)
+   Menerapkan otomatis fitur batas tanggal form (logbook, galeri, daftar hadir):
+   - tidak bisa memilih tanggal masa depan (dinamis sesuai tanggal perangkat),
+   - tidak bisa memilih tanggal sebelum hari pertama magang (8 September 2026),
+   - pesan error ramah saat tanggal terlarang diketuk atau saat submit.
+   Idempoten: bagian yang sudah terpasang akan dilewati. */
+const fs = require('fs')
+const path = require('path')
+
+const ROOT = process.cwd()
+const gagal = []
+const catatan = []
+
+function baca(rel) {
+  const p = path.join(ROOT, rel)
+  if (!fs.existsSync(p)) { gagal.push(rel + ' : file tidak ditemukan'); return null }
+  return fs.readFileSync(p, 'utf8')
+}
+function ganti(rel, src, pola, pengganti, label) {
+  if (src == null) return src
+  const hasil = src.replace(pola, pengganti)
+  if (hasil === src) gagal.push(rel + ' : pola tidak ditemukan -> ' + label)
+  return hasil
+}
+function tulis(rel, isi) {
+  fs.writeFileSync(path.join(ROOT, rel), isi, 'utf8')
+}
+
+/* ========== 1. src/lib/constants.js ========== */
+const KONSTANTA_TAMBAHAN = "\n/* Hari pertama masa magang BSI; form tidak menerima tanggal sebelum ini */\nexport const MULAI_MAGANG = '2026-09-08'\n"
+let constants = baca('src/lib/constants.js')
+if (constants != null && constants.indexOf('MULAI_MAGANG') !== -1) {
+  catatan.push('LEWATI src/lib/constants.js (sudah ada MULAI_MAGANG)')
+  constants = null
+} else if (constants != null) {
+  constants = constants.replace(/\s*$/, '') + KONSTANTA_TAMBAHAN
+  catatan.push('UBAH  src/lib/constants.js (+ MULAI_MAGANG)')
+}
+
+/* ========== 2. src/lib/format.js ========== */
+const FORMAT_FUNGSI = "\n/* Batas pilihan tanggal form: tidak sebelum hari pertama magang, tidak setelah hari ini.\n   Dinamis karena max diambil dari tanggal perangkat saat web dibuka. */\nexport function batasTanggalPilihan() {\n  return { min: MULAI_MAGANG, max: todayInput() }\n}\n/* Mengembalikan pesan error bila tanggal di luar batas, atau null bila valid.\n   Perbandingan string aman karena format tanggal ISO (YYYY-MM-DD). */\nexport function pesanTanggalTerlarang(value, min, max) {\n  if (!value) return null\n  if (max && value > max) {\n    return 'Tanggal ' + formatTanggal(value) + ' belum kamu lewati. Kamu hanya bisa memilih tanggal hari ini atau sebelumnya, karena logbook, galeri, dan daftar hadir mencatat kegiatan yang sudah benar-benar terjadi.'\n  }\n  if (min && value < min) {\n    return 'Tanggal ' + formatTanggal(value) + ' berada sebelum hari pertama masa magang (' + formatTanggal(min) + '). Silakan pilih tanggal pada rentang masa magang berlangsung, ya.'\n  }\n  return null\n}\n"
+let format = baca('src/lib/format.js')
+if (format != null && format.indexOf('batasTanggalPilihan') !== -1) {
+  catatan.push('LEWATI src/lib/format.js (sudah ada batasTanggalPilihan)')
+  format = null
+} else if (format != null) {
+  if (format.indexOf("./constants.js") === -1) {
+    format = "import { MULAI_MAGANG } from './constants.js'\n" + format
+  }
+  format = ganti('src/lib/format.js', format, /(export function todayInput\(\)\s*\{[^}]*\})/, '$1' + FORMAT_FUNGSI, 'sisip fungsi setelah todayInput')
+  catatan.push('UBAH  src/lib/format.js (+ batasTanggalPilihan, pesanTanggalTerlarang)')
+}
+
+/* ========== 3. src/components/controls.jsx ========== */
+const PICKDAY_BARU = "  function pickDay(d) {\n    const ds = view.y + '-' + pad(view.m + 1) + '-' + pad(d)\n    const pesan = pesanTanggalTerlarang(ds, props.min, props.max)\n    if (pesan) {\n      if (props.onTerlarang) props.onTerlarang(pesan)\n      return\n    }\n    props.onChange(ds)\n    setOpen(false)\n  }"
+const CELLS_BARU = "              {cells.map(function (d, i) {\n                if (d === null) return <span key={'kosong' + i} />\n                const isSel = sel && sel.y === view.y && sel.m === view.m && sel.d === d\n                const isToday = today.getFullYear() === view.y && today.getMonth() === view.m && today.getDate() === d\n                const terlarang = pesanTanggalTerlarang(view.y + '-' + pad(view.m + 1) + '-' + pad(d), props.min, props.max)\n                return (\n                  <button\n                    key={d}\n                    type=\"button\"\n                    onClick={function () { pickDay(d) }}\n                    title={terlarang || undefined}\n                    className={'mx-auto grid h-8 w-8 place-items-center rounded-lg text-sm ' + (terlarang ? 'opacity-35 cursor-not-allowed ' : '') + (isSel ? 'bg-bsi-800 font-semibold text-white' : isToday ? 'font-bold text-bsi-700 ring-1 ring-bsi-500' : 'text-slate-700 hover:bg-slate-100')}\n                  >\n                    {d}\n                  </button>\n                )\n              })}"
+let controls = baca('src/components/controls.jsx')
+if (controls != null && controls.indexOf('pesanTanggalTerlarang') !== -1) {
+  catatan.push('LEWATI src/components/controls.jsx (sudah ada pesanTanggalTerlarang)')
+  controls = null
+} else if (controls != null) {
+  controls = "import { pesanTanggalTerlarang } from '../lib/format.js'\n" + controls
+  controls = ganti('src/components/controls.jsx', controls,
+    /function pickDay\(d\)\s*\{\s*props\.onChange\(view\.y \+ '-' \+ pad\(view\.m \+ 1\) \+ '-' \+ pad\(d\)\)\s*setOpen\(false\)\s*\}/,
+    PICKDAY_BARU, 'ganti pickDay')
+  controls = ganti('src/components/controls.jsx', controls,
+    /\{cells\.map\(function \(d, i\) \{[\s\S]*?\n\s*\}\)\}/,
+    CELLS_BARU, 'ganti sel kalender')
+  catatan.push('UBAH  src/components/controls.jsx (picker menolak tanggal terlarang)')
+}
+
+/* ========== 4. src/pages/DashboardPage.jsx ========== */
+let dash = baca('src/pages/DashboardPage.jsx')
+if (dash != null && dash.indexOf('batasTanggalPilihan') !== -1) {
+  catatan.push('LEWATI src/pages/DashboardPage.jsx (sudah ada batasTanggalPilihan)')
+  dash = null
+} else if (dash != null) {
+  dash = ganti('src/pages/DashboardPage.jsx', dash,
+    "import { todayInput, detectMediaType, matchesDateFilters, urutkanTanggal } from '../lib/format.js'",
+    "import { todayInput, detectMediaType, matchesDateFilters, urutkanTanggal, batasTanggalPilihan, pesanTanggalTerlarang } from '../lib/format.js'",
+    'perluas import format')
+  dash = ganti('src/pages/DashboardPage.jsx', dash,
+    /(const toast = useToast\(\)\r?\n)/,
+    '$1  const batas = batasTanggalPilihan()\n  function tolakTanggal(pesan) { toast.gagal(pesan) }\n',
+    'sisip batas & tolakTanggal')
+  dash = ganti('src/pages/DashboardPage.jsx', dash,
+    /(async function submitLogbook\(e\)\s*\{\s*e\.preventDefault\(\))/,
+    '$1\n    const pesanTgl = pesanTanggalTerlarang(form.tanggal, batas.min, batas.max)\n    if (pesanTgl) { toast.gagal(pesanTgl); return }',
+    'guard submitLogbook')
+  dash = ganti('src/pages/DashboardPage.jsx', dash,
+    /(async function submitGaleri\(e\)\s*\{\s*e\.preventDefault\(\))/,
+    '$1\n    const pesanTgl = pesanTanggalTerlarang(galForm.tanggal, batas.min, batas.max)\n    if (pesanTgl) { toast.gagal(pesanTgl); return }',
+    'guard submitGaleri')
+  dash = ganti('src/pages/DashboardPage.jsx', dash,
+    /(async function submitHadir\(e\)\s*\{\s*e\.preventDefault\(\))/,
+    '$1\n    const pesanTgl = pesanTanggalTerlarang(hadirForm.tanggal, batas.min, batas.max)\n    if (pesanTgl) { toast.gagal(pesanTgl); return }',
+    'guard submitHadir')
+  dash = ganti('src/pages/DashboardPage.jsx', dash,
+    "<CustomDateInput value={form.tanggal} onChange={function (v) { setForm(Object.assign({}, form, { tanggal: v })) }} />",
+    "<CustomDateInput value={form.tanggal} onChange={function (v) { setForm(Object.assign({}, form, { tanggal: v })) }} min={batas.min} max={batas.max} onTerlarang={tolakTanggal} />",
+    'props tanggal logbook')
+  dash = ganti('src/pages/DashboardPage.jsx', dash,
+    "<CustomDateInput value={galForm.tanggal} onChange={function (v) { setGalForm(Object.assign({}, galForm, { tanggal: v })) }} />",
+    "<CustomDateInput value={galForm.tanggal} onChange={function (v) { setGalForm(Object.assign({}, galForm, { tanggal: v })) }} min={batas.min} max={batas.max} onTerlarang={tolakTanggal} />",
+    'props tanggal galeri')
+  dash = ganti('src/pages/DashboardPage.jsx', dash,
+    "<CustomDateInput value={hadirForm.tanggal} onChange={function (v) { setHadirForm(Object.assign({}, hadirForm, { tanggal: v })) }} />",
+    "<CustomDateInput value={hadirForm.tanggal} onChange={function (v) { setHadirForm(Object.assign({}, hadirForm, { tanggal: v })) }} min={batas.min} max={batas.max} onTerlarang={tolakTanggal} />",
+    'props tanggal hadir')
+  catatan.push('UBAH  src/pages/DashboardPage.jsx (3 form + 3 guard submit)')
+}
+
+/* ========== Eksekusi ========== */
+if (gagal.length) {
+  console.error('PATCH DIBATALKAN (tidak ada file yang ditulis):')
+  gagal.forEach(function (g) { console.error('  - ' + g) })
+  process.exit(1)
+}
+if (constants != null) tulis('src/lib/constants.js', constants)
+if (format != null) tulis('src/lib/format.js', format)
+if (controls != null) tulis('src/components/controls.jsx', controls)
+if (dash != null) tulis('src/pages/DashboardPage.jsx', dash)
+console.log('Patch tanggal valid selesai:')
+catatan.forEach(function (c) { console.log('  ' + c) })
+console.log('Silakan jalankan npm run dev untuk verifikasi.')
+````
 
 ## File: api/_lib/sesi.js
 ````javascript
@@ -409,6 +541,8 @@ export const GALERI_KEGIATAN = [
   'Operasional',
   'Lainnya'
 ]
+/* Hari pertama masa magang BSI; form tidak menerima tanggal sebelum ini */
+export const MULAI_MAGANG = '2026-09-08'
 ````
 
 ## File: src/lib/drive.js
@@ -1595,6 +1729,7 @@ Proyek internal untuk kegiatan magang Bank Syariah Indonesia. Hak cipta © 2026 
 
 ## File: src/lib/format.js
 ````javascript
+import { MULAI_MAGANG } from './constants.js'
 export function formatTanggal(s) {
   if (!s) return 'Tanggal belum diisi'
   const d = new Date(s + 'T00:00:00')
@@ -1615,6 +1750,24 @@ export function todayInput() {
   const day = ('0' + d.getDate()).slice(-2)
   return d.getFullYear() + '-' + m + '-' + day
 }
+/* Batas pilihan tanggal form: tidak sebelum hari pertama magang, tidak setelah hari ini.
+   Dinamis karena max diambil dari tanggal perangkat saat web dibuka. */
+export function batasTanggalPilihan() {
+  return { min: MULAI_MAGANG, max: todayInput() }
+}
+/* Mengembalikan pesan error bila tanggal di luar batas, atau null bila valid.
+   Perbandingan string aman karena format tanggal ISO (YYYY-MM-DD). */
+export function pesanTanggalTerlarang(value, min, max) {
+  if (!value) return null
+  if (max && value > max) {
+    return 'Tanggal ini belum kamu lewati, maksimal hari ini'
+  }
+  if (min && value < min) {
+    return 'Hari pertama magang tanggal (8 September 2026)'
+  }
+  return null
+}
+
 
 export function detectMediaType(u) {
   let s = String(u || '')
@@ -2637,6 +2790,7 @@ export default function Carousel(props) {
 
 ## File: src/components/controls.jsx
 ````javascript
+import { pesanTanggalTerlarang } from '../lib/format.js'
 import { SelubungPanel } from './ui.jsx'
 import { useEffect, useRef, useState } from 'react'
 import { ICONS } from './icons.jsx'
@@ -2755,8 +2909,14 @@ export function CustomDateInput(props) {
     })
   }
 
-  function pickDay(d) {
-    props.onChange(view.y + '-' + pad(view.m + 1) + '-' + pad(d))
+    function pickDay(d) {
+    const ds = view.y + '-' + pad(view.m + 1) + '-' + pad(d)
+    const pesan = pesanTanggalTerlarang(ds, props.min, props.max)
+    if (pesan) {
+      if (props.onTerlarang) props.onTerlarang(pesan)
+      return
+    }
+    props.onChange(ds)
     setOpen(false)
   }
 
@@ -2806,16 +2966,18 @@ export function CustomDateInput(props) {
               {HARI_NAMA.map(function (h) {
                 return <span key={h} className="py-1 text-[11px] font-semibold text-slate-600">{h}</span>
               })}
-              {cells.map(function (d, i) {
+                            {cells.map(function (d, i) {
                 if (d === null) return <span key={'kosong' + i} />
                 const isSel = sel && sel.y === view.y && sel.m === view.m && sel.d === d
                 const isToday = today.getFullYear() === view.y && today.getMonth() === view.m && today.getDate() === d
+                const terlarang = pesanTanggalTerlarang(view.y + '-' + pad(view.m + 1) + '-' + pad(d), props.min, props.max)
                 return (
                   <button
                     key={d}
                     type="button"
                     onClick={function () { pickDay(d) }}
-                    className={'mx-auto grid h-8 w-8 place-items-center rounded-lg text-sm ' + (isSel ? 'bg-bsi-800 font-semibold text-white' : isToday ? 'font-bold text-bsi-700 ring-1 ring-bsi-500' : 'text-slate-700 hover:bg-slate-100')}
+                    title={terlarang || undefined}
+                    className={'mx-auto grid h-8 w-8 place-items-center rounded-lg text-sm ' + (terlarang ? 'opacity-35 cursor-not-allowed ' : '') + (isSel ? 'bg-bsi-800 font-semibold text-white' : isToday ? 'font-bold text-bsi-700 ring-1 ring-bsi-500' : 'text-slate-700 hover:bg-slate-100')}
                   >
                     {d}
                   </button>
@@ -5200,6 +5362,9 @@ textarea {
 .grid-pusat-rapat { display: flex; flex-wrap: wrap; justify-content: center; gap: 1rem; }
 .kolom-kartu, .kolom-kartu-rapat { width: 100%; display: flex; }
 .kolom-kartu > *, .kolom-kartu-rapat > * { width: 100%; }
+.kartu-grid > * { min-width: 0; }
+.kolom-kartu, .kolom-kartu-rapat { min-width: 0; }
+.kartu-grid, .grid-pusat, .grid-pusat-rapat { overflow-wrap: anywhere; }
 @media (min-width: 768px) {
   .kolom-kartu { width: calc(50% - 0.625rem); }
   .kolom-kartu-rapat { width: calc(50% - 0.5rem); }
@@ -6513,7 +6678,7 @@ import { parseYouTubeId, ytThumb, fetchYouTubeQuota, unggahVideoYouTube } from '
 import { parseDriveId, driveThumbUrl, driveViewUrl } from '../lib/drive.js'
 import { uploadFotoProfil, updateFotoProfilMahasiswa, hapusFotoProfil } from '../lib/profil.js'
 import { urlPratinjau } from '../lib/konversi.js'
-import { todayInput, detectMediaType, matchesDateFilters, urutkanTanggal } from '../lib/format.js'
+import { todayInput, detectMediaType, matchesDateFilters, urutkanTanggal, batasTanggalPilihan, pesanTanggalTerlarang } from '../lib/format.js'
 import { KATEGORI, UNIT, GALERI_KEGIATAN } from '../lib/constants.js'
 import { Avatar, LabelProses, EmptyState, Modal, ConfirmModal, inputCls, labelCls, btnPrimary, AutoTextArea, Pagination, useToast } from '../components/ui.jsx'
 import { LogbookCard, LogbookDetail, GalleryCard, GalleryDetail, AttendanceCard, AttendanceDetail } from '../components/cards.jsx'
@@ -6567,6 +6732,8 @@ function ModeIndicator(props) {
 export default function DashboardPage() {
   const { mahasiswa, loading } = useAuth()
   const toast = useToast()
+  const batas = batasTanggalPilihan()
+  function tolakTanggal(pesan) { toast.gagal(pesan) }
   const [tab, setTab] = useState('logbook')
   const [logs, setLogs] = useState([])
   const [galeri, setGaleri] = useState([])
@@ -6838,6 +7005,8 @@ export default function DashboardPage() {
 
   async function submitLogbook(e) {
     e.preventDefault()
+    const pesanTgl = pesanTanggalTerlarang(form.tanggal, batas.min, batas.max)
+    if (pesanTgl) { toast.gagal(pesanTgl); return }
     setBusy(true)
     const menambahLog = !editLogId
     try {
@@ -7031,6 +7200,8 @@ export default function DashboardPage() {
 
   async function submitGaleri(e) {
     e.preventDefault()
+    const pesanTgl = pesanTanggalTerlarang(galForm.tanggal, batas.min, batas.max)
+    if (pesanTgl) { toast.gagal(pesanTgl); return }
     setBusy(true)
     const menambahGal = !editGalId
     try {
@@ -7144,6 +7315,8 @@ export default function DashboardPage() {
 
   async function submitHadir(e) {
     e.preventDefault()
+    const pesanTgl = pesanTanggalTerlarang(hadirForm.tanggal, batas.min, batas.max)
+    if (pesanTgl) { toast.gagal(pesanTgl); return }
     setBusy(true)
     const menambahHadir = !editHadirId
     const payload = { mahasiswa_id: mahasiswa.id, tanggal: hadirForm.tanggal, status: hadirForm.status, alasan: hadirForm.status === 'Masuk' ? '' : hadirForm.alasan }
@@ -7372,7 +7545,7 @@ async function executeDelete() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label className={labelCls}>Tanggal <span className="text-red-500">*</span></label>
-                  <div className="mt-1.5"><CustomDateInput value={form.tanggal} onChange={function (v) { setForm(Object.assign({}, form, { tanggal: v })) }} /></div>
+                  <div className="mt-1.5"><CustomDateInput value={form.tanggal} onChange={function (v) { setForm(Object.assign({}, form, { tanggal: v })) }} min={batas.min} max={batas.max} onTerlarang={tolakTanggal} /></div>
                 </div>
                 <div>
                   <label className={labelCls}>Unit Utama</label>
@@ -7562,7 +7735,7 @@ async function executeDelete() {
                 <div><label className={labelCls}>Judul (Opsional)</label><input className={inputCls} value={galForm.judul} onChange={function (e) { setGalForm(Object.assign({}, galForm, { judul: e.target.value })) }} aria-label="Judul Media" placeholder="Kosongkan untuk judul otomatis" /></div>
                 <div>
                   <label className={labelCls}>Tanggal (Opsional)</label>
-                  <div className="mt-1.5"><CustomDateInput value={galForm.tanggal} onChange={function (v) { setGalForm(Object.assign({}, galForm, { tanggal: v })) }} /></div>
+                  <div className="mt-1.5"><CustomDateInput value={galForm.tanggal} onChange={function (v) { setGalForm(Object.assign({}, galForm, { tanggal: v })) }} min={batas.min} max={batas.max} onTerlarang={tolakTanggal} /></div>
                 </div>
               </div>
               <div>
@@ -7605,7 +7778,7 @@ async function executeDelete() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label className={labelCls}>Tanggal <span className="text-red-500">*</span></label>
-                  <div className="mt-1.5"><CustomDateInput value={hadirForm.tanggal} onChange={function (v) { setHadirForm(Object.assign({}, hadirForm, { tanggal: v })) }} /></div>
+                  <div className="mt-1.5"><CustomDateInput value={hadirForm.tanggal} onChange={function (v) { setHadirForm(Object.assign({}, hadirForm, { tanggal: v })) }} min={batas.min} max={batas.max} onTerlarang={tolakTanggal} /></div>
                 </div>
                 <div>
                   <label className={labelCls}>Status Kehadiran <span className="text-red-500">*</span></label>
