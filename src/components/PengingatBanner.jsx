@@ -43,7 +43,9 @@ export function hitungTanggalTerlewat(tanggalLogbook, hadir) {
 
 export default function PengingatBanner(props) {
   const [tutup, setTutup] = useState(false)
+  const [lihatSemua, setLihatSemua] = useState(false)
   const terlewat = hitungTanggalTerlewat(props.tanggalLogbook, props.hadir)
+  const tampil = lihatSemua ? terlewat : terlewat.slice(0, 3)
   if (tutup || !terlewat.length) return null
   return (
     <section className="mt-6 rounded-[2rem] border border-amber-200 bg-amber-50 p-5 sm:p-6">
@@ -66,7 +68,7 @@ export default function PengingatBanner(props) {
         </button>
       </div>
       <ul className="mt-4 max-h-72 space-y-2 overflow-y-auto pr-1">
-        {terlewat.map(function (t) {
+        {tampil.map(function (t) {
           return (
             <li key={t} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-200 bg-white p-3">
               <p className="text-sm font-semibold text-slate-800">
@@ -80,6 +82,11 @@ export default function PengingatBanner(props) {
           )
         })}
       </ul>
+      {terlewat.length > 3 ? (
+        <button type="button" onClick={function () { setLihatSemua(function (v) { return !v }) }} className="mt-3 w-full rounded-xl border border-amber-300 bg-white px-4 py-2.5 text-xs font-bold text-amber-800 hover:bg-amber-100 sm:text-sm">
+          {lihatSemua ? 'Sembunyikan' : 'Lihat Semua (' + terlewat.length + ' tanggal)'}
+        </button>
+      ) : null}
     </section>
   )
 }
