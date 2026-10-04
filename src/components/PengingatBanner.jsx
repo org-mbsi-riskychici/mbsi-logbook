@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { SizedIcon } from './icons.jsx'
 import { formatTanggal } from '../lib/format.js'
 import { MULAI_MAGANG } from '../lib/constants.js'
@@ -41,6 +41,25 @@ export function hitungTanggalTerlewat(tanggalLogbook, hadir) {
   return hasil
 }
 
+/* gulir-atas-dulu-v1: saat daftar tambahan ditutup, gulir internal dinaikkan
+   mulus ke puncak dulu; aksi penutup dipanggil setelah gulir selesai (atau
+   jatuh tempo) supaya tinggi banner baru menyusut sesudahnya */
+function gulirKeAtasLalu(el, selesai) {
+  if (!el || el.scrollTop <= 0) { selesai(); return }
+  const reduksi = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (reduksi) { el.scrollTop = 0; selesai(); return }
+  let done = false
+  const panggil = function () { if (done) return; done = true; selesai() }
+  el.addEventListener('scrollend', panggil, { once: true })
+  el.scrollTo({ top: 0, behavior: 'smooth' })
+  const mulai = Date.now()
+  const cek = function () {
+    if (done) return
+    if (el.scrollTop <= 0 || Date.now() - mulai > 700) { panggil(); return }
+    setTimeout(cek, 80)
+  }
+  setTimeout(cek, 80)
+}
 export default function PengingatBanner(props) {
   const [tutup, setTutup] = useState(false)
   const [lihatSemua, setLihatSemua] = useState(false)
@@ -48,11 +67,26 @@ export default function PengingatBanner(props) {
   const [keluar, setKeluar] = useState(false)
   const [hilang, setHilang] = useState(false)
   const simpanRef = useRef(null)
+  const refScroll = useRef(null)
+  const sedangTutup = useRef(false)
+  const refTiga = useRef(null)
+  const [tinggiTiga, setTinggiTiga] = useState(0)
+  const [capBuka, setCapBuka] = useState(311)
   const mentah = hitungTanggalTerlewat(props.tanggalLogbook, props.hadir)
   if (mentah.length && !tutup) simpanRef.current = mentah
   const harusHilang = tutup || !mentah.length
   /* saat menghilang, pakai salinan terakhir supaya isi banner tetap utuh selama animasi keluar */
   const terlewat = mentah.length ? mentah : (simpanRef.current || [])
+  /* ukur tinggi 3 item pertama supaya tinggi lipatan presisi di semua lebar layar */
+  useLayoutEffect(function () {
+    function ukur() {
+      if (refTiga.current) setTinggiTiga(refTiga.current.offsetHeight)
+      setCapBuka(window.matchMedia('(max-width: 639px)').matches ? 293 : 311)
+    }
+    ukur()
+    window.addEventListener('resize', ukur)
+    return function () { window.removeEventListener('resize', ukur) }
+  }, [terlewat.length])
   /* masuk: wrapper dibiarkan terlipat satu frame lalu dibuka supaya transisi tinggi
      berjalan dan konten di bawah bergeser mulus; keluar: wrapper merapat bersamaan
      dengan isi yang memudar, komponen dilepas setelah keduanya selesai */
@@ -92,8 +126,8 @@ export default function PengingatBanner(props) {
           <SizedIcon name="close" size={14} />
         </button>
       </div>
-      <div className="mt-4">
-        <ul className="space-y-2">
+      <div ref={refScroll} className={'mt-4 pengingat-scroll' + (lihatSemua ? ' pengingat-scroll-buka' : '')} style={{ maxHeight: lihatSemua ? capBuka : (tinggiTiga || undefined) }}>
+        <ul ref={refTiga} className="space-y-2">
         {terlewat.slice(0, 3).map(function (t) {
           return (
             <li key={t} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-200 bg-white p-3">
@@ -109,9 +143,7 @@ export default function PengingatBanner(props) {
         })}
       </ul>
         {terlewat.length > 3 ? (
-          <div className={'pengingat-extra' + (lihatSemua ? ' pengingat-extra-buka' : '')}>
-            <div className="pengingat-extra-dalam">
-              <ul className="space-y-2 pt-2">
+              <ul className="pengingat-daftar-extra space-y-2 pt-2">
                 {terlewat.slice(3).map(function (t) {
                   return (
                     <li key={t} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-200 bg-white p-3">
@@ -126,12 +158,10 @@ export default function PengingatBanner(props) {
                   )
                 })}
               </ul>
-            </div>
-          </div>
         ) : null}
       </div>
       {terlewat.length > 3 ? (
-        <button type="button" onClick={function () { setLihatSemua(function (v) { return !v }) }} className="mt-3 w-full rounded-xl border border-amber-300 bg-white px-4 py-2.5 text-xs font-bold text-amber-800 hover:bg-amber-100 sm:text-sm">
+        <button type="button" onClick={function () { if (!lihatSemua) { setLihatSemua(true); return } if (sedangTutup.current) return; sedangTutup.current = true; gulirKeAtasLalu(refScroll.current, function () { sedangTutup.current = false; setLihatSemua(false) }) }} className="mt-3 w-full rounded-xl border border-amber-300 bg-white px-4 py-2.5 text-xs font-bold text-amber-800 hover:bg-amber-100 sm:text-sm">
           {lihatSemua ? 'Sembunyikan' : 'Lihat Semua (' + terlewat.length + ' tanggal)'}
         </button>
       ) : null}

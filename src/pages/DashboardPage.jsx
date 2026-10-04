@@ -300,7 +300,7 @@ export default function DashboardPage() {
      setSearchParams({}, { replace: true })
      const pesan = pesanTanggalTerlarang(t, batas.min, batas.max)
      if (pesan) { toast.gagal(pesan); return }
-     isiLogbookTanggal(t)
+     isiLogbookTanggal(t, true)
    }, [mahasiswa, dataSiap])
 
   if (loading || !mahasiswa) {
@@ -452,6 +452,18 @@ export default function DashboardPage() {
     setBusy(false)
   }
 
+  function gulirKeFormTunda(ref, ms) {
+
+
+    /* tunggu animasi masuk (halaman + banner pengingat) selesai supaya posisi form final */
+
+
+    setTimeout(function () { gulirKeForm(ref) }, ms || 450)
+
+
+  }
+
+
   function gulirKeForm(ref) {
     requestAnimationFrame(function () { if (ref && ref.current) ref.current.scrollIntoView({ behavior: 'smooth', block: 'start' }) })
   }
@@ -540,22 +552,23 @@ export default function DashboardPage() {
     setEditHadirId(null)
     setHadirForm({ tanggal: todayInput(), status: 'Masuk', alasan: '' })
   }
-   function terapkanIsiTanggal(t) {
+   function terapkanIsiTanggal(t, tunda) {
      cancelEditLog()
      setForm(function (f) { return Object.assign({}, f, { tanggal: t }) })
      setTab('logbook')
-     gulirKeForm(refFormLog)
+     if (tunda) gulirKeFormTunda(refFormLog, 450)
+     else gulirKeForm(refFormLog)
    }
-   function isiLogbookTanggal(t) {
+   function isiLogbookTanggal(t, tunda) {
      if (isLogbookDirty()) {
        setKonfirmasiEdit({
          judul: 'Ganti Draf Logbook?',
          pesan: 'Isian form logbook yang belum disimpan akan hilang dan diganti dengan tanggal terlewat yang kamu pilih.',
-         aksi: function () { terapkanIsiTanggal(t) }
+         aksi: function () { terapkanIsiTanggal(t, tunda) }
        })
        return
      }
-     terapkanIsiTanggal(t)
+     terapkanIsiTanggal(t, tunda)
    }
 
 

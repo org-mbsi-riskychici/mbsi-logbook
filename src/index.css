@@ -876,15 +876,6 @@ body { background-color: #f4f8f4; background-image: linear-gradient(160deg, #dff
   opacity: 0;
   transform: translateY(-8px);
   transition: opacity 0.2s ease, transform 0.24s cubic-bezier(0.32, 0.72, 0, 1);
-  /* pengingat-extra-scroll: saat terbuka, daftar hanya memperlihatkan ±4,5 item
-     (item berikutnya terlihat setengah sebagai penanda); sisanya digulir
-     di dalam area pengingat saja sehingga halaman tidak ikut memanjang.
-     112px untuk desktop, 104px untuk mobile yang itemnya sedikit lebih pendek */
-  max-height: 112px;
-  overflow-y: auto;
-}
-@media (max-width: 639px) {
-  .pengingat-extra ul { max-height: 104px; }
 }
 .pengingat-extra-buka ul {
   opacity: 1;
@@ -915,3 +906,16 @@ body { background-color: #f4f8f4; background-image: linear-gradient(160deg, #dff
   overflow: hidden;
   min-height: 0;
 }
+/* pengingat-geser-list-v1: tinggi area daftar dianimasikan lewat max-height
+   terukur supaya tombol di bawah tidak terhentak saat Lihat Semua;
+   seluruh baris tetap tergulir bersama dalam satu area */
+.pengingat-scroll {
+  overflow-y: hidden;
+  transition: max-height 0.36s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.pengingat-scroll-buka { overflow-y: auto; }
+.pengingat-daftar-extra {
+  visibility: hidden;
+  transition: visibility 0.36s;
+}
+.pengingat-scroll-buka .pengingat-daftar-extra { visibility: visible; }
