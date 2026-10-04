@@ -48,6 +48,8 @@ api/
     session.js
 public/
   llms.txt
+  logo-1.svg
+  logo.svg
   robots.txt
 src/
   components/
@@ -91,6 +93,7 @@ supabase/
 .env.example
 .gitignore
 index.html
+mvp-qr.html
 package.json
 postcss.config.js
 README.md
@@ -100,6 +103,323 @@ vite.config.js
 ````
 
 # Files
+
+## File: public/logo-1.svg
+````xml
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="512" height="512" fill="white"/>
+<g clip-path="url(#clip0_1_16)">
+<path d="M149.86 328.153C154.115 328.153 157.575 327.607 160.242 326.515C162.972 325.422 165.1 324.008 166.623 322.273C168.146 320.537 169.195 318.578 169.766 316.394C170.337 314.209 170.623 311.991 170.623 309.741C170.623 307.17 170.274 304.857 169.576 302.801C168.94 300.745 167.798 299.009 166.147 297.596C164.559 296.182 162.433 295.09 159.766 294.319C157.099 293.547 153.733 293.161 149.67 293.161H127.192V328.153H149.86ZM127.192 236.673V271.376H143.955C147.511 271.376 150.717 271.119 153.575 270.604C156.432 270.09 158.844 269.191 160.813 267.905C162.844 266.62 164.369 264.853 165.385 262.604C166.465 260.355 167.004 257.526 167.004 254.121C167.004 250.779 166.591 248.015 165.766 245.83C164.94 243.582 163.67 241.783 161.955 240.433C160.242 239.083 158.051 238.12 155.385 237.541C152.781 236.963 149.67 236.673 146.051 236.673H127.192ZM146.051 212.285C155.638 212.285 163.798 213.185 170.528 214.984C177.259 216.783 182.751 219.322 187.005 222.599C191.259 225.877 194.338 229.861 196.243 234.553C198.212 239.244 199.196 244.482 199.196 250.265C199.196 253.414 198.751 256.467 197.862 259.423C196.974 262.315 195.577 265.045 193.672 267.616C191.767 270.123 189.323 272.436 186.338 274.557C183.355 276.678 179.766 278.509 175.576 280.052C184.72 282.3 191.482 285.932 195.863 290.945C200.243 295.956 202.434 302.448 202.434 310.416C202.434 316.394 201.292 321.952 199.006 327.094C196.72 332.233 193.354 336.733 188.91 340.589C184.528 344.38 179.1 347.368 172.623 349.553C166.147 351.674 158.749 352.734 150.432 352.734H95V212.285H146.051Z" fill="#00A39D"/>
+<path d="M301.325 240.931C300.371 242.472 299.356 243.628 298.277 244.398C297.26 245.168 295.927 245.553 294.277 245.553C292.815 245.553 291.229 245.103 289.514 244.205C287.863 243.242 285.958 242.182 283.799 241.028C281.704 239.872 279.291 238.844 276.561 237.946C273.831 236.983 270.72 236.502 267.227 236.502C261.195 236.502 256.687 237.818 253.702 240.449C250.782 243.017 249.322 246.516 249.322 250.945C249.322 253.77 250.211 256.113 251.989 257.974C253.767 259.835 256.084 261.44 258.941 262.787C261.862 264.136 265.163 265.388 268.847 266.543C272.593 267.634 276.403 268.886 280.275 270.298C284.149 271.647 287.926 273.251 291.61 275.113C295.356 276.974 298.658 279.349 301.515 282.238C304.435 285.127 306.785 288.656 308.563 292.829C310.341 296.937 311.23 301.912 311.23 307.753C311.23 314.238 310.118 320.303 307.896 325.951C305.673 331.601 302.435 336.543 298.181 340.78C293.99 344.952 288.783 348.258 282.561 350.698C276.403 353.073 269.386 354.26 261.513 354.26C257.194 354.26 252.781 353.811 248.273 352.912C243.829 352.013 239.512 350.761 235.32 349.156C231.13 347.488 227.193 345.53 223.511 343.283C219.827 341.036 216.621 338.533 213.891 335.773L223.415 320.559C224.177 319.468 225.161 318.57 226.368 317.863C227.638 317.093 229.003 316.708 230.463 316.708C232.369 316.708 234.273 317.318 236.178 318.538C238.147 319.758 240.336 321.105 242.75 322.582C245.225 324.059 248.052 325.406 251.226 326.625C254.401 327.846 258.147 328.455 262.465 328.455C268.306 328.455 272.847 327.172 276.085 324.604C279.323 321.972 280.943 317.832 280.943 312.184C280.943 308.909 280.054 306.245 278.276 304.191C276.498 302.136 274.148 300.437 271.228 299.088C268.369 297.741 265.1 296.553 261.418 295.525C257.735 294.498 253.957 293.375 250.083 292.156C246.211 290.872 242.432 289.331 238.75 287.534C235.067 285.673 231.765 283.264 228.845 280.312C225.987 277.295 223.669 273.572 221.891 269.142C220.114 264.65 219.225 259.13 219.225 252.582C219.225 247.318 220.272 242.182 222.368 237.176C224.463 232.168 227.543 227.708 231.606 223.792C235.67 219.876 240.654 216.764 246.559 214.452C252.465 212.077 259.227 210.89 266.846 210.89C271.101 210.89 275.228 211.242 279.228 211.949C283.292 212.591 287.134 213.586 290.753 214.934C294.372 216.218 297.736 217.79 300.847 219.651C304.023 221.449 306.848 223.503 309.324 225.815L301.325 240.931Z" fill="#00A39D"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M416.385 206.476C391.667 204.065 382.975 217.691 378.127 224.43C371.943 197.487 361.485 199.611 350.298 192.824C366.468 183.428 370.99 168.82 370.545 158C386.384 169.626 397.428 168.379 411.105 164.608C404.3 184.941 408.596 190.679 416.385 206.476Z" fill="#F8AD3C"/>
+<path d="M364.689 352.793H331.212V209.165C352.161 212.006 364.722 229.351 364.689 247.711V352.793Z" fill="#00A39D"/>
+</g>
+<defs>
+<clipPath id="clip0_1_16">
+<rect width="322" height="197" fill="white" transform="translate(95 158)"/>
+</clipPath>
+</defs>
+</svg>
+````
+
+## File: public/logo.svg
+````xml
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect x="1.52588e-05" width="512" height="512" fill="white"/>
+<g clip-path="url(#clip0_1_16)">
+<path d="M149.86 328.153C154.115 328.153 157.575 327.607 160.242 326.515C162.972 325.422 165.1 324.008 166.623 322.273C168.146 320.537 169.195 318.578 169.766 316.394C170.337 314.209 170.623 311.991 170.623 309.741C170.623 307.17 170.274 304.857 169.576 302.801C168.94 300.745 167.798 299.009 166.147 297.596C164.559 296.182 162.433 295.09 159.766 294.319C157.099 293.547 153.733 293.161 149.67 293.161H127.192V328.153H149.86ZM127.192 236.673V271.376H143.955C147.511 271.376 150.717 271.119 153.575 270.604C156.432 270.09 158.844 269.191 160.813 267.905C162.844 266.62 164.369 264.853 165.385 262.604C166.465 260.355 167.004 257.526 167.004 254.121C167.004 250.779 166.591 248.015 165.766 245.83C164.94 243.582 163.67 241.783 161.955 240.433C160.242 239.083 158.051 238.12 155.385 237.541C152.781 236.963 149.67 236.673 146.051 236.673H127.192ZM146.051 212.285C155.638 212.285 163.798 213.185 170.528 214.984C177.259 216.783 182.751 219.322 187.005 222.599C191.259 225.877 194.338 229.861 196.243 234.553C198.212 239.244 199.196 244.482 199.196 250.265C199.196 253.414 198.751 256.467 197.863 259.423C196.974 262.315 195.577 265.045 193.672 267.616C191.767 270.123 189.323 272.436 186.338 274.557C183.355 276.678 179.766 278.509 175.576 280.052C184.72 282.3 191.482 285.932 195.863 290.945C200.243 295.956 202.434 302.448 202.434 310.416C202.434 316.394 201.292 321.952 199.006 327.094C196.72 332.233 193.355 336.733 188.91 340.589C184.528 344.38 179.1 347.368 172.623 349.553C166.147 351.674 158.749 352.734 150.432 352.734H95V212.285H146.051Z" fill="#00A39D"/>
+<path d="M301.325 240.931C300.371 242.472 299.356 243.628 298.277 244.398C297.26 245.168 295.927 245.553 294.277 245.553C292.815 245.553 291.229 245.103 289.514 244.205C287.863 243.242 285.958 242.182 283.799 241.028C281.704 239.872 279.291 238.844 276.561 237.946C273.831 236.983 270.72 236.502 267.227 236.502C261.195 236.502 256.687 237.818 253.702 240.449C250.782 243.017 249.322 246.516 249.322 250.945C249.322 253.77 250.211 256.113 251.989 257.974C253.767 259.835 256.084 261.44 258.941 262.787C261.862 264.136 265.163 265.388 268.847 266.543C272.593 267.634 276.403 268.886 280.275 270.298C284.149 271.647 287.926 273.251 291.61 275.113C295.356 276.974 298.658 279.349 301.515 282.238C304.435 285.127 306.785 288.656 308.563 292.829C310.341 296.937 311.23 301.912 311.23 307.753C311.23 314.238 310.118 320.303 307.896 325.951C305.673 331.601 302.435 336.543 298.181 340.78C293.991 344.952 288.783 348.258 282.561 350.698C276.403 353.073 269.386 354.26 261.513 354.26C257.194 354.26 252.781 353.811 248.273 352.912C243.829 352.013 239.512 350.761 235.32 349.156C231.13 347.488 227.193 345.53 223.511 343.283C219.827 341.036 216.621 338.533 213.891 335.773L223.415 320.559C224.177 319.468 225.161 318.57 226.368 317.863C227.638 317.093 229.003 316.708 230.463 316.708C232.369 316.708 234.273 317.318 236.178 318.538C238.147 319.758 240.336 321.105 242.75 322.582C245.225 324.059 248.052 325.406 251.226 326.625C254.401 327.846 258.147 328.455 262.465 328.455C268.306 328.455 272.847 327.172 276.085 324.604C279.323 321.972 280.943 317.832 280.943 312.183C280.943 308.909 280.054 306.245 278.276 304.191C276.498 302.136 274.148 300.437 271.228 299.088C268.369 297.741 265.1 296.553 261.418 295.525C257.735 294.498 253.957 293.375 250.083 292.156C246.211 290.872 242.432 289.331 238.75 287.534C235.067 285.673 231.765 283.264 228.845 280.312C225.987 277.295 223.669 273.572 221.891 269.142C220.114 264.65 219.225 259.13 219.225 252.582C219.225 247.318 220.272 242.182 222.368 237.176C224.463 232.168 227.543 227.708 231.606 223.792C235.67 219.876 240.654 216.764 246.559 214.452C252.465 212.077 259.227 210.89 266.846 210.89C271.101 210.89 275.228 211.242 279.228 211.949C283.292 212.591 287.134 213.586 290.753 214.934C294.372 216.218 297.736 217.79 300.847 219.651C304.023 221.449 306.849 223.503 309.324 225.815L301.325 240.931Z" fill="#00A39D"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M416.385 206.476C391.667 204.065 382.975 217.691 378.127 224.43C371.943 197.487 361.485 199.611 350.298 192.824C366.468 183.428 370.99 168.82 370.545 158C386.384 169.626 397.428 168.379 411.105 164.608C404.3 184.941 408.596 190.679 416.385 206.476Z" fill="#F8AD3C"/>
+<path d="M364.689 352.793H331.212V209.165C352.161 212.006 364.722 229.351 364.689 247.711V352.793Z" fill="#00A39D"/>
+</g>
+<path d="M312 1.41683e-05H512V140C512 140 495.444 100.473 435.4 54.5424C375.355 8.61181 312 1.41683e-05 312 1.41683e-05Z" fill="#FEAB2B"/>
+<path d="M200 512L1.95839e-05 512L7.43218e-06 373C7.43218e-06 373 15.6733 413.56 75.7174 459.162C135.762 504.765 200 512 200 512Z" fill="#00A39D"/>
+<defs>
+<clipPath id="clip0_1_16">
+<rect width="322" height="197" fill="white" transform="translate(95 158)"/>
+</clipPath>
+</defs>
+</svg>
+````
+
+## File: mvp-qr.html
+````html
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cetak QR Code - Portal Logbook Magang BSI</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            bsi: {
+              50: '#f4fbf6', 100: '#dff0e4', 200: '#bfe3cc', 300: '#86ecb0',
+              400: '#4ed58f', 500: '#27c06d', 600: '#1a9e57', 700: '#177c48',
+              800: '#16623c', 900: '#135033'
+            },
+            gold: { 400: '#fbbf24', 500: '#f59e0b', 600: '#d97706' }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Font Plus Jakarta Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Library QR Code Generator -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+
+  <!-- Library HTML to Canvas (Untuk Unduh Seluruh Kartu ke PNG) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+
+    #qrcode svg {
+      width: 200px;
+      height: 200px;
+      display: block;
+      margin: 0 auto;
+    }
+    
+    /* Utility styling khusus saat print */
+    @media print {
+      @page {
+        size: A4 portrait;
+        margin: 1.5cm;
+      }
+      
+      /* Memaksa browser mencetak background warna & aksen persis seperti di layar */
+      *, *::before, *::after {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+
+      html, body {
+        background: white !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        width: 100% !important;
+        display: flex !important;
+        justify-content: center !important;
+        align-items: flex-start !important;
+      }
+
+      .no-print {
+        display: none !important;
+      }
+
+      /* Mengatur lebar kartu presisi 430px agar rasio lebar vs tinggi pas */
+      #posterCard,
+      main#posterCard.print-card {
+        width: 430px !important;
+        max-width: 430px !important;
+        min-width: 430px !important;
+        margin: 1cm auto !important;
+        box-shadow: none !important;
+        border: 1px solid #cbd5e1 !important;
+        border-radius: 2.5rem !important;
+        background: white !important;
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+        box-sizing: border-box !important;
+      }
+
+      .logo-glow {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+<body class="bg-slate-100 min-h-screen text-slate-800 flex flex-col items-center justify-center p-4 sm:p-8">
+
+  <!-- Floating Action Bar (Hanya Tampil di Layar Monitor) -->
+  <div class="no-print w-full max-w-md mb-6 bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between gap-3">
+    <a href="/qr" class="flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-600 hover:text-bsi-800 transition">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+      </svg>
+      Kembali
+    </a>
+    
+    <div class="flex gap-2">
+      <!-- Tombol Unduh Seluruh Kartu PNG -->
+      <button id="btnDownloadPng" onclick="downloadCardPNG()" class="px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs sm:text-sm font-bold text-slate-700 flex items-center gap-1.5 transition">
+        <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        </svg>
+        <span>Unduh PNG</span>
+      </button>
+
+      <!-- Tombol Cetak PDF / Standee -->
+      <button onclick="window.print()" class="px-4 py-2 rounded-xl bg-bsi-800 hover:bg-bsi-900 text-white text-xs sm:text-sm font-bold flex items-center gap-2 shadow-sm transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+        </svg>
+        Cetak
+      </button>
+    </div>
+  </div>
+
+  <!-- Kartu Poster / Standee Siap Cetak (Bodi Kartu Putih Solid) -->
+  <main id="posterCard" class="print-card w-full max-w-md bg-white rounded-[2.5rem] p-8 shadow-xl border border-slate-200 flex flex-col items-center text-center relative overflow-hidden">
+    
+    <!-- Accent Top Bar -->
+    <div class="absolute top-0 inset-x-0 h-2 bg-bsi-800"></div>
+
+    <!-- Header Branding BSI -->
+    <div class="flex flex-col items-center gap-3 mt-4">
+      <!-- Logo Badge -->
+      <div class="relative">
+        <div class="relative h-16 w-16 rounded-2xl bg-bsi-800 text-white grid place-items-center shadow-md overflow-hidden">
+          
+          <!-- Ikon SVG: Dokumen/Logbook dengan Aksen Centang -->
+          <svg class="w-9 h-9 relative z-10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M4 7V17C4 18.1046 4.89543 19 6 19H18C19.1046 19 20 18.1046 20 17V7" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M4 7L12 12L20 7" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M12 12V19" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Tipografi Brand -->
+      <div class="flex flex-col items-center">
+        <h1 class="text-2xl font-black tracking-tight text-slate-900 uppercase flex items-center gap-2">
+          <span class="text-bsi-800">GANK</span>
+          <span class="text-slate-700">SKUYY</span>
+        </h1>
+        <p class="text-[11px] font-bold text-slate-500 tracking-[0.2em] uppercase mt-1.5">
+          Portal Presensi & Logbook
+        </p>
+      </div>
+    </div>
+
+    <hr class="w-full border-slate-100 my-6" />
+
+    <!-- Teks Instruksi -->
+    <div class="space-y-1">
+      <p class="text-xs font-bold text-bsi-800 uppercase tracking-widest">
+        Scan QR Code di Bawah Ini
+      </p>
+      <p class="text-xs text-slate-500">
+        Untuk mengisi Logbook harian &amp; Presensi magang
+      </p>
+    </div>
+
+    <!-- Container Gambar QR Code Inline SVG -->
+    <div class="my-6 p-4 bg-slate-50 border-2 border-dashed border-bsi-300 rounded-3xl relative">
+      <div id="qrcode" class="flex justify-center items-center"></div>
+    </div>
+
+    <!-- URL Manual -->
+    <div class="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-2xl flex flex-col items-center justify-center">
+      <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Akses Tautan Manual</p>
+      <p id="targetUrlText" class="text-xs font-mono font-bold text-slate-700 break-all leading-normal mt-1 px-1">
+        Loading URL...
+      </p>
+    </div>
+  </main>
+
+  <script>
+    // =========================================================================
+    // KONFIGURASI UTAMA URL TUJUAN QR CODE
+    // =========================================================================
+    const CUSTOM_URL = "https://mbsi.riskychici.web.id/qr"; 
+
+    const targetUrl = (CUSTOM_URL && CUSTOM_URL.trim() !== "") 
+      ? CUSTOM_URL.trim() 
+      : (window.location.origin + '/qr');
+
+    document.getElementById('targetUrlText').innerText = targetUrl;
+
+    // Generate Inline SVG QR Code
+    const typeNumber = 0;
+    const errorCorrectionLevel = 'H';
+    const qr = qrcode(typeNumber, errorCorrectionLevel);
+    qr.addData(targetUrl);
+    qr.make();
+
+    const count = qr.getModuleCount();
+    const size = 200;
+    const cellSize = size / count;
+
+    let svgPath = '';
+    for (let row = 0; row < count; row++) {
+      for (let col = 0; col < count; col++) {
+        if (qr.isDark(row, col)) {
+          svgPath += `M${col * cellSize},${row * cellSize}h${cellSize}v${cellSize}h-${cellSize}z `;
+        }
+      }
+    }
+
+    const svgElementStr = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">
+      <rect width="${size}" height="${size}" fill="#ffffff" />
+      <path d="${svgPath}" fill="#16623c" />
+    </svg>`;
+
+    const qrContainer = document.getElementById("qrcode");
+    qrContainer.innerHTML = svgElementStr;
+
+    // =========================================================================
+    // FUNGSI UNDUH SELURUH KARTU KE PNG (KARTU PUTIH, AREA LUAR TRANSPARAN)
+    // =========================================================================
+    async function downloadCardPNG() {
+      const cardElement = document.getElementById('posterCard');
+      const btnBtn = document.getElementById('btnDownloadPng');
+      
+      if (!cardElement) return;
+
+      const originalText = btnBtn.innerHTML;
+      btnBtn.innerHTML = `<span class="animate-pulse">Mengunduh...</span>`;
+      btnBtn.disabled = true;
+
+      try {
+        const canvas = await html2canvas(cardElement, {
+          scale: 3,
+          useCORS: true,
+          backgroundColor: null, // Kanvas luar tetap transparan (mengikuti sudut rounded)
+          logging: false,
+          onclone: (clonedDoc) => {
+            const urlText = clonedDoc.getElementById('targetUrlText');
+            if (urlText) {
+              urlText.style.lineHeight = '1.5';
+              urlText.style.paddingTop = '2px';
+              urlText.style.paddingBottom = '2px';
+            }
+          }
+        });
+
+        const imageDataUrl = canvas.toDataURL('image/png', 1.0);
+        
+        const link = document.createElement('a');
+        link.href = imageDataUrl;
+        link.download = 'Standee-Presensi-Magang-GANK-SKUYY.png';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch (error) {
+        console.error('Gagal mengunduh kartu sebagai PNG:', error);
+        alert('Gagal membuat gambar PNG. Silakan coba lagi.');
+      } finally {
+        btnBtn.innerHTML = originalText;
+        btnBtn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>
+````
 
 ## File: api/_lib/sesi.js
 ````javascript
@@ -1952,373 +2272,6 @@ export function urutkanTanggal(list, mode) {
 }
 ````
 
-## File: src/pages/QuickPage.jsx
-````javascript
-import { useEffect, useRef, useState } from 'react'
-import { supabase } from '../lib/supabase.js'
-import { useAuth } from '../lib/auth.js'
-import { uploadMedia } from '../lib/upload.js'
-import { syncGaleriFromLogbook } from '../lib/logbook.js'
-import { urlPratinjau } from '../lib/konversi.js'
-import { todayInput, formatTanggal } from '../lib/format.js'
-import { KATEGORI } from '../lib/constants.js'
-import { inputCls, labelCls, btnPrimary, useToast, AutoTextArea, LabelProses, Avatar } from '../components/ui.jsx'
-import { CustomSelect } from '../components/controls.jsx'
-import { SizedIcon } from '../components/icons.jsx'
-import { useNavigate } from 'react-router-dom'
-import PengingatBanner from '../components/PengingatBanner.jsx'
-
-const STATUS_HADIR = ['Masuk', 'Izin', 'Bolos']
-
-export default function QuickPage() {
-  const { mahasiswa } = useAuth()
-  const toast = useToast()
-  const tanggal = todayInput()
-
-  const [tab, setTab] = useState('logbook')
-  const [loading, setLoading] = useState(true)
-  const [todayLog, setTodayLog] = useState(null)
-  const [hadirHariIni, setHadirHariIni] = useState(null)
-  const [lastLogTanggal, setLastLogTanggal] = useState(null)
-  const [lastHadirTanggal, setLastHadirTanggal] = useState(null)
-
-  const [kategori, setKategori] = useState('')
-  const [judulKegiatan, setJudulKegiatan] = useState('')
-  const [deskripsi, setDeskripsi] = useState('')
-  const [file, setFile] = useState(null)
-  const [preview, setPreview] = useState('')
-  const [showGal, setShowGal] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [info, setInfo] = useState('')
-
-  const [status, setStatus] = useState('Masuk')
-  const [alasan, setAlasan] = useState('')
-  const navigate = useNavigate()
-  const [tanggalLogs, setTanggalLogs] = useState([])
-  const [hadirRows, setHadirRows] = useState([])
-
-  const cameraRef = useRef(null)
-  const galeriRef = useRef(null)
-
-  async function muatData(mhs, senyap) {
-    if (!senyap) setLoading(true)
-    const l = await supabase
-      .from('logbooks')
-      .select('*, logbook_items(*)')
-      .eq('mahasiswa_id', mhs.id)
-      .eq('tanggal', tanggal)
-      .order('created_at', { ascending: false })
-      .limit(1)
-    const log = (l.data || [])[0] || null
-    if (log) {
-      log.logbook_items = (log.logbook_items || []).sort(function (a, b) { return (a.urutan || 0) - (b.urutan || 0) })
-    }
-    const h = await supabase
-      .from('daftar_hadir')
-      .select('*')
-      .eq('mahasiswa_id', mhs.id)
-      .eq('tanggal', tanggal)
-      .limit(1)
-    const hadir = (h.data || [])[0] || null
-    const ll = await supabase
-      .from('logbooks')
-      .select('tanggal')
-      .eq('mahasiswa_id', mhs.id)
-      .order('tanggal', { ascending: false })
-      .limit(1)
-    const lh = await supabase
-      .from('daftar_hadir')
-      .select('tanggal')
-      .eq('mahasiswa_id', mhs.id)
-      .order('tanggal', { ascending: false })
-      .limit(1)
-    setTodayLog(log)
-    setHadirHariIni(hadir)
-    setLastLogTanggal(ll.data && ll.data[0] ? ll.data[0].tanggal : null)
-    setLastHadirTanggal(lh.data && lh.data[0] ? lh.data[0].tanggal : null)
-    if (hadir) {
-      setStatus(hadir.status)
-      setAlasan(hadir.alasan || '')
-    }
-        const pg = await supabase.from('logbooks').select('tanggal').eq('mahasiswa_id', mhs.id)
-    const ph = await supabase.from('daftar_hadir').select('tanggal, status').eq('mahasiswa_id', mhs.id)
-    setTanggalLogs((pg.data || []).map(function (x) { return x.tanggal }))
-    setHadirRows(ph.data || [])
-    if (!senyap) setLoading(false)
-  }
-
-  useEffect(function () {
-    if (mahasiswa) muatData(mahasiswa)
-  }, [mahasiswa])
-
-  async function pilihFile(e) {
-    const f = e.target.files[0]
-    e.target.value = ''
-    if (!f) return
-    if (preview && preview.indexOf('blob:') === 0) URL.revokeObjectURL(preview)
-    setFile(f)
-    setPreview(await urlPratinjau(f))
-  }
-
-  function hapusFile() {
-    if (preview && preview.indexOf('blob:') === 0) URL.revokeObjectURL(preview)
-    setFile(null)
-    setPreview('')
-    setShowGal(false)
-  }
-
-  async function submitLogbook(e) {
-    e.preventDefault()
-    if (!todayLog && !kategori) { toast.gagal('Pilih kategori terlebih dahulu.'); return }
-    if (!judulKegiatan.trim()) { toast.gagal('Judul kegiatan wajib diisi.'); return }
-    setBusy(true)
-    try {
-      let mediaPath = null
-      let mediaThumb = null
-      if (file) {
-        const up = await uploadMedia(file, 'logbook', setInfo)
-        mediaPath = up.publicUrl
-        mediaThumb = up.thumbUrl || null
-      }
-      let logId = todayLog ? todayLog.id : null
-      if (!todayLog) {
-        const ins = await supabase.from('logbooks').insert({
-          mahasiswa_id: mahasiswa.id, tanggal: tanggal, unit: '', kategori: kategori,
-          judul: judulKegiatan.trim(), kendala: '', solusi: '', pembelajaran: '', status: 'publik'
-        }).select().single()
-        if (ins.error) throw new Error(ins.error.message)
-        logId = ins.data.id
-      }
-      const urutan = todayLog ? todayLog.logbook_items.reduce(function (m, it) { return Math.max(m, it.urutan || 0) }, 0) + 1 : 1
-      const insItem = await supabase.from('logbook_items').insert({
-        logbook_id: logId,
-        urutan: urutan,
-        judul: judulKegiatan.trim(),
-        deskripsi: deskripsi.trim(),
-        hasil: '',
-        media_path: mediaPath,
-        media_type: mediaPath ? 'foto' : null,
-        media_thumb: mediaThumb,
-        media_source: 'r2',
-        youtube_id: null,
-        drive_id: null,
-        show_in_gallery: showGal && !!mediaPath
-      }).select().single()
-      if (insItem.error) throw new Error(insItem.error.message)
-      if (todayLog && todayLog.status !== 'publik') {
-        await supabase.from('logbooks').update({ status: 'publik' }).eq('id', todayLog.id)
-      }
-      if (showGal && mediaPath) {
-        await syncGaleriFromLogbook(mahasiswa.id, [insItem.data], {
-          tanggal: tanggal,
-          kategori: todayLog ? todayLog.kategori : kategori
-        })
-      }
-      const pertama = !todayLog
-      setJudulKegiatan('')
-      setDeskripsi('')
-      hapusFile()
-      if (pertama) setKategori('')
-      await muatData(mahasiswa, true)
-      toast.sukses(pertama ? 'Logbook hari ini berhasil dibuat' : 'Kegiatan baru berhasil ditambahkan')
-    } catch (err) {
-      toast.gagal('Gagal menyimpan logbook: ' + err.message)
-    }
-    setInfo('')
-    setBusy(false)
-  }
-
-  async function submitAbsen(e) {
-    e.preventDefault()
-    setBusy(true)
-    try {
-      const payload = {
-        mahasiswa_id: mahasiswa.id,
-        tanggal: tanggal,
-        status: status,
-        alasan: status === 'Masuk' ? '' : alasan.trim()
-      }
-      let res
-      if (hadirHariIni) {
-        res = await supabase.from('daftar_hadir').update(payload).eq('id', hadirHariIni.id)
-      } else {
-        res = await supabase.from('daftar_hadir').insert(payload)
-      }
-      if (res.error) throw new Error(res.error.message)
-      await muatData(mahasiswa, true)
-      toast.sukses(hadirHariIni ? 'Daftar hadir berhasil diperbarui' : 'Daftar hadir berhasil disimpan')
-    } catch (err) {
-      toast.gagal('Gagal menyimpan kehadiran: ' + err.message)
-    }
-    setBusy(false)
-  }
-
-  function infoTerakhir(tgl) {
-    if (!tgl) return { teks: 'belum pernah', lama: true }
-    const selisih = Math.round((new Date(tanggal + 'T00:00:00').getTime() - new Date(tgl + 'T00:00:00').getTime()) / 86400000)
-    if (selisih <= 0) return { teks: 'hari ini', lama: false }
-    if (selisih === 1) return { teks: 'kemarin', lama: false }
-    return { teks: selisih + ' hari yang lalu', lama: true }
-  }
-
-  if (loading) {
-    return <div className="grid min-h-[50vh] place-items-center"><div className="h-10 w-10 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div></div>
-  }
-
-  const infoLog = infoTerakhir(lastLogTanggal)
-  const infoHadir = infoTerakhir(lastHadirTanggal)
-
-  const tabCls = function (t) {
-    return 'flex-1 px-4 py-2.5 rounded-xl text-xs sm:rounded-2xl sm:py-3 sm:text-sm font-bold ' + (tab === t ? 'bg-bsi-800 text-white shadow-sm' : 'bsi-panel text-slate-600 hover:text-bsi-800')
-  }
-
-  return (
-    <div className="mx-auto w-full max-w-xl space-y-5">
-      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="avatar-kepala-dash avatar-kepala-cepat"><Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl" /></div>
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate text-xl font-black text-slate-900 sm:text-2xl">{mahasiswa.nama}</h1>
-            <p className="mt-1 truncate text-sm text-slate-600">{formatTanggal(tanggal)}</p>
-          </div>
-        </div>
-        <div className="mt-4 flex gap-2">
-          <button type="button" onClick={function () { setTab('logbook') }} className={tabCls('logbook')}>Logbook</button>
-          <button type="button" onClick={function () { setTab('absen') }} className={tabCls('absen')}>Daftar Hadir</button>
-        </div>
-      </section>
-
-      <div className={tab === 'logbook' ? '' : 'hidden'} style={{ marginTop: 0 }}>
-        {!loading ? (
-          <PengingatBanner
-            tipe="logbook"
-            tanggalLogbook={tanggalLogs}
-            hadir={hadirRows}
-            onIsi={function (t) { navigate('/dashboard?isi=' + t) }}
-          />
-        ) : null}
-      </div>
-      <div className={tab === 'absen' ? '' : 'hidden'} style={{ marginTop: 0 }}>
-        {!loading ? (
-          <PengingatBanner
-            tipe="hadir"
-            tanggalLogbook={tanggalLogs}
-            hadir={hadirRows}
-            onIsi={function (t) { navigate('/dashboard?isiHadir=' + t) }}
-          />
-        ) : null}
-      </div>
-      {tab === 'logbook' ? (
-        <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
-          <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoLog.lama ? 'text-amber-600' : 'text-slate-500')}>
-            <SizedIcon name="calendar" size={13} />
-            Terakhir mengisi logbook: {infoLog.teks}
-          </p>
-          {todayLog ? (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-              <p className="text-sm font-bold text-emerald-800">Logbook hari ini sudah ada</p>
-              <p className="mt-1 text-sm text-emerald-800">{todayLog.judul} • {todayLog.logbook_items.length} kegiatan</p>
-              <div className="mt-2 space-y-1">
-                {todayLog.logbook_items.map(function (it, i) {
-                  return <p key={it.id} className="truncate text-xs text-emerald-800">{i + 1}. {it.judul}</p>
-                })}
-              </div>
-              <p className="mt-2 text-xs text-emerald-800">Kegiatan baru ditambahkan di bawahnya tanpa menghapus kegiatan lama.</p>
-              {todayLog.status !== 'publik' ? <p className="mt-1 text-xs font-semibold text-emerald-800">Status masih draf — akan otomatis dipublikasikan.</p> : null}
-            </div>
-          ) : (
-            <div>
-              <label className={labelCls}>Kategori Utama <span className="text-red-500">*</span></label>
-              <div className="mt-1.5">
-                <CustomSelect placeholder="Pilih Kategori" value={kategori} onChange={setKategori} options={KATEGORI.map(function (k) { return { value: k, label: k } })} />
-              </div>
-            </div>
-          )}
-
-          <form onSubmit={submitLogbook} className="mt-5 space-y-4">
-            <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-xs font-bold text-bsi-800">{todayLog ? 'Kegiatan Baru (kegiatan ' + (todayLog.logbook_items.length + 1) + ')' : 'Kegiatan'}</p>
-              <input className={inputCls} value={judulKegiatan} onChange={function (e) { setJudulKegiatan(e.target.value) }} aria-label="Judul Kegiatan" placeholder="Judul kegiatan" />
-              <AutoTextArea className={inputCls} value={deskripsi} onChange={function (e) { setDeskripsi(e.target.value) }} aria-label="Deskripsi Kegiatan" placeholder="Deskripsi singkat kegiatan" />
-              {preview ? (
-                <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-900">
-                  <img src={preview} alt="Pratinjau" className="absolute inset-0 h-full w-full object-contain" />
-                  <button type="button" onClick={hapusFile} title="Hapus Gambar" className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-red-500 text-white hover:bg-red-600">
-                    <SizedIcon name="close" size={14} />
-                  </button>
-                </div>
-              ) : null}
-              <div className="grid grid-cols-2 gap-3">
-                <button type="button" onClick={function () { cameraRef.current.click() }} className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-3 py-3.5 text-sm font-semibold text-slate-700 hover:border-bsi-500 hover:bg-slate-100">
-                  <SizedIcon name="camera" size={18} /> Ambil Foto
-                </button>
-                <button type="button" onClick={function () { galeriRef.current.click() }} className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-3 py-3.5 text-sm font-semibold text-slate-700 hover:border-bsi-500 hover:bg-slate-100">
-                  <SizedIcon name="image" size={18} /> Dari Galeri
-                </button>
-              </div>
-              <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={pilihFile} />
-              <input ref={galeriRef} type="file" accept="image/*" className="hidden" onChange={pilihFile} />
-              {preview ? (
-                <label className="flex w-full cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 p-3">
-                  <input type="checkbox" checked={showGal} onChange={function (e) { setShowGal(e.target.checked) }} className="mt-0.5 h-4 w-4 rounded accent-bsi-800" />
-                  <span className="text-sm font-semibold text-slate-800">Tampilkan kegiatan ini di galeri</span>
-                </label>
-              ) : null}
-            </div>
-            <button type="submit" disabled={busy} className={btnPrimary}>
-              {busy ? <LabelProses teks={info || 'Menyimpan'} /> : (todayLog ? 'Tambah Kegiatan' : 'Simpan Logbook')}
-            </button>
-          </form>
-        </section>
-      ) : null}
-
-      {tab === 'absen' ? (
-        <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
-          <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoHadir.lama ? 'text-amber-600' : 'text-slate-500')}>
-            <SizedIcon name="clipboard" size={13} />
-            Terakhir mengisi daftar hadir: {infoHadir.teks}
-          </p>
-          {hadirHariIni ? (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-              <p className="text-sm font-bold text-emerald-800">Kamu sudah mengisi daftar hadir hari ini ({hadirHariIni.status})</p>
-              <p className="mt-1 text-xs text-emerald-800">Form di bawah bisa dipakai untuk memperbarui status bila ada perubahan.</p>
-            </div>
-          ) : null}
-          <form onSubmit={submitAbsen} className={'space-y-4 ' + (hadirHariIni ? 'mt-5' : '')}>
-            <div>
-              <label className={labelCls}>Status Kehadiran <span className="text-red-500">*</span></label>
-              <div className="mt-1.5 flex gap-2">
-                {STATUS_HADIR.map(function (s) {
-                  const aktif = status === s
-                  const warna = aktif
-                    ? (s === 'Masuk' ? 'bg-emerald-500 text-white' : s === 'Izin' ? 'bg-amber-500 text-white' : 'bg-red-500 text-white')
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  return <button type="button" key={s} onClick={function () { setStatus(s) }} className={'flex-1 rounded-2xl px-3 py-3 text-sm font-bold ' + warna}>{s}</button>
-                })}
-              </div>
-            </div>
-            <div>
-              <label className={labelCls}>Alasan atau Keterangan</label>
-              <AutoTextArea
-                className={inputCls + (status === 'Masuk' ? ' cursor-not-allowed opacity-60' : '')}
-                value={alasan}
-                onChange={function (e) { setAlasan(e.target.value) }}
-                aria-label="Alasan atau Keterangan"
-                placeholder={status === 'Masuk' ? 'Status Masuk tidak memerlukan alasan' : 'Contoh: Keperluan keluarga, sakit.'}
-                disabled={status === 'Masuk'}
-              />
-            </div>
-            <button type="submit" disabled={busy} className={btnPrimary}>
-              {busy ? <LabelProses teks="Menyimpan" /> : (hadirHariIni ? 'Perbarui Daftar Hadir' : 'Simpan Daftar Hadir')}
-            </button>
-          </form>
-        </section>
-      ) : null}
-    </div>
-  )
-}
-````
-
 ## File: src/components/PemutarVideo.jsx
 ````javascript
 import { useEffect, useRef, useState } from 'react'
@@ -2772,6 +2725,373 @@ export async function siapkanFotoProfil(file, maksSisi, kualitas) {
   } finally {
     URL.revokeObjectURL(muat.url)
   }
+}
+````
+
+## File: src/pages/QuickPage.jsx
+````javascript
+import { useEffect, useRef, useState } from 'react'
+import { supabase } from '../lib/supabase.js'
+import { useAuth } from '../lib/auth.js'
+import { uploadMedia } from '../lib/upload.js'
+import { syncGaleriFromLogbook } from '../lib/logbook.js'
+import { urlPratinjau } from '../lib/konversi.js'
+import { todayInput, formatTanggal } from '../lib/format.js'
+import { KATEGORI } from '../lib/constants.js'
+import { inputCls, labelCls, btnPrimary, useToast, AutoTextArea, LabelProses, Avatar } from '../components/ui.jsx'
+import { CustomSelect } from '../components/controls.jsx'
+import { SizedIcon } from '../components/icons.jsx'
+import { useNavigate } from 'react-router-dom'
+import PengingatBanner from '../components/PengingatBanner.jsx'
+
+const STATUS_HADIR = ['Masuk', 'Izin', 'Bolos']
+
+export default function QuickPage() {
+  const { mahasiswa } = useAuth()
+  const toast = useToast()
+  const tanggal = todayInput()
+
+  const [tab, setTab] = useState('logbook')
+  const [loading, setLoading] = useState(true)
+  const [todayLog, setTodayLog] = useState(null)
+  const [hadirHariIni, setHadirHariIni] = useState(null)
+  const [lastLogTanggal, setLastLogTanggal] = useState(null)
+  const [lastHadirTanggal, setLastHadirTanggal] = useState(null)
+
+  const [kategori, setKategori] = useState('')
+  const [judulKegiatan, setJudulKegiatan] = useState('')
+  const [deskripsi, setDeskripsi] = useState('')
+  const [file, setFile] = useState(null)
+  const [preview, setPreview] = useState('')
+  const [showGal, setShowGal] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [info, setInfo] = useState('')
+
+  const [status, setStatus] = useState('Masuk')
+  const [alasan, setAlasan] = useState('')
+  const navigate = useNavigate()
+  const [tanggalLogs, setTanggalLogs] = useState([])
+  const [hadirRows, setHadirRows] = useState([])
+
+  const cameraRef = useRef(null)
+  const galeriRef = useRef(null)
+
+  async function muatData(mhs, senyap) {
+    if (!senyap) setLoading(true)
+    const l = await supabase
+      .from('logbooks')
+      .select('*, logbook_items(*)')
+      .eq('mahasiswa_id', mhs.id)
+      .eq('tanggal', tanggal)
+      .order('created_at', { ascending: false })
+      .limit(1)
+    const log = (l.data || [])[0] || null
+    if (log) {
+      log.logbook_items = (log.logbook_items || []).sort(function (a, b) { return (a.urutan || 0) - (b.urutan || 0) })
+    }
+    const h = await supabase
+      .from('daftar_hadir')
+      .select('*')
+      .eq('mahasiswa_id', mhs.id)
+      .eq('tanggal', tanggal)
+      .limit(1)
+    const hadir = (h.data || [])[0] || null
+    const ll = await supabase
+      .from('logbooks')
+      .select('tanggal')
+      .eq('mahasiswa_id', mhs.id)
+      .order('tanggal', { ascending: false })
+      .limit(1)
+    const lh = await supabase
+      .from('daftar_hadir')
+      .select('tanggal')
+      .eq('mahasiswa_id', mhs.id)
+      .order('tanggal', { ascending: false })
+      .limit(1)
+    setTodayLog(log)
+    setHadirHariIni(hadir)
+    setLastLogTanggal(ll.data && ll.data[0] ? ll.data[0].tanggal : null)
+    setLastHadirTanggal(lh.data && lh.data[0] ? lh.data[0].tanggal : null)
+    if (hadir) {
+      setStatus(hadir.status)
+      setAlasan(hadir.alasan || '')
+    }
+        const pg = await supabase.from('logbooks').select('tanggal').eq('mahasiswa_id', mhs.id)
+    const ph = await supabase.from('daftar_hadir').select('tanggal, status').eq('mahasiswa_id', mhs.id)
+    setTanggalLogs((pg.data || []).map(function (x) { return x.tanggal }))
+    setHadirRows(ph.data || [])
+    if (!senyap) setLoading(false)
+  }
+
+  useEffect(function () {
+    if (mahasiswa) muatData(mahasiswa)
+  }, [mahasiswa])
+
+  async function pilihFile(e) {
+    const f = e.target.files[0]
+    e.target.value = ''
+    if (!f) return
+    if (preview && preview.indexOf('blob:') === 0) URL.revokeObjectURL(preview)
+    setFile(f)
+    setPreview(await urlPratinjau(f))
+  }
+
+  function hapusFile() {
+    if (preview && preview.indexOf('blob:') === 0) URL.revokeObjectURL(preview)
+    setFile(null)
+    setPreview('')
+    setShowGal(false)
+  }
+
+  async function submitLogbook(e) {
+    e.preventDefault()
+    if (!todayLog && !kategori) { toast.gagal('Pilih kategori terlebih dahulu.'); return }
+    if (!judulKegiatan.trim()) { toast.gagal('Judul kegiatan wajib diisi.'); return }
+    setBusy(true)
+    try {
+      let mediaPath = null
+      let mediaThumb = null
+      if (file) {
+        const up = await uploadMedia(file, 'logbook', setInfo)
+        mediaPath = up.publicUrl
+        mediaThumb = up.thumbUrl || null
+      }
+      let logId = todayLog ? todayLog.id : null
+      if (!todayLog) {
+        const ins = await supabase.from('logbooks').insert({
+          mahasiswa_id: mahasiswa.id, tanggal: tanggal, unit: '', kategori: kategori,
+          judul: judulKegiatan.trim(), kendala: '', solusi: '', pembelajaran: '', status: 'publik'
+        }).select().single()
+        if (ins.error) throw new Error(ins.error.message)
+        logId = ins.data.id
+      }
+      const urutan = todayLog ? todayLog.logbook_items.reduce(function (m, it) { return Math.max(m, it.urutan || 0) }, 0) + 1 : 1
+      const insItem = await supabase.from('logbook_items').insert({
+        logbook_id: logId,
+        urutan: urutan,
+        judul: judulKegiatan.trim(),
+        deskripsi: deskripsi.trim(),
+        hasil: '',
+        media_path: mediaPath,
+        media_type: mediaPath ? 'foto' : null,
+        media_thumb: mediaThumb,
+        media_source: 'r2',
+        youtube_id: null,
+        drive_id: null,
+        show_in_gallery: showGal && !!mediaPath
+      }).select().single()
+      if (insItem.error) throw new Error(insItem.error.message)
+      if (todayLog && todayLog.status !== 'publik') {
+        await supabase.from('logbooks').update({ status: 'publik' }).eq('id', todayLog.id)
+      }
+      if (showGal && mediaPath) {
+        await syncGaleriFromLogbook(mahasiswa.id, [insItem.data], {
+          tanggal: tanggal,
+          kategori: todayLog ? todayLog.kategori : kategori
+        })
+      }
+      const pertama = !todayLog
+      setJudulKegiatan('')
+      setDeskripsi('')
+      hapusFile()
+      if (pertama) setKategori('')
+      await muatData(mahasiswa, true)
+      toast.sukses(pertama ? 'Logbook hari ini berhasil dibuat' : 'Kegiatan baru berhasil ditambahkan')
+    } catch (err) {
+      toast.gagal('Gagal menyimpan logbook: ' + err.message)
+    }
+    setInfo('')
+    setBusy(false)
+  }
+
+  async function submitAbsen(e) {
+    e.preventDefault()
+    setBusy(true)
+    try {
+      const payload = {
+        mahasiswa_id: mahasiswa.id,
+        tanggal: tanggal,
+        status: status,
+        alasan: status === 'Masuk' ? '' : alasan.trim()
+      }
+      let res
+      if (hadirHariIni) {
+        res = await supabase.from('daftar_hadir').update(payload).eq('id', hadirHariIni.id)
+      } else {
+        res = await supabase.from('daftar_hadir').insert(payload)
+      }
+      if (res.error) throw new Error(res.error.message)
+      await muatData(mahasiswa, true)
+      toast.sukses(hadirHariIni ? 'Daftar hadir berhasil diperbarui' : 'Daftar hadir berhasil disimpan')
+    } catch (err) {
+      toast.gagal('Gagal menyimpan kehadiran: ' + err.message)
+    }
+    setBusy(false)
+  }
+
+  function infoTerakhir(tgl) {
+    if (!tgl) return { teks: 'belum pernah', lama: true }
+    const selisih = Math.round((new Date(tanggal + 'T00:00:00').getTime() - new Date(tgl + 'T00:00:00').getTime()) / 86400000)
+    if (selisih <= 0) return { teks: 'hari ini', lama: false }
+    if (selisih === 1) return { teks: 'kemarin', lama: false }
+    return { teks: selisih + ' hari yang lalu', lama: true }
+  }
+
+  if (loading) {
+    return <div className="grid min-h-[50vh] place-items-center"><div className="h-10 w-10 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div></div>
+  }
+
+  const infoLog = infoTerakhir(lastLogTanggal)
+  const infoHadir = infoTerakhir(lastHadirTanggal)
+
+  const tabCls = function (t) {
+    return 'flex-1 px-4 py-2.5 rounded-xl text-xs sm:rounded-2xl sm:py-3 sm:text-sm font-bold ' + (tab === t ? 'bg-bsi-800 text-white shadow-sm' : 'bsi-panel text-slate-600 hover:text-bsi-800')
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-xl space-y-5">
+      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="avatar-kepala-dash avatar-kepala-cepat"><Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl" /></div>
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-xl font-black text-slate-900 sm:text-2xl">{mahasiswa.nama}</h1>
+            <p className="mt-1 truncate text-sm text-slate-600">{formatTanggal(tanggal)}</p>
+          </div>
+        </div>
+        <div className="mt-4 flex gap-2">
+          <button type="button" onClick={function () { setTab('logbook') }} className={tabCls('logbook')}>Logbook</button>
+          <button type="button" onClick={function () { setTab('absen') }} className={tabCls('absen')}>Daftar Hadir</button>
+        </div>
+      </section>
+
+      <div className={tab === 'logbook' ? '' : 'hidden'} style={{ marginTop: 0 }}>
+        {!loading ? (
+          <PengingatBanner
+            tipe="logbook"
+            tanggalLogbook={tanggalLogs}
+            hadir={hadirRows}
+            onIsi={function (t) { navigate('/dashboard?isi=' + t) }}
+          />
+        ) : null}
+      </div>
+      <div className={tab === 'absen' ? '' : 'hidden'} style={{ marginTop: 0 }}>
+        {!loading ? (
+          <PengingatBanner
+            tipe="hadir"
+            tanggalLogbook={tanggalLogs}
+            hadir={hadirRows}
+            onIsi={function (t) { navigate('/dashboard?isiHadir=' + t) }}
+          />
+        ) : null}
+      </div>
+      {tab === 'logbook' ? (
+        <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
+          <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoLog.lama ? 'text-amber-600' : 'text-slate-500')}>
+            <SizedIcon name="calendar" size={13} />
+            Terakhir mengisi logbook: {infoLog.teks}
+          </p>
+          {todayLog ? (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+              <p className="text-sm font-bold text-emerald-800">Logbook hari ini sudah ada</p>
+              <p className="mt-1 text-sm text-emerald-800">{todayLog.judul} • {todayLog.logbook_items.length} kegiatan</p>
+              <div className="mt-2 space-y-1">
+                {todayLog.logbook_items.map(function (it, i) {
+                  return <p key={it.id} className="truncate text-xs text-emerald-800">{i + 1}. {it.judul}</p>
+                })}
+              </div>
+              <p className="mt-2 text-xs text-emerald-800">Kegiatan baru ditambahkan di bawahnya tanpa menghapus kegiatan lama.</p>
+              {todayLog.status !== 'publik' ? <p className="mt-1 text-xs font-semibold text-emerald-800">Status masih draf — akan otomatis dipublikasikan.</p> : null}
+            </div>
+          ) : (
+            <div>
+              <label className={labelCls}>Kategori Utama <span className="text-red-500">*</span></label>
+              <div className="mt-1.5">
+                <CustomSelect placeholder="Pilih Kategori" value={kategori} onChange={setKategori} options={KATEGORI.map(function (k) { return { value: k, label: k } })} />
+              </div>
+            </div>
+          )}
+
+          <form onSubmit={submitLogbook} className="mt-5 space-y-4">
+            <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-bold text-bsi-800">{todayLog ? 'Kegiatan Baru (kegiatan ' + (todayLog.logbook_items.length + 1) + ')' : 'Kegiatan'}</p>
+              <input className={inputCls} value={judulKegiatan} onChange={function (e) { setJudulKegiatan(e.target.value) }} aria-label="Judul Kegiatan" placeholder="Judul kegiatan" />
+              <AutoTextArea className={inputCls} value={deskripsi} onChange={function (e) { setDeskripsi(e.target.value) }} aria-label="Deskripsi Kegiatan" placeholder="Deskripsi singkat kegiatan" />
+              {preview ? (
+                <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-900">
+                  <img src={preview} alt="Pratinjau" className="absolute inset-0 h-full w-full object-contain" />
+                  <button type="button" onClick={hapusFile} title="Hapus Gambar" className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-red-500 text-white hover:bg-red-600">
+                    <SizedIcon name="close" size={14} />
+                  </button>
+                </div>
+              ) : null}
+              <div className="grid grid-cols-2 gap-3">
+                <button type="button" onClick={function () { cameraRef.current.click() }} className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-3 py-3.5 text-sm font-semibold text-slate-700 hover:border-bsi-500 hover:bg-slate-100">
+                  <SizedIcon name="camera" size={18} /> Ambil Foto
+                </button>
+                <button type="button" onClick={function () { galeriRef.current.click() }} className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-3 py-3.5 text-sm font-semibold text-slate-700 hover:border-bsi-500 hover:bg-slate-100">
+                  <SizedIcon name="image" size={18} /> Dari Galeri
+                </button>
+              </div>
+              <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={pilihFile} />
+              <input ref={galeriRef} type="file" accept="image/*" className="hidden" onChange={pilihFile} />
+              {preview ? (
+                <label className="flex w-full cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 p-3">
+                  <input type="checkbox" checked={showGal} onChange={function (e) { setShowGal(e.target.checked) }} className="mt-0.5 h-4 w-4 rounded accent-bsi-800" />
+                  <span className="text-sm font-semibold text-slate-800">Tampilkan kegiatan ini di galeri</span>
+                </label>
+              ) : null}
+            </div>
+            <button type="submit" disabled={busy} className={btnPrimary}>
+              {busy ? <LabelProses teks={info || 'Menyimpan'} /> : (todayLog ? 'Tambah Kegiatan' : 'Simpan Logbook')}
+            </button>
+          </form>
+        </section>
+      ) : null}
+
+      {tab === 'absen' ? (
+        <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
+          <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoHadir.lama ? 'text-amber-600' : 'text-slate-500')}>
+            <SizedIcon name="clipboard" size={13} />
+            Terakhir mengisi daftar hadir: {infoHadir.teks}
+          </p>
+          {hadirHariIni ? (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+              <p className="text-sm font-bold text-emerald-800">Kamu sudah mengisi daftar hadir hari ini ({hadirHariIni.status})</p>
+              <p className="mt-1 text-xs text-emerald-800">Form di bawah bisa dipakai untuk memperbarui status bila ada perubahan.</p>
+            </div>
+          ) : null}
+          <form onSubmit={submitAbsen} className={'space-y-4 ' + (hadirHariIni ? 'mt-5' : '')}>
+            <div>
+              <label className={labelCls}>Status Kehadiran <span className="text-red-500">*</span></label>
+              <div className="mt-1.5 flex gap-2">
+                {STATUS_HADIR.map(function (s) {
+                  const aktif = status === s
+                  const warna = aktif
+                    ? (s === 'Masuk' ? 'bg-emerald-500 text-white' : s === 'Izin' ? 'bg-amber-500 text-white' : 'bg-red-500 text-white')
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  return <button type="button" key={s} onClick={function () { setStatus(s) }} className={'flex-1 rounded-2xl px-3 py-3 text-sm font-bold ' + warna}>{s}</button>
+                })}
+              </div>
+            </div>
+            <div>
+              <label className={labelCls}>Alasan atau Keterangan</label>
+              <AutoTextArea
+                className={inputCls + (status === 'Masuk' ? ' cursor-not-allowed opacity-60' : '')}
+                value={alasan}
+                onChange={function (e) { setAlasan(e.target.value) }}
+                aria-label="Alasan atau Keterangan"
+                placeholder={status === 'Masuk' ? 'Status Masuk tidak memerlukan alasan' : 'Contoh: Keperluan keluarga, sakit.'}
+                disabled={status === 'Masuk'}
+              />
+            </div>
+            <button type="submit" disabled={busy} className={btnPrimary}>
+              {busy ? <LabelProses teks="Menyimpan" /> : (hadirHariIni ? 'Perbarui Daftar Hadir' : 'Simpan Daftar Hadir')}
+            </button>
+          </form>
+        </section>
+      ) : null}
+    </div>
+  )
 }
 ````
 
@@ -4553,6 +4873,167 @@ export default function LogbookPage() {
 }
 ````
 
+## File: src/pages/AttendancePage.jsx
+````javascript
+import { useEffect, useState } from 'react'
+import { supabase } from '../lib/supabase.js'
+import { useAuth } from '../lib/auth.js'
+import { StatCard, EmptyState, Modal, Pagination } from '../components/ui.jsx'
+import { AttendanceCard, AttendanceDetail } from '../components/cards.jsx'
+import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
+import { ICONS } from '../components/icons.jsx'
+import { matchesDateFilters, urutkanTanggal } from '../lib/format.js'
+import { SkeletonStatCard, SkeletonChartRow, SkeletonAttendanceCard } from '../components/Skeleton.jsx'
+
+const INITIAL = { mahasiswa: '', status: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
+const PER_PAGE = 12
+
+export default function AttendancePage() {
+  const { mahasiswa } = useAuth()
+  const [all, setAll] = useState([])
+  const [people, setPeople] = useState([])
+  const [filter, setFilter] = useState(INITIAL)
+  const [sort, setSort] = useState('terbaru')
+  const [open, setOpen] = useState(false)
+  const [detail, setDetail] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
+
+  useEffect(function () {
+    async function load() {
+      const a = await supabase.from('daftar_hadir').select('*, mahasiswa(*)').order('tanggal', { ascending: false })
+      const p = await supabase.from('mahasiswa').select('id, nama, nim').order('nama')
+      setAll(a.data || [])
+      setPeople(p.data || [])
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  useEffect(function () {
+    setPage(1)
+  }, [filter, sort])
+  function gantiHalaman(p) {
+    setPage(p)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+  const rows = all.filter(function (r) {
+    if (filter.mahasiswa && r.mahasiswa_id !== filter.mahasiswa) return false
+    if (filter.status && r.status !== filter.status) return false
+    return matchesDateFilters(r.tanggal, filter)
+  })
+  const active = countActiveFilters(filter)
+  const sortedRows = urutkanTanggal(rows, sort)
+  const totalData = sortedRows.length
+  const totalPages = Math.ceil(totalData / PER_PAGE)
+  const pageAman = Math.min(page, Math.max(1, totalPages))
+  const paginatedRows = sortedRows.slice((pageAman - 1) * PER_PAGE, pageAman * PER_PAGE)
+
+  const counts = rows.reduce(function (acc, r) {
+    acc[r.status] = (acc[r.status] || 0) + 1
+    return acc
+  }, {})
+
+  const perPerson = people.map(function (p) {
+    const mine = rows.filter(function (r) { return r.mahasiswa_id === p.id })
+    const c = mine.reduce(function (acc, r) { acc[r.status] = (acc[r.status] || 0) + 1; return acc }, {})
+    return { nama: p.nama, nim: p.nim, Masuk: c.Masuk || 0, Izin: c.Izin || 0, Bolos: c.Bolos || 0, total: mine.length }
+  })
+  const maxTotal = Math.max.apply(null, perPerson.map(function (p) { return p.total }).concat([1]))
+
+  return (
+    <div>
+      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8 lg:p-10">
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600 dark:text-gold-400">Daftar hadir</p>
+        <h1 className="mt-2 text-2xl sm:text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Rekap Kehadiran Tim Magang</h1>
+        <div className="mt-5 grid grid-cols-2 gap-2.5 sm:mt-8 sm:gap-4 xl:grid-cols-4">
+          {loading
+            ? [0, 1, 2, 3].map(function (i) { return <SkeletonStatCard key={i} /> })
+            : [
+                <StatCard key="total" label="Total Catatan Hadir" value={rows.length} sub="Sesuai Filter Aktif" />,
+                <StatCard key="masuk" label="Masuk" value={counts.Masuk || 0} sub="Mahasiswa Hadir" />,
+                <StatCard key="izin" label="Izin" value={counts.Izin || 0} sub="Dengan Keterangan" />,
+                <StatCard key="bolos" label="Bolos" value={counts.Bolos || 0} sub="Tanpa Keterangan" />
+              ]}
+        </div>
+      </section>
+
+      <section className="mt-6">
+        <FilterBar open={open} onToggle={function () { setOpen(function (o) { return !o }) }} activeCount={active}
+          onReset={function () { setFilter(INITIAL) }}>
+          <FilterSelect icon={ICONS.user} value={filter.mahasiswa} onChange={function (v) { setFilter(Object.assign({}, filter, { mahasiswa: v })) }}
+            options={[{ value: '', label: 'Semua Mahasiswa' }].concat(people.map(function (p) { return { value: p.id, label: p.nama } }))} />
+          <FilterSelect icon={ICONS.check} value={filter.status} onChange={function (v) { setFilter(Object.assign({}, filter, { status: v })) }}
+            options={[{ value: '', label: 'Semua Status' }, { value: 'Masuk', label: 'Masuk' }, { value: 'Izin', label: 'Izin' }, { value: 'Bolos', label: 'Bolos' }]} />
+          <TimeFilter filter={filter} set={setFilter} />
+          <SortSelect value={sort} onChange={setSort} />
+        </FilterBar>
+      </section>
+
+      <section className="mt-8 bsi-panel rounded-[2rem] p-5 sm:p-8 lg:p-10">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <h2 className="text-xl sm:text-2xl font-black text-slate-900">Grafik Kehadiran per Mahasiswa</h2>
+          <div className="flex flex-wrap gap-3 text-xs font-semibold">
+            <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-emerald-500" />Masuk</span>
+            <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-amber-500" />Izin</span>
+            <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-red-500" />Bolos</span>
+          </div>
+        </div>
+        <div className="mt-6 space-y-4">
+          {loading
+            ? [0, 1, 2].map(function (i) { return <SkeletonChartRow key={i} /> })
+            : perPerson.map(function (p) {
+                return (
+                  <div key={p.nim} className="card-hover rounded-[1.5rem] border border-slate-200 p-5">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="font-bold text-slate-900">{p.nama}</p>
+                        <p className="text-xs text-slate-600">NIM {p.nim}</p>
+                      </div>
+                      <div className="text-xs text-slate-600">Masuk: {p.Masuk} | Izin: {p.Izin} | Bolos: {p.Bolos}</div>
+                    </div>
+                    <div className="mt-4 flex h-4 w-full overflow-hidden rounded-full bg-slate-100">
+                      <div className="bg-emerald-500 transition-all duration-500" style={{ width: (p.Masuk / maxTotal) * 100 + '%' }} />
+                      <div className="bg-amber-500 transition-all duration-500" style={{ width: (p.Izin / maxTotal) * 100 + '%' }} />
+                      <div className="bg-red-500 transition-all duration-500" style={{ width: (p.Bolos / maxTotal) * 100 + '%' }} />
+                    </div>
+                  </div>
+                )
+              })}
+        </div>
+      </section>
+
+      <section className="mt-8">
+        <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Daftar Kehadiran sesuai Filter</h2>
+        <div className="grid-pusat-rapat mt-6">
+          {loading
+            ? [0, 1, 2].map(function (i) { return <div key={i} className="kolom-kartu-rapat"><SkeletonAttendanceCard /></div> })
+            : paginatedRows.map(function (r) {
+                return (
+                  <div key={r.id} className="kolom-kartu-rapat">
+                    <AttendanceCard row={r} isOwner={mahasiswa && mahasiswa.id === r.mahasiswa_id}
+                      onDetail={function () { setDetail(r) }} />
+                  </div>
+                )
+              })}
+          {!loading && !rows.length ? <div className="w-full"><EmptyState icon="clipboard" title="Belum Ada Data Kehadiran" desc="Data kehadiran akan tampil setelah mahasiswa mengisi daftar hadir." /></div> : null}
+        </div>
+      </section>
+      {!loading && totalData > 0 ? (
+        <div className="mt-6 text-center text-sm text-slate-600">
+          Total {totalData} catatan{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}
+        </div>
+      ) : null}
+      {!loading ? <Pagination totalItems={totalData} perPage={PER_PAGE} page={pageAman} onPageChange={gantiHalaman} /> : null}
+
+      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
+        {detail ? <AttendanceDetail row={detail} /> : null}
+      </Modal>
+    </div>
+  )
+}
+````
+
 ## File: src/pages/HomePage.jsx
 ````javascript
 import { urutkanTanggal } from '../lib/format.js'
@@ -4724,167 +5205,6 @@ export default function HomePage() {
 
       <Modal open={!!detail} onClose={function () { setDetail(null) }}>
         {detail ? <LogbookDetail log={detail} /> : null}
-      </Modal>
-    </div>
-  )
-}
-````
-
-## File: src/pages/AttendancePage.jsx
-````javascript
-import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase.js'
-import { useAuth } from '../lib/auth.js'
-import { StatCard, EmptyState, Modal, Pagination } from '../components/ui.jsx'
-import { AttendanceCard, AttendanceDetail } from '../components/cards.jsx'
-import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
-import { ICONS } from '../components/icons.jsx'
-import { matchesDateFilters, urutkanTanggal } from '../lib/format.js'
-import { SkeletonStatCard, SkeletonChartRow, SkeletonAttendanceCard } from '../components/Skeleton.jsx'
-
-const INITIAL = { mahasiswa: '', status: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
-const PER_PAGE = 12
-
-export default function AttendancePage() {
-  const { mahasiswa } = useAuth()
-  const [all, setAll] = useState([])
-  const [people, setPeople] = useState([])
-  const [filter, setFilter] = useState(INITIAL)
-  const [sort, setSort] = useState('terbaru')
-  const [open, setOpen] = useState(false)
-  const [detail, setDetail] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [page, setPage] = useState(1)
-
-  useEffect(function () {
-    async function load() {
-      const a = await supabase.from('daftar_hadir').select('*, mahasiswa(*)').order('tanggal', { ascending: false })
-      const p = await supabase.from('mahasiswa').select('id, nama, nim').order('nama')
-      setAll(a.data || [])
-      setPeople(p.data || [])
-      setLoading(false)
-    }
-    load()
-  }, [])
-
-  useEffect(function () {
-    setPage(1)
-  }, [filter, sort])
-  function gantiHalaman(p) {
-    setPage(p)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-  const rows = all.filter(function (r) {
-    if (filter.mahasiswa && r.mahasiswa_id !== filter.mahasiswa) return false
-    if (filter.status && r.status !== filter.status) return false
-    return matchesDateFilters(r.tanggal, filter)
-  })
-  const active = countActiveFilters(filter)
-  const sortedRows = urutkanTanggal(rows, sort)
-  const totalData = sortedRows.length
-  const totalPages = Math.ceil(totalData / PER_PAGE)
-  const pageAman = Math.min(page, Math.max(1, totalPages))
-  const paginatedRows = sortedRows.slice((pageAman - 1) * PER_PAGE, pageAman * PER_PAGE)
-
-  const counts = rows.reduce(function (acc, r) {
-    acc[r.status] = (acc[r.status] || 0) + 1
-    return acc
-  }, {})
-
-  const perPerson = people.map(function (p) {
-    const mine = rows.filter(function (r) { return r.mahasiswa_id === p.id })
-    const c = mine.reduce(function (acc, r) { acc[r.status] = (acc[r.status] || 0) + 1; return acc }, {})
-    return { nama: p.nama, nim: p.nim, Masuk: c.Masuk || 0, Izin: c.Izin || 0, Bolos: c.Bolos || 0, total: mine.length }
-  })
-  const maxTotal = Math.max.apply(null, perPerson.map(function (p) { return p.total }).concat([1]))
-
-  return (
-    <div>
-      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8 lg:p-10">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600 dark:text-gold-400">Daftar hadir</p>
-        <h1 className="mt-2 text-2xl sm:text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Rekap Kehadiran Tim Magang</h1>
-        <div className="mt-5 grid grid-cols-2 gap-2.5 sm:mt-8 sm:gap-4 xl:grid-cols-4">
-          {loading
-            ? [0, 1, 2, 3].map(function (i) { return <SkeletonStatCard key={i} /> })
-            : [
-                <StatCard key="total" label="Total Catatan Hadir" value={rows.length} sub="Sesuai Filter Aktif" />,
-                <StatCard key="masuk" label="Masuk" value={counts.Masuk || 0} sub="Mahasiswa Hadir" />,
-                <StatCard key="izin" label="Izin" value={counts.Izin || 0} sub="Dengan Keterangan" />,
-                <StatCard key="bolos" label="Bolos" value={counts.Bolos || 0} sub="Tanpa Keterangan" />
-              ]}
-        </div>
-      </section>
-
-      <section className="mt-6">
-        <FilterBar open={open} onToggle={function () { setOpen(function (o) { return !o }) }} activeCount={active}
-          onReset={function () { setFilter(INITIAL) }}>
-          <FilterSelect icon={ICONS.user} value={filter.mahasiswa} onChange={function (v) { setFilter(Object.assign({}, filter, { mahasiswa: v })) }}
-            options={[{ value: '', label: 'Semua Mahasiswa' }].concat(people.map(function (p) { return { value: p.id, label: p.nama } }))} />
-          <FilterSelect icon={ICONS.check} value={filter.status} onChange={function (v) { setFilter(Object.assign({}, filter, { status: v })) }}
-            options={[{ value: '', label: 'Semua Status' }, { value: 'Masuk', label: 'Masuk' }, { value: 'Izin', label: 'Izin' }, { value: 'Bolos', label: 'Bolos' }]} />
-          <TimeFilter filter={filter} set={setFilter} />
-          <SortSelect value={sort} onChange={setSort} />
-        </FilterBar>
-      </section>
-
-      <section className="mt-8 bsi-panel rounded-[2rem] p-5 sm:p-8 lg:p-10">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <h2 className="text-xl sm:text-2xl font-black text-slate-900">Grafik Kehadiran per Mahasiswa</h2>
-          <div className="flex flex-wrap gap-3 text-xs font-semibold">
-            <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-emerald-500" />Masuk</span>
-            <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-amber-500" />Izin</span>
-            <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-red-500" />Bolos</span>
-          </div>
-        </div>
-        <div className="mt-6 space-y-4">
-          {loading
-            ? [0, 1, 2].map(function (i) { return <SkeletonChartRow key={i} /> })
-            : perPerson.map(function (p) {
-                return (
-                  <div key={p.nim} className="card-hover rounded-[1.5rem] border border-slate-200 p-5">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <p className="font-bold text-slate-900">{p.nama}</p>
-                        <p className="text-xs text-slate-600">NIM {p.nim}</p>
-                      </div>
-                      <div className="text-xs text-slate-600">Masuk: {p.Masuk} | Izin: {p.Izin} | Bolos: {p.Bolos}</div>
-                    </div>
-                    <div className="mt-4 flex h-4 w-full overflow-hidden rounded-full bg-slate-100">
-                      <div className="bg-emerald-500 transition-all duration-500" style={{ width: (p.Masuk / maxTotal) * 100 + '%' }} />
-                      <div className="bg-amber-500 transition-all duration-500" style={{ width: (p.Izin / maxTotal) * 100 + '%' }} />
-                      <div className="bg-red-500 transition-all duration-500" style={{ width: (p.Bolos / maxTotal) * 100 + '%' }} />
-                    </div>
-                  </div>
-                )
-              })}
-        </div>
-      </section>
-
-      <section className="mt-8">
-        <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Daftar Kehadiran sesuai Filter</h2>
-        <div className="grid-pusat-rapat mt-6">
-          {loading
-            ? [0, 1, 2].map(function (i) { return <div key={i} className="kolom-kartu-rapat"><SkeletonAttendanceCard /></div> })
-            : paginatedRows.map(function (r) {
-                return (
-                  <div key={r.id} className="kolom-kartu-rapat">
-                    <AttendanceCard row={r} isOwner={mahasiswa && mahasiswa.id === r.mahasiswa_id}
-                      onDetail={function () { setDetail(r) }} />
-                  </div>
-                )
-              })}
-          {!loading && !rows.length ? <div className="w-full"><EmptyState icon="clipboard" title="Belum Ada Data Kehadiran" desc="Data kehadiran akan tampil setelah mahasiswa mengisi daftar hadir." /></div> : null}
-        </div>
-      </section>
-      {!loading && totalData > 0 ? (
-        <div className="mt-6 text-center text-sm text-slate-600">
-          Total {totalData} catatan{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}
-        </div>
-      ) : null}
-      {!loading ? <Pagination totalItems={totalData} perPage={PER_PAGE} page={pageAman} onPageChange={gantiHalaman} /> : null}
-
-      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
-        {detail ? <AttendanceDetail row={detail} /> : null}
       </Modal>
     </div>
   )

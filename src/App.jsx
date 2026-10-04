@@ -52,7 +52,7 @@ export default function App() {
             <Route path="/tim" element={<Navigate to="/dospem" replace />} />
             <Route path="/login" element={<RequireGuest><LoginPage /></RequireGuest>} />
             <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
-            <Route path="/cepat" element={<RequireAuth><QuickPage /></RequireAuth>} />
+            <Route path="/qr" element={<RequireAuth><QuickPage /></RequireAuth>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

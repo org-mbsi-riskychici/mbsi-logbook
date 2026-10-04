@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cetak QR Code - Portal Logbook Magang BSI</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            bsi: {
+              50: '#f4fbf6', 100: '#dff0e4', 200: '#bfe3cc', 300: '#86ecb0',
+              400: '#4ed58f', 500: '#27c06d', 600: '#1a9e57', 700: '#177c48',
+              800: '#16623c', 900: '#135033'
+            },
+            gold: { 400: '#fbbf24', 500: '#f59e0b', 600: '#d97706' }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Font Plus Jakarta Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Library QR Code Generator -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+
+  <!-- Library HTML to Canvas (Untuk Unduh Seluruh Kartu ke PNG) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+
+    #qrcode svg {
+      width: 200px;
+      height: 200px;
+      display: block;
+      margin: 0 auto;
+    }
+    
+    /* Utility styling khusus saat print */
+    @media print {
+      @page {
+        size: A4 portrait;
+        margin: 1.5cm;
+      }
+      
+      /* Memaksa browser mencetak background warna & aksen persis seperti di layar */
+      *, *::before, *::after {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+
+      html, body {
+        background: white !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        width: 100% !important;
+        display: flex !important;
+        justify-content: center !important;
+        align-items: flex-start !important;
+      }
+
+      .no-print {
+        display: none !important;
+      }
+
+      /* Mengatur lebar kartu presisi 430px agar rasio lebar vs tinggi pas */
+      #posterCard,
+      main#posterCard.print-card {
+        width: 430px !important;
+        max-width: 430px !important;
+        min-width: 430px !important;
+        margin: 1cm auto !important;
+        box-shadow: none !important;
+        border: 1px solid #cbd5e1 !important;
+        border-radius: 2.5rem !important;
+        background: white !important;
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+        box-sizing: border-box !important;
+      }
+
+      .logo-glow {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+<body class="bg-slate-100 min-h-screen text-slate-800 flex flex-col items-center justify-center p-4 sm:p-8">
+
+  <!-- Floating Action Bar (Hanya Tampil di Layar Monitor) -->
+  <div class="no-print w-full max-w-md mb-6 bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between gap-3">
+    <a href="/qr" class="flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-600 hover:text-bsi-800 transition">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+      </svg>
+      Kembali
+    </a>
+    
+    <div class="flex gap-2">
+      <!-- Tombol Unduh Seluruh Kartu PNG -->
+      <button id="btnDownloadPng" onclick="downloadCardPNG()" class="px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs sm:text-sm font-bold text-slate-700 flex items-center gap-1.5 transition">
+        <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        </svg>
+        <span>Unduh PNG</span>
+      </button>
+
+      <!-- Tombol Cetak PDF / Standee -->
+      <button onclick="window.print()" class="px-4 py-2 rounded-xl bg-bsi-800 hover:bg-bsi-900 text-white text-xs sm:text-sm font-bold flex items-center gap-2 shadow-sm transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+        </svg>
+        Cetak
+      </button>
+    </div>
+  </div>
+
+  <!-- Kartu Poster / Standee Siap Cetak (Bodi Kartu Putih Solid) -->
+  <main id="posterCard" class="print-card w-full max-w-md bg-white rounded-[2.5rem] p-8 shadow-xl border border-slate-200 flex flex-col items-center text-center relative overflow-hidden">
+    
+    <!-- Accent Top Bar -->
+    <div class="absolute top-0 inset-x-0 h-2 bg-bsi-800"></div>
+
+    <!-- Header Branding BSI -->
+    <div class="flex flex-col items-center gap-3 mt-4">
+      <!-- Logo Badge -->
+      <div class="relative">
+        <div class="relative h-16 w-16 rounded-2xl bg-bsi-800 text-white grid place-items-center shadow-md overflow-hidden">
+          
+          <!-- Ikon SVG: Dokumen/Logbook dengan Aksen Centang -->
+          <svg class="w-9 h-9 relative z-10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M4 7V17C4 18.1046 4.89543 19 6 19H18C19.1046 19 20 18.1046 20 17V7" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M4 7L12 12L20 7" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M12 12V19" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Tipografi Brand -->
+      <div class="flex flex-col items-center">
+        <h1 class="text-2xl font-black tracking-tight text-slate-900 uppercase flex items-center gap-2">
+          <span class="text-bsi-800">GANK</span>
+          <span class="text-slate-700">SKUYY</span>
+        </h1>
+        <p class="text-[11px] font-bold text-slate-500 tracking-[0.2em] uppercase mt-1.5">
+          Portal Presensi & Logbook
+        </p>
+      </div>
+    </div>
+
+    <hr class="w-full border-slate-100 my-6" />
+
+    <!-- Teks Instruksi -->
+    <div class="space-y-1">
+      <p class="text-xs font-bold text-bsi-800 uppercase tracking-widest">
+        Scan QR Code di Bawah Ini
+      </p>
+      <p class="text-xs text-slate-500">
+        Untuk mengisi Logbook harian &amp; Presensi magang
+      </p>
+    </div>
+
+    <!-- Container Gambar QR Code Inline SVG -->
+    <div class="my-6 p-4 bg-slate-50 border-2 border-dashed border-bsi-300 rounded-3xl relative">
+      <div id="qrcode" class="flex justify-center items-center"></div>
+    </div>
+
+    <!-- URL Manual -->
+    <div class="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-2xl flex flex-col items-center justify-center">
+      <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Akses Tautan Manual</p>
+      <p id="targetUrlText" class="text-xs font-mono font-bold text-slate-700 break-all leading-normal mt-1 px-1">
+        Loading URL...
+      </p>
+    </div>
+  </main>
+
+  <script>
+    // =========================================================================
+    // KONFIGURASI UTAMA URL TUJUAN QR CODE
+    // =========================================================================
+    const CUSTOM_URL = "https://mbsi.riskychici.web.id/qr"; 
+
+    const targetUrl = (CUSTOM_URL && CUSTOM_URL.trim() !== "") 
+      ? CUSTOM_URL.trim() 
+      : (window.location.origin + '/qr');
+
+    document.getElementById('targetUrlText').innerText = targetUrl;
+
+    // Generate Inline SVG QR Code
+    const typeNumber = 0;
+    const errorCorrectionLevel = 'H';
+    const qr = qrcode(typeNumber, errorCorrectionLevel);
+    qr.addData(targetUrl);
+    qr.make();
+
+    const count = qr.getModuleCount();
+    const size = 200;
+    const cellSize = size / count;
+
+    let svgPath = '';
+    for (let row = 0; row < count; row++) {
+      for (let col = 0; col < count; col++) {
+        if (qr.isDark(row, col)) {
+          svgPath += `M${col * cellSize},${row * cellSize}h${cellSize}v${cellSize}h-${cellSize}z `;
+        }
+      }
+    }
+
+    const svgElementStr = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">
+      <rect width="${size}" height="${size}" fill="#ffffff" />
+      <path d="${svgPath}" fill="#16623c" />
+    </svg>`;
+
+    const qrContainer = document.getElementById("qrcode");
+    qrContainer.innerHTML = svgElementStr;
+
+    // =========================================================================
+    // FUNGSI UNDUH SELURUH KARTU KE PNG (KARTU PUTIH, AREA LUAR TRANSPARAN)
+    // =========================================================================
+    async function downloadCardPNG() {
+      const cardElement = document.getElementById('posterCard');
+      const btnBtn = document.getElementById('btnDownloadPng');
+      
+      if (!cardElement) return;
+
+      const originalText = btnBtn.innerHTML;
+      btnBtn.innerHTML = `<span class="animate-pulse">Mengunduh...</span>`;
+      btnBtn.disabled = true;
+
+      try {
+        const canvas = await html2canvas(cardElement, {
+          scale: 3,
+          useCORS: true,
+          backgroundColor: null, // Kanvas luar tetap transparan (mengikuti sudut rounded)
+          logging: false,
+          onclone: (clonedDoc) => {
+            const urlText = clonedDoc.getElementById('targetUrlText');
+            if (urlText) {
+              urlText.style.lineHeight = '1.5';
+              urlText.style.paddingTop = '2px';
+              urlText.style.paddingBottom = '2px';
+            }
+          }
+        });
+
+        const imageDataUrl = canvas.toDataURL('image/png', 1.0);
+        
+        const link = document.createElement('a');
+        link.href = imageDataUrl;
+        link.download = 'Standee-Presensi-Magang-GANK-SKUYY.png';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch (error) {
+        console.error('Gagal mengunduh kartu sebagai PNG:', error);
+        alert('Gagal membuat gambar PNG. Silakan coba lagi.');
+      } finally {
+        btnBtn.innerHTML = originalText;
+        btnBtn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>
