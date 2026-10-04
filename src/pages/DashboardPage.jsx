@@ -1,6 +1,6 @@
 import { SkeletonDashboard } from '../components/Skeleton.jsx'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../lib/auth.js'
 import { uploadMedia, deleteMedia } from '../lib/upload.js'
@@ -16,6 +16,7 @@ import { LogbookCard, LogbookDetail, GalleryCard, GalleryDetail, AttendanceCard,
 import { CustomSelect, CustomDateInput, FileInput, ToggleModeMedia, SumberVideo } from '../components/controls.jsx'
 import { SizedIcon, ICONS } from '../components/icons.jsx'
 import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
+import PengingatBanner from '../components/PengingatBanner.jsx'
 
 function newItem() {
   return { key: Math.random().toString(36).slice(2), judul: '', deskripsi: '', hasil: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false, show: false, mode: 'foto', ytLink: '', oldYtId: null, oldSource: 'r2', driveLink: '' }
@@ -94,6 +95,8 @@ export default function DashboardPage() {
   const [pendingDelete, setPendingDelete] = useState(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [konfirmasiEdit, setKonfirmasiEdit] = useState(null)
+  const [dataSiap, setDataSiap] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
    const [refleksiFokus, setRefleksiFokus] = useState('')
    const refleksiRefs = useRef({})
    const refleksiPrevRects = useRef(null)
@@ -197,6 +200,7 @@ export default function DashboardPage() {
     setLogs(l.data || [])
     setGaleri(g.data || [])
     setHadir(h.data || [])
+    setDataSiap(true)
   }
 
   useEffect(function () {
@@ -289,6 +293,16 @@ export default function DashboardPage() {
        document.removeEventListener('click', onClickLink, true)
      }
    })
+   useEffect(function () {
+     if (!mahasiswa || !dataSiap) return
+     const t = searchParams.get('isi')
+     if (!t) return
+     setSearchParams({}, { replace: true })
+     const pesan = pesanTanggalTerlarang(t, batas.min, batas.max)
+     if (pesan) { toast.gagal(pesan); return }
+     isiLogbookTanggal(t)
+   }, [mahasiswa, dataSiap])
+
   if (loading || !mahasiswa) {
     return <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:py-8"><SkeletonDashboard /></div>
   }
@@ -526,6 +540,24 @@ export default function DashboardPage() {
     setEditHadirId(null)
     setHadirForm({ tanggal: todayInput(), status: 'Masuk', alasan: '' })
   }
+   function terapkanIsiTanggal(t) {
+     cancelEditLog()
+     setForm(function (f) { return Object.assign({}, f, { tanggal: t }) })
+     setTab('logbook')
+     gulirKeForm(refFormLog)
+   }
+   function isiLogbookTanggal(t) {
+     if (isLogbookDirty()) {
+       setKonfirmasiEdit({
+         judul: 'Ganti Draf Logbook?',
+         pesan: 'Isian form logbook yang belum disimpan akan hilang dan diganti dengan tanggal terlewat yang kamu pilih.',
+         aksi: function () { terapkanIsiTanggal(t) }
+       })
+       return
+     }
+     terapkanIsiTanggal(t)
+   }
+
 
   function deleteLog(log) { setPendingDelete({ type: 'log', data: log }) }
 
@@ -818,6 +850,13 @@ async function executeDelete() {
           </div>
         </div>
       </section>
+       {dataSiap ? (
+         <PengingatBanner
+           tanggalLogbook={logs.map(function (l) { return l.tanggal })}
+           hadir={hadir}
+           onIsi={isiLogbookTanggal}
+         />
+       ) : null}
 
       {tab === 'profil' ? (
         <section className="anim-tab mt-8 grid gap-6 lg:grid-cols-[0.85fr_1.15fr] items-start">

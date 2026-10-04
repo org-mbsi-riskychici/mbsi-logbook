@@ -58,6 +58,7 @@ src/
     icons.jsx
     Layout.jsx
     PemutarVideo.jsx
+    PengingatBanner.jsx
     Skeleton.jsx
     ui.jsx
   lib/
@@ -89,8 +90,14 @@ supabase/
   schema.sql
 .env.example
 .gitignore
+fix-syntax.cjs
 index.html
 package.json
+patch-dropdown-clip-v1.cjs
+patch-pengingat-logbook-v1.cjs
+patch-pengingat-logbook-v2.cjs
+patch-pengingat-mobile-v1.cjs
+patch-pengingat-tahun-mobile-v1.cjs
 patch-tanggal-valid-v1.cjs
 postcss.config.js
 README.md
@@ -101,15 +108,107 @@ vite.config.js
 
 # Files
 
-## File: patch-tanggal-valid-v1.cjs
+## File: src/components/PengingatBanner.jsx
+````javascript
+import { useState } from 'react'
+import { SizedIcon } from './icons.jsx'
+import { formatTanggal } from '../lib/format.js'
+import { MULAI_MAGANG } from '../lib/constants.js'
+
+const HARI_PENDEK = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
+const BULAN_PENDEK = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agt', 'Sept', 'Okt', 'Nov', 'Des']
+function formatTanggalMobile(s) {
+  if (!s) return ''
+  const d = new Date(s + 'T00:00:00')
+  if (Number.isNaN(d.getTime())) return s
+  return HARI_PENDEK[d.getDay()] + ', ' + d.getDate() + ' ' + BULAN_PENDEK[d.getMonth()] + ' ' + d.getFullYear()
+}
+
+function pad2(n) { return (n < 10 ? '0' : '') + n }
+function isoDari(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) }
+/* Batas akhir pengingat = kemarin; hari ini belum dianggap terlewat karena masih bisa diisi */
+function kemarinIso() {
+  const d = new Date()
+  d.setDate(d.getDate() - 1)
+  return isoDari(d)
+}
+
+/* Daftar hari kerja (Sen-Jum) dari MULAI_MAGANG s/d kemarin yang tidak punya
+   logbook dan tidak berstatus Izin/Bolos pada daftar hadir. */
+export function hitungTanggalTerlewat(tanggalLogbook, hadir) {
+  const punyaLog = new Set(tanggalLogbook || [])
+  const absen = new Set()
+  ;(hadir || []).forEach(function (h) {
+    if (h.status === 'Izin' || h.status === 'Bolos') absen.add(h.tanggal)
+  })
+  const hasil = []
+  const d = new Date(MULAI_MAGANG + 'T00:00:00')
+  const batas = new Date(kemarinIso() + 'T00:00:00')
+  while (d <= batas) {
+    const iso = isoDari(d)
+    const hari = d.getDay()
+    if (hari !== 0 && hari !== 6 && !punyaLog.has(iso) && !absen.has(iso)) hasil.push(iso)
+    d.setDate(d.getDate() + 1)
+  }
+  return hasil
+}
+
+export default function PengingatBanner(props) {
+  const [tutup, setTutup] = useState(false)
+  const terlewat = hitungTanggalTerlewat(props.tanggalLogbook, props.hadir)
+  if (tutup || !terlewat.length) return null
+  return (
+    <section className="mt-6 rounded-[2rem] border border-amber-200 bg-amber-50 p-5 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-800">
+            <SizedIcon name="clipboard" size={18} />
+          </span>
+          <div>
+            <h2 className="text-base font-black text-amber-800 sm:text-lg">
+              {terlewat.length} hari kerja belum punya logbook
+            </h2>
+            <p className="mt-1 text-xs text-amber-800 sm:text-sm">
+              Sabtu-Minggu serta hari berstatus Izin atau Bolos tidak dihitung. Isi logbook untuk tanggal di bawah supaya catatan magangmu lengkap.
+            </p>
+          </div>
+        </div>
+        <button type="button" onClick={function () { setTutup(true) }} title="Sembunyikan Pengingat" className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-amber-100 text-amber-800 hover:bg-amber-200">
+          <SizedIcon name="close" size={14} />
+        </button>
+      </div>
+      <ul className="mt-4 max-h-72 space-y-2 overflow-y-auto pr-1">
+        {terlewat.map(function (t) {
+          return (
+            <li key={t} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-200 bg-white p-3">
+              <p className="text-sm font-semibold text-slate-800">
+          <span className="hidden sm:inline">{formatTanggal(t)}</span>
+          <span className="sm:hidden">{formatTanggalMobile(t)}</span>
+        </p>
+              <button type="button" onClick={function () { props.onIsi(t) }} className="rounded-xl bg-bsi-800 px-3.5 py-2 text-xs font-bold text-white hover:bg-bsi-900 sm:text-sm">
+                Isi Logbook
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
+  )
+}
+````
+
+## File: patch-pengingat-logbook-v1.cjs
 ````javascript
 #!/usr/bin/env node
-/* patch-tanggal-valid-v1.cjs
-   Pemakaian: node patch-tanggal-valid-v1.cjs   (jalankan dari root repo)
-   Menerapkan otomatis fitur batas tanggal form (logbook, galeri, daftar hadir):
-   - tidak bisa memilih tanggal masa depan (dinamis sesuai tanggal perangkat),
-   - tidak bisa memilih tanggal sebelum hari pertama magang (8 September 2026),
-   - pesan error ramah saat tanggal terlarang diketuk atau saat submit.
+/* patch-pengingat-logbook-v1.cjs
+   Pemakaian: node patch-pengingat-logbook-v1.cjs   (jalankan dari root repo)
+   Memasang fitur pengingat logbook terlewat:
+   - komponen baru PengingatBanner (banner amber, daftar tanggal + tombol Isi Logbook),
+   - Dashboard: banner tampil tiap kali halaman dibuka, tombol tanggal mengisi
+     form logbook (dengan konfirmasi bila ada draf), dukungan /dashboard?isi=TANGGAL,
+   - /cepat: banner sama, tombolnya membawa ke dashboard dengan tanggal terpasang.
+   Aturan: hari kerja Sen-Jum dari MULAI_MAGANG s/d kemarin; Sabtu/Minggu dan
+   hari berstatus Izin/Bolos dilewati; hari ini tidak dihitung (belum terlewat).
    Idempoten: bagian yang sudah terpasang akan dilewati. */
 const fs = require('fs')
 const path = require('path')
@@ -133,88 +232,200 @@ function tulis(rel, isi) {
   fs.writeFileSync(path.join(ROOT, rel), isi, 'utf8')
 }
 
-/* ========== 1. src/lib/constants.js ========== */
-const KONSTANTA_TAMBAHAN = "\n/* Hari pertama masa magang BSI; form tidak menerima tanggal sebelum ini */\nexport const MULAI_MAGANG = '2026-09-08'\n"
-let constants = baca('src/lib/constants.js')
-if (constants != null && constants.indexOf('MULAI_MAGANG') !== -1) {
-  catatan.push('LEWATI src/lib/constants.js (sudah ada MULAI_MAGANG)')
-  constants = null
-} else if (constants != null) {
-  constants = constants.replace(/\s*$/, '') + KONSTANTA_TAMBAHAN
-  catatan.push('UBAH  src/lib/constants.js (+ MULAI_MAGANG)')
+/* ========== 1. Komponen baru: src/components/PengingatBanner.jsx ========== */
+const KOMPONEN = `import { useState } from 'react'
+import { SizedIcon } from './icons.jsx'
+import { formatTanggal } from '../lib/format.js'
+import { MULAI_MAGANG } from '../lib/constants.js'
+
+function pad2(n) { return (n < 10 ? '0' : '') + n }
+function isoDari(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) }
+/* Batas akhir pengingat = kemarin; hari ini belum dianggap terlewat karena masih bisa diisi */
+function kemarinIso() {
+  const d = new Date()
+  d.setDate(d.getDate() - 1)
+  return isoDari(d)
 }
 
-/* ========== 2. src/lib/format.js ========== */
-const FORMAT_FUNGSI = "\n/* Batas pilihan tanggal form: tidak sebelum hari pertama magang, tidak setelah hari ini.\n   Dinamis karena max diambil dari tanggal perangkat saat web dibuka. */\nexport function batasTanggalPilihan() {\n  return { min: MULAI_MAGANG, max: todayInput() }\n}\n/* Mengembalikan pesan error bila tanggal di luar batas, atau null bila valid.\n   Perbandingan string aman karena format tanggal ISO (YYYY-MM-DD). */\nexport function pesanTanggalTerlarang(value, min, max) {\n  if (!value) return null\n  if (max && value > max) {\n    return 'Tanggal ' + formatTanggal(value) + ' belum kamu lewati. Kamu hanya bisa memilih tanggal hari ini atau sebelumnya, karena logbook, galeri, dan daftar hadir mencatat kegiatan yang sudah benar-benar terjadi.'\n  }\n  if (min && value < min) {\n    return 'Tanggal ' + formatTanggal(value) + ' berada sebelum hari pertama masa magang (' + formatTanggal(min) + '). Silakan pilih tanggal pada rentang masa magang berlangsung, ya.'\n  }\n  return null\n}\n"
-let format = baca('src/lib/format.js')
-if (format != null && format.indexOf('batasTanggalPilihan') !== -1) {
-  catatan.push('LEWATI src/lib/format.js (sudah ada batasTanggalPilihan)')
-  format = null
-} else if (format != null) {
-  if (format.indexOf("./constants.js") === -1) {
-    format = "import { MULAI_MAGANG } from './constants.js'\n" + format
+/* Daftar hari kerja (Sen-Jum) dari MULAI_MAGANG s/d kemarin yang tidak punya
+   logbook dan tidak berstatus Izin/Bolos pada daftar hadir. */
+export function hitungTanggalTerlewat(tanggalLogbook, hadir) {
+  const punyaLog = new Set(tanggalLogbook || [])
+  const absen = new Set()
+  ;(hadir || []).forEach(function (h) {
+    if (h.status === 'Izin' || h.status === 'Bolos') absen.add(h.tanggal)
+  })
+  const hasil = []
+  const d = new Date(MULAI_MAGANG + 'T00:00:00')
+  const batas = new Date(kemarinIso() + 'T00:00:00')
+  while (d <= batas) {
+    const iso = isoDari(d)
+    const hari = d.getDay()
+    if (hari !== 0 && hari !== 6 && !punyaLog.has(iso) && !absen.has(iso)) hasil.push(iso)
+    d.setDate(d.getDate() + 1)
   }
-  format = ganti('src/lib/format.js', format, /(export function todayInput\(\)\s*\{[^}]*\})/, '$1' + FORMAT_FUNGSI, 'sisip fungsi setelah todayInput')
-  catatan.push('UBAH  src/lib/format.js (+ batasTanggalPilihan, pesanTanggalTerlarang)')
+  return hasil
 }
 
-/* ========== 3. src/components/controls.jsx ========== */
-const PICKDAY_BARU = "  function pickDay(d) {\n    const ds = view.y + '-' + pad(view.m + 1) + '-' + pad(d)\n    const pesan = pesanTanggalTerlarang(ds, props.min, props.max)\n    if (pesan) {\n      if (props.onTerlarang) props.onTerlarang(pesan)\n      return\n    }\n    props.onChange(ds)\n    setOpen(false)\n  }"
-const CELLS_BARU = "              {cells.map(function (d, i) {\n                if (d === null) return <span key={'kosong' + i} />\n                const isSel = sel && sel.y === view.y && sel.m === view.m && sel.d === d\n                const isToday = today.getFullYear() === view.y && today.getMonth() === view.m && today.getDate() === d\n                const terlarang = pesanTanggalTerlarang(view.y + '-' + pad(view.m + 1) + '-' + pad(d), props.min, props.max)\n                return (\n                  <button\n                    key={d}\n                    type=\"button\"\n                    onClick={function () { pickDay(d) }}\n                    title={terlarang || undefined}\n                    className={'mx-auto grid h-8 w-8 place-items-center rounded-lg text-sm ' + (terlarang ? 'opacity-35 cursor-not-allowed ' : '') + (isSel ? 'bg-bsi-800 font-semibold text-white' : isToday ? 'font-bold text-bsi-700 ring-1 ring-bsi-500' : 'text-slate-700 hover:bg-slate-100')}\n                  >\n                    {d}\n                  </button>\n                )\n              })}"
-let controls = baca('src/components/controls.jsx')
-if (controls != null && controls.indexOf('pesanTanggalTerlarang') !== -1) {
-  catatan.push('LEWATI src/components/controls.jsx (sudah ada pesanTanggalTerlarang)')
-  controls = null
-} else if (controls != null) {
-  controls = "import { pesanTanggalTerlarang } from '../lib/format.js'\n" + controls
-  controls = ganti('src/components/controls.jsx', controls,
-    /function pickDay\(d\)\s*\{\s*props\.onChange\(view\.y \+ '-' \+ pad\(view\.m \+ 1\) \+ '-' \+ pad\(d\)\)\s*setOpen\(false\)\s*\}/,
-    PICKDAY_BARU, 'ganti pickDay')
-  controls = ganti('src/components/controls.jsx', controls,
-    /\{cells\.map\(function \(d, i\) \{[\s\S]*?\n\s*\}\)\}/,
-    CELLS_BARU, 'ganti sel kalender')
-  catatan.push('UBAH  src/components/controls.jsx (picker menolak tanggal terlarang)')
+export default function PengingatBanner(props) {
+  const [tutup, setTutup] = useState(false)
+  const terlewat = hitungTanggalTerlewat(props.tanggalLogbook, props.hadir)
+  if (tutup || !terlewat.length) return null
+  return (
+    <section className="mt-6 rounded-[2rem] border border-amber-200 bg-amber-50 p-5 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-800">
+            <SizedIcon name="clipboard" size={18} />
+          </span>
+          <div>
+            <h2 className="text-base font-black text-amber-800 sm:text-lg">
+              {terlewat.length} hari kerja belum punya logbook
+            </h2>
+            <p className="mt-1 text-xs text-amber-800 sm:text-sm">
+              Sabtu-Minggu serta hari berstatus Izin atau Bolos tidak dihitung. Isi logbook untuk tanggal di bawah supaya catatan magangmu lengkap.
+            </p>
+          </div>
+        </div>
+        <button type="button" onClick={function () { setTutup(true) }} title="Sembunyikan Pengingat" className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-amber-100 text-amber-800 hover:bg-amber-200">
+          <SizedIcon name="close" size={14} />
+        </button>
+      </div>
+      <ul className="mt-4 max-h-72 space-y-2 overflow-y-auto pr-1">
+        {terlewat.map(function (t) {
+          return (
+            <li key={t} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-200 bg-white p-3">
+              <p className="text-sm font-semibold text-slate-800">{formatTanggal(t)}</p>
+              <button type="button" onClick={function () { props.onIsi(t) }} className="rounded-xl bg-bsi-800 px-3.5 py-2 text-xs font-bold text-white hover:bg-bsi-900 sm:text-sm">
+                Isi Logbook
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
+  )
+}
+`
+
+const relKomp = 'src/components/PengingatBanner.jsx'
+if (fs.existsSync(path.join(ROOT, relKomp))) {
+  catatan.push('LEWATI ' + relKomp + ' (file sudah ada)')
+} else {
+  tulis(relKomp, KOMPONEN)
+  catatan.push('BARU  ' + relKomp)
 }
 
-/* ========== 4. src/pages/DashboardPage.jsx ========== */
+/* ========== 2. src/pages/DashboardPage.jsx ========== */
+const EFFECT_ISI = `   useEffect(function () {
+     if (!mahasiswa || !dataSiap) return
+     const t = searchParams.get('isi')
+     if (!t) return
+     setSearchParams({}, { replace: true })
+     const pesan = pesanTanggalTerlarang(t, batas.min, batas.max)
+     if (pesan) { toast.gagal(pesan); return }
+     isiLogbookTanggal(t)
+   }, [mahasiswa, dataSiap])
+`
+const HANDLER_ISI = `
+   function terapkanIsiTanggal(t) {
+     cancelEditLog()
+     setForm(function (f) { return Object.assign({}, f, { tanggal: t }) })
+     setTab('logbook')
+     gulirKeForm(refFormLog)
+   }
+   function isiLogbookTanggal(t) {
+     if (isLogbookDirty()) {
+       setKonfirmasiEdit({
+         judul: 'Ganti Draf Logbook?',
+         pesan: 'Isian form logbook yang belum disimpan akan hilang dan diganti dengan tanggal terlewat yang kamu pilih.',
+         aksi: function () { terapkanIsiTanggal(t) }
+       })
+       return
+     }
+     terapkanIsiTanggal(t)
+   }
+`
+const BANNER_DASH = `       {dataSiap ? (
+         <PengingatBanner
+           tanggalLogbook={logs.map(function (l) { return l.tanggal })}
+           hadir={hadir}
+           onIsi={isiLogbookTanggal}
+         />
+       ) : null}
+`
 let dash = baca('src/pages/DashboardPage.jsx')
-if (dash != null && dash.indexOf('batasTanggalPilihan') !== -1) {
-  catatan.push('LEWATI src/pages/DashboardPage.jsx (sudah ada batasTanggalPilihan)')
+if (dash != null && dash.indexOf('PengingatBanner') !== -1) {
+  catatan.push('LEWATI src/pages/DashboardPage.jsx (sudah ada PengingatBanner)')
   dash = null
 } else if (dash != null) {
   dash = ganti('src/pages/DashboardPage.jsx', dash,
-    "import { todayInput, detectMediaType, matchesDateFilters, urutkanTanggal } from '../lib/format.js'",
-    "import { todayInput, detectMediaType, matchesDateFilters, urutkanTanggal, batasTanggalPilihan, pesanTanggalTerlarang } from '../lib/format.js'",
-    'perluas import format')
+    /import \{ useNavigate \} from 'react-router-dom'/,
+    "import { useNavigate, useSearchParams } from 'react-router-dom'",
+    'import useSearchParams')
   dash = ganti('src/pages/DashboardPage.jsx', dash,
-    /(const toast = useToast\(\)\r?\n)/,
-    '$1  const batas = batasTanggalPilihan()\n  function tolakTanggal(pesan) { toast.gagal(pesan) }\n',
-    'sisip batas & tolakTanggal')
+    /(import \{ FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect \} from '\.\.\/components\/FilterBar\.jsx'\n)/,
+    "$1import PengingatBanner from '../components/PengingatBanner.jsx'\n",
+    'import PengingatBanner')
   dash = ganti('src/pages/DashboardPage.jsx', dash,
-    /(async function submitLogbook\(e\)\s*\{\s*e\.preventDefault\(\))/,
-    '$1\n    const pesanTgl = pesanTanggalTerlarang(form.tanggal, batas.min, batas.max)\n    if (pesanTgl) { toast.gagal(pesanTgl); return }',
-    'guard submitLogbook')
+    /(const \[konfirmasiEdit, setKonfirmasiEdit\] = useState\(null\)\n)/,
+    '$1  const [dataSiap, setDataSiap] = useState(false)\n  const [searchParams, setSearchParams] = useSearchParams()\n',
+    'state dataSiap & searchParams')
   dash = ganti('src/pages/DashboardPage.jsx', dash,
-    /(async function submitGaleri\(e\)\s*\{\s*e\.preventDefault\(\))/,
-    '$1\n    const pesanTgl = pesanTanggalTerlarang(galForm.tanggal, batas.min, batas.max)\n    if (pesanTgl) { toast.gagal(pesanTgl); return }',
-    'guard submitGaleri')
+    /(setHadir\(h\.data \|\| \[\]\)\n)/,
+    '$1    setDataSiap(true)\n',
+    'tandai data selesai dimuat')
   dash = ganti('src/pages/DashboardPage.jsx', dash,
-    /(async function submitHadir\(e\)\s*\{\s*e\.preventDefault\(\))/,
-    '$1\n    const pesanTgl = pesanTanggalTerlarang(hadirForm.tanggal, batas.min, batas.max)\n    if (pesanTgl) { toast.gagal(pesanTgl); return }',
-    'guard submitHadir')
+    /(document\.removeEventListener\('click', onClickLink, true\)\s*\n\s*\}\s*\n\s*\)\))/,
+    '$1\n' + EFFECT_ISI,
+    'efek param ?isi=')
   dash = ganti('src/pages/DashboardPage.jsx', dash,
-    "<CustomDateInput value={form.tanggal} onChange={function (v) { setForm(Object.assign({}, form, { tanggal: v })) }} />",
-    "<CustomDateInput value={form.tanggal} onChange={function (v) { setForm(Object.assign({}, form, { tanggal: v })) }} min={batas.min} max={batas.max} onTerlarang={tolakTanggal} />",
-    'props tanggal logbook')
+    /(function cancelEditHadir\(\) \{\s*\n\s*setEditHadirId\(null\)\s*\n\s*setHadirForm\(\{ tanggal: todayInput\(\), status: 'Masuk', alasan: '' \}\)\s*\n\s*\})/,
+    '$1' + HANDLER_ISI,
+    'handler tombol Isi Logbook')
   dash = ganti('src/pages/DashboardPage.jsx', dash,
-    "<CustomDateInput value={galForm.tanggal} onChange={function (v) { setGalForm(Object.assign({}, galForm, { tanggal: v })) }} />",
-    "<CustomDateInput value={galForm.tanggal} onChange={function (v) { setGalForm(Object.assign({}, galForm, { tanggal: v })) }} min={batas.min} max={batas.max} onTerlarang={tolakTanggal} />",
-    'props tanggal galeri')
-  dash = ganti('src/pages/DashboardPage.jsx', dash,
-    "<CustomDateInput value={hadirForm.tanggal} onChange={function (v) { setHadirForm(Object.assign({}, hadirForm, { tanggal: v })) }} />",
-    "<CustomDateInput value={hadirForm.tanggal} onChange={function (v) { setHadirForm(Object.assign({}, hadirForm, { tanggal: v })) }} min={batas.min} max={batas.max} onTerlarang={tolakTanggal} />",
-    'props tanggal hadir')
-  catatan.push('UBAH  src/pages/DashboardPage.jsx (3 form + 3 guard submit)')
+    /(<\/section>\n)(\s*)(\{tab === 'profil' \?)/,
+    '$1' + BANNER_DASH + '$2$3',
+    'render banner di bawah header')
+  catatan.push('UBAH  src/pages/DashboardPage.jsx (banner + aksi isi tanggal + param ?isi=)')
+}
+
+/* ========== 3. src/pages/QuickPage.jsx ========== */
+const FETCH_QUICK = `    const pg = await supabase.from('logbooks').select('tanggal').eq('mahasiswa_id', mhs.id)
+    const ph = await supabase.from('daftar_hadir').select('tanggal, status').eq('mahasiswa_id', mhs.id)
+    setTanggalLogs((pg.data || []).map(function (x) { return x.tanggal }))
+    setHadirRows(ph.data || [])
+    `
+const BANNER_QUICK = `      {!loading ? (
+        <PengingatBanner
+          tanggalLogbook={tanggalLogs}
+          hadir={hadirRows}
+          onIsi={function (t) { navigate('/dashboard?isi=' + t) }}
+        />
+      ) : null}
+`
+let quick = baca('src/pages/QuickPage.jsx')
+if (quick != null && quick.indexOf('PengingatBanner') !== -1) {
+  catatan.push('LEWATI src/pages/QuickPage.jsx (sudah ada PengingatBanner)')
+  quick = null
+} else if (quick != null) {
+  quick = ganti('src/pages/QuickPage.jsx', quick,
+    /(import \{ SizedIcon \} from '\.\.\/components\/icons\.jsx'\n)/,
+    "$1import { useNavigate } from 'react-router-dom'\nimport PengingatBanner from '../components/PengingatBanner.jsx'\n",
+    'import navigate & PengingatBanner')
+  quick = ganti('src/pages/QuickPage.jsx', quick,
+    /(const \[alasan, setAlasan\] = useState\(''\)\n)/,
+    '$1  const navigate = useNavigate()\n  const [tanggalLogs, setTanggalLogs] = useState([])\n  const [hadirRows, setHadirRows] = useState([])\n',
+    'state data pengingat')
+  quick = ganti('src/pages/QuickPage.jsx', quick,
+    /(if \(!senyap\) setLoading\(false\))/,
+    FETCH_QUICK + '$1',
+    'muat tanggal logbook & hadir')
+  quick = ganti('src/pages/QuickPage.jsx', quick,
+    /(<div className="mx-auto w-full max-w-xl space-y-5">\n)/,
+    '$1' + BANNER_QUICK,
+    'render banner di atas konten')
+  catatan.push('UBAH  src/pages/QuickPage.jsx (banner + tombol ke dashboard)')
 }
 
 /* ========== Eksekusi ========== */
@@ -223,12 +434,343 @@ if (gagal.length) {
   gagal.forEach(function (g) { console.error('  - ' + g) })
   process.exit(1)
 }
-if (constants != null) tulis('src/lib/constants.js', constants)
-if (format != null) tulis('src/lib/format.js', format)
-if (controls != null) tulis('src/components/controls.jsx', controls)
 if (dash != null) tulis('src/pages/DashboardPage.jsx', dash)
-console.log('Patch tanggal valid selesai:')
+if (quick != null) tulis('src/pages/QuickPage.jsx', quick)
+console.log('Patch pengingat logbook selesai:')
 catatan.forEach(function (c) { console.log('  ' + c) })
+console.log('Silakan jalankan npm run dev untuk verifikasi.')
+````
+
+## File: patch-pengingat-logbook-v2.cjs
+````javascript
+#!/usr/bin/env node
+/* patch-pengingat-logbook-v2.cjs
+   Pemakaian: node patch-pengingat-logbook-v2.cjs   (jalankan dari root repo)
+   Versi 2: menormalkan line ending (CRLF/LF) di memori sebelum mencocokkan pola,
+   lalu menulis kembali dengan line ending asli file. Memperbaiki kegagalan v1
+   di repo ber-line-ending CRLF (Windows).
+   Fitur: banner pengingat logbook terlewat di Dashboard dan /cepat. */
+const fs = require('fs')
+const path = require('path')
+
+const ROOT = process.cwd()
+const gagal = []
+const catatan = []
+
+function bacaNorm(rel) {
+  const p = path.join(ROOT, rel)
+  if (!fs.existsSync(p)) { gagal.push(rel + ' : file tidak ditemukan'); return null }
+  const raw = fs.readFileSync(p, 'utf8')
+  const crlf = raw.indexOf('\r\n') !== -1
+  return { teks: crlf ? raw.split('\r\n').join('\n') : raw, crlf: crlf }
+}
+function tulisNorm(rel, obj) {
+  const isi = obj.crlf ? obj.teks.split('\n').join('\r\n') : obj.teks
+  fs.writeFileSync(path.join(ROOT, rel), isi, 'utf8')
+}
+function ganti(rel, obj, pola, pengganti, label) {
+  if (obj == null) return obj
+  const hasil = obj.teks.replace(pola, pengganti)
+  if (hasil === obj.teks) gagal.push(rel + ' : pola tidak ditemukan -> ' + label)
+  else obj.teks = hasil
+  return obj
+}
+
+/* ========== 1. Komponen baru ========== */
+const KOMPONEN = `import { useState } from 'react'
+import { SizedIcon } from './icons.jsx'
+import { formatTanggal } from '../lib/format.js'
+import { MULAI_MAGANG } from '../lib/constants.js'
+
+function pad2(n) { return (n < 10 ? '0' : '') + n }
+function isoDari(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) }
+/* Batas akhir pengingat = kemarin; hari ini belum dianggap terlewat karena masih bisa diisi */
+function kemarinIso() {
+  const d = new Date()
+  d.setDate(d.getDate() - 1)
+  return isoDari(d)
+}
+
+/* Daftar hari kerja (Sen-Jum) dari MULAI_MAGANG s/d kemarin yang tidak punya
+   logbook dan tidak berstatus Izin/Bolos pada daftar hadir. */
+export function hitungTanggalTerlewat(tanggalLogbook, hadir) {
+  const punyaLog = new Set(tanggalLogbook || [])
+  const absen = new Set()
+  ;(hadir || []).forEach(function (h) {
+    if (h.status === 'Izin' || h.status === 'Bolos') absen.add(h.tanggal)
+  })
+  const hasil = []
+  const d = new Date(MULAI_MAGANG + 'T00:00:00')
+  const batas = new Date(kemarinIso() + 'T00:00:00')
+  while (d <= batas) {
+    const iso = isoDari(d)
+    const hari = d.getDay()
+    if (hari !== 0 && hari !== 6 && !punyaLog.has(iso) && !absen.has(iso)) hasil.push(iso)
+    d.setDate(d.getDate() + 1)
+  }
+  return hasil
+}
+
+export default function PengingatBanner(props) {
+  const [tutup, setTutup] = useState(false)
+  const terlewat = hitungTanggalTerlewat(props.tanggalLogbook, props.hadir)
+  if (tutup || !terlewat.length) return null
+  return (
+    <section className="mt-6 rounded-[2rem] border border-amber-200 bg-amber-50 p-5 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-800">
+            <SizedIcon name="clipboard" size={18} />
+          </span>
+          <div>
+            <h2 className="text-base font-black text-amber-800 sm:text-lg">
+              {terlewat.length} hari kerja belum punya logbook
+            </h2>
+            <p className="mt-1 text-xs text-amber-800 sm:text-sm">
+              Sabtu-Minggu serta hari berstatus Izin atau Bolos tidak dihitung. Isi logbook untuk tanggal di bawah supaya catatan magangmu lengkap.
+            </p>
+          </div>
+        </div>
+        <button type="button" onClick={function () { setTutup(true) }} title="Sembunyikan Pengingat" className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-amber-100 text-amber-800 hover:bg-amber-200">
+          <SizedIcon name="close" size={14} />
+        </button>
+      </div>
+      <ul className="mt-4 max-h-72 space-y-2 overflow-y-auto pr-1">
+        {terlewat.map(function (t) {
+          return (
+            <li key={t} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-200 bg-white p-3">
+              <p className="text-sm font-semibold text-slate-800">{formatTanggal(t)}</p>
+              <button type="button" onClick={function () { props.onIsi(t) }} className="rounded-xl bg-bsi-800 px-3.5 py-2 text-xs font-bold text-white hover:bg-bsi-900 sm:text-sm">
+                Isi Logbook
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
+  )
+}
+`
+const relKomp = 'src/components/PengingatBanner.jsx'
+if (fs.existsSync(path.join(ROOT, relKomp))) {
+  catatan.push('LEWATI ' + relKomp + ' (file sudah ada)')
+} else {
+  fs.writeFileSync(path.join(ROOT, relKomp), KOMPONEN, 'utf8')
+  catatan.push('BARU  ' + relKomp)
+}
+
+/* ========== 2. DashboardPage ========== */
+const EFFECT_ISI = `   useEffect(function () {
+     if (!mahasiswa || !dataSiap) return
+     const t = searchParams.get('isi')
+     if (!t) return
+     setSearchParams({}, { replace: true })
+     const pesan = pesanTanggalTerlarang(t, batas.min, batas.max)
+     if (pesan) { toast.gagal(pesan); return }
+     isiLogbookTanggal(t)
+   }, [mahasiswa, dataSiap])
+`
+const HANDLER_ISI = `
+   function terapkanIsiTanggal(t) {
+     cancelEditLog()
+     setForm(function (f) { return Object.assign({}, f, { tanggal: t }) })
+     setTab('logbook')
+     gulirKeForm(refFormLog)
+   }
+   function isiLogbookTanggal(t) {
+     if (isLogbookDirty()) {
+       setKonfirmasiEdit({
+         judul: 'Ganti Draf Logbook?',
+         pesan: 'Isian form logbook yang belum disimpan akan hilang dan diganti dengan tanggal terlewat yang kamu pilih.',
+         aksi: function () { terapkanIsiTanggal(t) }
+       })
+       return
+     }
+     terapkanIsiTanggal(t)
+   }
+`
+const BANNER_DASH = `       {dataSiap ? (
+         <PengingatBanner
+           tanggalLogbook={logs.map(function (l) { return l.tanggal })}
+           hadir={hadir}
+           onIsi={isiLogbookTanggal}
+         />
+       ) : null}
+`
+let dash = bacaNorm('src/pages/DashboardPage.jsx')
+if (dash != null && dash.teks.indexOf('PengingatBanner') !== -1) {
+  catatan.push('LEWATI src/pages/DashboardPage.jsx (sudah ada PengingatBanner)')
+  dash = null
+} else if (dash != null) {
+  ganti('DashboardPage', dash, /import \{ useNavigate \} from 'react-router-dom'/,
+    "import { useNavigate, useSearchParams } from 'react-router-dom'", 'import useSearchParams')
+  ganti('DashboardPage', dash, /(import \{ FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect \} from '\.\.\/components\/FilterBar\.jsx'\n)/,
+    "$1import PengingatBanner from '../components/PengingatBanner.jsx'\n", 'import PengingatBanner')
+  ganti('DashboardPage', dash, /(const \[konfirmasiEdit, setKonfirmasiEdit\] = useState\(null\)\n)/,
+    '$1  const [dataSiap, setDataSiap] = useState(false)\n  const [searchParams, setSearchParams] = useSearchParams()\n', 'state dataSiap & searchParams')
+  ganti('DashboardPage', dash, /(setHadir\(h\.data \|\| \[\]\)\n)/,
+    '$1    setDataSiap(true)\n', 'tandai data selesai dimuat')
+  ganti('DashboardPage', dash, /(document\.removeEventListener\('click', onClickLink, true\)\n\s*\}\n\s*\}\))/,
+    '$1\n' + EFFECT_ISI, 'efek param ?isi=')
+  ganti('DashboardPage', dash, /(function cancelEditHadir\(\) \{\n\s*setEditHadirId\(null\)\n\s*setHadirForm\(\{ tanggal: todayInput\(\), status: 'Masuk', alasan: '' \}\)\n\s*\})/,
+    '$1' + HANDLER_ISI, 'handler tombol Isi Logbook')
+  ganti('DashboardPage', dash, /(<\/section>\n)(\s*)(\{tab === 'profil' \?)/,
+    '$1' + BANNER_DASH + '$2$3', 'render banner di bawah header')
+  catatan.push('UBAH  src/pages/DashboardPage.jsx (banner + aksi isi tanggal + param ?isi=)')
+}
+
+/* ========== 3. QuickPage ========== */
+const FETCH_QUICK = `    const pg = await supabase.from('logbooks').select('tanggal').eq('mahasiswa_id', mhs.id)
+    const ph = await supabase.from('daftar_hadir').select('tanggal, status').eq('mahasiswa_id', mhs.id)
+    setTanggalLogs((pg.data || []).map(function (x) { return x.tanggal }))
+    setHadirRows(ph.data || [])
+    `
+const BANNER_QUICK = `      {!loading ? (
+        <PengingatBanner
+          tanggalLogbook={tanggalLogs}
+          hadir={hadirRows}
+          onIsi={function (t) { navigate('/dashboard?isi=' + t) }}
+        />
+      ) : null}
+`
+let quick = bacaNorm('src/pages/QuickPage.jsx')
+if (quick != null && quick.teks.indexOf('PengingatBanner') !== -1) {
+  catatan.push('LEWATI src/pages/QuickPage.jsx (sudah ada PengingatBanner)')
+  quick = null
+} else if (quick != null) {
+  ganti('QuickPage', quick, /(import \{ SizedIcon \} from '\.\.\/components\/icons\.jsx'\n)/,
+    "$1import { useNavigate } from 'react-router-dom'\nimport PengingatBanner from '../components/PengingatBanner.jsx'\n", 'import navigate & PengingatBanner')
+  ganti('QuickPage', quick, /(const \[alasan, setAlasan\] = useState\(''\)\n)/,
+    '$1  const navigate = useNavigate()\n  const [tanggalLogs, setTanggalLogs] = useState([])\n  const [hadirRows, setHadirRows] = useState([])\n', 'state data pengingat')
+  ganti('QuickPage', quick, /(if \(!senyap\) setLoading\(false\))/,
+    FETCH_QUICK + '$1', 'muat tanggal logbook & hadir')
+  ganti('QuickPage', quick, /(<div className="mx-auto w-full max-w-xl space-y-5">\n)/,
+    '$1' + BANNER_QUICK, 'render banner di atas konten')
+  catatan.push('UBAH  src/pages/QuickPage.jsx (banner + tombol ke dashboard)')
+}
+
+/* ========== Eksekusi ========== */
+if (gagal.length) {
+  console.error('PATCH DIBATALKAN (tidak ada file yang ditulis):')
+  gagal.forEach(function (g) { console.error('  - ' + g) })
+  process.exit(1)
+}
+if (dash != null) tulisNorm('src/pages/DashboardPage.jsx', dash)
+if (quick != null) tulisNorm('src/pages/QuickPage.jsx', quick)
+console.log('Patch pengingat logbook v2 selesai:')
+catatan.forEach(function (c) { console.log('  ' + c) })
+console.log('Silakan jalankan npm run dev untuk verifikasi.')
+````
+
+## File: patch-pengingat-mobile-v1.cjs
+````javascript
+#!/usr/bin/env node
+/* patch-pengingat-mobile-v1.cjs
+   Pemakaian: node patch-pengingat-mobile-v1.cjs
+   Menyingkat format tanggal di banner pengingat logbook khusus untuk tampilan mobile
+   (misal: "Senin, 8 September" menjadi "Sen, 8 Sept"). */
+const fs = require('fs')
+const path = require('path')
+
+const rel = 'src/components/PengingatBanner.jsx'
+const p = path.join(process.cwd(), rel)
+if (!fs.existsSync(p)) {
+  console.error('File tidak ditemukan: ' + rel)
+  process.exit(1)
+}
+
+let src = fs.readFileSync(p, 'utf8')
+const crlf = src.indexOf('\r\n') !== -1
+if (crlf) src = src.split('\r\n').join('\n')
+
+if (src.indexOf('formatTanggalMobile') !== -1) {
+  console.log('LEWATI ' + rel + ' (sudah ada formatTanggalMobile)')
+  process.exit(0)
+}
+
+// 1. Sisipkan helper function untuk format tanggal pendek
+const HELPER = `
+const HARI_PENDEK = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
+const BULAN_PENDEK = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agt', 'Sept', 'Okt', 'Nov', 'Des']
+function formatTanggalMobile(s) {
+  if (!s) return ''
+  const d = new Date(s + 'T00:00:00')
+  if (Number.isNaN(d.getTime())) return s
+  return HARI_PENDEK[d.getDay()] + ', ' + d.getDate() + ' ' + BULAN_PENDEK[d.getMonth()]
+}
+`
+src = src.replace(/(import \{ MULAI_MAGANG \} from '\.\.\/lib\/constants\.js'\n)/, '$1' + HELPER)
+
+// 2. Ganti elemen tanggal dengan responsive span
+const OLD_DATE = `<p className="text-sm font-semibold text-slate-800">{formatTanggal(t)}</p>`
+const NEW_DATE = `<p className="text-sm font-semibold text-slate-800">
+          <span className="hidden sm:inline">{formatTanggal(t)}</span>
+          <span className="sm:hidden">{formatTanggalMobile(t)}</span>
+        </p>`
+
+if (src.indexOf(OLD_DATE) === -1) {
+  console.error('Pola tanggal tidak ditemukan. Pastikan file PengingatBanner.jsx belum diubah manual.')
+  process.exit(1)
+}
+
+src = src.replace(OLD_DATE, NEW_DATE)
+
+if (crlf) src = src.split('\n').join('\r\n')
+fs.writeFileSync(p, src, 'utf8')
+console.log('UBAH  ' + rel + ' (tanggal mobile disingkat)')
+console.log('Silakan jalankan npm run dev untuk verifikasi.')
+````
+
+## File: patch-pengingat-tahun-mobile-v1.cjs
+````javascript
+#!/usr/bin/env node
+/* patch-pengingat-tahun-mobile-v1.cjs
+   Pemakaian: node patch-pengingat-tahun-mobile-v1.cjs
+   Menambahkan tahun pada format tanggal mobile di banner pengingat logbook,
+   sehingga tampil: "Sen, 8 Sept 2026" (sebelumnya hanya "Sen, 8 Sept"). */
+const fs = require('fs')
+const path = require('path')
+
+const rel = 'src/components/PengingatBanner.jsx'
+const p = path.join(process.cwd(), rel)
+if (!fs.existsSync(p)) {
+  console.error('File tidak ditemukan: ' + rel)
+  process.exit(1)
+}
+
+let src = fs.readFileSync(p, 'utf8')
+const crlf = src.indexOf('\r\n') !== -1
+if (crlf) src = src.split('\r\n').join('\n')
+
+// Cek apakah sudah ada tahun (mencegah duplikasi)
+if (src.indexOf("d.getFullYear()\n}") !== -1 || src.indexOf("d.getFullYear() + '\\n}") !== -1) {
+  // Cek lebih teliti: apakah fungsi formatTanggalMobile sudah mengandung getFullYear di return-nya
+  const cocok = src.match(/function formatTanggalMobile\([^)]*\)\s*\{[\s\S]*?return[\s\S]*?getFullYear[\s\S]*?\n\}/)
+  if (cocok) {
+    console.log('LEWATI ' + rel + ' (formatTanggalMobile sudah menyertakan tahun)')
+    process.exit(0)
+  }
+}
+
+// Ganti fungsi formatTanggalMobile yang lama
+const POLA_LAMA = /function formatTanggalMobile\(s\) \{\s*if \(!s\) return ''\s*const d = new Date\(s \+ 'T00:00:00'\)\s*if \(Number\.isNaN\(d\.getTime\(\)\)\) return s\s*return HARI_PENDEK\[d\.getDay\(\)\] \+ ', ' \+ d\.getDate\(\) \+ ' ' \+ BULAN_PENDEK\[d\.getMonth\(\)\]\s*\}/
+
+const FUNGSI_BARU = `function formatTanggalMobile(s) {
+  if (!s) return ''
+  const d = new Date(s + 'T00:00:00')
+  if (Number.isNaN(d.getTime())) return s
+  return HARI_PENDEK[d.getDay()] + ', ' + d.getDate() + ' ' + BULAN_PENDEK[d.getMonth()] + ' ' + d.getFullYear()
+}`
+
+const hasil = src.replace(POLA_LAMA, FUNGSI_BARU)
+if (hasil === src) {
+  console.error('Pola fungsi formatTanggalMobile tidak ditemukan. Pastikan file PengingatBanner.jsx memiliki struktur asli.')
+  process.exit(1)
+}
+
+const keluaran = crlf ? hasil.split('\n').join('\r\n') : hasil
+fs.writeFileSync(p, keluaran, 'utf8')
+console.log('UBAH  ' + rel + ' (tahun ditambahkan pada format tanggal mobile)')
 console.log('Silakan jalankan npm run dev untuk verifikasi.')
 ````
 
@@ -450,6 +992,238 @@ R2_BUCKET_NAME=mbsi-media
 R2_PUBLIC_BASE_URL=
 ````
 
+## File: fix-syntax.cjs
+````javascript
+#!/usr/bin/env node
+const fs = require('fs')
+const p = 'src/components/controls.jsx'
+let c = fs.readFileSync(p, 'utf8')
+
+// Menghapus duplikasi setOpen dan kurung kurawal penutup yang bocor ke luar fungsi
+c = c.replace(
+  /(\s*setOpen\(function \(o\) \{ return !o \}\)\s*\})\s*setOpen\(function \(o\) \{ return !o \}\)\s*\}/, 
+  '$1'
+)
+
+fs.writeFileSync(p, c)
+console.log('Duplikasi dihapus, syntax error teratasi. Silakan jalankan npm run dev lagi.')
+````
+
+## File: patch-dropdown-clip-v1.cjs
+````javascript
+#!/usr/bin/env node
+/* patch-dropdown-clip-v1.cjs
+   Pemakaian: node patch-dropdown-clip-v1.cjs   (jalankan dari root repo)
+   Memperbaiki sisa bug dropdown/picker di panel filter:
+   - panel kalender (w-72) terpotong overflow-x: clip .filter-isi saat tombol
+     berada dekat tepi kanan -> panel kini dibuka merapat ke kanan bila ruang
+     di kanan tidak cukup (diukur terhadap .filter-isi atau viewport),
+   - memastikan root FilterBar punya relative z-40 supaya dropdown tidak
+     tertutup kartu (bagian ini dilewati bila sudah ada).
+   Idempoten: bagian yang sudah terpasang akan dilewati. */
+const fs = require('fs')
+const path = require('path')
+
+const ROOT = process.cwd()
+const gagal = []
+const catatan = []
+
+function baca(rel) {
+  const p = path.join(ROOT, rel)
+  if (!fs.existsSync(p)) { gagal.push(rel + ' : file tidak ditemukan'); return null }
+  return fs.readFileSync(p, 'utf8')
+}
+function ganti(rel, src, pola, pengganti, label) {
+  if (src == null) return src
+  const hasil = src.replace(pola, pengganti)
+  if (hasil === src) gagal.push(rel + ' : pola tidak ditemukan -> ' + label)
+  return hasil
+}
+function tulis(rel, isi) {
+  fs.writeFileSync(path.join(ROOT, rel), isi, 'utf8')
+}
+
+/* ========== 1. src/components/controls.jsx ========== */
+let controls = baca('src/components/controls.jsx')
+if (controls != null && controls.indexOf('alignRight') !== -1) {
+  catatan.push('LEWATI src/components/controls.jsx (sudah ada alignRight)')
+  controls = null
+} else if (controls != null) {
+  /* state penanda panel dibuka merapat ke kanan */
+  controls = ganti('src/components/controls.jsx', controls,
+    /(\s*)const \[view, setView\] = useState\(function \(\) \{/,
+    '$1const [alignRight, setAlignRight] = useState(false)\n$1const [view, setView] = useState(function () {',
+    'sisip state alignRight')
+  /* ukur ruang saat dropdown dibuka */
+  controls = ganti('src/components/controls.jsx', controls,
+    /function toggle\(\)\s*\{\s*if \(!open\)\s*\{\s*const p = parseValue\(props\.value, mode\)\s*if \(p\) setView\(\{ y: p\.y, m: p\.m \}\)\s*\}/,
+    "function toggle() {\n    if (!open) {\n      const p = parseValue(props.value, mode)\n      if (p) setView({ y: p.y, m: p.m })\n      if (boxRef.current) {\n        const r = boxRef.current.getBoundingClientRect()\n        const wadah = boxRef.current.closest('.filter-isi')\n        const batasKanan = wadah ? wadah.getBoundingClientRect().right : window.innerWidth - 8\n        setAlignRight(r.left + 296 > batasKanan)\n      }\n    }\n    setOpen(function (o) { return !o })\n  }",
+    'ganti toggle dengan pengukuran ruang')
+  /* panel kalender mengikuti hasil pengukuran */
+  controls = ganti('src/components/controls.jsx', controls,
+    '<div className="anim-modal absolute z-30 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">',
+    "<div className={'anim-modal absolute z-30 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl ' + (alignRight ? 'right-0' : '')}>",
+    'kelas panel kalender responsif ruang')
+  catatan.push('UBAH  src/components/controls.jsx (picker membuka merapat kanan bila ruang sempit)')
+}
+
+/* ========== 2. src/components/FilterBar.jsx ========== */
+let filter = baca('src/components/FilterBar.jsx')
+if (filter != null && filter.indexOf('relative z-40') !== -1) {
+  catatan.push('LEWATI src/components/FilterBar.jsx (sudah ada relative z-40)')
+  filter = null
+} else if (filter != null) {
+  filter = ganti('src/components/FilterBar.jsx', filter,
+    '<div className="bsi-panel rounded-3xl p-4 lg:p-5">',
+    '<div className="bsi-panel relative z-40 rounded-3xl p-4 lg:p-5">',
+    'angkat stacking context panel filter')
+  catatan.push('UBAH  src/components/FilterBar.jsx (relative z-40 agar dropdown di atas kartu)')
+}
+
+/* ========== Eksekusi ========== */
+if (gagal.length) {
+  console.error('PATCH DIBATALKAN (tidak ada file yang ditulis):')
+  gagal.forEach(function (g) { console.error('  - ' + g) })
+  process.exit(1)
+}
+if (controls != null) tulis('src/components/controls.jsx', controls)
+if (filter != null) tulis('src/components/FilterBar.jsx', filter)
+console.log('Patch dropdown clip selesai:')
+catatan.forEach(function (c) { console.log('  ' + c) })
+console.log('Silakan jalankan npm run dev untuk verifikasi.')
+````
+
+## File: patch-tanggal-valid-v1.cjs
+````javascript
+#!/usr/bin/env node
+/* patch-tanggal-valid-v1.cjs
+   Pemakaian: node patch-tanggal-valid-v1.cjs   (jalankan dari root repo)
+   Menerapkan otomatis fitur batas tanggal form (logbook, galeri, daftar hadir):
+   - tidak bisa memilih tanggal masa depan (dinamis sesuai tanggal perangkat),
+   - tidak bisa memilih tanggal sebelum hari pertama magang (8 September 2026),
+   - pesan error ramah saat tanggal terlarang diketuk atau saat submit.
+   Idempoten: bagian yang sudah terpasang akan dilewati. */
+const fs = require('fs')
+const path = require('path')
+
+const ROOT = process.cwd()
+const gagal = []
+const catatan = []
+
+function baca(rel) {
+  const p = path.join(ROOT, rel)
+  if (!fs.existsSync(p)) { gagal.push(rel + ' : file tidak ditemukan'); return null }
+  return fs.readFileSync(p, 'utf8')
+}
+function ganti(rel, src, pola, pengganti, label) {
+  if (src == null) return src
+  const hasil = src.replace(pola, pengganti)
+  if (hasil === src) gagal.push(rel + ' : pola tidak ditemukan -> ' + label)
+  return hasil
+}
+function tulis(rel, isi) {
+  fs.writeFileSync(path.join(ROOT, rel), isi, 'utf8')
+}
+
+/* ========== 1. src/lib/constants.js ========== */
+const KONSTANTA_TAMBAHAN = "\n/* Hari pertama masa magang BSI; form tidak menerima tanggal sebelum ini */\nexport const MULAI_MAGANG = '2026-09-08'\n"
+let constants = baca('src/lib/constants.js')
+if (constants != null && constants.indexOf('MULAI_MAGANG') !== -1) {
+  catatan.push('LEWATI src/lib/constants.js (sudah ada MULAI_MAGANG)')
+  constants = null
+} else if (constants != null) {
+  constants = constants.replace(/\s*$/, '') + KONSTANTA_TAMBAHAN
+  catatan.push('UBAH  src/lib/constants.js (+ MULAI_MAGANG)')
+}
+
+/* ========== 2. src/lib/format.js ========== */
+const FORMAT_FUNGSI = "\n/* Batas pilihan tanggal form: tidak sebelum hari pertama magang, tidak setelah hari ini.\n   Dinamis karena max diambil dari tanggal perangkat saat web dibuka. */\nexport function batasTanggalPilihan() {\n  return { min: MULAI_MAGANG, max: todayInput() }\n}\n/* Mengembalikan pesan error bila tanggal di luar batas, atau null bila valid.\n   Perbandingan string aman karena format tanggal ISO (YYYY-MM-DD). */\nexport function pesanTanggalTerlarang(value, min, max) {\n  if (!value) return null\n  if (max && value > max) {\n    return 'Tanggal ' + formatTanggal(value) + ' belum kamu lewati. Kamu hanya bisa memilih tanggal hari ini atau sebelumnya, karena logbook, galeri, dan daftar hadir mencatat kegiatan yang sudah benar-benar terjadi.'\n  }\n  if (min && value < min) {\n    return 'Tanggal ' + formatTanggal(value) + ' berada sebelum hari pertama masa magang (' + formatTanggal(min) + '). Silakan pilih tanggal pada rentang masa magang berlangsung, ya.'\n  }\n  return null\n}\n"
+let format = baca('src/lib/format.js')
+if (format != null && format.indexOf('batasTanggalPilihan') !== -1) {
+  catatan.push('LEWATI src/lib/format.js (sudah ada batasTanggalPilihan)')
+  format = null
+} else if (format != null) {
+  if (format.indexOf("./constants.js") === -1) {
+    format = "import { MULAI_MAGANG } from './constants.js'\n" + format
+  }
+  format = ganti('src/lib/format.js', format, /(export function todayInput\(\)\s*\{[^}]*\})/, '$1' + FORMAT_FUNGSI, 'sisip fungsi setelah todayInput')
+  catatan.push('UBAH  src/lib/format.js (+ batasTanggalPilihan, pesanTanggalTerlarang)')
+}
+
+/* ========== 3. src/components/controls.jsx ========== */
+const PICKDAY_BARU = "  function pickDay(d) {\n    const ds = view.y + '-' + pad(view.m + 1) + '-' + pad(d)\n    const pesan = pesanTanggalTerlarang(ds, props.min, props.max)\n    if (pesan) {\n      if (props.onTerlarang) props.onTerlarang(pesan)\n      return\n    }\n    props.onChange(ds)\n    setOpen(false)\n  }"
+const CELLS_BARU = "              {cells.map(function (d, i) {\n                if (d === null) return <span key={'kosong' + i} />\n                const isSel = sel && sel.y === view.y && sel.m === view.m && sel.d === d\n                const isToday = today.getFullYear() === view.y && today.getMonth() === view.m && today.getDate() === d\n                const terlarang = pesanTanggalTerlarang(view.y + '-' + pad(view.m + 1) + '-' + pad(d), props.min, props.max)\n                return (\n                  <button\n                    key={d}\n                    type=\"button\"\n                    onClick={function () { pickDay(d) }}\n                    title={terlarang || undefined}\n                    className={'mx-auto grid h-8 w-8 place-items-center rounded-lg text-sm ' + (terlarang ? 'opacity-35 cursor-not-allowed ' : '') + (isSel ? 'bg-bsi-800 font-semibold text-white' : isToday ? 'font-bold text-bsi-700 ring-1 ring-bsi-500' : 'text-slate-700 hover:bg-slate-100')}\n                  >\n                    {d}\n                  </button>\n                )\n              })}"
+let controls = baca('src/components/controls.jsx')
+if (controls != null && controls.indexOf('pesanTanggalTerlarang') !== -1) {
+  catatan.push('LEWATI src/components/controls.jsx (sudah ada pesanTanggalTerlarang)')
+  controls = null
+} else if (controls != null) {
+  controls = "import { pesanTanggalTerlarang } from '../lib/format.js'\n" + controls
+  controls = ganti('src/components/controls.jsx', controls,
+    /function pickDay\(d\)\s*\{\s*props\.onChange\(view\.y \+ '-' \+ pad\(view\.m \+ 1\) \+ '-' \+ pad\(d\)\)\s*setOpen\(false\)\s*\}/,
+    PICKDAY_BARU, 'ganti pickDay')
+  controls = ganti('src/components/controls.jsx', controls,
+    /\{cells\.map\(function \(d, i\) \{[\s\S]*?\n\s*\}\)\}/,
+    CELLS_BARU, 'ganti sel kalender')
+  catatan.push('UBAH  src/components/controls.jsx (picker menolak tanggal terlarang)')
+}
+
+/* ========== 4. src/pages/DashboardPage.jsx ========== */
+let dash = baca('src/pages/DashboardPage.jsx')
+if (dash != null && dash.indexOf('batasTanggalPilihan') !== -1) {
+  catatan.push('LEWATI src/pages/DashboardPage.jsx (sudah ada batasTanggalPilihan)')
+  dash = null
+} else if (dash != null) {
+  dash = ganti('src/pages/DashboardPage.jsx', dash,
+    "import { todayInput, detectMediaType, matchesDateFilters, urutkanTanggal } from '../lib/format.js'",
+    "import { todayInput, detectMediaType, matchesDateFilters, urutkanTanggal, batasTanggalPilihan, pesanTanggalTerlarang } from '../lib/format.js'",
+    'perluas import format')
+  dash = ganti('src/pages/DashboardPage.jsx', dash,
+    /(const toast = useToast\(\)\r?\n)/,
+    '$1  const batas = batasTanggalPilihan()\n  function tolakTanggal(pesan) { toast.gagal(pesan) }\n',
+    'sisip batas & tolakTanggal')
+  dash = ganti('src/pages/DashboardPage.jsx', dash,
+    /(async function submitLogbook\(e\)\s*\{\s*e\.preventDefault\(\))/,
+    '$1\n    const pesanTgl = pesanTanggalTerlarang(form.tanggal, batas.min, batas.max)\n    if (pesanTgl) { toast.gagal(pesanTgl); return }',
+    'guard submitLogbook')
+  dash = ganti('src/pages/DashboardPage.jsx', dash,
+    /(async function submitGaleri\(e\)\s*\{\s*e\.preventDefault\(\))/,
+    '$1\n    const pesanTgl = pesanTanggalTerlarang(galForm.tanggal, batas.min, batas.max)\n    if (pesanTgl) { toast.gagal(pesanTgl); return }',
+    'guard submitGaleri')
+  dash = ganti('src/pages/DashboardPage.jsx', dash,
+    /(async function submitHadir\(e\)\s*\{\s*e\.preventDefault\(\))/,
+    '$1\n    const pesanTgl = pesanTanggalTerlarang(hadirForm.tanggal, batas.min, batas.max)\n    if (pesanTgl) { toast.gagal(pesanTgl); return }',
+    'guard submitHadir')
+  dash = ganti('src/pages/DashboardPage.jsx', dash,
+    "<CustomDateInput value={form.tanggal} onChange={function (v) { setForm(Object.assign({}, form, { tanggal: v })) }} />",
+    "<CustomDateInput value={form.tanggal} onChange={function (v) { setForm(Object.assign({}, form, { tanggal: v })) }} min={batas.min} max={batas.max} onTerlarang={tolakTanggal} />",
+    'props tanggal logbook')
+  dash = ganti('src/pages/DashboardPage.jsx', dash,
+    "<CustomDateInput value={galForm.tanggal} onChange={function (v) { setGalForm(Object.assign({}, galForm, { tanggal: v })) }} />",
+    "<CustomDateInput value={galForm.tanggal} onChange={function (v) { setGalForm(Object.assign({}, galForm, { tanggal: v })) }} min={batas.min} max={batas.max} onTerlarang={tolakTanggal} />",
+    'props tanggal galeri')
+  dash = ganti('src/pages/DashboardPage.jsx', dash,
+    "<CustomDateInput value={hadirForm.tanggal} onChange={function (v) { setHadirForm(Object.assign({}, hadirForm, { tanggal: v })) }} />",
+    "<CustomDateInput value={hadirForm.tanggal} onChange={function (v) { setHadirForm(Object.assign({}, hadirForm, { tanggal: v })) }} min={batas.min} max={batas.max} onTerlarang={tolakTanggal} />",
+    'props tanggal hadir')
+  catatan.push('UBAH  src/pages/DashboardPage.jsx (3 form + 3 guard submit)')
+}
+
+/* ========== Eksekusi ========== */
+if (gagal.length) {
+  console.error('PATCH DIBATALKAN (tidak ada file yang ditulis):')
+  gagal.forEach(function (g) { console.error('  - ' + g) })
+  process.exit(1)
+}
+if (constants != null) tulis('src/lib/constants.js', constants)
+if (format != null) tulis('src/lib/format.js', format)
+if (controls != null) tulis('src/components/controls.jsx', controls)
+if (dash != null) tulis('src/pages/DashboardPage.jsx', dash)
+console.log('Patch tanggal valid selesai:')
+catatan.forEach(function (c) { console.log('  ' + c) })
+console.log('Silakan jalankan npm run dev untuk verifikasi.')
+````
+
 ## File: postcss.config.js
 ````javascript
 export default {
@@ -513,36 +1287,6 @@ Aplikasi single page berbasis React dengan data tersimpan di Supabase dan media 
 ## Catatan teknis
 - Seluruh konten dimuat lewat JavaScript, tersedia blok noscript berisi tautan halaman utama.
 - robots.txt mengizinkan perayap umum dan agen AI.
-````
-
-## File: src/lib/constants.js
-````javascript
-export const KATEGORI = [
-  'Administrasi',
-  'Pengarsipan',
-  'Layanan Nasabah',
-  'Back Office',
-  'Edukasi Produk',
-  'Pendataan',
-  'Rapat',
-  'Pelatihan',
-  'Dokumentasi',
-  'Pendukung Lain'
-]
-
-export const UNIT = ['Frontliner', 'Back Office', 'Marketing', 'Operasional', 'Umum']
-
-export const GALERI_KEGIATAN = [
-  'Dokumentasi',
-  'Administrasi',
-  'Layanan Nasabah',
-  'Edukasi',
-  'Pelatihan',
-  'Operasional',
-  'Lainnya'
-]
-/* Hari pertama masa magang BSI; form tidak menerima tanggal sebelum ini */
-export const MULAI_MAGANG = '2026-09-08'
 ````
 
 ## File: src/lib/drive.js
@@ -708,6 +1452,8 @@ import { KATEGORI } from '../lib/constants.js'
 import { inputCls, labelCls, btnPrimary, useToast, AutoTextArea, LabelProses } from '../components/ui.jsx'
 import { CustomSelect } from '../components/controls.jsx'
 import { SizedIcon } from '../components/icons.jsx'
+import { useNavigate } from 'react-router-dom'
+import PengingatBanner from '../components/PengingatBanner.jsx'
 
 const STATUS_HADIR = ['Masuk', 'Izin', 'Bolos']
 
@@ -734,6 +1480,9 @@ export default function QuickPage() {
 
   const [status, setStatus] = useState('Masuk')
   const [alasan, setAlasan] = useState('')
+  const navigate = useNavigate()
+  const [tanggalLogs, setTanggalLogs] = useState([])
+  const [hadirRows, setHadirRows] = useState([])
 
   const cameraRef = useRef(null)
   const galeriRef = useRef(null)
@@ -778,6 +1527,10 @@ export default function QuickPage() {
       setStatus(hadir.status)
       setAlasan(hadir.alasan || '')
     }
+        const pg = await supabase.from('logbooks').select('tanggal').eq('mahasiswa_id', mhs.id)
+    const ph = await supabase.from('daftar_hadir').select('tanggal, status').eq('mahasiswa_id', mhs.id)
+    setTanggalLogs((pg.data || []).map(function (x) { return x.tanggal }))
+    setHadirRows(ph.data || [])
     if (!senyap) setLoading(false)
   }
 
@@ -908,6 +1661,13 @@ export default function QuickPage() {
 
   return (
     <div className="mx-auto w-full max-w-xl space-y-5">
+      {!loading ? (
+        <PengingatBanner
+          tanggalLogbook={tanggalLogs}
+          hadir={hadirRows}
+          onIsi={function (t) { navigate('/dashboard?isi=' + t) }}
+        />
+      ) : null}
       <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8">
         <h1 className="text-xl font-black text-slate-900 sm:text-2xl">Isi Cepat</h1>
         <p className="mt-1 text-sm text-slate-600">{formatTanggal(tanggal)}</p>
@@ -1305,6 +2065,36 @@ export default async function handler(req, res) {
   }
   return res.status(429).json({ error: 'Kuota harian semua project video sudah habis. Coba lagi besok atau gunakan link video eksternal.', detail: terakhir })
 }
+````
+
+## File: src/lib/constants.js
+````javascript
+export const KATEGORI = [
+  'Administrasi',
+  'Pengarsipan',
+  'Layanan Nasabah',
+  'Back Office',
+  'Edukasi Produk',
+  'Pendataan',
+  'Rapat',
+  'Pelatihan',
+  'Dokumentasi',
+  'Pendukung Lain'
+]
+
+export const UNIT = ['Frontliner', 'Back Office', 'Marketing', 'Operasional', 'Umum']
+
+export const GALERI_KEGIATAN = [
+  'Dokumentasi',
+  'Administrasi',
+  'Layanan Nasabah',
+  'Edukasi',
+  'Pelatihan',
+  'Operasional',
+  'Lainnya'
+]
+/* Hari pertama masa magang BSI; form tidak menerima tanggal sebelum ini */
+export const MULAI_MAGANG = '2026-09-08'
 ````
 
 ## File: .gitignore
@@ -1727,95 +2517,6 @@ Setiap project YouTube mendapat kuota **5 upload/hari** (zona waktu Pacific). Ta
 Proyek internal untuk kegiatan magang Bank Syariah Indonesia. Hak cipta © 2026 Tim Magang BSI.
 ````
 
-## File: src/lib/format.js
-````javascript
-import { MULAI_MAGANG } from './constants.js'
-export function formatTanggal(s) {
-  if (!s) return 'Tanggal belum diisi'
-  const d = new Date(s + 'T00:00:00')
-  if (Number.isNaN(d.getTime())) return s
-  return d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-}
-
-export function formatTanggalShort(s) {
-  if (!s) return ''
-  const d = new Date(s + 'T00:00:00')
-  if (Number.isNaN(d.getTime())) return s
-  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
-}
-
-export function todayInput() {
-  const d = new Date()
-  const m = ('0' + (d.getMonth() + 1)).slice(-2)
-  const day = ('0' + d.getDate()).slice(-2)
-  return d.getFullYear() + '-' + m + '-' + day
-}
-/* Batas pilihan tanggal form: tidak sebelum hari pertama magang, tidak setelah hari ini.
-   Dinamis karena max diambil dari tanggal perangkat saat web dibuka. */
-export function batasTanggalPilihan() {
-  return { min: MULAI_MAGANG, max: todayInput() }
-}
-/* Mengembalikan pesan error bila tanggal di luar batas, atau null bila valid.
-   Perbandingan string aman karena format tanggal ISO (YYYY-MM-DD). */
-export function pesanTanggalTerlarang(value, min, max) {
-  if (!value) return null
-  if (max && value > max) {
-    return 'Tanggal ini belum kamu lewati, maksimal hari ini'
-  }
-  if (min && value < min) {
-    return 'Hari pertama magang tanggal (8 September 2026)'
-  }
-  return null
-}
-
-
-export function detectMediaType(u) {
-  let s = String(u || '')
-  const iK = s.indexOf('key=')
-  if (iK !== -1) s = decodeURIComponent(s.slice(iK + 4).split('&')[0])
-  const ext = s.split('?')[0].split('.').pop().toLowerCase()
-  return ['mp4', 'webm', 'ogg', 'mov', 'm4v'].indexOf(ext) !== -1 ? 'video' : 'foto'
-}
-
-export function matchesDateFilters(dateString, f) {
-  if (!dateString) return false
-  if (f.timeMode === 'bulan') {
-    if (f.bulan) {
-      if (f.bulan.length === 7) return dateString.slice(0, 7) === f.bulan
-      const p = dateString.split('-')
-      if (p.length < 2 || p[1] !== f.bulan) return false
-    }
-  } else if (f.timeMode === 'rentang') {
-    if (f.dari && dateString < f.dari) return false
-    if (f.sampai && dateString > f.sampai) return false
-  }
-  return true
-}
-export function waktuUrut(x) {
-  if (!x) return 0
-  const src = x.created_at || x.updated_at || ''
-  if (!src) return 0
-  const t = new Date(src).getTime()
-  return isNaN(t) ? 0 : t
-}
-export function urutkanTanggal(list, mode) {
-  const arr = (list || []).slice()
-  arr.sort(function (a, b) {
-    const ta = new Date(a.tanggal + 'T00:00:00').getTime()
-    const tb = new Date(b.tanggal + 'T00:00:00').getTime()
-    if (ta !== tb) return mode === 'terlama' ? ta - tb : tb - ta
-    const ca = waktuUrut(a)
-    const cb = waktuUrut(b)
-    if (ca !== cb) return mode === 'terlama' ? ca - cb : cb - ca
-    const ia = a.id || ''
-    const ib = b.id || ''
-    if (ia !== ib) return ia < ib ? (mode === 'terlama' ? -1 : 1) : (mode === 'terlama' ? 1 : -1)
-    return 0
-  })
-  return arr
-}
-````
-
 ## File: src/lib/logbook.js
 ````javascript
 import { supabase } from './supabase.js'
@@ -2203,6 +2904,95 @@ export function SkeletonChartRow() {
       <div className="skeleton mt-4 h-4 w-full rounded-full"></div>
     </div>
   )
+}
+````
+
+## File: src/lib/format.js
+````javascript
+import { MULAI_MAGANG } from './constants.js'
+export function formatTanggal(s) {
+  if (!s) return 'Tanggal belum diisi'
+  const d = new Date(s + 'T00:00:00')
+  if (Number.isNaN(d.getTime())) return s
+  return d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+export function formatTanggalShort(s) {
+  if (!s) return ''
+  const d = new Date(s + 'T00:00:00')
+  if (Number.isNaN(d.getTime())) return s
+  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+export function todayInput() {
+  const d = new Date()
+  const m = ('0' + (d.getMonth() + 1)).slice(-2)
+  const day = ('0' + d.getDate()).slice(-2)
+  return d.getFullYear() + '-' + m + '-' + day
+}
+/* Batas pilihan tanggal form: tidak sebelum hari pertama magang, tidak setelah hari ini.
+   Dinamis karena max diambil dari tanggal perangkat saat web dibuka. */
+export function batasTanggalPilihan() {
+  return { min: MULAI_MAGANG, max: todayInput() }
+}
+/* Mengembalikan pesan error bila tanggal di luar batas, atau null bila valid.
+   Perbandingan string aman karena format tanggal ISO (YYYY-MM-DD). */
+export function pesanTanggalTerlarang(value, min, max) {
+  if (!value) return null
+  if (max && value > max) {
+    return 'Tanggal ini belum kamu lewati!'
+  }
+  if (min && value < min) {
+    return 'Hari pertama magang tanggal (8 September 2026).'
+  }
+  return null
+}
+
+
+export function detectMediaType(u) {
+  let s = String(u || '')
+  const iK = s.indexOf('key=')
+  if (iK !== -1) s = decodeURIComponent(s.slice(iK + 4).split('&')[0])
+  const ext = s.split('?')[0].split('.').pop().toLowerCase()
+  return ['mp4', 'webm', 'ogg', 'mov', 'm4v'].indexOf(ext) !== -1 ? 'video' : 'foto'
+}
+
+export function matchesDateFilters(dateString, f) {
+  if (!dateString) return false
+  if (f.timeMode === 'bulan') {
+    if (f.bulan) {
+      if (f.bulan.length === 7) return dateString.slice(0, 7) === f.bulan
+      const p = dateString.split('-')
+      if (p.length < 2 || p[1] !== f.bulan) return false
+    }
+  } else if (f.timeMode === 'rentang') {
+    if (f.dari && dateString < f.dari) return false
+    if (f.sampai && dateString > f.sampai) return false
+  }
+  return true
+}
+export function waktuUrut(x) {
+  if (!x) return 0
+  const src = x.created_at || x.updated_at || ''
+  if (!src) return 0
+  const t = new Date(src).getTime()
+  return isNaN(t) ? 0 : t
+}
+export function urutkanTanggal(list, mode) {
+  const arr = (list || []).slice()
+  arr.sort(function (a, b) {
+    const ta = new Date(a.tanggal + 'T00:00:00').getTime()
+    const tb = new Date(b.tanggal + 'T00:00:00').getTime()
+    if (ta !== tb) return mode === 'terlama' ? ta - tb : tb - ta
+    const ca = waktuUrut(a)
+    const cb = waktuUrut(b)
+    if (ca !== cb) return mode === 'terlama' ? ca - cb : cb - ca
+    const ia = a.id || ''
+    const ib = b.id || ''
+    if (ia !== ib) return ia < ib ? (mode === 'terlama' ? -1 : 1) : (mode === 'terlama' ? 1 : -1)
+    return 0
+  })
+  return arr
 }
 ````
 
@@ -2788,290 +3578,6 @@ export default function Carousel(props) {
 }
 ````
 
-## File: src/components/controls.jsx
-````javascript
-import { pesanTanggalTerlarang } from '../lib/format.js'
-import { SelubungPanel } from './ui.jsx'
-import { useEffect, useRef, useState } from 'react'
-import { ICONS } from './icons.jsx'
-
-const BULAN_NAMA = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
-const BULAN_PENDEK = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
-const HARI_NAMA = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
-
-const defaultBtn = 'flex w-full items-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-bsi-500'
-
-function pad(n) {
-  return (n < 10 ? '0' : '') + n
-}
-
-function parseValue(value, mode) {
-  if (!value) return null
-  const p = String(value).split('-')
-  if (mode === 'month') {
-    if (p.length < 2) return null
-    const y = parseInt(p[0], 10)
-    const m = parseInt(p[1], 10) - 1
-    if (isNaN(y) || isNaN(m) || m < 0 || m > 11) return null
-    return { y: y, m: m }
-  }
-  if (p.length < 3) return null
-  const y = parseInt(p[0], 10)
-  const m = parseInt(p[1], 10) - 1
-  const d = parseInt(p[2], 10)
-  if (isNaN(y) || isNaN(m) || isNaN(d)) return null
-  return { y: y, m: m, d: d }
-}
-
-function useOutside(ref, open, setOpen) {
-  useEffect(function () {
-    if (!open) return undefined
-    function handler(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return function () { document.removeEventListener('mousedown', handler) }
-  }, [open])
-}
-
-export function CustomSelect(props) {
-  const [open, setOpen] = useState(false)
-  const boxRef = useRef(null)
-  useOutside(boxRef, open, setOpen)
-  const options = props.options || []
-  const current = options.find(function (o) { return o.value === props.value }) || null
-
-  return (
-    <div ref={boxRef} className={'relative ' + (props.className || '')}>
-      <button
-        type="button"
-        onClick={function () { setOpen(function (o) { return !o }) }}
-        className={(props.buttonCls || defaultBtn) + ' text-left'}
-      >
-        {props.icon ? <span className="shrink-0 text-slate-600">{props.icon}</span> : null}
-        <span className={'flex-1 truncate ' + (current ? 'text-slate-800' : 'text-slate-600')}>
-          {current ? current.label : (props.placeholder || 'Pilih')}
-        </span>
-        <span className={'shrink-0 text-slate-600 transition-transform duration-200 ' + (open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
-      </button>
-      <SelubungPanel open={open}>
-<div className="anim-modal absolute z-30 mt-2 max-h-64 w-full overflow-y-auto rounded-2xl border border-slate-200 bg-white py-1 shadow-xl">
-          {options.map(function (o) {
-            const active = o.value === props.value
-            return (
-              <button
-                type="button"
-                key={String(o.value)}
-                onClick={function () { props.onChange(o.value); setOpen(false) }}
-                className={'flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left text-sm ' + (active ? 'bg-bsi-800 text-white' : 'text-slate-700 hover:bg-slate-100')}
-              >
-                <span className="truncate">{o.label}</span>
-                {active ? <span className="shrink-0">{ICONS.check}</span> : null}
-              </button>
-            )
-          })}
-        </div>
-</SelubungPanel>
-    </div>
-  )
-}
-
-export function CustomDateInput(props) {
-  const mode = props.mode || 'date'
-  const [open, setOpen] = useState(false)
-  const [view, setView] = useState(function () {
-    const p = parseValue(props.value, mode)
-    const t = new Date()
-    return p ? { y: p.y, m: p.m } : { y: t.getFullYear(), m: t.getMonth() }
-  })
-  const boxRef = useRef(null)
-  useOutside(boxRef, open, setOpen)
-
-  const sel = parseValue(props.value, mode)
-  const today = new Date()
-
-  function toggle() {
-    if (!open) {
-      const p = parseValue(props.value, mode)
-      if (p) setView({ y: p.y, m: p.m })
-    }
-    setOpen(function (o) { return !o })
-  }
-
-  function shift(delta) {
-    setView(function (v) {
-      if (mode === 'month') return { y: v.y + delta, m: v.m }
-      let m = v.m + delta
-      let y = v.y
-      if (m < 0) { m = 11; y -= 1 }
-      if (m > 11) { m = 0; y += 1 }
-      return { y: y, m: m }
-    })
-  }
-
-    function pickDay(d) {
-    const ds = view.y + '-' + pad(view.m + 1) + '-' + pad(d)
-    const pesan = pesanTanggalTerlarang(ds, props.min, props.max)
-    if (pesan) {
-      if (props.onTerlarang) props.onTerlarang(pesan)
-      return
-    }
-    props.onChange(ds)
-    setOpen(false)
-  }
-
-  function pickMonth(m) {
-    props.onChange(view.y + '-' + pad(m + 1))
-    setOpen(false)
-  }
-
-  function pickToday() {
-    const t = new Date()
-    if (mode === 'month') props.onChange(t.getFullYear() + '-' + pad(t.getMonth() + 1))
-    else props.onChange(t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate()))
-    setOpen(false)
-  }
-
-  const label = sel
-    ? (mode === 'month' ? BULAN_NAMA[sel.m] + ' ' + sel.y : sel.d + ' ' + BULAN_PENDEK[sel.m] + ' ' + sel.y)
-    : ''
-
-  const firstDay = new Date(view.y, view.m, 1).getDay()
-  const daysCount = new Date(view.y, view.m + 1, 0).getDate()
-  const cells = []
-  for (let i = 0; i < firstDay; i++) cells.push(null)
-  for (let d = 1; d <= daysCount; d++) cells.push(d)
-
-  return (
-    <div ref={boxRef} className={'relative ' + (props.className || '')}>
-      <button type="button" onClick={toggle} className={(props.buttonCls || defaultBtn) + ' text-left'}>
-        <span className="shrink-0 text-slate-600">{ICONS.calendar}</span>
-        <span className={'flex-1 truncate ' + (props.value ? 'text-slate-800' : 'text-slate-600')}>
-          {label || (mode === 'month' ? 'Pilih Bulan' : 'Pilih Tanggal')}
-        </span>
-        <span className={'shrink-0 text-slate-600 transition-transform duration-200 ' + (open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
-      </button>
-      <SelubungPanel open={open}>
-<div className="anim-modal absolute z-30 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
-          <div className="flex items-center justify-between">
-            <button type="button" onClick={function () { shift(-1) }} className="grid h-8 w-8 place-items-center rounded-lg text-slate-600 hover:bg-slate-100">&#8249;</button>
-            <p className="text-sm font-bold text-slate-800">
-              {mode === 'month' ? String(view.y) : BULAN_NAMA[view.m] + ' ' + view.y}
-            </p>
-            <button type="button" onClick={function () { shift(1) }} className="grid h-8 w-8 place-items-center rounded-lg text-slate-600 hover:bg-slate-100">&#8250;</button>
-          </div>
-
-          {mode === 'date' ? (
-            <div className="mt-3 grid grid-cols-7 gap-1 text-center">
-              {HARI_NAMA.map(function (h) {
-                return <span key={h} className="py-1 text-[11px] font-semibold text-slate-600">{h}</span>
-              })}
-                            {cells.map(function (d, i) {
-                if (d === null) return <span key={'kosong' + i} />
-                const isSel = sel && sel.y === view.y && sel.m === view.m && sel.d === d
-                const isToday = today.getFullYear() === view.y && today.getMonth() === view.m && today.getDate() === d
-                const terlarang = pesanTanggalTerlarang(view.y + '-' + pad(view.m + 1) + '-' + pad(d), props.min, props.max)
-                return (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={function () { pickDay(d) }}
-                    title={terlarang || undefined}
-                    className={'mx-auto grid h-8 w-8 place-items-center rounded-lg text-sm ' + (terlarang ? 'opacity-35 cursor-not-allowed ' : '') + (isSel ? 'bg-bsi-800 font-semibold text-white' : isToday ? 'font-bold text-bsi-700 ring-1 ring-bsi-500' : 'text-slate-700 hover:bg-slate-100')}
-                  >
-                    {d}
-                  </button>
-                )
-              })}
-            </div>
-          ) : (
-            <div className="mt-3 grid grid-cols-3 gap-2">
-              {BULAN_NAMA.map(function (nama, m) {
-                const isSel = sel && sel.y === view.y && sel.m === m
-                const isNow = today.getFullYear() === view.y && today.getMonth() === m
-                return (
-                  <button
-                    key={nama}
-                    type="button"
-                    onClick={function () { pickMonth(m) }}
-                    className={'rounded-lg px-2 py-2 text-xs font-semibold ' + (isSel ? 'bg-bsi-800 text-white' : isNow ? 'text-bsi-700 ring-1 ring-bsi-500' : 'text-slate-700 hover:bg-slate-100')}
-                  >
-                    {nama}
-                  </button>
-                )
-              })}
-            </div>
-          )}
-
-          <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
-            <button type="button" onClick={function () { props.onChange(''); setOpen(false) }} className="text-sm font-semibold text-slate-600 hover:text-red-600">Hapus</button>
-            <button type="button" onClick={pickToday} className="text-sm font-semibold text-bsi-700 hover:text-bsi-900">Hari Ini</button>
-          </div>
-        </div>
-</SelubungPanel>
-    </div>
-  )
-}
-
-export function FileInput(props) {
-  const inputRef = useRef(null)
-  return (
-    <div className={props.className || ''}>
-      <input
-        ref={inputRef}
-        type="file"
-        accept={props.accept || 'image/*,video/*'}
-        className="hidden"
-        onChange={function (e) {
-          if (props.onChange) props.onChange(e)
-          e.target.value = ''
-        }}
-      />
-      <button
-        type="button"
-        onClick={function () { inputRef.current.click() }}
-        className="flex w-full items-center gap-3 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-4 py-4 text-left transition hover:border-bsi-500 hover:bg-slate-100"
-      >
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-bsi-100 text-bsi-800">{ICONS.image}</span>
-        <span className="min-w-0 flex-1">
-          <span className={'block truncate text-sm font-semibold ' + (props.fileName ? 'text-slate-800' : 'text-slate-600')}>
-            {props.fileName || props.label || 'Klik untuk Pilih Foto atau Video'}
-          </span>
-          <span className="block text-xs text-slate-600">{props.hint || 'Foto JPG, PNG, atau HEIC otomatis dikonversi. Video maks 50 MB.'}</span>
-        </span>
-        {props.fileName ? <span className="shrink-0 text-xs font-semibold text-bsi-700">Ganti</span> : null}
-      </button>
-    </div>
-  )
-}
-export function ToggleModeMedia(props) {
-  const cls = function (aktif) {
-    return 'px-3 py-1.5 rounded-xl text-xs font-bold ' + (aktif ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700')
-  }
-  return (
-    <div className={props.className || 'flex gap-2'}>
-      <button type="button" onClick={function () { props.onChange('foto') }} className={cls(props.value !== 'video')}>Foto</button>
-      <button type="button" onClick={function () { props.onChange('video') }} className={cls(props.value === 'video')}>Video</button>
-    </div>
-  )
-}
-
-export function SumberVideo(props) {
-  const habis = props.quotaRemaining <= 0
-  return (
-    <div className="space-y-2">
-      <p className="text-xs font-semibold text-slate-600">Sisa kuota unggah video hari ini: {props.quotaLoading ? <span className="inline-block w-3 h-3 ml-1 border-2 border-slate-400 border-t-transparent rounded-full animate-spin align-middle"></span> : <>{props.quotaRemaining} dari {props.quotaLimit}</>}</p>
-      <div className={habis && !props.fileName ? 'opacity-50 pointer-events-none' : ''}>
-        <FileInput accept="video/*" fileName={props.fileName || ''} label="Klik untuk Pilih Video" hint="Video maks 50 MB. Format MP4, MOV, WebM, atau MKV." onChange={props.onFile} />
-      </div>
-      {habis ? <p className="text-xs text-red-600">Kuota habis. Gunakan tautan video di bawah.</p> : null}
-      <input className={props.inputCls} value={props.ytLink} onChange={props.onYtLink} aria-label="Tautan video YouTube" placeholder="Tautan video YouTube (opsional)" />
-      <input className={props.inputCls} value={props.driveLink} onChange={props.onDriveLink} aria-label="Tautan Google Drive" placeholder="Tautan Google Drive (opsional)" />
-    </div>
-  )
-}
-````
-
 ## File: src/components/icons.jsx
 ````javascript
 function svg(inner, size) {
@@ -3519,125 +4025,295 @@ export default defineConfig(function ({ mode }) {
 })
 ````
 
-## File: src/components/FilterBar.jsx
+## File: src/components/controls.jsx
 ````javascript
-import { useEffect, useState } from 'react'
+import { pesanTanggalTerlarang } from '../lib/format.js'
+import { SelubungPanel } from './ui.jsx'
+import { useEffect, useRef, useState } from 'react'
 import { ICONS } from './icons.jsx'
-import { CustomSelect, CustomDateInput } from './controls.jsx'
 
-export function FilterSelect(props) {
-  return (
-    <CustomSelect
-      icon={props.icon}
-      value={props.value}
-      onChange={props.onChange}
-      options={props.options}
-      className="min-w-[190px]"
-      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
-    />
-  )
+const BULAN_NAMA = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
+const BULAN_PENDEK = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
+const HARI_NAMA = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
+
+const defaultBtn = 'flex w-full items-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-bsi-500'
+
+function pad(n) {
+  return (n < 10 ? '0' : '') + n
 }
 
-export function FilterDate(props) {
-  return (
-    <CustomDateInput
-      mode={props.mode || 'date'}
-      value={props.value}
-      onChange={props.onChange}
-      className="min-w-[170px]"
-      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
-    />
-  )
+function parseValue(value, mode) {
+  if (!value) return null
+  const p = String(value).split('-')
+  if (mode === 'month') {
+    if (p.length < 2) return null
+    const y = parseInt(p[0], 10)
+    const m = parseInt(p[1], 10) - 1
+    if (isNaN(y) || isNaN(m) || m < 0 || m > 11) return null
+    return { y: y, m: m }
+  }
+  if (p.length < 3) return null
+  const y = parseInt(p[0], 10)
+  const m = parseInt(p[1], 10) - 1
+  const d = parseInt(p[2], 10)
+  if (isNaN(y) || isNaN(m) || isNaN(d)) return null
+  return { y: y, m: m, d: d }
 }
 
-export function TimeFilter(props) {
-  const f = props.filter
-  const set = props.set
+function useOutside(ref, open, setOpen) {
+  useEffect(function () {
+    if (!open) return undefined
+    function handler(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return function () { document.removeEventListener('mousedown', handler) }
+  }, [open])
+}
+
+export function CustomSelect(props) {
+  const [open, setOpen] = useState(false)
+  const boxRef = useRef(null)
+  useOutside(boxRef, open, setOpen)
+  const options = props.options || []
+  const current = options.find(function (o) { return o.value === props.value }) || null
+
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <div className="time-toggle">
-        <button type="button" className={f.timeMode === 'bulan' ? 'active' : ''}
-          onClick={function () { set(Object.assign({}, f, { timeMode: 'bulan', bulan: '', dari: '', sampai: '' })) }}>Bulan</button>
-        <button type="button" className={f.timeMode === 'rentang' ? 'active' : ''}
-          onClick={function () { set(Object.assign({}, f, { timeMode: 'rentang', bulan: '', dari: '', sampai: '' })) }}>Rentang Waktu</button>
-      </div>
-      {f.timeMode === 'bulan'
-        ? <div key="bulan" className="anim-ganti-bulan flex flex-wrap items-center gap-2">
-<FilterDate mode="month" value={f.bulan} onChange={function (v) { set(Object.assign({}, f, { bulan: v })) }} />
-</div>
-        : <div key="rentang" className="anim-ganti-rentang flex flex-wrap items-center gap-2">
-            <FilterDate value={f.dari} onChange={function (v) { set(Object.assign({}, f, { dari: v })) }} />
-            <span className="text-slate-600 text-sm">sampai</span>
-            <FilterDate value={f.sampai} onChange={function (v) { set(Object.assign({}, f, { sampai: v })) }} />
-          </div>}
+    <div ref={boxRef} className={'relative ' + (props.className || '')}>
+      <button
+        type="button"
+        onClick={function () { setOpen(function (o) { return !o }) }}
+        className={(props.buttonCls || defaultBtn) + ' text-left'}
+      >
+        {props.icon ? <span className="shrink-0 text-slate-600">{props.icon}</span> : null}
+        <span className={'flex-1 truncate ' + (current ? 'text-slate-800' : 'text-slate-600')}>
+          {current ? current.label : (props.placeholder || 'Pilih')}
+        </span>
+        <span className={'shrink-0 text-slate-600 transition-transform duration-200 ' + (open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
+      </button>
+      <SelubungPanel open={open}>
+<div className="anim-modal absolute z-30 mt-2 max-h-64 w-full overflow-y-auto rounded-2xl border border-slate-200 bg-white py-1 shadow-xl">
+          {options.map(function (o) {
+            const active = o.value === props.value
+            return (
+              <button
+                type="button"
+                key={String(o.value)}
+                onClick={function () { props.onChange(o.value); setOpen(false) }}
+                className={'flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left text-sm ' + (active ? 'bg-bsi-800 text-white' : 'text-slate-700 hover:bg-slate-100')}
+              >
+                <span className="truncate">{o.label}</span>
+                {active ? <span className="shrink-0">{ICONS.check}</span> : null}
+              </button>
+            )
+          })}
+        </div>
+</SelubungPanel>
     </div>
   )
 }
 
-export function FilterBar(props) {
-  const [settled, setSettled] = useState(false)
-  useEffect(function () {
-    if (props.open) {
-      const t = setTimeout(function () { setSettled(true) }, 400)
-      return function () { clearTimeout(t) }
+export function CustomDateInput(props) {
+  const mode = props.mode || 'date'
+  const [open, setOpen] = useState(false)
+  const [alignRight, setAlignRight] = useState(false)
+
+  const [view, setView] = useState(function () {
+    const p = parseValue(props.value, mode)
+    const t = new Date()
+    return p ? { y: p.y, m: p.m } : { y: t.getFullYear(), m: t.getMonth() }
+  })
+  const boxRef = useRef(null)
+  useOutside(boxRef, open, setOpen)
+
+  const sel = parseValue(props.value, mode)
+  const today = new Date()
+
+  function toggle() {
+    if (!open) {
+      const p = parseValue(props.value, mode)
+      if (p) setView({ y: p.y, m: p.m })
+      if (boxRef.current) {
+        const r = boxRef.current.getBoundingClientRect()
+        const wadah = boxRef.current.closest('.filter-isi')
+        const batasKanan = wadah ? wadah.getBoundingClientRect().right : window.innerWidth - 8
+        setAlignRight(r.left + 296 > batasKanan)
+      }
     }
-    setSettled(false)
-    return undefined
-  }, [props.open])
+    setOpen(function (o) { return !o })
+  }
+
+  function shift(delta) {
+    setView(function (v) {
+      if (mode === 'month') return { y: v.y + delta, m: v.m }
+      let m = v.m + delta
+      let y = v.y
+      if (m < 0) { m = 11; y -= 1 }
+      if (m > 11) { m = 0; y += 1 }
+      return { y: y, m: m }
+    })
+  }
+
+    function pickDay(d) {
+    const ds = view.y + '-' + pad(view.m + 1) + '-' + pad(d)
+    const pesan = pesanTanggalTerlarang(ds, props.min, props.max)
+    if (pesan) {
+      if (props.onTerlarang) props.onTerlarang(pesan)
+      return
+    }
+    props.onChange(ds)
+    setOpen(false)
+  }
+
+  function pickMonth(m) {
+    props.onChange(view.y + '-' + pad(m + 1))
+    setOpen(false)
+  }
+
+  function pickToday() {
+    const t = new Date()
+    if (mode === 'month') props.onChange(t.getFullYear() + '-' + pad(t.getMonth() + 1))
+    else props.onChange(t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate()))
+    setOpen(false)
+  }
+
+  const label = sel
+    ? (mode === 'month' ? BULAN_NAMA[sel.m] + ' ' + sel.y : sel.d + ' ' + BULAN_PENDEK[sel.m] + ' ' + sel.y)
+    : ''
+
+  const firstDay = new Date(view.y, view.m, 1).getDay()
+  const daysCount = new Date(view.y, view.m + 1, 0).getDate()
+  const cells = []
+  for (let i = 0; i < firstDay; i++) cells.push(null)
+  for (let d = 1; d <= daysCount; d++) cells.push(d)
+
   return (
-    <div className="bsi-panel rounded-3xl p-4 lg:p-5">
-      <div className="flex items-center justify-between gap-3">
-        <button onClick={props.onToggle}
-          className="xl:hidden flex items-center gap-2 px-4 py-2.5 rounded-2xl border border-slate-200 bg-slate-50 text-sm font-semibold text-slate-700 hover:bg-slate-100">
-          <span className="text-bsi-700">{ICONS.funnel}</span>
-          <span>Filter</span>
-          {props.activeCount > 0 ? (
-            <span className="inline-flex items-center justify-center h-6 min-w-6 px-2 rounded-full bg-bsi-800 text-white text-xs font-bold">{props.activeCount}</span>
-          ) : null}
-          <span className={'transition-transform duration-200 text-slate-600 ' + (props.open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
-        </button>
-        <div className="hidden xl:block text-sm text-slate-600">
-          {props.activeCount > 0
-            ? <span className="inline-flex items-center gap-2"><span className="text-bsi-700">{ICONS.funnel}</span><span><strong className="text-slate-900">{props.activeCount}</strong> filter aktif</span></span>
-            : <span className="inline-flex items-center gap-2"><span className="text-slate-600">{ICONS.funnel}</span><span>Belum ada filter aktif</span></span>}
-        </div>
-      </div>
-            <div className={'filter-wrap' + (props.open ? ' filter-wrap-buka' : '')}>
-        <div className={'filter-dalam' + (props.open && settled ? ' filter-dalam-santai' : '')}>
-          <div className="filter-isi flex flex-wrap items-center gap-3">
-            {props.children}
-            {props.activeCount > 0 ? (
-              <button onClick={props.onReset}
-                className="inline-flex items-center gap-2 rounded-2xl bg-red-50 border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100">
-                {ICONS.close}<span>Hapus Filter</span>
-              </button>
-            ) : null}
+    <div ref={boxRef} className={'relative ' + (props.className || '')}>
+      <button type="button" onClick={toggle} className={(props.buttonCls || defaultBtn) + ' text-left'}>
+        <span className="shrink-0 text-slate-600">{ICONS.calendar}</span>
+        <span className={'flex-1 truncate ' + (props.value ? 'text-slate-800' : 'text-slate-600')}>
+          {label || (mode === 'month' ? 'Pilih Bulan' : 'Pilih Tanggal')}
+        </span>
+        <span className={'shrink-0 text-slate-600 transition-transform duration-200 ' + (open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
+      </button>
+      <SelubungPanel open={open}>
+<div className={'anim-modal absolute z-30 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl ' + (alignRight ? 'right-0' : '')}>
+          <div className="flex items-center justify-between">
+            <button type="button" onClick={function () { shift(-1) }} className="grid h-8 w-8 place-items-center rounded-lg text-slate-600 hover:bg-slate-100">&#8249;</button>
+            <p className="text-sm font-bold text-slate-800">
+              {mode === 'month' ? String(view.y) : BULAN_NAMA[view.m] + ' ' + view.y}
+            </p>
+            <button type="button" onClick={function () { shift(1) }} className="grid h-8 w-8 place-items-center rounded-lg text-slate-600 hover:bg-slate-100">&#8250;</button>
+          </div>
+
+          {mode === 'date' ? (
+            <div className="mt-3 grid grid-cols-7 gap-1 text-center">
+              {HARI_NAMA.map(function (h) {
+                return <span key={h} className="py-1 text-[11px] font-semibold text-slate-600">{h}</span>
+              })}
+                            {cells.map(function (d, i) {
+                if (d === null) return <span key={'kosong' + i} />
+                const isSel = sel && sel.y === view.y && sel.m === view.m && sel.d === d
+                const isToday = today.getFullYear() === view.y && today.getMonth() === view.m && today.getDate() === d
+                const terlarang = pesanTanggalTerlarang(view.y + '-' + pad(view.m + 1) + '-' + pad(d), props.min, props.max)
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={function () { pickDay(d) }}
+                    title={terlarang || undefined}
+                    className={'mx-auto grid h-8 w-8 place-items-center rounded-lg text-sm ' + (terlarang ? 'opacity-35 cursor-not-allowed ' : '') + (isSel ? 'bg-bsi-800 font-semibold text-white' : isToday ? 'font-bold text-bsi-700 ring-1 ring-bsi-500' : 'text-slate-700 hover:bg-slate-100')}
+                  >
+                    {d}
+                  </button>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {BULAN_NAMA.map(function (nama, m) {
+                const isSel = sel && sel.y === view.y && sel.m === m
+                const isNow = today.getFullYear() === view.y && today.getMonth() === m
+                return (
+                  <button
+                    key={nama}
+                    type="button"
+                    onClick={function () { pickMonth(m) }}
+                    className={'rounded-lg px-2 py-2 text-xs font-semibold ' + (isSel ? 'bg-bsi-800 text-white' : isNow ? 'text-bsi-700 ring-1 ring-bsi-500' : 'text-slate-700 hover:bg-slate-100')}
+                  >
+                    {nama}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
+            <button type="button" onClick={function () { props.onChange(''); setOpen(false) }} className="text-sm font-semibold text-slate-600 hover:text-red-600">Hapus</button>
+            <button type="button" onClick={pickToday} className="text-sm font-semibold text-bsi-700 hover:text-bsi-900">Hari Ini</button>
           </div>
         </div>
-      </div>
+</SelubungPanel>
     </div>
   )
 }
 
-export function SortSelect(props) {
+export function FileInput(props) {
+  const inputRef = useRef(null)
   return (
-    <CustomSelect
-      icon={ICONS.sort}
-      value={props.value}
-      onChange={props.onChange}
-      options={[{ value: 'terbaru', label: 'Terbaru' }, { value: 'terlama', label: 'Terlama' }]}
-      className="min-w-[150px]"
-      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
-    />
+    <div className={props.className || ''}>
+      <input
+        ref={inputRef}
+        type="file"
+        accept={props.accept || 'image/*,video/*'}
+        className="hidden"
+        onChange={function (e) {
+          if (props.onChange) props.onChange(e)
+          e.target.value = ''
+        }}
+      />
+      <button
+        type="button"
+        onClick={function () { inputRef.current.click() }}
+        className="flex w-full items-center gap-3 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-4 py-4 text-left transition hover:border-bsi-500 hover:bg-slate-100"
+      >
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-bsi-100 text-bsi-800">{ICONS.image}</span>
+        <span className="min-w-0 flex-1">
+          <span className={'block truncate text-sm font-semibold ' + (props.fileName ? 'text-slate-800' : 'text-slate-600')}>
+            {props.fileName || props.label || 'Klik untuk Pilih Foto atau Video'}
+          </span>
+          <span className="block text-xs text-slate-600">{props.hint || 'Foto JPG, PNG, atau HEIC otomatis dikonversi. Video maks 50 MB.'}</span>
+        </span>
+        {props.fileName ? <span className="shrink-0 text-xs font-semibold text-bsi-700">Ganti</span> : null}
+      </button>
+    </div>
   )
 }
-export function countActiveFilters(o) {
-  let c = 0
-  for (const k in o) {
-    if (k === 'timeMode') continue
-    if (o[k]) c++
+export function ToggleModeMedia(props) {
+  const cls = function (aktif) {
+    return 'px-3 py-1.5 rounded-xl text-xs font-bold ' + (aktif ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700')
   }
-  return c
+  return (
+    <div className={props.className || 'flex gap-2'}>
+      <button type="button" onClick={function () { props.onChange('foto') }} className={cls(props.value !== 'video')}>Foto</button>
+      <button type="button" onClick={function () { props.onChange('video') }} className={cls(props.value === 'video')}>Video</button>
+    </div>
+  )
+}
+
+export function SumberVideo(props) {
+  const habis = props.quotaRemaining <= 0
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-semibold text-slate-600">Sisa kuota unggah video hari ini: {props.quotaLoading ? <span className="inline-block w-3 h-3 ml-1 border-2 border-slate-400 border-t-transparent rounded-full animate-spin align-middle"></span> : <>{props.quotaRemaining} dari {props.quotaLimit}</>}</p>
+      <div className={habis && !props.fileName ? 'opacity-50 pointer-events-none' : ''}>
+        <FileInput accept="video/*" fileName={props.fileName || ''} label="Klik untuk Pilih Video" hint="Video maks 50 MB. Format MP4, MOV, WebM, atau MKV." onChange={props.onFile} />
+      </div>
+      {habis ? <p className="text-xs text-red-600">Kuota habis. Gunakan tautan video di bawah.</p> : null}
+      <input className={props.inputCls} value={props.ytLink} onChange={props.onYtLink} aria-label="Tautan video YouTube" placeholder="Tautan video YouTube (opsional)" />
+      <input className={props.inputCls} value={props.driveLink} onChange={props.onDriveLink} aria-label="Tautan Google Drive" placeholder="Tautan Google Drive (opsional)" />
+    </div>
+  )
 }
 ````
 
@@ -3863,6 +4539,128 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   })
   obs.observe(akar, { attributes: true, attributeFilter: ['class'] })
 })()
+````
+
+## File: src/components/FilterBar.jsx
+````javascript
+import { useEffect, useState } from 'react'
+import { ICONS } from './icons.jsx'
+import { CustomSelect, CustomDateInput } from './controls.jsx'
+
+export function FilterSelect(props) {
+  return (
+    <CustomSelect
+      icon={props.icon}
+      value={props.value}
+      onChange={props.onChange}
+      options={props.options}
+      className="min-w-[190px]"
+      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+    />
+  )
+}
+
+export function FilterDate(props) {
+  return (
+    <CustomDateInput
+      mode={props.mode || 'date'}
+      value={props.value}
+      onChange={props.onChange}
+      className="min-w-[170px]"
+      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+    />
+  )
+}
+
+export function TimeFilter(props) {
+  const f = props.filter
+  const set = props.set
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <div className="time-toggle">
+        <button type="button" className={f.timeMode === 'bulan' ? 'active' : ''}
+          onClick={function () { set(Object.assign({}, f, { timeMode: 'bulan', bulan: '', dari: '', sampai: '' })) }}>Bulan</button>
+        <button type="button" className={f.timeMode === 'rentang' ? 'active' : ''}
+          onClick={function () { set(Object.assign({}, f, { timeMode: 'rentang', bulan: '', dari: '', sampai: '' })) }}>Rentang Waktu</button>
+      </div>
+      {f.timeMode === 'bulan'
+        ? <div key="bulan" className="anim-ganti-bulan flex flex-wrap items-center gap-2">
+<FilterDate mode="month" value={f.bulan} onChange={function (v) { set(Object.assign({}, f, { bulan: v })) }} />
+</div>
+        : <div key="rentang" className="anim-ganti-rentang flex flex-wrap items-center gap-2">
+            <FilterDate value={f.dari} onChange={function (v) { set(Object.assign({}, f, { dari: v })) }} />
+            <span className="text-slate-600 text-sm">sampai</span>
+            <FilterDate value={f.sampai} onChange={function (v) { set(Object.assign({}, f, { sampai: v })) }} />
+          </div>}
+    </div>
+  )
+}
+
+export function FilterBar(props) {
+  const [settled, setSettled] = useState(false)
+  useEffect(function () {
+    if (props.open) {
+      const t = setTimeout(function () { setSettled(true) }, 400)
+      return function () { clearTimeout(t) }
+    }
+    setSettled(false)
+    return undefined
+  }, [props.open])
+  return (
+    <div className="bsi-panel relative z-40 rounded-3xl p-4 lg:p-5">
+      <div className="flex items-center justify-between gap-3">
+        <button onClick={props.onToggle}
+          className="xl:hidden flex items-center gap-2 px-4 py-2.5 rounded-2xl border border-slate-200 bg-slate-50 text-sm font-semibold text-slate-700 hover:bg-slate-100">
+          <span className="text-bsi-700">{ICONS.funnel}</span>
+          <span>Filter</span>
+          {props.activeCount > 0 ? (
+            <span className="inline-flex items-center justify-center h-6 min-w-6 px-2 rounded-full bg-bsi-800 text-white text-xs font-bold">{props.activeCount}</span>
+          ) : null}
+          <span className={'transition-transform duration-200 text-slate-600 ' + (props.open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
+        </button>
+        <div className="hidden xl:block text-sm text-slate-600">
+          {props.activeCount > 0
+            ? <span className="inline-flex items-center gap-2"><span className="text-bsi-700">{ICONS.funnel}</span><span><strong className="text-slate-900">{props.activeCount}</strong> filter aktif</span></span>
+            : <span className="inline-flex items-center gap-2"><span className="text-slate-600">{ICONS.funnel}</span><span>Belum ada filter aktif</span></span>}
+        </div>
+      </div>
+            <div className={'filter-wrap' + (props.open ? ' filter-wrap-buka' : '')}>
+        <div className={'filter-dalam' + (props.open && settled ? ' filter-dalam-santai' : '')}>
+          <div className="filter-isi flex flex-wrap items-center gap-3">
+            {props.children}
+            {props.activeCount > 0 ? (
+              <button onClick={props.onReset}
+                className="inline-flex items-center gap-2 rounded-2xl bg-red-50 border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100">
+                {ICONS.close}<span>Hapus Filter</span>
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function SortSelect(props) {
+  return (
+    <CustomSelect
+      icon={ICONS.sort}
+      value={props.value}
+      onChange={props.onChange}
+      options={[{ value: 'terbaru', label: 'Terbaru' }, { value: 'terlama', label: 'Terlama' }]}
+      className="min-w-[150px]"
+      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+    />
+  )
+}
+export function countActiveFilters(o) {
+  let c = 0
+  for (const k in o) {
+    if (k === 'timeMode') continue
+    if (o[k]) c++
+  }
+  return c
+}
 ````
 
 ## File: src/App.jsx
@@ -6669,7 +7467,7 @@ export function SelubungPanel(props) {
 ````javascript
 import { SkeletonDashboard } from '../components/Skeleton.jsx'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../lib/auth.js'
 import { uploadMedia, deleteMedia } from '../lib/upload.js'
@@ -6685,6 +7483,7 @@ import { LogbookCard, LogbookDetail, GalleryCard, GalleryDetail, AttendanceCard,
 import { CustomSelect, CustomDateInput, FileInput, ToggleModeMedia, SumberVideo } from '../components/controls.jsx'
 import { SizedIcon, ICONS } from '../components/icons.jsx'
 import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
+import PengingatBanner from '../components/PengingatBanner.jsx'
 
 function newItem() {
   return { key: Math.random().toString(36).slice(2), judul: '', deskripsi: '', hasil: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false, show: false, mode: 'foto', ytLink: '', oldYtId: null, oldSource: 'r2', driveLink: '' }
@@ -6763,6 +7562,8 @@ export default function DashboardPage() {
   const [pendingDelete, setPendingDelete] = useState(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [konfirmasiEdit, setKonfirmasiEdit] = useState(null)
+  const [dataSiap, setDataSiap] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
    const [refleksiFokus, setRefleksiFokus] = useState('')
    const refleksiRefs = useRef({})
    const refleksiPrevRects = useRef(null)
@@ -6866,6 +7667,7 @@ export default function DashboardPage() {
     setLogs(l.data || [])
     setGaleri(g.data || [])
     setHadir(h.data || [])
+    setDataSiap(true)
   }
 
   useEffect(function () {
@@ -6958,6 +7760,16 @@ export default function DashboardPage() {
        document.removeEventListener('click', onClickLink, true)
      }
    })
+   useEffect(function () {
+     if (!mahasiswa || !dataSiap) return
+     const t = searchParams.get('isi')
+     if (!t) return
+     setSearchParams({}, { replace: true })
+     const pesan = pesanTanggalTerlarang(t, batas.min, batas.max)
+     if (pesan) { toast.gagal(pesan); return }
+     isiLogbookTanggal(t)
+   }, [mahasiswa, dataSiap])
+
   if (loading || !mahasiswa) {
     return <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:py-8"><SkeletonDashboard /></div>
   }
@@ -7195,6 +8007,24 @@ export default function DashboardPage() {
     setEditHadirId(null)
     setHadirForm({ tanggal: todayInput(), status: 'Masuk', alasan: '' })
   }
+   function terapkanIsiTanggal(t) {
+     cancelEditLog()
+     setForm(function (f) { return Object.assign({}, f, { tanggal: t }) })
+     setTab('logbook')
+     gulirKeForm(refFormLog)
+   }
+   function isiLogbookTanggal(t) {
+     if (isLogbookDirty()) {
+       setKonfirmasiEdit({
+         judul: 'Ganti Draf Logbook?',
+         pesan: 'Isian form logbook yang belum disimpan akan hilang dan diganti dengan tanggal terlewat yang kamu pilih.',
+         aksi: function () { terapkanIsiTanggal(t) }
+       })
+       return
+     }
+     terapkanIsiTanggal(t)
+   }
+
 
   function deleteLog(log) { setPendingDelete({ type: 'log', data: log }) }
 
@@ -7487,6 +8317,13 @@ async function executeDelete() {
           </div>
         </div>
       </section>
+       {dataSiap ? (
+         <PengingatBanner
+           tanggalLogbook={logs.map(function (l) { return l.tanggal })}
+           hadir={hadir}
+           onIsi={isiLogbookTanggal}
+         />
+       ) : null}
 
       {tab === 'profil' ? (
         <section className="anim-tab mt-8 grid gap-6 lg:grid-cols-[0.85fr_1.15fr] items-start">

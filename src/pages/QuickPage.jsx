@@ -9,6 +9,8 @@ import { KATEGORI } from '../lib/constants.js'
 import { inputCls, labelCls, btnPrimary, useToast, AutoTextArea, LabelProses } from '../components/ui.jsx'
 import { CustomSelect } from '../components/controls.jsx'
 import { SizedIcon } from '../components/icons.jsx'
+import { useNavigate } from 'react-router-dom'
+import PengingatBanner from '../components/PengingatBanner.jsx'
 
 const STATUS_HADIR = ['Masuk', 'Izin', 'Bolos']
 
@@ -35,6 +37,9 @@ export default function QuickPage() {
 
   const [status, setStatus] = useState('Masuk')
   const [alasan, setAlasan] = useState('')
+  const navigate = useNavigate()
+  const [tanggalLogs, setTanggalLogs] = useState([])
+  const [hadirRows, setHadirRows] = useState([])
 
   const cameraRef = useRef(null)
   const galeriRef = useRef(null)
@@ -79,6 +84,10 @@ export default function QuickPage() {
       setStatus(hadir.status)
       setAlasan(hadir.alasan || '')
     }
+        const pg = await supabase.from('logbooks').select('tanggal').eq('mahasiswa_id', mhs.id)
+    const ph = await supabase.from('daftar_hadir').select('tanggal, status').eq('mahasiswa_id', mhs.id)
+    setTanggalLogs((pg.data || []).map(function (x) { return x.tanggal }))
+    setHadirRows(ph.data || [])
     if (!senyap) setLoading(false)
   }
 
@@ -209,6 +218,13 @@ export default function QuickPage() {
 
   return (
     <div className="mx-auto w-full max-w-xl space-y-5">
+      {!loading ? (
+        <PengingatBanner
+          tanggalLogbook={tanggalLogs}
+          hadir={hadirRows}
+          onIsi={function (t) { navigate('/dashboard?isi=' + t) }}
+        />
+      ) : null}
       <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8">
         <h1 className="text-xl font-black text-slate-900 sm:text-2xl">Isi Cepat</h1>
         <p className="mt-1 text-sm text-slate-600">{formatTanggal(tanggal)}</p>
