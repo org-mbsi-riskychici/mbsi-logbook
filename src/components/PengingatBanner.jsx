@@ -113,7 +113,13 @@ export default function PengingatBanner(props) {
     }
     ukur()
     window.addEventListener('resize', ukur)
-    return function () { window.removeEventListener('resize', ukur) }
+    /* ukur ulang saat banner berubah dari tersembunyi menjadi terlihat (misal pindah tab) */
+    let ro = null
+    if (refTiga.current && typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(ukur)
+      ro.observe(refTiga.current)
+    }
+    return function () { window.removeEventListener('resize', ukur); if (ro) ro.disconnect() }
   }, [terlewat.length])
   /* masuk: wrapper dibiarkan terlipat satu frame lalu dibuka supaya transisi tinggi
      berjalan dan konten di bawah bergeser mulus; keluar: wrapper merapat bersamaan

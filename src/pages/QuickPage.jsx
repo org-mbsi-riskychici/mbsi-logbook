@@ -227,8 +227,7 @@ export default function QuickPage() {
         </div>
       </section>
 
-      {tab === 'logbook' ? (
-        <>
+      <div className={tab === 'logbook' ? '' : 'hidden'}>
         {!loading ? (
           <PengingatBanner
             tipe="logbook"
@@ -237,6 +236,18 @@ export default function QuickPage() {
             onIsi={function (t) { navigate('/dashboard?isi=' + t) }}
           />
         ) : null}
+      </div>
+      <div className={tab === 'absen' ? '' : 'hidden'}>
+        {!loading ? (
+          <PengingatBanner
+            tipe="hadir"
+            tanggalLogbook={tanggalLogs}
+            hadir={hadirRows}
+            onIsi={function (t) { navigate('/dashboard?isiHadir=' + t) }}
+          />
+        ) : null}
+      </div>
+      {tab === 'logbook' ? (
         <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
           <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoLog.lama ? 'text-amber-600' : 'text-slate-500')}>
             <SizedIcon name="calendar" size={13} />
@@ -298,19 +309,9 @@ export default function QuickPage() {
             </button>
           </form>
         </section>
-        </>
       ) : null}
 
       {tab === 'absen' ? (
-        <>
-        {!loading ? (
-          <PengingatBanner
-            tipe="hadir"
-            tanggalLogbook={tanggalLogs}
-            hadir={hadirRows}
-            onIsi={function (t) { navigate('/dashboard?isiHadir=' + t) }}
-          />
-        ) : null}
         <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
           <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoHadir.lama ? 'text-amber-600' : 'text-slate-500')}>
             <SizedIcon name="clipboard" size={13} />
@@ -351,7 +352,6 @@ export default function QuickPage() {
             </button>
           </form>
         </section>
-        </>
       ) : null}
     </div>
   )

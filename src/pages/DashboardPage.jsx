@@ -889,6 +889,26 @@ async function executeDelete() {
         </div>
       </section>
 
+      <div className={tab === 'logbook' ? '' : 'hidden'}>
+        {dataSiap ? (
+          <PengingatBanner
+            tipe="logbook"
+            tanggalLogbook={logs.map(function (l) { return l.tanggal })}
+            hadir={hadir}
+            onIsi={isiLogbookTanggal}
+          />
+        ) : null}
+      </div>
+      <div className={tab === 'absen' ? '' : 'hidden'}>
+        {dataSiap ? (
+          <PengingatBanner
+            tipe="hadir"
+            tanggalLogbook={logs.map(function (l) { return l.tanggal })}
+            hadir={hadir}
+            onIsi={isiHadirTanggal}
+          />
+        ) : null}
+      </div>
       {tab === 'profil' ? (
         <section className="anim-tab mt-8 grid gap-6 lg:grid-cols-[0.85fr_1.15fr] items-start">
           <div className="card-hover bsi-panel rounded-[2rem] p-8 flex flex-col items-center text-center">
@@ -938,15 +958,6 @@ async function executeDelete() {
       ) : null}
 
       {tab === 'logbook' ? (
-        <>
-        {dataSiap ? (
-          <PengingatBanner
-            tipe="logbook"
-            tanggalLogbook={logs.map(function (l) { return l.tanggal })}
-            hadir={hadir}
-            onIsi={isiLogbookTanggal}
-          />
-        ) : null}
         <section className="anim-tab mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
           <div ref={refFormLog} className={'card-hover scroll-mt-24 bsi-panel rounded-[2rem] p-8 min-w-0 ' + (editLogId ? 'ring-2 ring-gold-500' : '')}>
             <ModeIndicator edit={!!editLogId} onCancel={cobaCancelEditLog} />
@@ -1077,7 +1088,6 @@ async function executeDelete() {
             <Pagination totalItems={logTotal} perPage={PER_PAGE_DASH} page={logPageAman} onPageChange={gantiHalamanLog} />
           </div>
         </section>
-        </>
       ) : null}
 
       {tab === 'galeri' ? (
@@ -1181,15 +1191,6 @@ async function executeDelete() {
       ) : null}
 
       {tab === 'absen' ? (
-        <>
-        {dataSiap ? (
-          <PengingatBanner
-            tipe="hadir"
-            tanggalLogbook={logs.map(function (l) { return l.tanggal })}
-            hadir={hadir}
-            onIsi={isiHadirTanggal}
-          />
-        ) : null}
         <section className="anim-tab mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr] items-start">
           <div ref={refFormHadir} className={'card-hover scroll-mt-24 bsi-panel rounded-[2rem] p-8 min-w-0 ' + (editHadirId ? 'ring-2 ring-gold-500' : '')}>
             <ModeIndicator edit={!!editHadirId} onCancel={cobaCancelEditHadir} />
@@ -1238,7 +1239,6 @@ async function executeDelete() {
             <Pagination totalItems={hadirTotal} perPage={PER_PAGE_DASH} page={hadirPageAman} onPageChange={gantiHalamanHadir} />
           </div>
         </section>
-        </>
       ) : null}
 
       <Modal open={!!detail} onClose={function () { setDetail(null) }}>
