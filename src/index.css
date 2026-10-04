@@ -919,3 +919,14 @@ body { background-color: #f4f8f4; background-image: linear-gradient(160deg, #dff
   transition: visibility 0.36s;
 }
 .pengingat-scroll-buka .pengingat-daftar-extra { visibility: visible; }
+@media (min-width: 640px) {
+  .avatar-kepala-cepat > button, .avatar-kepala-cepat > span {
+    width: 67px !important;
+    height: 67px !important;
+    border-radius: 20px !important;
+  }
+  .avatar-kepala-cepat img { border-radius: 20px !important; }
+  .avatar-kepala-cepat > button > span, .avatar-kepala-cepat > span > span {
+    font-size: 25px !important;
+  }
+}

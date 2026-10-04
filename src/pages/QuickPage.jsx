@@ -6,7 +6,7 @@ import { syncGaleriFromLogbook } from '../lib/logbook.js'
 import { urlPratinjau } from '../lib/konversi.js'
 import { todayInput, formatTanggal } from '../lib/format.js'
 import { KATEGORI } from '../lib/constants.js'
-import { inputCls, labelCls, btnPrimary, useToast, AutoTextArea, LabelProses } from '../components/ui.jsx'
+import { inputCls, labelCls, btnPrimary, useToast, AutoTextArea, LabelProses, Avatar } from '../components/ui.jsx'
 import { CustomSelect } from '../components/controls.jsx'
 import { SizedIcon } from '../components/icons.jsx'
 import { useNavigate } from 'react-router-dom'
@@ -219,8 +219,13 @@ export default function QuickPage() {
   return (
     <div className="mx-auto w-full max-w-xl space-y-5">
       <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8">
-        <h1 className="text-xl font-black text-slate-900 sm:text-2xl">Isi Cepat</h1>
-        <p className="mt-1 text-sm text-slate-600">{formatTanggal(tanggal)}</p>
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="avatar-kepala-dash avatar-kepala-cepat"><Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl" /></div>
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-xl font-black text-slate-900 sm:text-2xl">{mahasiswa.nama}</h1>
+            <p className="mt-1 truncate text-sm text-slate-600">{formatTanggal(tanggal)}</p>
+          </div>
+        </div>
         <div className="mt-4 flex gap-2">
           <button type="button" onClick={function () { setTab('logbook') }} className={tabCls('logbook')}>Logbook</button>
           <button type="button" onClick={function () { setTab('absen') }} className={tabCls('absen')}>Daftar Hadir</button>

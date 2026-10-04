@@ -63,7 +63,7 @@ export default function HomePage() {
               Portal Logbook, Galeri & Kehadiran Magang <span className="bsi-grad-text"></span>
             </h1>
             <p className="mt-4 max-w-2xl text-sm leading-relaxed text-slate-600 sm:mt-5 sm:text-base">
-              Platform terpusat untuk mendokumentasikan aktivitas dan kehadiran tim magang BSI.
+              Platform terpusat untuk mendokumentasikan aktivitas dan kehadiran tim magang.
             </p>
             <div className="mt-6 flex flex-wrap gap-2 sm:mt-8 sm:gap-3">
               <Link to="/logbook" className="inline-flex items-center gap-2 rounded-2xl bg-bsi-800 px-5 py-3 text-sm font-bold text-white shadow-lg hover:bg-bsi-900 sm:px-6 sm:text-base">Lihat Logbook</Link>
