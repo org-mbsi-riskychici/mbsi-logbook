@@ -822,7 +822,7 @@ body { background-color: #f4f8f4; background-image: linear-gradient(160deg, #dff
 /* hero-art-v2: cluster kartu + chip meregang setinggi hero, elemen tersebar atas-tengah-bawah supaya tidak ada pita kosong */
 .bsi-hero-art .bsi-mini-white { margin-top: 0; }
 .bsi-chip-c1 { top: 0; left: 52%; right: auto; bottom: auto; }
-.bsi-chip-c3 { top: 24%; right: -6px; left: auto; bottom: auto; }
+.bsi-chip-c3 { top: 12%; right: -6px; left: auto; bottom: auto; }
 .bsi-chip-c2 { bottom: 84px; left: 30%; right: auto; top: auto; }
 .bsi-pill-card { position: absolute; left: 8px; right: 24px; bottom: 8px; display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 16px; background: rgba(255,255,255,.65); border: 1px solid rgba(15,42,29,.10); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); color: #0f2a1d; box-shadow: 0 10px 24px -12px rgba(15,42,29,.18); }
 .dark .bsi-pill-card { background: rgba(16,42,29,.6); border-color: rgba(234,244,238,.10); color: #eaf4ee; }

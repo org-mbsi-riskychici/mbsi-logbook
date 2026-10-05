@@ -52,7 +52,7 @@ export default function HomePage() {
 
   return (
     <div>
-      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-6 sm:p-10 lg:px-12 lg:py-9">
+      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-6 sm:p-10 lg:px-12 lg:py-7">
         <div className="pointer-events-none absolute right-16 top-1/2 h-80 w-80 -translate-y-1/2 rounded-full bg-bsi-500/10 blur-3xl" />
         <span className="bsi-chip bsi-chip-deep bsi-chip-mobile-1 xl:hidden">▦</span>
         <span className="bsi-chip bsi-chip-gold bsi-chip-mobile-2 xl:hidden">▶</span>
@@ -74,16 +74,16 @@ export default function HomePage() {
                 : <Link to="/login" className="bsi-btn-white">Masuk Akun</Link>} */}
             </div>
           </div>
-          <div className="bsi-hero-art relative hidden w-[430px] shrink-0 self-stretch min-h-[350px] xl:block">
+          <div className="bsi-hero-art relative hidden w-[430px] shrink-0 self-stretch min-h-[300px] xl:block">
             <span className="bsi-chip bsi-chip-deep bsi-chip-c1">▦</span>
             <span className="bsi-chip bsi-chip-green bsi-chip-c3">✦</span>
             <span className="bsi-chip bsi-chip-gold bsi-chip-c2">▶</span>
-            <div className="bsi-mini-card bsi-mini-green absolute left-0 top-10 -rotate-2">
+            <div className="bsi-mini-card bsi-mini-green absolute left-0 top-8 -rotate-2">
               <p className="text-xs font-bold opacity-80">LOGBOOK PUBLIK</p>
               <p className="mt-1 text-3xl font-black">{loading ? '—' : stats.logbook}</p>
               <p className="mt-2 text-xs opacity-75">{loading ? 'Memuat data...' : stats.galeri + ' media di galeri'}</p>
             </div>
-            <div className="bsi-mini-card bsi-mini-white absolute right-0 top-[36%] rotate-2">
+            <div className="bsi-mini-card bsi-mini-white absolute right-0 top-[32%] rotate-2">
               <p className="text-xs font-bold opacity-80">KEHADIRAN TIM</p>
               <p className="mt-1 text-3xl font-black">{loading ? '—' : persenMasuk + '%'}</p>
               <div className="bsi-stack">
