@@ -3,7 +3,7 @@ import { useTheme } from '../lib/theme.jsx'
 import { useAuth, logoutMahasiswa } from '../lib/auth.js'
 import { SizedIcon } from './icons.jsx'
 import { ConfirmModal } from './ui.jsx'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 const LINKS = [
   { to: '/', label: 'Beranda' },
@@ -15,7 +15,7 @@ const LINKS = [
 
 function MenuMobile(props) {
   return (
-    <div className={'menu-mobile-wrap xl:hidden' + (props.open ? ' menu-mobile-buka' : '')}>
+    <div ref={props.menuRef} className={'menu-mobile-wrap xl:hidden' + (props.open ? ' menu-mobile-buka' : '')}>
       <div className="menu-mobile-dalam">
         <div className="menu-mobile-isi border-t border-slate-200 px-4 py-4 space-y-2">
           {props.children}
@@ -29,10 +29,40 @@ export default function Layout() {
   const { mahasiswa } = useAuth()
   const [open, setOpen] = useState(false)
   const [konfirmasiKeluar, setKonfirmasiKeluar] = useState(false)
+  const refMenu = useRef(null)
+  const refBtnHamburger = useRef(null)
   const navigate = useNavigate()
   const location = useLocation()
   const isAreaIntern = location.pathname.indexOf('/dashboard') === 0 ||
     location.pathname.indexOf('/qr') === 0
+
+  /* menu-auto-close-v1: tutup menu mobile saat user berinteraksi di luar
+     area menu atau tombol hamburger. Escape juga menutup menu. */
+  useEffect(function () {
+    if (!open) return undefined
+    function onDocPointer(e) {
+      const t = e.target
+      if (!t || !t.nodeType) return
+      if (refMenu.current && refMenu.current.contains(t)) return
+      if (refBtnHamburger.current && refBtnHamburger.current.contains(t)) return
+      if (t.closest && t.closest('.theme-toggle-btn')) return
+      setOpen(false)
+    }
+    function onKeyDown(e) {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('pointerdown', onDocPointer, true)
+    document.addEventListener('keydown', onKeyDown)
+    return function () {
+      document.removeEventListener('pointerdown', onDocPointer, true)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [open])
+
+  /* safety net: tutup menu saat rute berubah (misal back/forward browser) */
+  useEffect(function () {
+    setOpen(false)
+  }, [location.pathname])
   function mintaKeluar(e) {
     e.preventDefault()
     setOpen(false)
@@ -50,7 +80,7 @@ export default function Layout() {
 
   const themeBtn = function (extra) {
     return (
-      <button onClick={theme.toggle} className={'rounded-xl border border-slate-300 grid place-items-center hover:bg-slate-100 text-slate-700 ' + (extra || 'h-10 w-10')} title="Ganti Tema">
+      <button onClick={theme.toggle} className={'theme-toggle-btn rounded-xl border border-slate-300 grid place-items-center hover:bg-slate-100 text-slate-700 ' + (extra || 'h-10 w-10')} title="Ganti Tema">
         <SizedIcon name={theme.dark ? 'sun' : 'moon'} size={18} />
       </button>
     )
@@ -94,11 +124,11 @@ export default function Layout() {
             </div>
             <div className="flex xl:hidden items-center gap-2">
               {themeBtn()}
-              <button onClick={function () { setOpen(function (o) { return !o }) }} aria-label="Buka Menu" aria-expanded={open} title="Buka Menu" className="h-10 w-10 rounded-xl border border-slate-300 grid place-items-center text-slate-700 hover:bg-slate-100"><SizedIcon name="menu" size={20} /></button>
+              <button ref={refBtnHamburger} onClick={function () { setOpen(function (o) { return !o }) }} aria-label="Buka Menu" aria-expanded={open} title="Buka Menu" className="h-10 w-10 rounded-xl border border-slate-300 grid place-items-center text-slate-700 hover:bg-slate-100"><SizedIcon name="menu" size={20} /></button>
             </div>
           </div>
         </div>
-        <MenuMobile open={open}>
+        <MenuMobile open={open} menuRef={refMenu}>
             {LINKS.map(function (l) {
               return <NavLink key={l.to} to={l.to} end={l.to === '/'} onClick={function () { setOpen(false) }} className={function (s) { return 'flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm ' + (s.isActive ? 'bg-[rgba(39,192,109,.12)] text-[#177c48] font-bold dark:bg-[rgba(39,192,109,.18)] dark:text-[#86ecb0]' : 'font-semibold text-[#5f6f64] hover:bg-[rgba(15,42,29,.06)] dark:text-[#9db4a6] dark:hover:bg-[rgba(234,244,238,.07)]') }}>{function (s) { return <>{s.isActive ? <span className="h-2 w-2 shrink-0 rounded-full bg-current" /> : null}<span className="truncate">{l.label}</span></> }}</NavLink>
             })}
