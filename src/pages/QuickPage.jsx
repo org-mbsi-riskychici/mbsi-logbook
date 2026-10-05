@@ -11,6 +11,7 @@ import { CustomSelect } from '../components/controls.jsx'
 import { SizedIcon } from '../components/icons.jsx'
 import { useNavigate } from 'react-router-dom'
 import PengingatBanner from '../components/PengingatBanner.jsx'
+import { SkeletonQuick } from '../components/Skeleton.jsx'
 
 const STATUS_HADIR = ['Masuk', 'Izin', 'Bolos']
 
@@ -206,7 +207,7 @@ export default function QuickPage() {
   }
 
   if (loading) {
-    return <div className="grid min-h-[50vh] place-items-center"><div className="h-10 w-10 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div></div>
+    return <SkeletonQuick />
   }
 
   const infoLog = infoTerakhir(lastLogTanggal)

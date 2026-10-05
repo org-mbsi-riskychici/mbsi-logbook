@@ -1088,3 +1088,19 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
     margin-bottom: -0.06em;
   }
 }
+
+
+/* quick-header-bigger-v1: halaman /qr fokus ke identitas singkat,
+   jadi nama + tanggal sedikit lebih besar dari dashboard pada mobile.
+   Selector compound .avatar-kepala-dash.avatar-kepala-cepat punya
+   specificity (0,3,1) yang menang atas rule dashboard (0,2,1),
+   jadi hanya /qr yang berubah dan /dashboard tetap seperti semula. */
+@media (max-width: 639px) {
+  .avatar-kepala-dash.avatar-kepala-cepat ~ div h1 {
+    font-size: 1.125rem !important;
+    line-height: 1.5rem !important;
+  }
+  .avatar-kepala-dash.avatar-kepala-cepat ~ div p {
+    font-size: 0.875rem !important;
+  }
+}

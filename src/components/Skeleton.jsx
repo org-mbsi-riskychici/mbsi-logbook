@@ -234,3 +234,49 @@ export function SkeletonChartRow() {
     </div>
   )
 }
+
+export function SkeletonQuick() {
+  return (
+    <div className="mx-auto w-full max-w-xl space-y-5">
+      {/* Hero: avatar + identitas + tab switcher */}
+      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="avatar-kepala-cepat">
+            <div className="skeleton h-14 w-14 sm:h-[67px] sm:w-[67px]" style={{ borderRadius: '20px' }} />
+          </div>
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="skeleton h-5 w-48 rounded-full sm:h-6" />
+            <div className="skeleton h-3.5 w-40 rounded-full" />
+          </div>
+        </div>
+        <div className="mt-4 flex gap-2">
+          <div className="skeleton h-10 flex-1 rounded-xl sm:h-12 sm:rounded-2xl" />
+          <div className="skeleton h-10 flex-1 rounded-xl sm:h-12 sm:rounded-2xl" />
+        </div>
+      </section>
+
+      {/* Form logbook: info terakhir + kartu kegiatan */}
+      <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
+        <div className="mb-4 flex items-center gap-1.5">
+          <div className="skeleton h-3.5 w-3.5 rounded-full" />
+          <div className="skeleton h-3 w-56 rounded-full" />
+        </div>
+
+        <div className="mt-1.5 skeleton h-11 w-full rounded-2xl" />
+
+        <div className="mt-5 space-y-4">
+          <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="skeleton h-3 w-24 rounded-full" />
+            <div className="skeleton h-11 w-full rounded-2xl" />
+            <div className="skeleton h-16 w-full rounded-2xl" />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="skeleton h-12 w-full rounded-2xl" />
+              <div className="skeleton h-12 w-full rounded-2xl" />
+            </div>
+          </div>
+          <div className="skeleton h-12 w-full rounded-xl sm:h-14 sm:rounded-2xl" />
+        </div>
+      </section>
+    </div>
+  )
+}

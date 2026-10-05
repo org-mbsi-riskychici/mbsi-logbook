@@ -1,4 +1,4 @@
-import { SkeletonDashboard } from './components/Skeleton.jsx'
+import { SkeletonDashboard, SkeletonQuick } from './components/Skeleton.jsx'
 import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { ThemeProvider } from './lib/theme.jsx'
@@ -24,7 +24,7 @@ function ScrollToTop() {
 function RequireAuth(props) {
   const { mahasiswa, loading } = useAuth()
   const location = useLocation()
-  if (loading) return <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:py-8"><SkeletonDashboard /></div>
+  if (loading) return props.fallback || <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:py-8"><SkeletonDashboard /></div>
   if (!mahasiswa) return <Navigate to={'/login?next=' + encodeURIComponent(location.pathname + location.search)} replace />
   return props.children
 }
@@ -52,7 +52,7 @@ export default function App() {
             <Route path="/tim" element={<Navigate to="/dospem" replace />} />
             <Route path="/login" element={<RequireGuest><LoginPage /></RequireGuest>} />
             <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
-            <Route path="/qr" element={<RequireAuth><QuickPage /></RequireAuth>} />
+            <Route path="/qr" element={<RequireAuth fallback={<SkeletonQuick />}><QuickPage /></RequireAuth>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
