@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { loginWithNim } from '../lib/auth.js'
-import { inputCls, labelCls, btnPrimary } from '../components/ui.jsx'
+import { inputCls, labelCls, btnPrimary, LabelProses } from '../components/ui.jsx'
 import { EyeToggle, SizedIcon } from '../components/icons.jsx'
 
 function pesanErrorLogin(err) {
@@ -93,7 +93,7 @@ export default function LoginPage() {
               </button>
             </div>
           </div>
-          <button type="submit" disabled={busy} className={btnPrimary}>{busy ? 'Memproses...' : 'Masuk'}</button>
+          <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks="Memproses" /> : 'Masuk'}</button>
         </form>
       </div>
     </section>

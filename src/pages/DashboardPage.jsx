@@ -1006,7 +1006,7 @@ async function executeDelete() {
                     </div>
                   </div>
                   <div className="mt-4 flex gap-2">
-                    <button type="button" onClick={simpanFotoProfil} disabled={uploadingFoto || !fotoFile} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition disabled:opacity-50">{uploadingFoto ? 'Mengunggah...' : 'Simpan Foto'}</button>
+                    <button type="button" onClick={simpanFotoProfil} disabled={uploadingFoto || !fotoFile} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition disabled:opacity-50">{uploadingFoto ? 'Mengunggah...' : 'Simpan'}</button>
                     <button type="button" onClick={function () { setShowUploadFoto(false) }} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition">Batal</button>
                   </div>
                 </div>
@@ -1139,7 +1139,7 @@ async function executeDelete() {
                   onFocus={function () { fokusRefleksi('pembelajaran') }} onBlur={blurRefleksi} />
               </div>
               </div>
-              <button ref={function (el) { refleksiRefs.current.tombol = el }} type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks={infoProses || 'Menyimpan'} /> : (editLogId ? 'Simpan Perubahan' : 'Simpan Logbook')}</button>
+              <button ref={function (el) { refleksiRefs.current.tombol = el }} type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks={infoProses || 'Menyimpan'} /> : 'Simpan'}</button>
             </form>
           </div>
           <div className="space-y-5 min-w-0">
@@ -1239,7 +1239,7 @@ async function executeDelete() {
                 {editGalDerived ? <p className="mt-1 text-xs text-slate-600">Media ini berasal dari logbook. Perubahan hanya berlaku di galeri dan tidak mengubah logbook aslinya.</p> : null}
               </div>
               <div><label className={labelCls}>Deskripsi (Opsional)</label><AutoTextArea className={inputCls} value={galForm.deskripsi} onChange={function (e) { setGalForm(Object.assign({}, galForm, { deskripsi: e.target.value })) }} aria-label="Deskripsi Media" placeholder="Tambahkan keterangan media." /></div>
-              <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks={infoProses || 'Menyimpan'} /> : (editGalId ? 'Simpan Perubahan Media' : 'Unggah Media')}</button>
+              <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks={infoProses || 'Menyimpan'} /> : 'Simpan'}</button>
             </form>
           </div>
           <div className="space-y-5 min-w-0">
@@ -1291,7 +1291,7 @@ async function executeDelete() {
                 />
                 {hadirForm.status === 'Masuk' ? <p className="mt-1 text-xs text-slate-600">Alasan hanya diisi untuk status Izin atau Bolos.</p> : null}
               </div>
-              <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks="Menyimpan" /> : (editHadirId ? 'Simpan Perubahan' : 'Simpan Daftar Hadir')}</button>
+              <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks="Menyimpan" /> : 'Simpan'}</button>
             </form>
           </div>
           <div className="space-y-5 min-w-0">

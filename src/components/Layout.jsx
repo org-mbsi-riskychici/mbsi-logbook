@@ -94,7 +94,7 @@ export default function Layout() {
             </div>
             <div className="flex xl:hidden items-center gap-2">
               {themeBtn()}
-              <button onClick={function () { setOpen(function (o) { return !o }) }} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700">Menu</button>
+              <button onClick={function () { setOpen(function (o) { return !o }) }} aria-label="Buka Menu" aria-expanded={open} title="Buka Menu" className="h-10 w-10 rounded-xl border border-slate-300 grid place-items-center text-slate-700 hover:bg-slate-100"><SizedIcon name="menu" size={20} /></button>
             </div>
           </div>
         </div>

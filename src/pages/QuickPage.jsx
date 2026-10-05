@@ -311,7 +311,7 @@ export default function QuickPage() {
               ) : null}
             </div>
             <button type="submit" disabled={busy} className={btnPrimary}>
-              {busy ? <LabelProses teks={info || 'Menyimpan'} /> : (todayLog ? 'Tambah Kegiatan' : 'Simpan Logbook')}
+              {busy ? <LabelProses teks={info || 'Menyimpan'} /> : 'Simpan'}
             </button>
           </form>
         </section>
@@ -354,7 +354,7 @@ export default function QuickPage() {
               />
             </div>
             <button type="submit" disabled={busy} className={btnPrimary}>
-              {busy ? <LabelProses teks="Menyimpan" /> : (hadirHariIni ? 'Perbarui Daftar Hadir' : 'Simpan Daftar Hadir')}
+              {busy ? <LabelProses teks="Menyimpan" /> : 'Simpan'}
             </button>
           </form>
         </section>

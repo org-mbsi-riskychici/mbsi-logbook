@@ -160,21 +160,29 @@ export function SkeletonPersonCard() {
 export function SkeletonDashboard() {
   return (
     <div className="space-y-6">
-      {/* Header profil + tab */}
-      <div className="bsi-panel rounded-[2rem] p-5 shadow-sm sm:p-8 lg:p-10">
-        <div className="flex flex-wrap items-center gap-4 sm:gap-6">
-          <div className="skeleton h-14 w-14 shrink-0 sm:h-24 sm:w-24" style={{ borderRadius: '28%' }}></div>
-          <div className="min-w-0 flex-1 space-y-2">
-            <div className="skeleton h-5 w-48 rounded-full sm:h-6"></div>
-            <div className="skeleton h-3.5 w-28 rounded-full"></div>
-            <div className="skeleton h-3.5 w-32 rounded-full"></div>
+      {/* skeleton-dash-v2: header meniru layout baru (identitas di atas, tab di bawah) */}
+      <div className="bsi-panel rounded-[2rem] p-5 sm:p-8 lg:p-10">
+        <div className="flex flex-col gap-5 sm:gap-6">
+          {/* Baris identitas: avatar + badge, nama, NIM, prodi */}
+          <div className="flex flex-wrap items-center gap-4 sm:gap-6 min-w-0">
+            <div className="avatar-kepala-dash relative shrink-0">
+              <div className="skeleton h-14 w-14 shrink-0 rounded-[28%] sm:h-24 sm:w-24"></div>
+              <div className="skeleton !absolute h-[22px] w-[22px] rounded-full -bottom-[3px] -right-[3px] sm:h-9 sm:w-9 sm:-bottom-1.5 sm:-right-1.5"></div>
+            </div>
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className="skeleton h-4 w-48 rounded-full sm:h-7"></div>
+              <div className="skeleton h-3 w-28 rounded-full sm:h-4"></div>
+              <div className="skeleton h-3 w-32 rounded-full sm:h-4"></div>
+            </div>
           </div>
-        </div>
-        <div className="mt-6 flex flex-wrap gap-2 sm:mt-8">
-          <div className="skeleton h-9 w-24 rounded-2xl"></div>
-          <div className="skeleton h-9 w-20 rounded-2xl"></div>
-          <div className="skeleton h-9 w-28 rounded-2xl"></div>
-          <div className="skeleton h-9 w-20 rounded-2xl"></div>
+
+          {/* Baris tab: 4 pill (Logbook, Galeri, Hadir, Cetak QR) */}
+          <div className="flex flex-wrap gap-1.5 sm:gap-2">
+            <div className="skeleton h-9 w-20 rounded-xl sm:h-11 sm:w-28 sm:rounded-2xl"></div>
+            <div className="skeleton h-9 w-16 rounded-xl sm:h-11 sm:w-24 sm:rounded-2xl"></div>
+            <div className="skeleton h-9 w-16 rounded-xl sm:h-11 sm:w-32 sm:rounded-2xl"></div>
+            <div className="skeleton h-9 w-12 rounded-xl sm:h-11 sm:w-28 sm:rounded-2xl"></div>
+          </div>
         </div>
       </div>
 
