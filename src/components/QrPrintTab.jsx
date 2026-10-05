@@ -7,6 +7,7 @@ export default function QrPrintTab() {
   const { mahasiswa } = useAuth()
   const cardRef = useRef(null)
   const [unduh, setUnduh] = useState(false)
+  const [ukuranPrint, setUkuranPrint] = useState('a7')
 
   const targetUrl = window.location.origin + '/qr'
 
@@ -49,8 +50,8 @@ export default function QrPrintTab() {
       <style>{`
         @media print {
           @page {
-            size: A4 portrait;
-            margin: 1.5cm;
+            size: ${ukuranPrint === 'a7' ? 'A7 portrait' : 'A4 portrait'};
+            margin: ${ukuranPrint === 'a7' ? '4mm' : '1.5cm'};
           }
           *, *::before, *::after {
             -webkit-print-color-adjust: exact !important;
@@ -83,12 +84,102 @@ html, body {
   height: fit-content !important;
   box-shadow: none !important;
   background: linear-gradient(135deg, #e7f6ec 0%, #f4fbee 55%, #fdf4e3 100%) !important;
+  width: ${ukuranPrint === 'a7' ? '66mm' : '430px'} !important;
+  max-width: ${ukuranPrint === 'a7' ? '66mm' : '430px'} !important;
+  min-width: ${ukuranPrint === 'a7' ? '66mm' : '430px'} !important;
+  padding: ${ukuranPrint === 'a7' ? '4mm' : '2rem'} !important;
+  border-radius: ${ukuranPrint === 'a7' ? '5mm' : '2.5rem'} !important;
 }
 /* Paksa warna light mode saat print (aman dari dark mode) */
 .qr-print-card .text-slate-900 { color: #0f172a !important; }
 .qr-print-card .text-slate-700 { color: #334155 !important; }
 .qr-print-card .text-slate-500 { color: #64748b !important; }
 .qr-print-card .text-slate-400 { color: #94a3b8 !important; }
+          ${ukuranPrint === 'a7' ? `
+          /* A7-v14: hint 5.5pt + header sweet spot + radius 5mm + QR padding 2.5mm */
+
+          /* === QR code: 32mm === */
+          .qr-print-card svg[width="200"] { width: 32mm !important; height: 32mm !important; }
+
+          /* === Logo header: 10mm (v10: 8mm, v11: 12mm) === */
+          .qr-print-card .h-16.w-16 {
+            width: 10mm !important;
+            height: 10mm !important;
+            border-radius: 2.5mm !important;
+          }
+          .qr-print-card .h-16.w-16 svg { width: 6.5mm !important; height: 6.5mm !important; }
+
+          /* === Judul "GANK SKUYY": 11.5pt (v10: 10, v11: 13) === */
+          .qr-print-card h2 {
+            font-size: 11.5pt !important;
+            line-height: 1.15 !important;
+            gap: 1.8mm !important;
+            margin-bottom: 0.5mm !important;
+          }
+
+          /* === Tagline: 5.5pt (v10: 4.5, v11: 6) === */
+          .qr-print-card [class*="text-[11px]"] {
+            font-size: 5.5pt !important;
+            line-height: 1.25 !important;
+            letter-spacing: 0.15em !important;
+            margin-top: 1.3mm !important;
+          }
+
+          /* === Hint "SCAN QR CODE..." + "Untuk mengisi..." (5.5pt) === */
+          .qr-print-card .text-xs {
+            font-size: 5.5pt !important;
+            line-height: 1.35 !important;
+          }
+          .qr-print-card .space-y-1 > * + * { margin-top: 0.9mm !important; }
+
+          /* === QR container === */
+          .qr-print-card .p-4 {
+            padding: 2.5mm !important;
+            border-width: 0.3mm !important;
+            border-style: dashed !important;
+            border-radius: 3mm !important;
+            width: fit-content !important;
+            margin-left: auto !important;
+            margin-right: auto !important;
+          }
+
+          /* === URL box === */
+          .qr-print-card .url-box {
+            width: 80% !important;
+            max-width: 51mm !important;
+            padding: 1.7mm 2mm !important;
+            border-radius: 1.5mm !important;
+          }
+          .qr-print-card .url-label {
+            font-size: 4pt !important;
+            line-height: 1.15 !important;
+            letter-spacing: 0.12em !important;
+            margin: 0 !important;
+          }
+          .qr-print-card .url-text {
+            font-size: 4.5pt !important;
+            line-height: 1.2 !important;
+            margin-top: 0.9mm !important;
+          }
+
+          /* Override line-height */
+          .qr-print-card .leading-normal { line-height: 1.2 !important; }
+          .qr-print-card .mt-1 { margin-top: 0.9mm !important; }
+
+          /* === Spacing global === */
+          .qr-print-card .mt-4 { margin-top: 2mm !important; }
+          .qr-print-card .gap-3 { gap: 2mm !important; }
+          .qr-print-card .my-6 { margin-top: 3mm !important; margin-bottom: 3mm !important; }
+          .qr-print-card hr { margin-top: 3mm !important; margin-bottom: 3mm !important; }
+
+          /* === Aksen dekoratif sudut: 22mm === */
+          .qr-print-card .pointer-events-none.absolute { width: 22mm !important; height: 22mm !important; }
+          .qr-print-card .-right-10.-top-10 { right: -7mm !important; top: -7mm !important; }
+          .qr-print-card .-bottom-10.-left-10 { bottom: -7mm !important; left: -7mm !important; }
+
+          /* === Accent bar atas === */
+          .qr-print-card .top-0.inset-x-0.h-2 { height: 1mm !important; }
+          ` : ''}
         }
 
         /* Kartu QR selalu bertema terang: batalkan override dark mode di dalam kartu saja */
@@ -159,17 +250,43 @@ html, body {
             />
           </div>
 
-          <div className="w-full max-w-[20rem] border border-slate-200 px-4 py-3 rounded-2xl" style={{ background: '#ffffff' }}>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+          <div className="url-box w-full max-w-[20rem] border border-slate-200 px-4 py-3 rounded-2xl" style={{ background: '#ffffff' }}>
+            <p className="url-label text-[10px] text-slate-400 font-bold uppercase tracking-wider">
               Akses Tautan Manual
             </p>
-            <p className="text-xs font-mono font-bold text-slate-700 break-all leading-normal mt-1">
+            <p className="url-text text-xs font-mono font-bold text-slate-700 break-all leading-normal mt-1">
               {targetUrl}
             </p>
           </div>
         </section>
 
         {/* Tombol Aksi (tidak ikut tercetak / terunduh) */}
+        <section className="mx-auto w-full max-w-md bsi-panel rounded-2xl p-5">
+          <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">Ukuran Cetak</p>
+          <div className="mt-3 flex gap-2">
+            {[{ id: 'a7', label: 'Saku (A7)', sub: '7,4 × 10,5 cm' }, { id: 'a4', label: 'Standee (A4)', sub: '21 × 29,7 cm' }].map(function (u) {
+              const aktif = ukuranPrint === u.id
+              return (
+                <button
+                  key={u.id}
+                  type="button"
+                  onClick={function () { setUkuranPrint(u.id) }}
+                  className={
+                    'flex-1 rounded-2xl px-3 py-3 text-left transition ' +
+                    (aktif ? 'bg-bsi-800 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200')
+                  }
+                >
+                  <p className={'text-sm font-bold ' + (aktif ? 'text-white' : 'text-slate-800')}>{u.label}</p>
+                  <p className={'mt-0.5 text-xs ' + (aktif ? 'text-white/75' : 'text-slate-500')}>{u.sub}</p>
+                </button>
+              )
+            })}
+          </div>
+          <p className="mt-3 text-xs text-slate-500">
+            Pilihan <strong>Saku</strong> dicetak di kertas A7 (atau potong dari A4). Pilihan <strong>Standee</strong> cocok untuk ditempel di meja.
+          </p>
+        </section>
+
         <section className="mx-auto w-full max-w-md bsi-panel rounded-2xl p-5 flex flex-col sm:flex-row gap-3">
           <button
             type="button"
