@@ -31,7 +31,7 @@ export default function QrPrintTab() {
       const url = canvas.toDataURL('image/png', 1.0)
       const a = document.createElement('a')
       a.href = url
-      a.download = 'Standee-QR-' + (mahasiswa ? mahasiswa.nama.replace(/\s+/g, '-') : 'mahasiswa') + '.png'
+      a.download = 'QR-' + (mahasiswa ? mahasiswa.nama.replace(/\s+/g, '-') : 'mahasiswa') + '.png'
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
