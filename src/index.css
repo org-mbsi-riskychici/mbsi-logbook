@@ -613,7 +613,7 @@ button:active:not(:disabled), a:active, .clickable:active { transition-duration:
 
 /* kepala-dash-responsif: avatar header dashboard mengecil proporsional di layar sempit, desktop tetap 96px */
 @media (max-width: 639px) {
-  .avatar-kepala-dash > button, .avatar-kepala-dash > span {
+  .avatar-kepala-dash > button:not(.avatar-edit-badge), .avatar-kepala-dash > span:not(.avatar-edit-badge) {
     width: 56px !important;
     height: 56px !important;
     border-radius: 16px !important;
@@ -626,7 +626,7 @@ button:active:not(:disabled), a:active, .clickable:active { transition-duration:
 
 /* proporsional-mobile-v1: teks header dashboard, avatar profil, dan iframe video menyesuaikan layar sempit */
 @media (max-width: 639px) {
-  .avatar-kepala-dash ~ div h1 { font-size: 1.125rem !important; line-height: 1.625rem !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }
+  .avatar-kepala-dash ~ div h1 { font-size: 1rem !important; line-height: 1.375rem !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }
   .avatar-kepala-dash ~ div p { font-size: 0.75rem !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }
   .avatar-kepala-dash ~ div .inline-flex { font-size: 0.625rem !important; padding: 0.25rem 0.5rem !important; }
   
@@ -928,5 +928,163 @@ body { background-color: #f4f8f4; background-image: linear-gradient(160deg, #dff
   .avatar-kepala-cepat img { border-radius: 20px !important; }
   .avatar-kepala-cepat > button > span, .avatar-kepala-cepat > span > span {
     font-size: 25px !important;
+  }
+}
+
+
+/* tab-scroll-v1: deret tab dashboard jadi satu baris yang bisa digeser horizontal
+   di mobile/tablet, tanpa scrollbar terlihat dan dengan gradien tepi sebagai isyarat.
+   Di sm ke atas kembali wrap normal supaya tetap rapi di layar lebar. */
+.tab-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+}
+.tab-scroll::-webkit-scrollbar { display: none; }
+.tab-scroll > button { scroll-snap-align: start; }
+
+/* fade .tab-scroll lama dihapus, diganti overlay tab-scroll-wrap */
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-scroll { scroll-behavior: auto; }
+}
+
+
+/* tab-fade-smooth-v1: fade tepi nav tab dashboard pakai overlay pseudo-element.
+   opacity-nya dianimasikan supaya muncul/hilang mulus, tidak mengandalkan
+   animasi mask-image yang tidak stabil antar browser.
+   Warna fade diambil dari CSS variable --tab-fade-bg yang otomatis switch
+   di dark mode, jadi tidak perlu duplikasi rules per tema. */
+:root { --tab-fade-bg: rgba(244, 251, 245, 1); }
+html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
+
+.tab-scroll-wrap {
+  position: relative;
+  width: 100%;
+}
+
+@media (min-width: 640px) {
+  /* di layar lebar nav wrap, tidak ada scroll, fade tidak perlu */
+  .tab-scroll-wrap { display: contents; }
+}
+
+@media (max-width: 639px) {
+  .tab-scroll-wrap::before,
+  .tab-scroll-wrap::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 32px;
+    z-index: 2;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: opacity;
+  }
+  .tab-scroll-wrap::before {
+    left: 0;
+    background: linear-gradient(to right, var(--tab-fade-bg) 0%, var(--tab-fade-bg) 25%, transparent 100%);
+  }
+  .tab-scroll-wrap::after {
+    right: 0;
+    background: linear-gradient(to left, var(--tab-fade-bg) 0%, var(--tab-fade-bg) 25%, transparent 100%);
+  }
+  .tab-scroll-wrap.tab-scroll-kiri::before { opacity: 1; }
+  .tab-scroll-wrap.tab-scroll-kanan::after { opacity: 1; }
+}
+
+@media (max-width: 639px) and (prefers-reduced-motion: reduce) {
+  .tab-scroll-wrap::before,
+  .tab-scroll-wrap::after {
+    transition-duration: 0.01ms;
+  }
+}
+
+
+/* tab-icon-sizeflex: ikon tab sedikit lebih besar di sm ke atas supaya
+   seimbang dengan label yang juga membesar (text-xs -> text-sm).
+   Nilai height diset juga karena svg punya attr height dari JSX. */
+.tab-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+@media (min-width: 640px) {
+  .tab-icon svg {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+
+/* avatar-edit-badge: tombol pensil kecil di sudut kanan-bawah avatar,
+   pola edit foto profil ala aplikasi sosial media.
+   Ukuran proporsional berbeda di mobile (avatar 56px) dan desktop (avatar 96px).
+   Border putih supaya "pop" dari avatar, dan border gelap di dark mode.
+   Warna hijau mengikuti palet bsi (bsi-800 di light, bsi-500 di dark). */
+.avatar-edit-badge {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  line-height: 0;
+  border-radius: 9999px;
+  background: #16623c;
+  color: #ffffff;
+  border: 2px solid #ffffff;
+  box-shadow: 0 2px 6px rgba(15, 42, 29, 0.28);
+  cursor: pointer;
+  z-index: 2;
+  transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.15s ease;
+}
+.avatar-edit-badge:hover { background: #135033; transform: scale(1.08); }
+.avatar-edit-badge:active { transform: scale(0.94); }
+.avatar-edit-badge svg { display: block; }
+
+@media (max-width: 639px) {
+  .avatar-edit-badge {
+    width: 22px;
+    height: 22px;
+    right: -3px;
+    bottom: -3px;
+    border-width: 1.5px;
+  }
+  .avatar-edit-badge svg { width: 11px; height: 11px; }
+}
+@media (min-width: 640px) {
+  .avatar-edit-badge {
+    width: 36px;
+    height: 36px;
+    right: -6px;
+    bottom: -6px;
+  }
+  .avatar-edit-badge svg { width: 16px; height: 16px; }
+}
+
+/* dark mode: border warna card gelap, badge pakai hijau terang bsi-500 */
+.dark .avatar-edit-badge {
+  border-color: #0e2a1c;
+  background: #27c06d;
+  color: #06281a;
+}
+.dark .avatar-edit-badge:hover { background: #34d399; }
+
+
+/* descender-fix-v1: heading nama di header dashboard (dan halaman QR)
+   sering kepotong descender huruf 'y', 'g', 'p', 'q' karena kombinasi
+   overflow: hidden dari utility `truncate` dan line-height Tailwind
+   text-4xl (1.11) yang terlalu ketat untuk font weight 800.
+   Perbaikan: line-height lebih longgar + padding-bottom kecil sebagai
+   safety margin, dan margin-bottom negatif setara supaya tinggi total
+   h1 tidak bertambah (layout di bawahnya tetap sama). */
+@media (min-width: 640px) {
+  .avatar-kepala-dash ~ div h1,
+  .avatar-kepala-cepat ~ div h1 {
+    line-height: 1.3 !important;
+    padding-bottom: 0.06em;
+    margin-bottom: -0.06em;
   }
 }

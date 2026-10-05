@@ -43,6 +43,12 @@ const LOG_INITIAL = { kategori: '', status: '', timeMode: 'bulan', bulan: '', da
 const GAL_INITIAL = { kegiatan: '', tipe: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
 const HADIR_INITIAL = { status: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
 const PER_PAGE_DASH = 6
+const TAB_DASHBOARD = [
+  { id: 'logbook', label: 'Logbook',      mobile: 'Logbook', icon: 'file' },
+  { id: 'galeri',  label: 'Galeri',       mobile: 'Galeri',  icon: 'image' },
+  { id: 'absen',   label: 'Daftar Hadir', mobile: 'Hadir',   icon: 'clipboard' },
+  { id: 'qr',      label: 'Cetak QR',     mobile: 'QR',      icon: 'qrcode' }
+]
 
 function ModeIndicator(props) {
   return (
@@ -68,6 +74,7 @@ export default function DashboardPage() {
   const batas = batasTanggalPilihan()
   function tolakTanggal(pesan) { toast.gagal(pesan) }
   const [tab, setTab] = useState('logbook')
+  const [tabEdge, setTabEdge] = useState({ left: false, right: false })
   const [logs, setLogs] = useState([])
   const [galeri, setGaleri] = useState([])
   const [hadir, setHadir] = useState([])
@@ -190,6 +197,7 @@ export default function DashboardPage() {
   const refFormHadir = useRef(null)
   const refListGal = useRef(null)
   const refListHadir = useRef(null)
+  const refNavTab = useRef(null)
 
   async function refresh() {
     if (!mahasiswa) return
@@ -220,6 +228,39 @@ export default function DashboardPage() {
     setGalPage(1)
     setHadirPage(1)
   }, [logFilter, galFilter, hadirFilter, sort])
+
+  useEffect(function () {
+    const nav = refNavTab.current
+    if (!nav) return
+    const aktif = nav.querySelector('[aria-current="page"]')
+    if (!aktif || typeof aktif.scrollIntoView !== 'function') return
+    aktif.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+  }, [tab])
+
+  useEffect(function () {
+    const nav = refNavTab.current
+    if (!nav) return
+    function perbaruiTabEdge() {
+      const max = nav.scrollWidth - nav.clientWidth
+      setTabEdge({
+        left: nav.scrollLeft > 2,
+        right: max > 2 && nav.scrollLeft < max - 2
+      })
+    }
+    perbaruiTabEdge()
+    nav.addEventListener('scroll', perbaruiTabEdge, { passive: true })
+    window.addEventListener('resize', perbaruiTabEdge)
+    let ro = null
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(perbaruiTabEdge)
+      ro.observe(nav)
+    }
+    return function () {
+      nav.removeEventListener('scroll', perbaruiTabEdge)
+      window.removeEventListener('resize', perbaruiTabEdge)
+      if (ro) ro.disconnect()
+    }
+  }, [tab, dataSiap])
 
    /* ===== proteksi-unsaved-v1: cegah kehilangan draf saat pindah tab/halaman, batal edit, atau tutup tab ===== */
    const [unsavedModal, setUnsavedModal] = useState(null)
@@ -863,30 +904,59 @@ async function executeDelete() {
      setTab(tabBaru)
    }
 
-  const tabCls = function (t) {
-    return 'px-4 py-2.5 rounded-xl text-xs sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm font-bold ' + (tab === t ? 'bg-bsi-800 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200')
-  }
-
-  return (
+    return (
     <div>
       <section className="card-hover bsi-panel rounded-[2rem] p-5 sm:p-8 lg:p-10">
-        <div className="flex flex-wrap items-center justify-between gap-4 sm:gap-6">
-          <div>
-            <div className="flex flex-wrap items-center gap-4 sm:gap-6">
-              <div className="avatar-kepala-dash"><Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl" onClick={function () { gantiTab('profil') }} title="Kelola Foto Profil" /></div>
-              <div className="min-w-0 flex-1">
-                <h1 className="truncate text-lg sm:text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">{mahasiswa.nama}</h1>
-                <p className="text-sm text-slate-600">NIM {mahasiswa.nim}</p>
-                {mahasiswa.prodi ? <p className="truncate text-sm text-slate-600">{mahasiswa.prodi}</p> : null}
-              </div>
+        <div className="flex flex-col gap-5 sm:gap-6">
+          <div className="flex flex-wrap items-center gap-4 sm:gap-6 min-w-0">
+            <div className="avatar-kepala-dash relative shrink-0">
+              <Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl" onClick={function () { gantiTab('profil') }} title="Kelola Profil" />
+              <button
+                type="button"
+                onClick={function () { gantiTab('profil') }}
+                aria-label="Edit Profil"
+                title="Edit Profil"
+                className="avatar-edit-badge"
+              >
+                <SizedIcon name="pencil" size={13} />
+              </button>
+            </div>
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-lg sm:text-2xl md:text-3xl lg:text-4xl font-black text-slate-900">{mahasiswa.nama}</h1>
+              <p className="text-sm sm:text-base text-slate-600">NIM {mahasiswa.nim}</p>
+              {mahasiswa.prodi ? <p className="truncate text-sm sm:text-base text-slate-600">{mahasiswa.prodi}</p> : null}
             </div>
           </div>
-          <div className="flex flex-wrap gap-2 sm:mt-8">
-            <button onClick={function () { gantiTab('logbook') }} className={tabCls('logbook')}>Logbook</button>
-            <button onClick={function () { gantiTab('galeri') }} className={tabCls('galeri')}>Galeri</button>
-            <button onClick={function () { gantiTab('absen') }} className={tabCls('absen')}>Daftar Hadir</button>
-            <button onClick={function () { gantiTab('profil') }} className={tabCls('profil')}>Profil</button>
-             <button onClick={function () { gantiTab('qr') }} className={tabCls('qr')}>Cetak QR</button>
+          <div className={'tab-scroll-wrap' + (tabEdge.left ? ' tab-scroll-kiri' : '') + (tabEdge.right ? ' tab-scroll-kanan' : '')}>
+            <nav
+              ref={refNavTab}
+              aria-label="Navigasi dashboard"
+              className="tab-scroll flex gap-1.5 overflow-x-auto w-full sm:flex-wrap"
+            >
+            {TAB_DASHBOARD.map(function (t) {
+              const aktif = tab === t.id
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={function () { gantiTab(t.id) }}
+                  aria-label={t.label}
+                  aria-current={aktif ? 'page' : undefined}
+                  className={
+                    'shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap ' +
+                    'sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm ' +
+                    (aktif
+                      ? 'bg-bsi-800 text-white shadow-sm'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800/60 dark:text-slate-200 dark:hover:bg-slate-800')
+                  }
+                >
+                  <span className="tab-icon shrink-0"><SizedIcon name={t.icon} size={15} /></span>
+                  <span className="hidden sm:inline">{t.label}</span>
+                  <span className="sm:hidden">{t.mobile}</span>
+                </button>
+              )
+            })}
+            </nav>
           </div>
         </div>
       </section>
@@ -1229,7 +1299,7 @@ async function executeDelete() {
             <FilterBar open={hadirFilterOpen} onToggle={function () { setHadirFilterOpen(function (o) { return !o }) }} activeCount={hadirFilterActive} onReset={function () { setHadirFilter(HADIR_INITIAL) }}>
               <FilterSelect icon={ICONS.check} value={hadirFilter.status} onChange={function (v) { setHadirFilter(Object.assign({}, hadirFilter, { status: v })) }} options={[{ value: '', label: 'Semua Status' }, { value: 'Masuk', label: 'Masuk' }, { value: 'Izin', label: 'Izin' }, { value: 'Bolos', label: 'Bolos' }]} />
               <TimeFilter filter={hadirFilter} set={setHadirFilter} />
-              <SortSelect value={sort} onChange={setHadirFilterOpen && setSort ? setSort : setSort} />
+              <SortSelect value={sort} onChange={setSort} />
             </FilterBar>
             <p className="text-sm text-slate-600">Total {filteredHadir.length} catatan{hadirTotalPages > 1 ? ' • Halaman ' + hadirPageAman + ' dari ' + hadirTotalPages : ''}</p>
             <div className="grid gap-5 md:grid-cols-2 kartu-grid">
