@@ -17,7 +17,7 @@ function MenuMobile(props) {
   return (
     <div className={'menu-mobile-wrap xl:hidden' + (props.open ? ' menu-mobile-buka' : '')}>
       <div className="menu-mobile-dalam">
-        <div className="menu-mobile-isi border-t border-slate-200 bg-white px-4 py-4 space-y-2">
+        <div className="menu-mobile-isi border-t border-slate-200 px-4 py-4 space-y-2">
           {props.children}
         </div>
       </div>
