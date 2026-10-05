@@ -1,4 +1,4 @@
-import { Outlet, Link, NavLink, useNavigate } from 'react-router-dom'
+import { Outlet, Link, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useTheme } from '../lib/theme.jsx'
 import { useAuth, logoutMahasiswa } from '../lib/auth.js'
 import { SizedIcon } from './icons.jsx'
@@ -30,6 +30,9 @@ export default function Layout() {
   const [open, setOpen] = useState(false)
   const [konfirmasiKeluar, setKonfirmasiKeluar] = useState(false)
   const navigate = useNavigate()
+  const location = useLocation()
+  const isAreaIntern = location.pathname.indexOf('/dashboard') === 0 ||
+    location.pathname.indexOf('/qr') === 0
   function mintaKeluar(e) {
     e.preventDefault()
     setOpen(false)
@@ -81,7 +84,9 @@ export default function Layout() {
               {mahasiswa ? (
                 <>
                   <Link to="/dashboard" className="px-4 py-2 rounded-xl bg-bsi-800 text-white text-sm font-semibold hover:bg-bsi-900">Dashboard</Link>
-                  <button type="button" onClick={mintaKeluar} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-100">Keluar</button>
+                  {isAreaIntern ? (
+                    <button type="button" onClick={mintaKeluar} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-100">Keluar</button>
+                  ) : null}
                 </>
               ) : (
                 <Link to="/login" className="px-4 py-2 rounded-xl bg-bsi-800 text-white text-sm font-semibold hover:bg-bsi-900">Masuk</Link>
@@ -100,7 +105,9 @@ export default function Layout() {
             {mahasiswa ? (
               <>
                 <NavLink to="/dashboard" onClick={function () { setOpen(false) }} className={function (s) { return 'flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm font-semibold bg-bsi-800 text-white ' + (s.isActive ? 'ring-2 ring-gold-400' : '') }}>{function (s) { return <>{s.isActive ? <span className="h-2 w-2 shrink-0 rounded-full bg-gold-400" /> : null}<span className="truncate">Dashboard</span></> }}</NavLink>
-                <button type="button" onClick={mintaKeluar} className="block w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700">Keluar</button>
+                {isAreaIntern ? (
+                  <button type="button" onClick={mintaKeluar} className="block w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700">Keluar</button>
+                ) : null}
               </>
             ) : (
               <Link to="/login" onClick={function () { setOpen(false) }} className="block px-4 py-3 rounded-xl bg-bsi-800 text-white text-sm font-semibold">Masuk</Link>
