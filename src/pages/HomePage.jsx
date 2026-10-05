@@ -66,7 +66,7 @@ export default function HomePage() {
               Platform terpusat untuk mendokumentasikan aktivitas dan kehadiran tim magang.
             </p>
             <div className="mt-6 flex flex-wrap gap-2 sm:mt-8 sm:gap-3">
-              <Link to="/logbook" className="inline-flex items-center gap-2 rounded-2xl bg-bsi-800 px-5 py-3 text-sm font-bold text-white shadow-lg hover:bg-bsi-900 sm:px-6 sm:text-base">Lihat Logbook</Link>
+              <Link to="/logbook" className="inline-flex items-center gap-2 rounded-2xl bg-bsi-800 px-5 py-3 text-sm font-bold text-white shadow-lg hover:bg-bsi-900 sm:px-6 sm:text-base">Logbook</Link>
               {/* <Link to="/galeri" className="bsi-btn-glass">Lihat Galeri</Link> */}
               <Link to="/absen" className="bsi-btn-glass">Daftar Hadir</Link>
               {/* {mahasiswa

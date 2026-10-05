@@ -91,7 +91,7 @@ export async function uploadToYouTube(sessionUri, blob, onProgress) {
 export async function unggahVideoYouTube(file, judul, onProgress) {
   const sesiData = await supabase.auth.getSession()
   const token = await ambilTokenSesi()
-  const sesi = await startYouTubeSession(judul || 'Dokumentasi Magang', 'Diunggah dari portal logbook magang BSI.', file.type || 'video/mp4', token)
+  const sesi = await startYouTubeSession(judul || 'Dokumentasi Magang', 'Diunggah dari portal magang BSI.', file.type || 'video/mp4', token)
   return await uploadToYouTube(sesi.sessionUri, file, onProgress)
 }
 

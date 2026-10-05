@@ -41,9 +41,8 @@ export default function DospemPage() {
   return (
     <div>
       <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8 lg:p-12">
-        <span className="bsi-pill">Untuk Dospem & Kaprodi</span>
-        <h1 className="mt-6 text-2xl sm:text-2xl sm:text-3xl lg:text-5xl font-black max-w-3xl leading-tight text-slate-900">Ringkasan Kegiatan Magang Tim di Bank BSI</h1>
-        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-600 sm:mt-4 sm:text-base">Halaman ini dapat diakses tanpa login.</p>
+        <h1 className="text-2xl sm:text-2xl sm:text-3xl lg:text-5xl font-black max-w-3xl leading-tight text-slate-900">Ringkasan Kegiatan Magang Tim di Bank BSI</h1>
+        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-600 sm:mt-4 sm:text-base">Halaman ringkasan detail mahasiswa magang.</p>
         <div className="mt-5 grid grid-cols-2 gap-2.5 sm:mt-8 sm:gap-4 xl:grid-cols-4">
           {loading
             ? [0, 1, 2, 3].map(function (i) {
@@ -62,9 +61,9 @@ export default function DospemPage() {
               ]}
         </div>
         <div className="mt-6 flex flex-wrap gap-2 sm:mt-8 sm:gap-3">
-          <Link to="/logbook" className="px-4 py-2 rounded-xl bg-gold-500 text-slate-900 text-xs font-bold hover:bg-gold-400 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat Logbook</Link>
-          <Link to="/galeri" className="px-4 py-2 rounded-xl bsi-panel text-slate-700 text-xs font-bold hover:text-bsi-800 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat Galeri</Link>
-          <Link to="/absen" className="px-4 py-2 rounded-xl bsi-panel text-slate-700 text-xs font-bold hover:text-bsi-800 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Lihat Daftar Hadir</Link>
+          <Link to="/logbook" className="px-4 py-3 rounded-xl bg-gold-500 text-slate-900 text-xs font-bold hover:bg-gold-400 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Logbook</Link>
+          <Link to="/galeri" className="px-4 py-3 rounded-xl bsi-panel text-slate-700 text-xs font-bold hover:text-bsi-800 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Galeri</Link>
+          <Link to="/absen" className="px-4 py-3 rounded-xl bsi-panel text-slate-700 text-xs font-bold hover:text-bsi-800 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Daftar Hadir</Link>
         </div>
       </section>
 
