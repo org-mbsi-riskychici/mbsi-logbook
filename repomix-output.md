@@ -99,11 +99,51 @@ package.json
 postcss.config.js
 README.md
 tailwind.config.js
+tess.html
+tess2.html
 vercel.json
 vite.config.js
 ````
 
 # Files
+
+## File: src/lib/supabase.js
+````javascript
+import { createClient } from '@supabase/supabase-js'
+
+export const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+)
+````
+
+## File: .env.example
+````
+VITE_SUPABASE_URL=
+VITE_SUPABASE_ANON_KEY=
+R2_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET_NAME=mbsi-media
+R2_PUBLIC_BASE_URL=
+````
+
+## File: postcss.config.js
+````javascript
+export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {}
+  }
+}
+````
+
+## File: vercel.json
+````json
+{
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}
+````
 
 ## File: api/_lib/sesi.js
 ````javascript
@@ -173,6 +213,31 @@ export async function getAccessToken(kred) {
   const j = await r.json()
   cacheToken[kred.n] = { token: j.access_token, expire: now + (j.expires_in || 3600) * 1000 }
   return j.access_token
+}
+````
+
+## File: api/r2/delete.js
+````javascript
+import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3'
+import { cekSesi } from '../_lib/sesi.js'
+
+const s3 = new S3Client({
+  region: 'auto',
+  endpoint: 'https://' + process.env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
+  }
+})
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const user = await cekSesi(process.env, req.headers.authorization)
+  if (!user) return res.status(401).json({ error: 'Sesi tidak valid' })
+  const { key } = req.body || {}
+  if (!key) return res.status(400).json({ error: 'Key tidak ada' })
+  await s3.send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key }))
+  return res.status(200).json({ ok: true })
 }
 ````
 
@@ -330,16 +395,6 @@ export async function hapusFotoProfil(mahasiswaId, fotoUrl) {
 }
 ````
 
-## File: src/lib/supabase.js
-````javascript
-import { createClient } from '@supabase/supabase-js'
-
-export const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-)
-````
-
 ## File: supabase/migrasi-drive-download.sql
 ````sql
 -- Migrasi fitur download Google Drive
@@ -350,15 +405,129 @@ alter table public.logbook_items add column if not exists drive_id text;
 alter table public.galeri add column if not exists drive_id text;
 ````
 
-## File: .env.example
-````
-VITE_SUPABASE_URL=
-VITE_SUPABASE_ANON_KEY=
-R2_ACCOUNT_ID=
-R2_ACCESS_KEY_ID=
-R2_SECRET_ACCESS_KEY=
-R2_BUCKET_NAME=mbsi-media
-R2_PUBLIC_BASE_URL=
+## File: supabase/schema.sql
+````sql
+create extension if not exists "pgcrypto";
+create table public.mahasiswa (
+  id uuid primary key default gen_random_uuid(),
+  auth_uid uuid unique references auth.users(id) on delete cascade,
+  nim varchar(20) not null unique,
+  nama varchar(100) not null,
+  created_at timestamptz not null default now()
+);
+create table public.logbooks (
+  id uuid primary key default gen_random_uuid(),
+  mahasiswa_id uuid not null references public.mahasiswa(id) on delete cascade,
+  tanggal date not null,
+  unit varchar(50),
+  kategori varchar(50) not null,
+  judul varchar(255) not null,
+  kendala text,
+  solusi text,
+  pembelajaran text,
+  status varchar(20) not null default 'draft' check (status in ('draft','publik')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create table public.logbook_items (
+  id uuid primary key default gen_random_uuid(),
+  logbook_id uuid not null references public.logbooks(id) on delete cascade,
+  urutan integer not null default 1,
+  judul varchar(255) not null,
+  deskripsi text,
+  hasil text,
+  media_path text,
+  media_type varchar(10) check (media_type in ('foto','video')),
+  show_in_gallery boolean not null default false,
+  created_at timestamptz not null default now()
+);
+create table public.galeri (
+  id uuid primary key default gen_random_uuid(),
+  mahasiswa_id uuid not null references public.mahasiswa(id) on delete cascade,
+  logbook_item_id uuid unique references public.logbook_items(id) on delete cascade,
+  judul varchar(255) not null,
+  deskripsi text,
+  tanggal date not null,
+  kegiatan varchar(50),
+  media_path text not null,
+  media_type varchar(10) not null check (media_type in ('foto','video')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create table public.daftar_hadir (
+  id uuid primary key default gen_random_uuid(),
+  mahasiswa_id uuid not null references public.mahasiswa(id) on delete cascade,
+  tanggal date not null,
+  status varchar(20) not null check (status in ('Masuk','Izin','Bolos')),
+  alasan text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (mahasiswa_id, tanggal)
+);
+create or replace function public.set_updated_at() returns trigger language plpgsql as $$
+begin
+  new.updated_at = now();
+  return new;
+end $$;
+create trigger trg_logbooks_upd before update on public.logbooks for each row execute function public.set_updated_at();
+create trigger trg_galeri_upd before update on public.galeri for each row execute function public.set_updated_at();
+create trigger trg_hadir_upd before update on public.daftar_hadir for each row execute function public.set_updated_at();
+create index idx_logbooks_mahasiswa on public.logbooks(mahasiswa_id, tanggal desc);
+create index idx_logbooks_status on public.logbooks(status);
+create index idx_items_logbook on public.logbook_items(logbook_id, urutan);
+create index idx_galeri_mahasiswa on public.galeri(mahasiswa_id, tanggal desc);
+create index idx_galeri_item on public.galeri(logbook_item_id);
+create index idx_hadir_mahasiswa on public.daftar_hadir(mahasiswa_id, tanggal desc);
+alter table public.mahasiswa enable row level security;
+alter table public.logbooks enable row level security;
+alter table public.logbook_items enable row level security;
+alter table public.galeri enable row level security;
+alter table public.daftar_hadir enable row level security;
+create policy "mahasiswa_read_all" on public.mahasiswa for select using (true);
+create policy "mahasiswa_update_self" on public.mahasiswa for update using (auth_uid = auth.uid());
+create policy "logbooks_read" on public.logbooks for select using (
+  status = 'publik' or mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
+);
+create policy "logbooks_insert_self" on public.logbooks for insert with check (
+  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
+);
+create policy "logbooks_update_self" on public.logbooks for update using (
+  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
+);
+create policy "logbooks_delete_self" on public.logbooks for delete using (
+  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
+);
+create policy "items_read" on public.logbook_items for select using (
+  exists (select 1 from public.logbooks l where l.id = logbook_id
+    and (l.status = 'publik' or l.mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())))
+);
+create policy "items_write_self" on public.logbook_items for all using (
+  exists (select 1 from public.logbooks l where l.id = logbook_id
+    and l.mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid()))
+) with check (
+  exists (select 1 from public.logbooks l where l.id = logbook_id
+    and l.mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid()))
+);
+create policy "galeri_read_all" on public.galeri for select using (true);
+create policy "galeri_insert_self" on public.galeri for insert with check (
+  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
+);
+create policy "galeri_update_self" on public.galeri for update using (
+  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
+);
+create policy "galeri_delete_self" on public.galeri for delete using (
+  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
+);
+create policy "hadir_read_all" on public.daftar_hadir for select using (true);
+create policy "hadir_insert_self" on public.daftar_hadir for insert with check (
+  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
+);
+create policy "hadir_update_self" on public.daftar_hadir for update using (
+  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
+);
+create policy "hadir_delete_self" on public.daftar_hadir for delete using (
+  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
+);
 ````
 
 ## File: mvp-qr.html
@@ -640,26 +809,2349 @@ R2_PUBLIC_BASE_URL=
 </html>
 ````
 
-## File: postcss.config.js
+## File: tailwind.config.js
 ````javascript
 export default {
-  plugins: {
-    tailwindcss: {},
-    autoprefixer: {}
+  darkMode: 'class',
+  content: ['./index.html', './src/**/*.{js,jsx}'],
+  theme: {
+    extend: {
+      colors: {
+        bsi: {
+           50: '#f4fbf6', 100: '#dff0e4', 200: '#bfe3cc', 300: '#86ecb0',
+           400: '#4ed58f', 500: '#27c06d', 600: '#1a9e57', 700: '#177c48',
+           800: '#16623c', 900: '#135033', 950: '#081a13'
+         },
+         gold: { 400: '#fbbf24', 500: '#f59e0b', 600: '#d97706' }
+      }
+    }
+  },
+  plugins: []
+}
+````
+
+## File: tess.html
+````html
+<!DOCTYPE html>
+<html lang="en" class="h-full select-none">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web OS - Interactive Portfolio</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        os: {
+                            glass: 'rgba(18, 24, 38, 0.65)',
+                            glassLight: 'rgba(255, 255, 255, 0.75)',
+                            border: 'rgba(255, 255, 255, 0.12)',
+                            accent: '#6366f1'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['Fira Code', 'Courier New', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+            background-color: #0f172a;
+        }
+
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+        }
+
+        .glass-menu {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .dock-item {
+            transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .dock-item:hover {
+            transform: translateY(-10px) scale(1.2);
+            margin: 0 8px;
+        }
+
+        /* Custom Scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.1);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.4);
+        }
+
+        /* Wallpaper Canvas */
+        #bg-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+        }
+
+        /* Spinning Vinyl Effect */
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .animate-spin-slow {
+            animation: spin 8s linear infinite;
+        }
+        .paused {
+            animation-play-state: paused;
+        }
+
+        /* Audio Waveform Bar Animation */
+        @keyframes waveform {
+            0%, 100% { height: 4px; }
+            50% { height: 24px; }
+        }
+        .wave-bar {
+            animation: waveform 1s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen overflow-hidden text-slate-100 flex flex-col justify-between relative bg-slate-900">
+
+    <canvas id="bg-canvas"></canvas>
+
+    <header class="h-8 glass-menu w-full px-4 flex items-center justify-between text-xs z-50 select-none font-medium text-slate-200">
+        <div class="flex items-center space-x-4">
+            <div class="flex items-center space-x-1 font-bold text-indigo-400 cursor-pointer hover:text-indigo-300" onclick="openApp('about')">
+                <i data-lucide="terminal" class="w-4 h-4 inline"></i>
+                <span id="active-app-title">RiskyOS</span>
+            </div>
+            <nav class="hidden md:flex space-x-3 text-slate-300">
+                <button onclick="openApp('about')" class="hover:text-white transition">About</button>
+                <button onclick="openApp('projects')" class="hover:text-white transition">Projects</button>
+                <button onclick="openApp('terminal')" class="hover:text-white transition">Terminal</button>
+                <button onclick="openApp('contact')" class="hover:text-white transition">Contact</button>
+            </nav>
+        </div>
+
+        <div class="flex items-center space-x-4">
+            <div class="hidden sm:flex items-center space-x-2 bg-slate-800/50 px-2 py-0.5 rounded-full border border-slate-700/50">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span class="text-[10px] text-slate-300">Available for Hire</span>
+            </div>
+            <div class="flex items-center space-x-3 text-slate-300">
+                <i data-lucide="wifi" class="w-3.5 h-3.5 text-emerald-400" title="Connected"></i>
+                <button onclick="toggleAudioSynth()" id="synth-sound-btn" class="hover:text-white transition" title="Toggle Sound FX">
+                    <i data-lucide="volume-2" class="w-3.5 h-3.5"></i>
+                </button>
+                <button onclick="openApp('settings')" class="hover:text-white transition" title="Settings">
+                    <i data-lucide="sliders" class="w-3.5 h-3.5"></i>
+                </button>
+                <span id="clock" class="font-mono text-slate-200">12:00 PM</span>
+            </div>
+        </div>
+    </header>
+
+    <main id="desktop" class="flex-1 relative overflow-hidden p-6 z-10 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4 auto-rows-max">
+        <!-- Desktop Shortcuts -->
+        <div onclick="openApp('about')" class="desktop-shortcut group flex flex-col items-center justify-center p-3 rounded-2xl cursor-pointer hover:bg-white/10 transition duration-200 text-center">
+            <div class="w-14 h-14 bg-gradient-to-tr from-indigo-500 to-purple-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
+                <i data-lucide="user" class="w-7 h-7 text-white"></i>
+            </div>
+            <span class="mt-2 text-xs font-medium drop-shadow text-white">About Me</span>
+        </div>
+
+        <div onclick="openApp('projects')" class="desktop-shortcut group flex flex-col items-center justify-center p-3 rounded-2xl cursor-pointer hover:bg-white/10 transition duration-200 text-center">
+            <div class="w-14 h-14 bg-gradient-to-tr from-blue-500 to-cyan-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
+                <i data-lucide="folder-git-2" class="w-7 h-7 text-white"></i>
+            </div>
+            <span class="mt-2 text-xs font-medium drop-shadow text-white">Projects</span>
+        </div>
+
+        <div onclick="openApp('player')" class="desktop-shortcut group flex flex-col items-center justify-center p-3 rounded-2xl cursor-pointer hover:bg-white/10 transition duration-200 text-center">
+            <div class="w-14 h-14 bg-gradient-to-tr from-rose-500 to-amber-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
+                <i data-lucide="music" class="w-7 h-7 text-white"></i>
+            </div>
+            <span class="mt-2 text-xs font-medium drop-shadow text-white">Music Studio</span>
+        </div>
+
+        <div onclick="openApp('terminal')" class="desktop-shortcut group flex flex-col items-center justify-center p-3 rounded-2xl cursor-pointer hover:bg-white/10 transition duration-200 text-center">
+            <div class="w-14 h-14 bg-slate-800 border border-slate-700 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
+                <i data-lucide="terminal" class="w-7 h-7 text-emerald-400"></i>
+            </div>
+            <span class="mt-2 text-xs font-medium drop-shadow text-white">Terminal CLI</span>
+        </div>
+
+        <div onclick="openApp('contact')" class="desktop-shortcut group flex flex-col items-center justify-center p-3 rounded-2xl cursor-pointer hover:bg-white/10 transition duration-200 text-center">
+            <div class="w-14 h-14 bg-gradient-to-tr from-emerald-500 to-teal-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
+                <i data-lucide="mail" class="w-7 h-7 text-white"></i>
+            </div>
+            <span class="mt-2 text-xs font-medium drop-shadow text-white">Mail Client</span>
+        </div>
+
+        <div onclick="openApp('settings')" class="desktop-shortcut group flex flex-col items-center justify-center p-3 rounded-2xl cursor-pointer hover:bg-white/10 transition duration-200 text-center">
+            <div class="w-14 h-14 bg-gradient-to-tr from-slate-600 to-slate-800 border border-slate-500/30 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
+                <i data-lucide="settings" class="w-7 h-7 text-white"></i>
+            </div>
+            <span class="mt-2 text-xs font-medium drop-shadow text-white">Settings</span>
+        </div>
+    </main>
+
+    <div id="window-container" class="absolute inset-0 pointer-events-none z-20 top-8 bottom-16">
+        
+        <!-- App Window 1: About Me -->
+        <div id="win-about" class="app-window absolute hidden pointer-events-auto rounded-2xl glass-panel flex flex-col overflow-hidden w-[92vw] sm:w-[680px] h-[500px]" style="top: 8%; left: 10%;">
+            <div class="window-header h-11 bg-slate-900/60 border-b border-white/10 px-4 flex items-center justify-between cursor-move">
+                <div class="flex items-center space-x-2">
+                    <button onclick="closeApp('about')" class="w-3 h-3 rounded-full bg-rose-500 hover:opacity-80 transition"></button>
+                    <button onclick="minimizeApp('about')" class="w-3 h-3 rounded-full bg-amber-500 hover:opacity-80 transition"></button>
+                    <button onclick="maximizeApp('about')" class="w-3 h-3 rounded-full bg-emerald-500 hover:opacity-80 transition"></button>
+                    <span class="ml-2 text-xs font-semibold text-slate-300">About Me - Developer Profile</span>
+                </div>
+                <i data-lucide="user" class="w-4 h-4 text-slate-400"></i>
+            </div>
+            <div class="window-body flex-1 overflow-y-auto p-6 space-y-6">
+                <div class="flex flex-col sm:flex-row items-center gap-6 bg-slate-800/40 p-5 rounded-2xl border border-white/5">
+                    <div class="relative">
+                        <div class="w-24 h-24 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-3xl font-bold text-white shadow-xl">
+                            R
+                        </div>
+                        <span class="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-500 border-2 border-slate-900 rounded-full"></span>
+                    </div>
+                    <div class="text-center sm:text-left flex-1">
+                        <h2 class="text-2xl font-bold text-white">Risky Architect</h2>
+                        <p class="text-indigo-400 text-sm font-medium">Full-Stack Web Architect & Creative Audio Producer</p>
+                        <p class="text-slate-400 text-xs mt-2 leading-relaxed">
+                            Crafting high-performance web applications with intuitive UX, sleek operating system interfaces, and custom digital soundscapes.
+                        </p>
+                        <div class="mt-3 flex flex-wrap justify-center sm:justify-start gap-2">
+                            <span class="px-2.5 py-1 rounded-full text-[11px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">React & Next.js</span>
+                            <span class="px-2.5 py-1 rounded-full text-[11px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">Tailwind & UI/UX</span>
+                            <span class="px-2.5 py-1 rounded-full text-[11px] bg-purple-500/20 text-purple-300 border border-purple-500/30">Node.js & Python</span>
+                            <span class="px-2.5 py-1 rounded-full text-[11px] bg-amber-500/20 text-amber-300 border border-amber-500/30">Audio Synth & DSP</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">
+                        <i data-lucide="cpu" class="w-4 h-4 text-indigo-400"></i> Tech Stack & Core Competencies
+                    </h3>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        <div class="p-3 bg-slate-800/30 rounded-xl border border-white/5 hover:border-indigo-500/40 transition">
+                            <div class="text-xs font-semibold text-slate-200">Frontend Engine</div>
+                            <div class="text-[11px] text-slate-400 mt-1">React, Vite, TypeScript, Tailwind CSS, Three.js</div>
+                        </div>
+                        <div class="p-3 bg-slate-800/30 rounded-xl border border-white/5 hover:border-indigo-500/40 transition">
+                            <div class="text-xs font-semibold text-slate-200">Backend & Cloud</div>
+                            <div class="text-[11px] text-slate-400 mt-1">Node.js, Express, Python, Supabase, Cloudflare</div>
+                        </div>
+                        <div class="p-3 bg-slate-800/30 rounded-xl border border-white/5 hover:border-indigo-500/40 transition">
+                            <div class="text-xs font-semibold text-slate-200">Audio & Creative</div>
+                            <div class="text-[11px] text-slate-400 mt-1">Web Audio API, FL Studio, Sound Design, DSP</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- App Window 2: File Explorer / Projects -->
+        <div id="win-projects" class="app-window absolute hidden pointer-events-auto rounded-2xl glass-panel flex flex-col overflow-hidden w-[92vw] sm:w-[760px] h-[520px]" style="top: 10%; left: 15%;">
+            <div class="window-header h-11 bg-slate-900/60 border-b border-white/10 px-4 flex items-center justify-between cursor-move">
+                <div class="flex items-center space-x-2">
+                    <button onclick="closeApp('projects')" class="w-3 h-3 rounded-full bg-rose-500 hover:opacity-80 transition"></button>
+                    <button onclick="minimizeApp('projects')" class="w-3 h-3 rounded-full bg-amber-500 hover:opacity-80 transition"></button>
+                    <button onclick="maximizeApp('projects')" class="w-3 h-3 rounded-full bg-emerald-500 hover:opacity-80 transition"></button>
+                    <span class="ml-2 text-xs font-semibold text-slate-300">File Explorer - Showcase & Projects</span>
+                </div>
+                <i data-lucide="folder" class="w-4 h-4 text-cyan-400"></i>
+            </div>
+            <div class="window-body flex-1 flex overflow-hidden">
+                <!-- Sidebar -->
+                <div class="w-44 bg-slate-900/50 border-r border-white/5 p-3 hidden sm:block">
+                    <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 px-2">Categories</div>
+                    <ul class="space-y-1 text-xs">
+                        <li>
+                            <button onclick="filterProjects('all')" class="w-full text-left px-2.5 py-1.5 rounded-lg bg-indigo-600/30 text-indigo-200 font-medium flex items-center gap-2">
+                                <i data-lucide="layers" class="w-3.5 h-3.5"></i> All Items
+                            </button>
+                        </li>
+                        <li>
+                            <button onclick="filterProjects('web')" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white/5 text-slate-300 flex items-center gap-2 transition">
+                                <i data-lucide="globe" class="w-3.5 h-3.5"></i> Web Apps
+                            </button>
+                        </li>
+                        <li>
+                            <button onclick="filterProjects('audio')" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white/5 text-slate-300 flex items-center gap-2 transition">
+                                <i data-lucide="music-2" class="w-3.5 h-3.5"></i> Audio & Synth
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+                <!-- Main Grid -->
+                <div class="flex-1 overflow-y-auto p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <!-- Project 1 -->
+                    <div class="project-card bg-slate-800/40 rounded-xl p-4 border border-white/10 hover:border-indigo-500/50 transition flex flex-col justify-between" data-category="web">
+                        <div>
+                            <div class="h-32 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 flex items-center justify-center mb-3 relative overflow-hidden">
+                                <i data-lucide="layout-grid" class="w-12 h-12 text-white/40"></i>
+                                <span class="absolute top-2 right-2 bg-slate-900/80 text-emerald-400 text-[10px] px-2 py-0.5 rounded-full font-mono border border-emerald-500/30">Live App</span>
+                            </div>
+                            <h4 class="font-bold text-slate-100 text-sm">Interactive Web OS Shell</h4>
+                            <p class="text-xs text-slate-400 mt-1">A browser-based virtual operating system with window management, apps, audio synthesis, and terminal CLI.</p>
+                        </div>
+                        <div class="mt-4 flex items-center justify-between">
+                            <span class="text-[10px] text-indigo-300 font-mono">React · Tailwind · AudioAPI</span>
+                            <button onclick="openNotification('Web OS Shell', 'You are currently inside this operating system! Feel free to explore.')" class="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md text-xs font-medium transition">
+                                Launch
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Project 2 -->
+                    <div class="project-card bg-slate-800/40 rounded-xl p-4 border border-white/10 hover:border-indigo-500/50 transition flex flex-col justify-between" data-category="web">
+                        <div>
+                            <div class="h-32 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 flex items-center justify-center mb-3 relative overflow-hidden">
+                                <i data-lucide="sparkles" class="w-12 h-12 text-white/40"></i>
+                                <span class="absolute top-2 right-2 bg-slate-900/80 text-indigo-400 text-[10px] px-2 py-0.5 rounded-full font-mono border border-indigo-500/30">SaaS Platform</span>
+                            </div>
+                            <h4 class="font-bold text-slate-100 text-sm">AI Content Studio</h4>
+                            <p class="text-xs text-slate-400 mt-1">Real-time content generation engine with dark mode UI, automated analytics, and web export features.</p>
+                        </div>
+                        <div class="mt-4 flex items-center justify-between">
+                            <span class="text-[10px] text-purple-300 font-mono">Next.js · Tailwind · OpenAI</span>
+                            <button onclick="openNotification('AI Content Studio', 'Opening demo view preview mode.')" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-white rounded-md text-xs font-medium transition">
+                                Demo
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Project 3 -->
+                    <div class="project-card bg-slate-800/40 rounded-xl p-4 border border-white/10 hover:border-indigo-500/50 transition flex flex-col justify-between" data-category="audio">
+                        <div>
+                            <div class="h-32 rounded-lg bg-gradient-to-r from-amber-600 to-rose-600 flex items-center justify-center mb-3 relative overflow-hidden">
+                                <i data-lucide="disc" class="w-12 h-12 text-white/40"></i>
+                                <span class="absolute top-2 right-2 bg-slate-900/80 text-amber-400 text-[10px] px-2 py-0.5 rounded-full font-mono border border-amber-500/30">Synthesizer</span>
+                            </div>
+                            <h4 class="font-bold text-slate-100 text-sm">WebAudio Chiptune Engine</h4>
+                            <p class="text-xs text-slate-400 mt-1">Synthesizer engine built completely using native Web Audio API oscillators without external MP3 dependencies.</p>
+                        </div>
+                        <div class="mt-4 flex items-center justify-between">
+                            <span class="text-[10px] text-amber-300 font-mono">JavaScript · WebAudio API</span>
+                            <button onclick="openApp('player')" class="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded-md text-xs font-medium transition">
+                                Listen
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- App Window 3: Music Player -->
+        <div id="win-player" class="app-window absolute hidden pointer-events-auto rounded-2xl glass-panel flex flex-col overflow-hidden w-[92vw] sm:w-[420px] h-[510px]" style="top: 12%; left: 25%;">
+            <div class="window-header h-11 bg-slate-900/60 border-b border-white/10 px-4 flex items-center justify-between cursor-move">
+                <div class="flex items-center space-x-2">
+                    <button onclick="closeApp('player')" class="w-3 h-3 rounded-full bg-rose-500 hover:opacity-80 transition"></button>
+                    <button onclick="minimizeApp('player')" class="w-3 h-3 rounded-full bg-amber-500 hover:opacity-80 transition"></button>
+                    <button onclick="maximizeApp('player')" class="w-3 h-3 rounded-full bg-emerald-500 hover:opacity-80 transition"></button>
+                    <span class="ml-2 text-xs font-semibold text-slate-300">SynthSound Studio</span>
+                </div>
+                <i data-lucide="disc" class="w-4 h-4 text-rose-400"></i>
+            </div>
+            <div class="window-body flex-1 p-6 flex flex-col items-center justify-between bg-gradient-to-b from-slate-900/40 to-slate-950/80">
+                <!-- Vinyl Disc Display -->
+                <div class="relative group my-2">
+                    <div id="vinyl-disc" class="w-40 h-40 rounded-full bg-slate-950 border-4 border-slate-800 shadow-2xl flex items-center justify-center relative overflow-hidden animate-spin-slow paused">
+                        <!-- Disc Grooves -->
+                        <div class="absolute inset-2 rounded-full border border-slate-800/60"></div>
+                        <div class="absolute inset-5 rounded-full border border-slate-800/40"></div>
+                        <div class="absolute inset-9 rounded-full border border-slate-800/30"></div>
+                        <!-- Center Label -->
+                        <div class="w-14 h-14 rounded-full bg-gradient-to-br from-indigo-500 to-rose-500 flex items-center justify-center border-2 border-slate-900">
+                            <div class="w-3 h-3 rounded-full bg-slate-900"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Track Info -->
+                <div class="text-center w-full">
+                    <h3 id="track-title" class="text-base font-bold text-white">Synthesized Cyber Lounge</h3>
+                    <p id="track-artist" class="text-xs text-indigo-400 mt-0.5">Risky Audio Engine · Synthwave</p>
+                </div>
+
+                <!-- Animated Waveform Visualizer simulation -->
+                <div class="flex items-end justify-center space-x-1.5 h-8 my-2">
+                    <div class="w-1 bg-indigo-500/80 rounded-full wave-bar" style="animation-delay: 0.1s"></div>
+                    <div class="w-1 bg-indigo-500/80 rounded-full wave-bar" style="animation-delay: 0.3s"></div>
+                    <div class="w-1 bg-purple-500/80 rounded-full wave-bar" style="animation-delay: 0.2s"></div>
+                    <div class="w-1 bg-rose-500/80 rounded-full wave-bar" style="animation-delay: 0.5s"></div>
+                    <div class="w-1 bg-indigo-500/80 rounded-full wave-bar" style="animation-delay: 0.4s"></div>
+                </div>
+
+                <!-- Controls -->
+                <div class="w-full space-y-3">
+                    <div class="flex items-center justify-between text-xs text-slate-400 font-mono">
+                        <span id="audio-time">0:00</span>
+                        <input id="audio-progress" type="range" min="0" max="100" value="0" class="w-full mx-3 accent-indigo-500 bg-slate-800 h-1 rounded-lg cursor-pointer">
+                        <span>1:30</span>
+                    </div>
+
+                    <div class="flex items-center justify-center space-x-6">
+                        <button onclick="prevTrack()" class="text-slate-400 hover:text-white transition"><i data-lucide="skip-back" class="w-5 h-5"></i></button>
+                        <button onclick="togglePlayTrack()" id="play-btn" class="w-12 h-12 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center shadow-lg transition transform active:scale-95">
+                            <i data-lucide="play" class="w-6 h-6 fill-white"></i>
+                        </button>
+                        <button onclick="nextTrack()" class="text-slate-400 hover:text-white transition"><i data-lucide="skip-forward" class="w-5 h-5"></i></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- App Window 4: Terminal CLI -->
+        <div id="win-terminal" class="app-window absolute hidden pointer-events-auto rounded-2xl glass-panel flex flex-col overflow-hidden w-[92vw] sm:w-[650px] h-[440px]" style="top: 15%; left: 20%;">
+            <div class="window-header h-11 bg-slate-950/80 border-b border-white/10 px-4 flex items-center justify-between cursor-move">
+                <div class="flex items-center space-x-2">
+                    <button onclick="closeApp('terminal')" class="w-3 h-3 rounded-full bg-rose-500 hover:opacity-80 transition"></button>
+                    <button onclick="minimizeApp('terminal')" class="w-3 h-3 rounded-full bg-amber-500 hover:opacity-80 transition"></button>
+                    <button onclick="maximizeApp('terminal')" class="w-3 h-3 rounded-full bg-emerald-500 hover:opacity-80 transition"></button>
+                    <span class="ml-2 text-xs font-mono font-semibold text-emerald-400">guest@risky-os:~ (zsh)</span>
+                </div>
+                <i data-lucide="terminal" class="w-4 h-4 text-emerald-400"></i>
+            </div>
+            <div id="terminal-body" class="window-body flex-1 bg-slate-950 p-4 font-mono text-xs overflow-y-auto text-emerald-400 leading-relaxed space-y-2">
+                <div>RiskyOS Terminal [Version 2.4.0-release]</div>
+                <div class="text-slate-400">Type <span class="text-amber-400">'help'</span> to list available CLI commands.</div>
+                <div id="terminal-output"></div>
+                <div class="flex items-center text-emerald-400 mt-2">
+                    <span class="text-indigo-400">guest@risky-os</span>:<span class="text-cyan-400">~</span>$&nbsp;
+                    <input id="terminal-input" type="text" class="flex-1 bg-transparent outline-none border-none text-emerald-300 font-mono" autofocus>
+                </div>
+            </div>
+        </div>
+
+        <!-- App Window 5: Contact Mail App -->
+        <div id="win-contact" class="app-window absolute hidden pointer-events-auto rounded-2xl glass-panel flex flex-col overflow-hidden w-[92vw] sm:w-[580px] h-[480px]" style="top: 14%; left: 22%;">
+            <div class="window-header h-11 bg-slate-900/60 border-b border-white/10 px-4 flex items-center justify-between cursor-move">
+                <div class="flex items-center space-x-2">
+                    <button onclick="closeApp('contact')" class="w-3 h-3 rounded-full bg-rose-500 hover:opacity-80 transition"></button>
+                    <button onclick="minimizeApp('contact')" class="w-3 h-3 rounded-full bg-amber-500 hover:opacity-80 transition"></button>
+                    <button onclick="maximizeApp('contact')" class="w-3 h-3 rounded-full bg-emerald-500 hover:opacity-80 transition"></button>
+                    <span class="ml-2 text-xs font-semibold text-slate-300">Mail Client - Contact</span>
+                </div>
+                <i data-lucide="mail" class="w-4 h-4 text-teal-400"></i>
+            </div>
+            <div class="window-body flex-1 p-6 overflow-y-auto space-y-4">
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Your Name / Organization</label>
+                    <input id="contact-name" type="text" placeholder="e.g. Alex Vance" class="w-full bg-slate-800/60 border border-white/10 rounded-lg p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Subject</label>
+                    <input id="contact-subject" type="text" placeholder="Project Collaboration / Inquiry" class="w-full bg-slate-800/60 border border-white/10 rounded-lg p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Message</label>
+                    <textarea id="contact-message" rows="4" placeholder="Write your message here..." class="w-full bg-slate-800/60 border border-white/10 rounded-lg p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 resize-none"></textarea>
+                </div>
+                <button onclick="sendMailMock()" class="w-full py-2.5 bg-gradient-to-r from-indigo-600 to-teal-500 hover:from-indigo-500 hover:to-teal-400 text-white font-medium rounded-lg text-xs shadow-md transition">
+                    Send Message
+                </button>
+            </div>
+        </div>
+
+        <!-- App Window 6: System Settings -->
+        <div id="win-settings" class="app-window absolute hidden pointer-events-auto rounded-2xl glass-panel flex flex-col overflow-hidden w-[92vw] sm:w-[500px] h-[420px]" style="top: 16%; left: 28%;">
+            <div class="window-header h-11 bg-slate-900/60 border-b border-white/10 px-4 flex items-center justify-between cursor-move">
+                <div class="flex items-center space-x-2">
+                    <button onclick="closeApp('settings')" class="w-3 h-3 rounded-full bg-rose-500 hover:opacity-80 transition"></button>
+                    <button onclick="minimizeApp('settings')" class="w-3 h-3 rounded-full bg-amber-500 hover:opacity-80 transition"></button>
+                    <button onclick="maximizeApp('settings')" class="w-3 h-3 rounded-full bg-emerald-500 hover:opacity-80 transition"></button>
+                    <span class="ml-2 text-xs font-semibold text-slate-300">System Control Center</span>
+                </div>
+                <i data-lucide="settings" class="w-4 h-4 text-slate-400"></i>
+            </div>
+            <div class="window-body flex-1 p-6 overflow-y-auto space-y-6">
+                <div>
+                    <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider mb-3">Wallpaper Styles</h3>
+                    <div class="grid grid-cols-3 gap-3">
+                        <button onclick="changeWallpaper('cyber')" class="h-16 rounded-xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 border-2 border-indigo-500 flex items-center justify-center text-xs text-indigo-300 font-medium">Cyber Night</button>
+                        <button onclick="changeWallpaper('sunset')" class="h-16 rounded-xl bg-gradient-to-br from-purple-900 via-rose-950 to-amber-950 border border-white/10 flex items-center justify-center text-xs text-rose-300 font-medium">Neon Sunset</button>
+                        <button onclick="changeWallpaper('matrix')" class="h-16 rounded-xl bg-gradient-to-br from-slate-950 via-emerald-950 to-slate-950 border border-white/10 flex items-center justify-center text-xs text-emerald-300 font-medium">Matrix Grid</button>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider mb-3">Sound & Audio Synthesis</h3>
+                    <div class="flex items-center justify-between p-3 bg-slate-800/40 rounded-xl border border-white/5">
+                        <span class="text-xs text-slate-300">Web Audio Keyboard & Click Sounds</span>
+                        <input type="checkbox" id="sound-toggle" checked onclick="toggleAudioSynth()" class="accent-indigo-500 cursor-pointer">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <footer class="h-16 glass-menu w-max mx-auto mb-3 px-4 rounded-2xl flex items-center space-x-3 z-50 border border-white/15 shadow-2xl">
+        <div onclick="openApp('about')" class="dock-item relative group cursor-pointer p-2 rounded-xl hover:bg-white/10">
+            <div class="w-10 h-10 bg-gradient-to-tr from-indigo-500 to-purple-500 rounded-xl flex items-center justify-center shadow">
+                <i data-lucide="user" class="w-5 h-5 text-white"></i>
+            </div>
+            <span class="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-900 text-slate-200 text-[10px] px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap">About</span>
+        </div>
+
+        <div onclick="openApp('projects')" class="dock-item relative group cursor-pointer p-2 rounded-xl hover:bg-white/10">
+            <div class="w-10 h-10 bg-gradient-to-tr from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center shadow">
+                <i data-lucide="folder-git-2" class="w-5 h-5 text-white"></i>
+            </div>
+            <span class="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-900 text-slate-200 text-[10px] px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap">Projects</span>
+        </div>
+
+        <div onclick="openApp('player')" class="dock-item relative group cursor-pointer p-2 rounded-xl hover:bg-white/10">
+            <div class="w-10 h-10 bg-gradient-to-tr from-rose-500 to-amber-500 rounded-xl flex items-center justify-center shadow">
+                <i data-lucide="music" class="w-5 h-5 text-white"></i>
+            </div>
+            <span class="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-900 text-slate-200 text-[10px] px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap">Music Player</span>
+        </div>
+
+        <div onclick="openApp('terminal')" class="dock-item relative group cursor-pointer p-2 rounded-xl hover:bg-white/10">
+            <div class="w-10 h-10 bg-slate-800 border border-slate-700 rounded-xl flex items-center justify-center shadow">
+                <i data-lucide="terminal" class="w-5 h-5 text-emerald-400"></i>
+            </div>
+            <span class="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-900 text-slate-200 text-[10px] px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap">Terminal</span>
+        </div>
+
+        <div onclick="openApp('contact')" class="dock-item relative group cursor-pointer p-2 rounded-xl hover:bg-white/10">
+            <div class="w-10 h-10 bg-gradient-to-tr from-emerald-500 to-teal-500 rounded-xl flex items-center justify-center shadow">
+                <i data-lucide="mail" class="w-5 h-5 text-white"></i>
+            </div>
+            <span class="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-900 text-slate-200 text-[10px] px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap">Contact</span>
+        </div>
+
+        <div onclick="openApp('settings')" class="dock-item relative group cursor-pointer p-2 rounded-xl hover:bg-white/10">
+            <div class="w-10 h-10 bg-gradient-to-tr from-slate-600 to-slate-800 rounded-xl flex items-center justify-center shadow border border-slate-500/30">
+                <i data-lucide="settings" class="w-5 h-5 text-white"></i>
+            </div>
+            <span class="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-900 text-slate-200 text-[10px] px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap">Settings</span>
+        </div>
+    </footer>
+
+    <!-- Notification Toast Container -->
+    <div id="toast-container" class="fixed bottom-20 right-6 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+
+    <script>
+        // --- Initialize Icons ---
+        lucide.createIcons();
+
+        // --- Global State ---
+        let highestZIndex = 100;
+        let soundEnabled = true;
+        let audioCtx = null;
+        let currentTheme = 'cyber';
+
+        // --- System Clock ---
+        function updateClock() {
+            const now = new Date();
+            let hours = now.getHours();
+            const minutes = now.getMinutes().toString().padStart(2, '0');
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            hours = hours % 12 || 12;
+            document.getElementById('clock').textContent = `${hours}:${minutes} ${ampm}`;
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // --- Window Management Logic ---
+        function openApp(id) {
+            playBeepSound(440, 0.05);
+            const win = document.getElementById(`win-${id}`);
+            if (!win) return;
+
+            win.classList.remove('hidden');
+            bringToFront(win);
+
+            // Update Top Bar active app name
+            const appTitles = {
+                about: 'About Me',
+                projects: 'File Explorer',
+                player: 'SynthSound Player',
+                terminal: 'Terminal CLI',
+                contact: 'Mail Client',
+                settings: 'System Settings'
+            };
+            document.getElementById('active-app-title').textContent = appTitles[id] || 'RiskyOS';
+        }
+
+        function closeApp(id) {
+            playBeepSound(300, 0.05);
+            const win = document.getElementById(`win-${id}`);
+            if (win) win.classList.add('hidden');
+        }
+
+        function minimizeApp(id) {
+            closeApp(id);
+        }
+
+        function maximizeApp(id) {
+            const win = document.getElementById(`win-${id}`);
+            if (!win) return;
+            if (win.style.width === '100vw') {
+                win.style.width = '';
+                win.style.height = '';
+                win.style.top = '10%';
+                win.style.left = '15%';
+            } else {
+                win.style.width = '100vw';
+                win.style.height = 'calc(100vh - 80px)';
+                win.style.top = '32px';
+                win.style.left = '0';
+            }
+        }
+
+        function bringToFront(win) {
+            highestZIndex++;
+            win.style.zIndex = highestZIndex;
+        }
+
+        // Setup Draggable Windows
+        document.querySelectorAll('.app-window').forEach(win => {
+            win.addEventListener('mousedown', () => bringToFront(win));
+            
+            const header = win.querySelector('.window-header');
+            let isDragging = false;
+            let offsetX, offsetY;
+
+            header.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                offsetX = e.clientX - win.offsetLeft;
+                offsetY = e.clientY - win.offsetTop;
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                win.style.left = `${e.clientX - offsetX}px`;
+                win.style.top = `${e.clientY - offsetY}px`;
+            });
+
+            window.addEventListener('mouseup', () => {
+                isDragging = false;
+            });
+        });
+
+        // --- Web Audio API Synth Generator ---
+        function initAudioContext() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        function playBeepSound(freq = 440, duration = 0.1) {
+            if (!soundEnabled) return;
+            try {
+                initAudioContext();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch (e) {
+                console.log("Audio waiting for user gesture.");
+            }
+        }
+
+        function toggleAudioSynth() {
+            soundEnabled = !soundEnabled;
+            openNotification('Audio Synth', `Sound FX ${soundEnabled ? 'Enabled' : 'Disabled'}`);
+        }
+
+        // --- Music Player Synth Loop ---
+        let isPlayingTrack = false;
+        let synthInterval = null;
+
+        function togglePlayTrack() {
+            initAudioContext();
+            isPlayingTrack = !isPlayingTrack;
+            const disc = document.getElementById('vinyl-disc');
+            const btn = document.getElementById('play-btn');
+
+            if (isPlayingTrack) {
+                disc.classList.remove('paused');
+                btn.innerHTML = `<i data-lucide="pause" class="w-6 h-6 fill-white"></i>`;
+                lucide.createIcons();
+                startSynthTune();
+            } else {
+                disc.classList.add('paused');
+                btn.innerHTML = `<i data-lucide="play" class="w-6 h-6 fill-white"></i>`;
+                lucide.createIcons();
+                clearInterval(synthInterval);
+            }
+        }
+
+        function startSynthTune() {
+            const notes = [261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88];
+            let step = 0;
+            synthInterval = setInterval(() => {
+                if (!isPlayingTrack) return;
+                const freq = notes[step % notes.length];
+                playBeepSound(freq, 0.2);
+                step++;
+                document.getElementById('audio-progress').value = (step * 2) % 100;
+            }, 300);
+        }
+
+        function prevTrack() { openNotification('Music Player', 'Playing Previous Synthesized Track'); }
+        function nextTrack() { openNotification('Music Player', 'Playing Next Synthesized Track'); }
+
+        // --- Terminal Logic ---
+        const terminalInput = document.getElementById('terminal-input');
+        const terminalOutput = document.getElementById('terminal-output');
+
+        if (terminalInput) {
+            terminalInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    const cmd = terminalInput.value.trim().toLowerCase();
+                    terminalInput.value = '';
+                    
+                    const line = document.createElement('div');
+                    line.innerHTML = `<span class="text-indigo-400">guest@risky-os</span>:<span class="text-cyan-400">~</span>$&nbsp;${cmd}`;
+                    terminalOutput.appendChild(line);
+
+                    let response = '';
+                    switch(cmd) {
+                        case 'help':
+                            response = 'Available Commands: about, projects, skills, contact, clear, date, theme';
+                            break;
+                        case 'about':
+                            response = 'Risky Architect - Full Stack Web Developer & Creative Audio Producer.';
+                            break;
+                        case 'skills':
+                            response = 'Core Stack: React, Next.js, Node.js, Python, Tailwind, WebAudio API';
+                            break;
+                        case 'projects':
+                            response = 'Type openApp("projects") or click Projects icon on Desktop!';
+                            break;
+                        case 'contact':
+                            response = 'Email: risky.dev@example.com | GitHub: github.com/risky-dev';
+                            break;
+                        case 'date':
+                            response = new Date().toString();
+                            break;
+                        case 'clear':
+                            terminalOutput.innerHTML = '';
+                            return;
+                        default:
+                            response = `Command not found: ${cmd}. Type 'help' for options.`;
+                    }
+
+                    const resDiv = document.createElement('div');
+                    resDiv.className = 'text-slate-400 mb-2';
+                    resDiv.textContent = response;
+                    terminalOutput.appendChild(resDiv);
+
+                    // Auto scroll
+                    document.getElementById('terminal-body').scrollTop = document.getElementById('terminal-body').scrollHeight;
+                }
+            });
+        }
+
+        // --- Notification Toast System ---
+        function openNotification(title, message) {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = 'glass-panel p-3.5 rounded-xl border border-white/10 text-xs shadow-2xl flex items-center space-x-3 pointer-events-auto transform translate-y-2 transition duration-300';
+            toast.innerHTML = `
+                <div class="w-8 h-8 rounded-lg bg-indigo-600/30 text-indigo-400 flex items-center justify-center">
+                    <i data-lucide="bell" class="w-4 h-4"></i>
+                </div>
+                <div>
+                    <div class="font-bold text-white">${title}</div>
+                    <div class="text-slate-400 text-[11px]">${message}</div>
+                </div>
+            `;
+            container.appendChild(toast);
+            lucide.createIcons();
+
+            setTimeout(() => {
+                toast.remove();
+            }, 3500);
+        }
+
+        function sendMailMock() {
+            openNotification('Mail Client', 'Message sent successfully! Thank you for reaching out.');
+            document.getElementById('contact-name').value = '';
+            document.getElementById('contact-subject').value = '';
+            document.getElementById('contact-message').value = '';
+        }
+
+        function filterProjects(cat) {
+            document.querySelectorAll('.project-card').forEach(card => {
+                if (cat === 'all' || card.dataset.category === cat) {
+                    card.style.display = 'flex';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        }
+
+        // --- Canvas Dynamic Background Wallpaper ---
+        const canvas = document.getElementById('bg-canvas');
+        const ctx = canvas.getContext('2d');
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        const particles = Array.from({ length: 45 }, () => ({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height,
+            radius: Math.random() * 2 + 1,
+            vx: (Math.random() - 0.5) * 0.4,
+            vy: (Math.random() - 0.5) * 0.4,
+            alpha: Math.random() * 0.5 + 0.2
+        }));
+
+        function drawBackground() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Gradient themes
+            let grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+            if (currentTheme === 'cyber') {
+                grad.addColorStop(0, '#090d16');
+                grad.addColorStop(0.5, '#111827');
+                grad.addColorStop(1, '#050811');
+            } else if (currentTheme === 'sunset') {
+                grad.addColorStop(0, '#1e112a');
+                grad.addColorStop(0.5, '#2a1220');
+                grad.addColorStop(1, '#0f0913');
+            } else {
+                grad.addColorStop(0, '#02120a');
+                grad.addColorStop(0.5, '#051f12');
+                grad.addColorStop(1, '#010a05');
+            }
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw floating particles
+            particles.forEach(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+
+                if (p.x < 0) p.x = canvas.width;
+                if (p.x > canvas.width) p.x = 0;
+                if (p.y < 0) p.y = canvas.height;
+                if (p.y > canvas.height) p.y = 0;
+
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.fillStyle = currentTheme === 'matrix' ? `rgba(16, 185, 129, ${p.alpha})` : `rgba(99, 102, 241, ${p.alpha})`;
+                ctx.fill();
+            });
+
+            requestAnimationFrame(drawBackground);
+        }
+
+        function changeWallpaper(theme) {
+            currentTheme = theme;
+            openNotification('Theme Updated', `Wallpaper changed to ${theme.toUpperCase()}`);
+        }
+
+        // Start Ambient Particle Loop
+        drawBackground();
+
+        // Open About app by default
+        window.addEventListener('load', () => {
+            openApp('about');
+        });
+    </script>
+</body>
+</html>
+````
+
+## File: tess2.html
+````html
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AryOS — Portfolio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --accent: #8b5cf6;
+  --accent-2: #6366f1;
+  --accent-3: #ec4899;
+  --text: #f5f5f7;
+  --text-2: #a1a1aa;
+  --text-3: #71717a;
+  --glass: rgba(30, 30, 40, 0.55);
+  --glass-2: rgba(40, 40, 55, 0.7);
+  --stroke: rgba(255, 255, 255, 0.08);
+  --stroke-2: rgba(255, 255, 255, 0.14);
+  --menu-h: 32px;
+  --dock-h: 72px;
+  --shadow-window: 0 40px 100px -20px rgba(0,0,0,0.7), 0 20px 40px -20px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06) inset, 0 1px 0 0 rgba(255,255,255,0.08) inset;
+  --shadow-window-focus: 0 50px 120px -20px rgba(0,0,0,0.85), 0 25px 50px -20px rgba(99, 102, 241, 0.3), 0 0 0 1px rgba(139, 92, 246, 0.35) inset, 0 1px 0 0 rgba(255,255,255,0.12) inset;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  color: var(--text);
+  background: #000;
+  user-select: none;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ============= BOOT ============= */
+#boot {
+  position: fixed; inset: 0; z-index: 10000;
+  background: #050509;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+#boot.hide { opacity: 0; pointer-events: none; }
+.boot-glow {
+  position: absolute; width: 600px; height: 600px;
+  background: radial-gradient(circle, rgba(139,92,246,0.25), transparent 60%);
+  animation: pulseGlow 3s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes pulseGlow {
+  0%, 100% { transform: scale(1); opacity: 0.6; }
+  50% { transform: scale(1.15); opacity: 1; }
+}
+.boot-mark {
+  width: 88px; height: 88px; border-radius: 24px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2) 50%, var(--accent-3));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 2.4rem; font-weight: 700; color: #fff;
+  box-shadow: 0 20px 60px -10px rgba(139,92,246,0.6), inset 0 1px 0 rgba(255,255,255,0.3);
+  margin-bottom: 24px;
+  animation: bootMark 1.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: relative; z-index: 1;
+}
+@keyframes bootMark {
+  0% { opacity: 0; transform: scale(0.5) translateY(20px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+.boot-name {
+  font-size: 1.5rem; font-weight: 600; letter-spacing: -0.02em;
+  color: #fff; position: relative; z-index: 1;
+  animation: bootFade 0.8s ease 0.3s backwards;
+}
+.boot-sub {
+  font-size: 0.75rem; color: var(--text-3); margin-top: 6px;
+  letter-spacing: 0.2em; text-transform: uppercase; font-weight: 500;
+  position: relative; z-index: 1;
+  animation: bootFade 0.8s ease 0.5s backwards;
+}
+@keyframes bootFade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.boot-bar {
+  width: 200px; height: 3px; background: rgba(255,255,255,0.08);
+  border-radius: 3px; margin-top: 48px; overflow: hidden;
+  position: relative; z-index: 1;
+}
+.boot-bar-fill {
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--accent-3));
+  border-radius: 3px;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 12px rgba(139,92,246,0.6);
+}
+
+/* ============= DESKTOP ============= */
+#desktop {
+  position: fixed; inset: 0;
+  background:
+    radial-gradient(ellipse 80% 60% at 20% 10%, rgba(139,92,246,0.35), transparent 60%),
+    radial-gradient(ellipse 70% 60% at 80% 30%, rgba(236,72,153,0.25), transparent 60%),
+    radial-gradient(ellipse 90% 70% at 50% 100%, rgba(99,102,241,0.3), transparent 60%),
+    linear-gradient(180deg, #0a0a12 0%, #0f0b1f 100%);
+  transition: background 0.6s ease;
+  overflow: hidden;
+}
+#desktop::after {
+  content: '';
+  position: absolute; inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  opacity: 0.04; pointer-events: none; mix-blend-mode: overlay;
+}
+
+/* ============= TOP MENU BAR ============= */
+#menubar {
+  position: fixed; top: 0; left: 0; right: 0;
+  height: var(--menu-h);
+  background: rgba(10, 10, 20, 0.4);
+  backdrop-filter: blur(30px) saturate(180%);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  display: flex; align-items: center;
+  padding: 0 16px; gap: 20px;
+  font-size: 0.78rem; font-weight: 500;
+  z-index: 500;
+  color: rgba(255,255,255,0.9);
+}
+.mb-item {
+  padding: 3px 8px; border-radius: 6px;
+  cursor: default; transition: background 0.15s;
+  display: flex; align-items: center; gap: 6px;
+}
+.mb-item:hover { background: rgba(255,255,255,0.08); }
+.mb-item.strong { font-weight: 600; }
+.mb-spacer { flex: 1; }
+.mb-logo {
+  width: 16px; height: 16px; border-radius: 5px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.3);
+}
+.mb-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #22c55e; box-shadow: 0 0 8px #22c55e;
+}
+
+/* ============= DESKTOP WIDGETS ============= */
+#widgets {
+  position: absolute;
+  top: calc(var(--menu-h) + 24px);
+  right: 24px;
+  display: flex; flex-direction: column; gap: 16px;
+  z-index: 10;
+}
+.widget {
+  width: 260px; padding: 20px;
+  background: var(--glass);
+  backdrop-filter: blur(30px) saturate(180%);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  border: 1px solid var(--stroke);
+  border-radius: 20px;
+  box-shadow: 0 20px 40px -10px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.08);
+}
+.widget-clock .time {
+  font-size: 2.6rem; font-weight: 300; letter-spacing: -0.04em;
+  line-height: 1; font-variant-numeric: tabular-nums;
+  background: linear-gradient(180deg, #fff, #a1a1aa);
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+}
+.widget-clock .date {
+  font-size: 0.78rem; color: var(--text-2); margin-top: 6px;
+  font-weight: 500;
+}
+.widget-greet .hi {
+  font-size: 0.72rem; color: var(--text-3); text-transform: uppercase;
+  letter-spacing: 0.15em; font-weight: 600;
+}
+.widget-greet .name {
+  font-size: 1.15rem; font-weight: 600; margin-top: 4px;
+  letter-spacing: -0.02em;
+}
+.widget-greet .role {
+  font-size: 0.78rem; color: var(--text-2); margin-top: 2px;
+}
+
+/* ============= DOCK ============= */
+#dock-wrap {
+  position: fixed;
+  bottom: 12px; left: 0; right: 0;
+  display: flex; justify-content: center;
+  z-index: 400;
+  pointer-events: none;
+}
+#dock {
+  pointer-events: auto;
+  display: flex; align-items: flex-end; gap: 6px;
+  padding: 8px;
+  background: rgba(25, 25, 35, 0.5);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border: 1px solid var(--stroke-2);
+  border-radius: 22px;
+  box-shadow:
+    0 20px 50px -10px rgba(0,0,0,0.6),
+    0 0 0 1px rgba(255,255,255,0.04) inset,
+    0 1px 0 0 rgba(255,255,255,0.1) inset;
+}
+.dock-item {
+  position: relative;
+  width: 52px; height: 52px;
+  border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.5rem;
+  cursor: pointer;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.2s;
+  background: linear-gradient(145deg, rgba(255,255,255,0.1), rgba(255,255,255,0.02));
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.15), 0 4px 12px rgba(0,0,0,0.2);
+}
+.dock-item:hover {
+  transform: translateY(-10px) scale(1.18);
+  filter: brightness(1.15);
+}
+.dock-item .tooltip {
+  position: absolute; bottom: calc(100% + 12px); left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  padding: 5px 10px; border-radius: 8px;
+  background: rgba(20, 20, 30, 0.95);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--stroke-2);
+  font-size: 0.7rem; font-weight: 500; color: #fff;
+  white-space: nowrap; pointer-events: none;
+  opacity: 0; transition: all 0.2s ease;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+.dock-item:hover .tooltip {
+  opacity: 1; transform: translateX(-50%) translateY(0);
+}
+.dock-running::after {
+  content: '';
+  position: absolute; bottom: -6px; left: 50%;
+  transform: translateX(-50%);
+  width: 4px; height: 4px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+}
+.dock-sep {
+  width: 1px; height: 40px;
+  background: rgba(255,255,255,0.1);
+  margin: 0 4px;
+  align-self: center;
+}
+
+/* Icon gradients per app */
+.icon-about    { background: linear-gradient(145deg, #6366f1, #8b5cf6); }
+.icon-projects { background: linear-gradient(145deg, #f59e0b, #ef4444); }
+.icon-terminal { background: linear-gradient(145deg, #1e293b, #0f172a); }
+.icon-mail     { background: linear-gradient(145deg, #06b6d4, #3b82f6); }
+.icon-settings { background: linear-gradient(145deg, #64748b, #334155); }
+.dock-item[class*="icon-"] {
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.15);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.25), 0 4px 12px rgba(0,0,0,0.3);
+}
+
+/* ============= WINDOWS ============= */
+#windows-container { position: absolute; inset: 0; pointer-events: none; }
+.window {
+  position: absolute;
+  background: var(--glass);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border: 1px solid var(--stroke);
+  border-radius: 14px;
+  box-shadow: var(--shadow-window);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  pointer-events: auto;
+  min-width: 300px; min-height: 180px;
+  animation: winOpen 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes winOpen {
+  from { opacity: 0; transform: scale(0.9) translateY(12px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.window.closing {
+  animation: winClose 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+@keyframes winClose {
+  to { opacity: 0; transform: scale(0.92); }
+}
+.window.focused {
+  box-shadow: var(--shadow-window-focus);
+  border-color: rgba(139, 92, 246, 0.25);
+}
+.window.minimized-anim {
+  animation: winMin 0.3s cubic-bezier(0.4, 0, 0.6, 1) forwards;
+}
+@keyframes winMin {
+  to { opacity: 0; transform: scale(0.6) translateY(200px); }
+}
+.window.maximized { border-radius: 0; }
+
+/* Titlebar */
+.win-titlebar {
+  height: 44px; flex-shrink: 0;
+  display: flex; align-items: center;
+  padding: 0 14px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0));
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  cursor: grab;
+  gap: 10px;
+}
+.win-titlebar:active { cursor: grabbing; }
+.traffic {
+  display: flex; gap: 8px;
+  align-items: center;
+}
+.traffic-btn {
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  border: none; padding: 0;
+  cursor: pointer;
+  position: relative;
+  transition: filter 0.15s;
+  background: rgba(255,255,255,0.15);
+}
+.traffic-btn.close    { background: #ff5f57; }
+.traffic-btn.minimize { background: #febc2e; }
+.traffic-btn.maximize { background: #28c840; }
+.traffic-btn:hover { filter: brightness(1.15); }
+.traffic:hover .traffic-btn::after {
+  content: '';
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 8px; color: rgba(0,0,0,0.55); font-weight: 700;
+}
+.traffic:hover .traffic-btn.close::after    { content: '✕'; }
+.traffic:hover .traffic-btn.minimize::after { content: '−'; }
+.traffic:hover .traffic-btn.maximize::after { content: '+'; }
+
+.win-title {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 0.82rem; font-weight: 600;
+  flex: 1; justify-content: center;
+  color: rgba(255,255,255,0.85);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  letter-spacing: -0.01em;
+  margin-right: 50px; /* balance traffic lights */
+}
+.win-title .emoji { font-size: 0.95rem; }
+
+.win-body {
+  flex: 1; overflow: auto;
+  padding: 24px;
+  font-size: 0.88rem; line-height: 1.65;
+  user-select: text;
+  color: rgba(255,255,255,0.88);
+}
+.win-body::-webkit-scrollbar { width: 10px; }
+.win-body::-webkit-scrollbar-track { background: transparent; }
+.win-body::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.1); border-radius: 5px;
+  border: 3px solid transparent; background-clip: padding-box;
+}
+.win-body::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); background-clip: padding-box; border: 3px solid transparent; }
+
+.win-resize {
+  position: absolute; right: 0; bottom: 0;
+  width: 14px; height: 14px;
+  cursor: nwse-resize; z-index: 5;
+}
+
+/* ============= SPOTLIGHT ============= */
+#spotlight {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.35);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 900;
+  display: flex; justify-content: center;
+  padding-top: 15vh;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.2s;
+}
+#spotlight.open { opacity: 1; pointer-events: auto; }
+.spot-panel {
+  width: 560px; max-width: calc(100vw - 32px);
+  max-height: 460px;
+  background: rgba(28, 28, 40, 0.85);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border: 1px solid var(--stroke-2);
+  border-radius: 18px;
+  box-shadow: 0 40px 100px -20px rgba(0,0,0,0.8);
+  overflow: hidden;
+  transform: scale(0.96) translateY(-8px);
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+#spotlight.open .spot-panel { transform: scale(1) translateY(0); }
+.spot-input-wrap {
+  display: flex; align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--stroke);
+  gap: 12px;
+}
+.spot-icon { font-size: 1.3rem; color: var(--text-3); }
+.spot-input {
+  flex: 1; background: transparent; border: none; outline: none;
+  color: var(--text); font: inherit; font-size: 1.05rem; font-weight: 500;
+  letter-spacing: -0.01em;
+}
+.spot-input::placeholder { color: var(--text-3); }
+.spot-results { max-height: 380px; overflow-y: auto; padding: 8px; }
+.spot-item {
+  padding: 10px 14px; border-radius: 10px;
+  display: flex; align-items: center; gap: 12px;
+  cursor: pointer; transition: background 0.12s;
+}
+.spot-item:hover, .spot-item.active { background: rgba(139, 92, 246, 0.2); }
+.spot-item .ico {
+  width: 34px; height: 34px; border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.1rem; flex-shrink: 0;
+}
+.spot-item .info { flex: 1; }
+.spot-item .name { font-size: 0.88rem; font-weight: 500; }
+.spot-item .sub { font-size: 0.72rem; color: var(--text-3); }
+.spot-item .kbd {
+  font-size: 0.68rem; color: var(--text-3);
+  padding: 2px 6px; border-radius: 4px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--stroke);
+}
+.spot-empty { padding: 40px 20px; text-align: center; color: var(--text-3); font-size: 0.85rem; }
+
+/* ============= CONTEXT MENU ============= */
+#context-menu {
+  position: absolute; z-index: 800;
+  background: rgba(28, 28, 40, 0.9);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border: 1px solid var(--stroke-2);
+  border-radius: 12px;
+  padding: 6px; min-width: 200px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+  opacity: 0; pointer-events: none;
+  transform: scale(0.95); transform-origin: top left;
+  transition: all 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+#context-menu.open { opacity: 1; pointer-events: auto; transform: scale(1); }
+.ctx-item {
+  padding: 8px 12px; border-radius: 8px;
+  display: flex; align-items: center; gap: 10px;
+  font-size: 0.82rem; cursor: pointer;
+  color: rgba(255,255,255,0.85);
+  transition: background 0.1s;
+}
+.ctx-item:hover { background: rgba(139, 92, 246, 0.25); }
+.ctx-item .kbd {
+  margin-left: auto; font-size: 0.68rem;
+  color: var(--text-3);
+}
+.ctx-sep { height: 1px; background: var(--stroke); margin: 4px 8px; }
+
+/* ============= APP CONTENT ============= */
+.about-hero { display: flex; gap: 18px; align-items: center; margin-bottom: 24px; }
+.about-avatar {
+  width: 76px; height: 76px; border-radius: 22px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2) 60%, var(--accent-3));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 2rem; flex-shrink: 0;
+  box-shadow: inset 0 2px 0 rgba(255,255,255,0.25), 0 10px 30px -5px rgba(139,92,246,0.5);
+}
+.about-name { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.02em; }
+.about-role { color: var(--accent); font-size: 0.85rem; font-weight: 500; margin-top: 2px; }
+.section-title {
+  font-size: 0.68rem; text-transform: uppercase;
+  letter-spacing: 0.15em; color: var(--text-3);
+  font-weight: 700;
+  margin: 22px 0 10px;
+}
+.skill-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.skill-tag {
+  padding: 5px 11px; border-radius: 8px;
+  background: rgba(139, 92, 246, 0.12);
+  border: 1px solid rgba(139, 92, 246, 0.25);
+  color: #c4b5fd; font-size: 0.74rem; font-weight: 500;
+}
+
+/* File Explorer */
+.explorer { display: flex; height: 100%; margin: -24px; }
+.explorer-side {
+  width: 190px; flex-shrink: 0;
+  background: rgba(0,0,0,0.15);
+  border-right: 1px solid var(--stroke);
+  padding: 14px 8px; overflow-y: auto;
+}
+.side-item {
+  padding: 8px 12px; border-radius: 8px;
+  font-size: 0.82rem; cursor: pointer;
+  display: flex; align-items: center; gap: 9px;
+  color: var(--text-2); transition: all 0.12s;
+  margin-bottom: 2px;
+}
+.side-item:hover { background: rgba(255,255,255,0.05); color: var(--text); }
+.side-item.active {
+  background: linear-gradient(135deg, rgba(139,92,246,0.25), rgba(99,102,241,0.2));
+  color: #fff;
+  border: 1px solid rgba(139,92,246,0.3);
+}
+.explorer-main { flex: 1; padding: 20px; overflow-y: auto; }
+.explorer-path {
+  font-size: 0.72rem; color: var(--text-3);
+  margin-bottom: 16px; padding-bottom: 10px;
+  border-bottom: 1px solid var(--stroke);
+  font-weight: 500;
+}
+.project-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+.project-card {
+  padding: 16px; border-radius: 12px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--stroke);
+  cursor: pointer; transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.project-card:hover {
+  background: rgba(139, 92, 246, 0.1);
+  border-color: rgba(139, 92, 246, 0.4);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 30px -10px rgba(139,92,246,0.3);
+}
+.project-card .emoji { font-size: 1.8rem; margin-bottom: 10px; }
+.project-card .title { font-weight: 600; font-size: 0.85rem; margin-bottom: 4px; }
+.project-card .desc { font-size: 0.72rem; color: var(--text-2); line-height: 1.45; }
+
+/* Terminal */
+.terminal {
+  font-family: 'JetBrains Mono', Menlo, Monaco, Consolas, monospace;
+  font-size: 0.82rem; line-height: 1.7;
+  background: rgba(0,0,0,0.35);
+  padding: 20px;
+  margin: -24px; height: calc(100% + 48px);
+  overflow-y: auto;
+  letter-spacing: -0.01em;
+}
+.term-line { white-space: pre-wrap; word-wrap: break-word; }
+.term-prompt { color: #a78bfa; font-weight: 600; }
+.term-path { color: #60a5fa; }
+.term-out { color: rgba(255,255,255,0.65); }
+.term-err { color: #f87171; }
+.term-input-line { display: flex; align-items: center; }
+.term-input {
+  flex: 1; background: transparent; border: none;
+  color: var(--text); font: inherit;
+  outline: none; margin-left: 10px;
+  caret-color: var(--accent);
+}
+
+/* Mail */
+.mail-form { display: flex; flex-direction: column; gap: 14px; }
+.mail-field label {
+  display: block; font-size: 0.7rem;
+  text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--text-3); margin-bottom: 6px; font-weight: 600;
+}
+.mail-field input, .mail-field textarea {
+  width: 100%; padding: 11px 14px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--stroke); border-radius: 10px;
+  color: var(--text); font: inherit; font-size: 0.85rem;
+  outline: none; resize: vertical;
+  transition: all 0.15s;
+}
+.mail-field input:focus, .mail-field textarea:focus {
+  border-color: var(--accent);
+  background: rgba(139, 92, 246, 0.06);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.15);
+}
+.btn-primary {
+  padding: 12px 22px; border: none;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #fff; border-radius: 10px;
+  cursor: pointer; font-weight: 600; font-size: 0.85rem;
+  transition: transform 0.15s, box-shadow 0.2s, filter 0.15s;
+  box-shadow: 0 8px 24px -8px rgba(139, 92, 246, 0.6), inset 0 1px 0 rgba(255,255,255,0.2);
+}
+.btn-primary:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.1);
+  box-shadow: 0 12px 30px -8px rgba(139, 92, 246, 0.8), inset 0 1px 0 rgba(255,255,255,0.2);
+}
+.socials { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.social-chip {
+  padding: 8px 14px; border-radius: 10px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--stroke);
+  color: var(--text); text-decoration: none;
+  font-size: 0.78rem; font-weight: 500;
+  transition: all 0.15s;
+  cursor: pointer;
+  display: flex; align-items: center; gap: 6px;
+}
+.social-chip:hover {
+  background: rgba(139, 92, 246, 0.18);
+  border-color: rgba(139, 92, 246, 0.4);
+  transform: translateY(-1px);
+}
+
+/* Settings */
+.wallpaper-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.wallpaper-item {
+  aspect-ratio: 16/10; border-radius: 12px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: relative;
+}
+.wallpaper-item:hover { transform: scale(1.04); }
+.wallpaper-item.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.2), 0 10px 25px -5px rgba(139,92,246,0.4);
+}
+.wallpaper-item.active::after {
+  content: '✓'; position: absolute; bottom: 8px; right: 8px;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--accent); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.75rem; font-weight: 700;
+}
+
+/* ============= MOBILE ============= */
+@media (max-width: 720px) {
+  :root { --menu-h: 28px; --dock-h: 68px; }
+  #widgets { display: none; }
+  .window {
+    top: var(--menu-h) !important; left: 0 !important;
+    width: 100vw !important;
+    height: calc(100vh - var(--menu-h) - var(--dock-h) - 20px) !important;
+    border-radius: 0; border-left: none; border-right: none;
+  }
+  .win-resize { display: none; }
+  .explorer-side { width: 130px; }
+  .spot-panel { width: calc(100vw - 24px); }
+  .dock-item { width: 46px; height: 46px; font-size: 1.3rem; }
+}
+</style>
+</head>
+<body>
+
+<!-- BOOT -->
+<div id="boot">
+  <div class="boot-glow"></div>
+  <div class="boot-mark">A</div>
+  <div class="boot-name">AryOS</div>
+  <div class="boot-sub">Portfolio Edition</div>
+  <div class="boot-bar"><div class="boot-bar-fill" id="boot-fill"></div></div>
+</div>
+
+<!-- MENU BAR -->
+<div id="menubar">
+  <div class="mb-item strong"><span class="mb-logo"></span>AryOS</div>
+  <div class="mb-item">File</div>
+  <div class="mb-item">Edit</div>
+  <div class="mb-item">View</div>
+  <div class="mb-item">Help</div>
+  <div class="mb-spacer"></div>
+  <div class="mb-item" id="mb-status"><span class="mb-dot"></span>online</div>
+  <div class="mb-item">🔋 100%</div>
+  <div class="mb-item">🔊</div>
+  <div class="mb-item" id="mb-clock"></div>
+</div>
+
+<!-- DESKTOP -->
+<div id="desktop">
+  <!-- WIDGETS -->
+  <div id="widgets">
+    <div class="widget widget-clock">
+      <div class="time" id="wg-time">00:00</div>
+      <div class="date" id="wg-date">—</div>
+    </div>
+    <div class="widget widget-greet">
+      <div class="hi">Welcome back</div>
+      <div class="name">Ary 👋</div>
+      <div class="role">Frontend Developer · Available for work</div>
+    </div>
+  </div>
+
+  <div id="windows-container"></div>
+</div>
+
+<!-- DOCK -->
+<div id="dock-wrap">
+  <div id="dock"></div>
+</div>
+
+<!-- SPOTLIGHT -->
+<div id="spotlight">
+  <div class="spot-panel">
+    <div class="spot-input-wrap">
+      <span class="spot-icon">🔍</span>
+      <input class="spot-input" id="spot-input" placeholder="Cari aplikasi atau perintah...">
+    </div>
+    <div class="spot-results" id="spot-results"></div>
+  </div>
+</div>
+
+<!-- CONTEXT MENU -->
+<div id="context-menu">
+  <div class="ctx-item" data-action="terminal">💻 Buka Terminal <span class="kbd">⌘T</span></div>
+  <div class="ctx-item" data-action="about">👤 Tentang Saya</div>
+  <div class="ctx-item" data-action="spotlight">🔍 Spotlight <span class="kbd">⌘K</span></div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" data-action="wallpaper">🖼️ Ganti Wallpaper</div>
+  <div class="ctx-item" data-action="refresh">🔄 Tutup Semua Window</div>
+</div>
+
+<script>
+/* =========================================================
+   STATE
+========================================================= */
+const OS = {
+  windows: {},
+  topZ: 100,
+  windowIdCounter: 0,
+  spotIdx: 0,
+  spotFiltered: [],
+  wallpapers: [
+    // Mesh gradient wallpapers (modern style)
+    `radial-gradient(ellipse 80% 60% at 20% 10%, rgba(139,92,246,0.35), transparent 60%),
+     radial-gradient(ellipse 70% 60% at 80% 30%, rgba(236,72,153,0.25), transparent 60%),
+     radial-gradient(ellipse 90% 70% at 50% 100%, rgba(99,102,241,0.3), transparent 60%),
+     linear-gradient(180deg, #0a0a12 0%, #0f0b1f 100%)`,
+    `radial-gradient(ellipse 70% 60% at 30% 20%, rgba(6,182,212,0.4), transparent 60%),
+     radial-gradient(ellipse 80% 60% at 80% 80%, rgba(59,130,246,0.35), transparent 60%),
+     linear-gradient(180deg, #04141c 0%, #0a1a2e 100%)`,
+    `radial-gradient(ellipse 80% 60% at 20% 80%, rgba(251,146,60,0.35), transparent 60%),
+     radial-gradient(ellipse 70% 60% at 80% 20%, rgba(244,63,94,0.3), transparent 60%),
+     linear-gradient(180deg, #1a0a0f 0%, #2a1015 100%)`,
+    `radial-gradient(ellipse 80% 60% at 50% 50%, rgba(34,197,94,0.25), transparent 60%),
+     radial-gradient(ellipse 60% 60% at 80% 20%, rgba(16,185,129,0.3), transparent 60%),
+     linear-gradient(180deg, #051410 0%, #0a1f1a 100%)`,
+    `radial-gradient(ellipse 90% 60% at 30% 10%, rgba(168,85,247,0.4), transparent 60%),
+     radial-gradient(ellipse 80% 60% at 80% 90%, rgba(59,7,100,0.5), transparent 60%),
+     linear-gradient(180deg, #0d0518 0%, #1a0a2e 100%)`,
+    `radial-gradient(ellipse 100% 60% at 50% 0%, rgba(255,255,255,0.08), transparent 60%),
+     radial-gradient(ellipse 80% 60% at 20% 100%, rgba(99,102,241,0.4), transparent 60%),
+     linear-gradient(180deg, #0a0a0a 0%, #151520 100%)`
+  ],
+  currentWallpaper: 0
+};
+
+/* =========================================================
+   APPS
+========================================================= */
+const APPS = {
+  about: {
+    title: 'Tentang Saya', icon: '👤', iconClass: 'icon-about',
+    width: 560, height: 500,
+    render: () => `
+      <div class="about-hero">
+        <div class="about-avatar">👨‍💻</div>
+        <div>
+          <div class="about-name">Ary</div>
+          <div class="about-role">Frontend Developer & UI Enthusiast</div>
+        </div>
+      </div>
+      <p style="color:rgba(255,255,255,0.75);">Saya seorang developer yang suka bikin hal-hal interaktif di web. Fokus di React, TypeScript, dan animasi. Portfolio berbentuk OS ini salah satu eksperimen saya untuk menggabungkan skill teknis dengan storytelling.</p>
+      <h3 class="section-title">Skills</h3>
+      <div class="skill-tags">
+        <span class="skill-tag">React</span>
+        <span class="skill-tag">Next.js</span>
+        <span class="skill-tag">TypeScript</span>
+        <span class="skill-tag">Tailwind</span>
+        <span class="skill-tag">Framer Motion</span>
+        <span class="skill-tag">Node.js</span>
+        <span class="skill-tag">UI/UX</span>
+      </div>
+      <h3 class="section-title">Sekarang</h3>
+      <p style="color:var(--text-2);font-size:0.85rem;">Terbuka untuk freelance & kolaborasi. Buka <b style="color:var(--accent)">Mail</b> untuk kontak, atau <b style="color:var(--accent)">Terminal</b> untuk explore lebih dalam ✨</p>
+    `
+  },
+
+  projects: {
+    title: 'File Explorer', icon: '📁', iconClass: 'icon-projects',
+    width: 780, height: 520,
+    render: () => `
+      <div class="explorer">
+        <div class="explorer-side">
+          <div class="side-item active">📂 Semua Project</div>
+          <div class="side-item">⭐ Featured</div>
+          <div class="side-item">🌐 Web Apps</div>
+          <div class="side-item">🎨 UI Experiments</div>
+          <div class="side-item">🛠️ Tools</div>
+        </div>
+        <div class="explorer-main">
+          <div class="explorer-path">~/Projects</div>
+          <div class="project-grid">
+            ${[
+              { emoji: '🛒', title: 'E-Commerce App', desc: 'Full-stack toko online dengan Next.js + Stripe' },
+              { emoji: '📊', title: 'Dashboard Analytics', desc: 'Real-time chart & data viz' },
+              { emoji: '💬', title: 'Chat App', desc: 'WebSocket chat dengan auth' },
+              { emoji: '🎵', title: 'Music Player', desc: 'Custom audio visualizer' },
+              { emoji: '📝', title: 'Note Taking', desc: 'Markdown editor + cloud sync' },
+              { emoji: '🎮', title: 'Mini Game', desc: 'Game browser pakai Canvas' }
+            ].map(p => `
+              <div class="project-card" data-project="${p.title}" data-emoji="${p.emoji}">
+                <div class="emoji">${p.emoji}</div>
+                <div class="title">${p.title}</div>
+                <div class="desc">${p.desc}</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    `,
+    onMount: (el) => {
+      el.querySelectorAll('.project-card').forEach(card => {
+        card.addEventListener('click', () => {
+          const name = card.dataset.project;
+          const emoji = card.dataset.emoji;
+          createWindow('project-detail-' + name, {
+            title: name, icon: emoji, iconClass: 'icon-projects',
+            width: 540, height: 440, singleton: false,
+            render: () => `
+              <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
+                <div style="font-size:2.5rem;">${emoji}</div>
+                <div>
+                  <h2 style="font-size:1.4rem;font-weight:700;letter-spacing:-0.02em;">${name}</h2>
+                  <div style="color:var(--text-2);font-size:0.8rem;">Placeholder detail project</div>
+                </div>
+              </div>
+              <p style="color:var(--text-2);">Detail project ini akan kamu isi sendiri nanti. Ceritakan role, tantangan, dan solusi yang kamu bikin di project ini.</p>
+              <h3 class="section-title">Tech Stack</h3>
+              <div class="skill-tags">
+                <span class="skill-tag">React</span>
+                <span class="skill-tag">TypeScript</span>
+                <span class="skill-tag">Tailwind</span>
+              </div>
+              <h3 class="section-title">Link</h3>
+              <div class="socials">
+                <a class="social-chip" href="#" target="_blank">🔗 Live Demo</a>
+                <a class="social-chip" href="#" target="_blank">💻 GitHub</a>
+              </div>
+            `
+          });
+        });
+      });
+    }
+  },
+
+  terminal: {
+    title: 'Terminal', icon: '⌨️', iconClass: 'icon-terminal',
+    width: 660, height: 440,
+    render: () => `
+      <div class="terminal" id="terminal-root">
+        <div class="term-line term-out">AryOS Terminal — v1.0.0</div>
+        <div class="term-line term-out">Ketik <span style="color:#a78bfa">help</span> untuk lihat command tersedia.</div>
+        <div class="term-line">&nbsp;</div>
+      </div>
+    `,
+    onMount: initTerminal
+  },
+
+  contact: {
+    title: 'Mail — Kontak', icon: '✉️', iconClass: 'icon-mail',
+    width: 560, height: 540,
+    render: () => `
+      <div class="mail-form">
+        <div class="mail-field">
+          <label>Nama</label>
+          <input type="text" placeholder="Nama kamu...">
+        </div>
+        <div class="mail-field">
+          <label>Email</label>
+          <input type="email" placeholder="email@kamu.com">
+        </div>
+        <div class="mail-field">
+          <label>Pesan</label>
+          <textarea rows="5" placeholder="Tulis pesan..."></textarea>
+        </div>
+        <button class="btn-primary" onclick="alert('Demo aja ya! Nanti connect ke Formspree/Resend.')">Kirim Pesan</button>
+        <h3 class="section-title">Atau via</h3>
+        <div class="socials">
+          <a class="social-chip" href="mailto:hi@example.com">📧 Email</a>
+          <a class="social-chip" href="https://github.com" target="_blank">💻 GitHub</a>
+          <a class="social-chip" href="https://linkedin.com" target="_blank">💼 LinkedIn</a>
+          <a class="social-chip" href="https://twitter.com" target="_blank">🐦 Twitter</a>
+        </div>
+      </div>
+    `
+  },
+
+  settings: {
+    title: 'Pengaturan', icon: '⚙️', iconClass: 'icon-settings',
+    width: 600, height: 500,
+    render: () => `
+      <h3 class="section-title">Wallpaper</h3>
+      <div class="wallpaper-grid">
+        ${OS.wallpapers.map((w, i) => `
+          <div class="wallpaper-item ${i === OS.currentWallpaper ? 'active' : ''}"
+               style="background:${w};background-size:cover"
+               data-wallpaper="${i}"></div>
+        `).join('')}
+      </div>
+      <h3 class="section-title">Sistem</h3>
+      <p style="font-size:0.85rem;color:var(--text-2);">
+        <b style="color:var(--text)">AryOS v1.0.0</b><br>
+        Dibuat dengan HTML, CSS, dan JavaScript murni.<br>
+        Zero dependencies. Pure web platform. 🚀
+      </p>
+      <h3 class="section-title">Shortcut</h3>
+      <div style="font-size:0.82rem;color:var(--text-2);line-height:2;">
+        <div><kbd style="background:rgba(255,255,255,0.08);padding:2px 8px;border-radius:6px;font-family:monospace;font-size:0.75rem;">⌘K</kbd> &nbsp; Spotight search</div>
+        <div><kbd style="background:rgba(255,255,255,0.08);padding:2px 8px;border-radius:6px;font-family:monospace;font-size:0.75rem;">Esc</kbd> &nbsp; Tutup menu/modal</div>
+        <div><kbd style="background:rgba(255,255,255,0.08);padding:2px 8px;border-radius:6px;font-family:monospace;font-size:0.75rem;">Right-click</kbd> &nbsp; Context menu</div>
+      </div>
+    `,
+    onMount: (el) => {
+      el.querySelectorAll('.wallpaper-item').forEach(item => {
+        item.addEventListener('click', () => {
+          const idx = parseInt(item.dataset.wallpaper);
+          OS.currentWallpaper = idx;
+          document.getElementById('desktop').style.background = OS.wallpapers[idx];
+          document.getElementById('desktop').style.backgroundSize = 'cover';
+          el.querySelectorAll('.wallpaper-item').forEach(i => i.classList.remove('active'));
+          item.classList.add('active');
+        });
+      });
+    }
+  }
+};
+
+/* =========================================================
+   DOCK
+========================================================= */
+const DOCK_APPS = ['about', 'projects', 'terminal', 'contact', 'settings'];
+
+function renderDock() {
+  const dock = document.getElementById('dock');
+  dock.innerHTML = DOCK_APPS.map(id => {
+    const app = APPS[id];
+    return `
+      <div class="dock-item ${app.iconClass}" data-app="${id}">
+        <span>${app.icon}</span>
+        <div class="tooltip">${app.title}</div>
+      </div>
+    `;
+  }).join('') + `
+    <div class="dock-sep"></div>
+    <div class="dock-item" data-action="spotlight" style="background:linear-gradient(145deg,rgba(255,255,255,0.12),rgba(255,255,255,0.03));">
+      <span>🔍</span>
+      <div class="tooltip">Spotlight (⌘K)</div>
+    </div>
+  `;
+
+  dock.querySelectorAll('.dock-item').forEach(item => {
+    item.addEventListener('click', () => {
+      if (item.dataset.action === 'spotlight') return openSpotlight();
+      if (item.dataset.app) openApp(item.dataset.app);
+    });
+  });
+}
+
+function updateDockRunning() {
+  const runningApps = new Set(Object.values(OS.windows).filter(w => w.appId && APPS[w.appId]).map(w => w.appId));
+  document.querySelectorAll('.dock-item[data-app]').forEach(el => {
+    el.classList.toggle('dock-running', runningApps.has(el.dataset.app));
+  });
+}
+
+/* =========================================================
+   WINDOW MANAGER
+========================================================= */
+function openApp(appId) {
+  const app = APPS[appId];
+  if (!app) return;
+
+  // Singleton: kalau udah ada, focus
+  const existing = Object.values(OS.windows).find(w => w.appId === appId && w.singleton !== false);
+  if (existing) {
+    if (existing.state.minimized) restoreWindow(existing.id);
+    else focusWindow(existing.id);
+    return;
+  }
+  createWindow(appId, { ...app, singleton: true });
+}
+
+function createWindow(appId, config) {
+  const id = 'win-' + (++OS.windowIdCounter);
+  const isMobile = window.matchMedia('(max-width: 720px)').matches;
+
+  const offset = (OS.windowIdCounter % 8) * 28;
+  const w = config.width || 500;
+  const h = config.height || 400;
+  const left = isMobile ? 0 : Math.min(140 + offset, window.innerWidth - w - 24);
+  const top = isMobile ? 32 : Math.min(70 + offset, window.innerHeight - h - 100);
+
+  const el = document.createElement('div');
+  el.className = 'window focused';
+  el.dataset.id = id;
+  el.style.left = left + 'px';
+  el.style.top = top + 'px';
+  el.style.width = w + 'px';
+  el.style.height = h + 'px';
+  el.style.zIndex = ++OS.topZ;
+
+  el.innerHTML = `
+    <div class="win-titlebar">
+      <div class="traffic">
+        <button class="traffic-btn close" title="Close"></button>
+        <button class="traffic-btn minimize" title="Minimize"></button>
+        <button class="traffic-btn maximize" title="Maximize"></button>
+      </div>
+      <div class="win-title">
+        <span class="emoji">${config.icon}</span>
+        <span>${config.title}</span>
+      </div>
+    </div>
+    <div class="win-body">${config.render()}</div>
+    <div class="win-resize"></div>
+  `;
+
+  document.getElementById('windows-container').appendChild(el);
+
+  const winObj = {
+    id, appId, el,
+    singleton: config.singleton,
+    state: { minimized: false, maximized: false, prevBounds: null }
+  };
+  OS.windows[id] = winObj;
+
+  el.querySelector('.traffic-btn.close').addEventListener('click', e => { e.stopPropagation(); closeWindow(id); });
+  el.querySelector('.traffic-btn.minimize').addEventListener('click', e => { e.stopPropagation(); minimizeWindow(id); });
+  el.querySelector('.traffic-btn.maximize').addEventListener('click', e => { e.stopPropagation(); toggleMaximize(id); });
+
+  el.addEventListener('mousedown', () => focusWindow(id));
+
+  makeDraggable(el, el.querySelector('.win-titlebar'));
+  makeResizable(el, el.querySelector('.win-resize'));
+
+  if (config.onMount) {
+    const body = el.querySelector('.win-body');
+    setTimeout(() => config.onMount(body, id), 30);
+  }
+
+  updateDockRunning();
+  updateTaskbarState();
+  return id;
+}
+
+function focusWindow(id) {
+  const w = OS.windows[id];
+  if (!w) return;
+  w.el.style.zIndex = ++OS.topZ;
+  Object.values(OS.windows).forEach(x => x.el.classList.toggle('focused', x.id === id));
+}
+
+function closeWindow(id) {
+  const w = OS.windows[id];
+  if (!w) return;
+  w.el.classList.add('closing');
+  setTimeout(() => {
+    w.el.remove();
+    delete OS.windows[id];
+    updateDockRunning();
+    updateTaskbarState();
+  }, 180);
+}
+
+function minimizeWindow(id) {
+  const w = OS.windows[id];
+  if (!w) return;
+  w.state.minimized = true;
+  w.el.classList.add('minimized-anim');
+  setTimeout(() => {
+    w.el.style.display = 'none';
+    w.el.classList.remove('minimized-anim');
+  }, 250);
+}
+
+function restoreWindow(id) {
+  const w = OS.windows[id];
+  if (!w) return;
+  w.state.minimized = false;
+  w.el.style.display = 'flex';
+  w.el.style.animation = 'winOpen 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)';
+  focusWindow(id);
+}
+
+function toggleMaximize(id) {
+  const w = OS.windows[id];
+  if (!w) return;
+  const el = w.el;
+  if (w.state.maximized) {
+    const b = w.state.prevBounds;
+    el.style.left = b.left; el.style.top = b.top;
+    el.style.width = b.width; el.style.height = b.height;
+    el.classList.remove('maximized');
+    w.state.maximized = false;
+  } else {
+    w.state.prevBounds = { left: el.style.left, top: el.style.top, width: el.style.width, height: el.style.height };
+    el.style.left = '0px';
+    el.style.top = 'var(--menu-h)';
+    el.style.width = '100vw';
+    el.style.height = `calc(100vh - var(--menu-h) - var(--dock-h) - 20px)`;
+    el.classList.add('maximized');
+    w.state.maximized = true;
   }
 }
-````
 
-## File: vercel.json
-````json
-{
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+function updateTaskbarState() { /* no taskbar in this design — dock shows running */ }
+
+/* =========================================================
+   DRAG & RESIZE
+========================================================= */
+function makeDraggable(el, handle) {
+  let startX, startY, startLeft, startTop, dragging = false;
+
+  handle.addEventListener('mousedown', e => {
+    if (e.target.closest('.traffic-btn')) return;
+    if (OS.windows[el.dataset.id]?.state.maximized) return;
+    if (window.matchMedia('(max-width: 720px)').matches) return;
+    dragging = true;
+    startX = e.clientX; startY = e.clientY;
+    startLeft = el.offsetLeft; startTop = el.offsetTop;
+    document.body.style.cursor = 'grabbing';
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    let newLeft = startLeft + dx;
+    let newTop = startTop + dy;
+    newLeft = Math.max(-el.offsetWidth + 100, Math.min(newLeft, window.innerWidth - 100));
+    newTop = Math.max(32, Math.min(newTop, window.innerHeight - 100));
+    el.style.left = newLeft + 'px';
+    el.style.top = newTop + 'px';
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (dragging) { dragging = false; document.body.style.cursor = ''; }
+  });
 }
+
+function makeResizable(el, handle) {
+  let resizing = false, startX, startY, startW, startH;
+  handle.addEventListener('mousedown', e => {
+    if (OS.windows[el.dataset.id]?.state.maximized) return;
+    resizing = true;
+    startX = e.clientX; startY = e.clientY;
+    startW = el.offsetWidth; startH = el.offsetHeight;
+    e.preventDefault(); e.stopPropagation();
+  });
+  document.addEventListener('mousemove', e => {
+    if (!resizing) return;
+    el.style.width = Math.max(300, startW + (e.clientX - startX)) + 'px';
+    el.style.height = Math.max(180, startH + (e.clientY - startY)) + 'px';
+  });
+  document.addEventListener('mouseup', () => { resizing = false; });
+}
+
+/* =========================================================
+   TERMINAL
+========================================================= */
+function initTerminal(root) {
+  const term = root.querySelector('#terminal-root');
+  let history = [], histIdx = -1;
+
+  const commands = {
+    help: () => `Command tersedia:
+  about      - Tentang saya
+  projects   - List project
+  contact    - Info kontak
+  skills     - Skill & tools
+  clear      - Bersihkan layar
+  whoami     - Siapa kamu
+  date       - Tanggal & waktu
+  echo <msg> - Echo pesan
+  open <app> - Buka aplikasi
+  sudo       - Jangan coba 😏`,
+    about: () => `Ary — Frontend Developer & UI Enthusiast.
+Fokus di React, TypeScript, dan animasi web.
+Suka bikin hal-hal interaktif & eksperimental di browser.`,
+    projects: () => `Project yang tersedia:
+  1. E-Commerce App       (Next.js + Stripe)
+  2. Dashboard Analytics  (React + D3)
+  3. Chat App             (WebSocket)
+  4. Music Player         (Canvas API)
+  5. Note Taking          (Markdown)
+  6. Mini Game            (HTML5 Canvas)
+
+Ketik "open projects" untuk lihat detail.`,
+    contact: () => `Email    : hi@example.com
+GitHub   : github.com/ary
+LinkedIn : linkedin.com/in/ary`,
+    skills: () => `Languages : JavaScript, TypeScript, HTML, CSS
+Framework : React, Next.js, Node.js, Express
+Tools     : Tailwind, Framer Motion, Git, Figma`,
+    whoami: () => `visitor@aryos`,
+    date: () => new Date().toString(),
+    sudo: () => `Nice try 😏 Tapi kamu bukan admin di sini.`,
+    open: (args) => {
+      if (!args[0]) return 'Usage: open <app>. Coba: open projects';
+      const map = { projects: 'projects', about: 'about', mail: 'contact', contact: 'contact', terminal: 'terminal', settings: 'settings' };
+      const target = map[args[0]];
+      if (target) { openApp(target); return `Membuka ${args[0]}...`; }
+      return `App "${args[0]}" tidak ditemukan.`;
+    }
+  };
+
+  function print(text, cls = 'term-out') {
+    const line = document.createElement('div');
+    line.className = 'term-line ' + cls;
+    line.textContent = text;
+    term.appendChild(line);
+  }
+  function printInput(cmd) {
+    const line = document.createElement('div');
+    line.className = 'term-line';
+    line.innerHTML = `<span class="term-prompt">visitor@aryos</span>:<span class="term-path">~</span>$ ${escapeHtml(cmd)}`;
+    term.appendChild(line);
+  }
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  }
+
+  function buildPrompt() {
+    const line = document.createElement('div');
+    line.className = 'term-line term-input-line';
+    line.innerHTML = `<span class="term-prompt">visitor@aryos</span>:<span class="term-path">~</span>$`;
+    const input = document.createElement('input');
+    input.className = 'term-input';
+    input.autocomplete = 'off'; input.spellcheck = false;
+    line.appendChild(input);
+    term.appendChild(line);
+    input.focus();
+    term.scrollTop = term.scrollHeight;
+
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        const val = input.value.trim();
+        if (val) { history.push(val); histIdx = history.length; }
+        input.style.display = 'none';
+        printInput(val);
+        if (val) {
+          const [cmd, ...args] = val.split(/\s+/);
+          if (cmd === 'clear') term.innerHTML = '';
+          else if (commands[cmd]) {
+            const out = commands[cmd](args);
+            if (out) print(out);
+          } else print(`command not found: ${cmd}. Ketik "help".`, 'term-err');
+        }
+        print('');
+        buildPrompt();
+        term.scrollTop = term.scrollHeight;
+      } else if (e.key === 'ArrowUp') {
+        if (histIdx > 0) { histIdx--; input.value = history[histIdx]; }
+        e.preventDefault();
+      } else if (e.key === 'ArrowDown') {
+        if (histIdx < history.length - 1) { histIdx++; input.value = history[histIdx]; }
+        else { histIdx = history.length; input.value = ''; }
+        e.preventDefault();
+      }
+    });
+    term.onclick = (e) => { if (!e.target.closest('input')) input.focus(); };
+  }
+  buildPrompt();
+}
+
+/* =========================================================
+   SPOTLIGHT
+========================================================= */
+function openSpotlight() {
+  const sp = document.getElementById('spotlight');
+  sp.classList.add('open');
+  const input = document.getElementById('spot-input');
+  input.value = '';
+  input.focus();
+  renderSpotlight('');
+}
+function closeSpotlight() {
+  document.getElementById('spotlight').classList.remove('open');
+}
+
+function renderSpotlight(query) {
+  const results = document.getElementById('spot-results');
+  const apps = Object.entries(APPS).filter(([id, a]) =>
+    a.title.toLowerCase().includes(query.toLowerCase())
+  );
+  OS.spotFiltered = apps;
+  if (OS.spotIdx >= apps.length) OS.spotIdx = 0;
+
+  if (!apps.length) {
+    results.innerHTML = `<div class="spot-empty">Tidak ada hasil untuk "${query}"</div>`;
+    return;
+  }
+
+  results.innerHTML = apps.map(([id, app], i) => `
+    <div class="spot-item ${i === OS.spotIdx ? 'active' : ''}" data-app="${id}">
+      <div class="ico ${app.iconClass}" style="color:#fff;">${app.icon}</div>
+      <div class="info">
+        <div class="name">${app.title}</div>
+        <div class="sub">Aplikasi · AryOS</div>
+      </div>
+      <span class="kbd">↵</span>
+    </div>
+  `).join('');
+
+  results.querySelectorAll('.spot-item').forEach(el => {
+    el.addEventListener('click', () => {
+      openApp(el.dataset.app);
+      closeSpotlight();
+    });
+  });
+}
+
+document.getElementById('spot-input').addEventListener('input', e => {
+  OS.spotIdx = 0;
+  renderSpotlight(e.target.value);
+});
+document.getElementById('spot-input').addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown') {
+    OS.spotIdx = Math.min(OS.spotIdx + 1, OS.spotFiltered.length - 1);
+    renderSpotlight(e.target.value);
+    e.preventDefault();
+  } else if (e.key === 'ArrowUp') {
+    OS.spotIdx = Math.max(OS.spotIdx - 1, 0);
+    renderSpotlight(e.target.value);
+    e.preventDefault();
+  } else if (e.key === 'Enter') {
+    const [id] = OS.spotFiltered[OS.spotIdx] || [];
+    if (id) { openApp(id); closeSpotlight(); }
+  } else if (e.key === 'Escape') {
+    closeSpotlight();
+  }
+});
+document.getElementById('spotlight').addEventListener('click', e => {
+  if (e.target.id === 'spotlight') closeSpotlight();
+});
+
+/* =========================================================
+   CONTEXT MENU
+========================================================= */
+const ctxMenu = document.getElementById('context-menu');
+document.getElementById('desktop').addEventListener('contextmenu', e => {
+  if (e.target.closest('.window')) return;
+  e.preventDefault();
+  ctxMenu.style.left = Math.min(e.clientX, window.innerWidth - 220) + 'px';
+  ctxMenu.style.top = Math.min(e.clientY, window.innerHeight - 240) + 'px';
+  ctxMenu.classList.add('open');
+});
+document.addEventListener('click', e => {
+  if (!ctxMenu.contains(e.target)) ctxMenu.classList.remove('open');
+});
+ctxMenu.querySelectorAll('.ctx-item').forEach(item => {
+  item.addEventListener('click', () => {
+    const action = item.dataset.action;
+    if (action === 'terminal') openApp('terminal');
+    else if (action === 'about') openApp('about');
+    else if (action === 'spotlight') openSpotlight();
+    else if (action === 'wallpaper') {
+      OS.currentWallpaper = (OS.currentWallpaper + 1) % OS.wallpapers.length;
+      document.getElementById('desktop').style.background = OS.wallpapers[OS.currentWallpaper];
+      document.getElementById('desktop').style.backgroundSize = 'cover';
+    } else if (action === 'refresh') {
+      Object.keys(OS.windows).forEach(closeWindow);
+    }
+    ctxMenu.classList.remove('open');
+  });
+});
+
+/* =========================================================
+   CLOCK
+========================================================= */
+function updateClock() {
+  const now = new Date();
+  const time = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+  const date = now.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' });
+  document.getElementById('wg-time').textContent = time;
+  document.getElementById('wg-date').textContent = now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  document.getElementById('mb-clock').textContent = `${date} ${time}`;
+}
+
+/* =========================================================
+   GLOBAL KEYBOARD
+========================================================= */
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+    e.preventDefault();
+    document.getElementById('spotlight').classList.contains('open') ? closeSpotlight() : openSpotlight();
+    return;
+  }
+  if (e.key === 'Escape') {
+    closeSpotlight();
+    ctxMenu.classList.remove('open');
+  }
+});
+
+/* =========================================================
+   BOOT
+========================================================= */
+function boot() {
+  const fill = document.getElementById('boot-fill');
+  let progress = 0;
+  const interval = setInterval(() => {
+    progress += Math.random() * 15 + 5;
+    if (progress >= 100) {
+      progress = 100;
+      fill.style.width = '100%';
+      clearInterval(interval);
+      setTimeout(() => {
+        document.getElementById('boot').classList.add('hide');
+        setTimeout(() => {
+          document.getElementById('boot').style.display = 'none';
+          openApp('about');
+        }, 800);
+      }, 400);
+    } else {
+      fill.style.width = progress + '%';
+    }
+  }, 200);
+}
+
+/* =========================================================
+   INIT
+========================================================= */
+function init() {
+  renderDock();
+  updateClock();
+  setInterval(updateClock, 1000);
+  document.getElementById('desktop').style.background = OS.wallpapers[0];
+  document.getElementById('desktop').style.backgroundSize = 'cover';
+  boot();
+}
+
+init();
+</script>
+</body>
+</html>
 ````
 
-## File: api/r2/delete.js
+## File: api/r2/presign.js
 ````javascript
-import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { cekSesi } from '../_lib/sesi.js'
 
 const s3 = new S3Client({
@@ -675,11 +3167,48 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
   const user = await cekSesi(process.env, req.headers.authorization)
   if (!user) return res.status(401).json({ error: 'Sesi tidak valid' })
-  const { key } = req.body || {}
-  if (!key) return res.status(400).json({ error: 'Key tidak ada' })
-  await s3.send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key }))
-  return res.status(200).json({ ok: true })
+  const { filename, contentType, kind } = req.body || {}
+  if (!filename || !contentType || !kind) return res.status(400).json({ error: 'Payload tidak lengkap' })
+  const ext = (filename.split('.').pop() || 'bin').toLowerCase()
+  const key = kind + '/' + new Date().getFullYear() + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + ext
+  const uploadUrl = await getSignedUrl(
+    s3,
+    new PutObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key, ContentType: contentType }),
+    { expiresIn: 300 }
+  )
+  const publicUrl = '/api/r2/file?key=' + key
+  return res.status(200).json({ uploadUrl, publicUrl, key })
 }
+````
+
+## File: src/lib/constants.js
+````javascript
+export const KATEGORI = [
+  'Administrasi',
+  'Pengarsipan',
+  'Layanan Nasabah',
+  'Back Office',
+  'Edukasi Produk',
+  'Pendataan',
+  'Rapat',
+  'Pelatihan',
+  'Dokumentasi',
+  'Pendukung Lain'
+]
+
+export const UNIT = ['Frontliner', 'Back Office', 'Marketing', 'Operasional', 'Umum']
+
+export const GALERI_KEGIATAN = [
+  'Dokumentasi',
+  'Administrasi',
+  'Layanan Nasabah',
+  'Edukasi',
+  'Pelatihan',
+  'Operasional',
+  'Lainnya'
+]
+/* Hari pertama masa magang BSI; form tidak menerima tanggal sebelum ini */
+export const MULAI_MAGANG = '2026-09-08'
 ````
 
 ## File: src/lib/drive.js
@@ -722,293 +3251,15 @@ export function driveViewUrl(id) {
 }
 ````
 
-## File: src/lib/youtube.js
-````javascript
-import { supabase } from './supabase.js'
-
-export function parseYouTubeId(url) {
-  if (!url) return null
-  const s = String(url).trim()
-  if (/^[A-Za-z0-9_-]{11}$/.test(s)) return s
-  try {
-    const u = new URL(s)
-    const host = u.hostname.replace('www.', '').replace('m.', '')
-    if (host === 'youtu.be') {
-      const id = u.pathname.slice(1).split('/')[0]
-      return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null
-    }
-    if (host.endsWith('youtube.com') || host.endsWith('youtube-nocookie.com')) {
-      const v = u.searchParams.get('v')
-      if (v && /^[A-Za-z0-9_-]{11}$/.test(v)) return v
-      const parts = u.pathname.split('/').filter(Boolean)
-      if (parts[0] === 'embed' || parts[0] === 'shorts' || parts[0] === 'live') {
-        const id = parts[1]
-        return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null
-      }
-    }
-  } catch (e) {}
-  return null
-}
-export function ytThumb(id) {
-  return 'https://i.ytimg.com/vi/' + id + '/hqdefault.jpg'
-}
-export async function fetchYouTubeQuota() {
-  try {
-    const r = await fetch('/api/youtube/quota', { cache: 'no-store' })
-    if (!r.ok) return { limit: 5, used: 0, remaining: 5 }
-    return await r.json()
-  } catch (e) {
-    return { limit: 5, used: 0, remaining: 5 }
-  }
-}
-export async function startYouTubeSession(title, description, contentType, token) {
-  if (!token) throw new Error('Sesi login tidak terbaca. Silakan masuk ulang lalu coba lagi.')
-  const r = await fetch('/api/youtube/session', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify({ title: title, description: description, contentType: contentType })
-  })
-  if (!r.ok) {
-    const j = await r.json().catch(function () { return { error: 'Gagal memulai sesi upload video' } })
-    throw new Error(j.error || 'Gagal memulai sesi upload video')
-  }
-  return await r.json()
-}
-export async function uploadToYouTube(sessionUri, blob, onProgress) {
-  const hasil = await new Promise(function (resolve) {
-    const xhr = new XMLHttpRequest()
-    xhr.open('PUT', sessionUri)
-    xhr.setRequestHeader('Content-Type', blob.type || 'video/mp4')
-    if (onProgress) {
-      xhr.upload.onprogress = function (e) {
-        if (e.lengthComputable) onProgress(e.loaded / e.total)
-      }
-    }
-    xhr.onload = function () { resolve({ status: xhr.status, body: xhr.responseText }) }
-    xhr.onerror = function () { resolve({ status: 0, body: '' }) }
-    xhr.send(blob)
-  })
-  if (hasil.status >= 200 && hasil.status < 300) {
-    try {
-      const j = JSON.parse(hasil.body || '{}')
-      if (j && j.id) return { videoId: j.id }
-    } catch (e) { /* respons tidak terbaca, pulihkan lewat server */ }
-  } else if (hasil.status !== 0) {
-    throw new Error('Upload video gagal (status ' + hasil.status + ')')
-  }
-  const sesi = await supabase.auth.getSession()
-  const token = await ambilTokenSesi()
-  const r = await fetch('/api/youtube/latest', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify({})
-  })
-  if (r.ok) {
-    try {
-      const j = await r.json()
-      if (j && j.videoId) return { videoId: j.videoId }
-    } catch (e) {
-      console.warn('Respons pemulihan bukan JSON, dilewati:', e.message)
-    }
-  }
-  throw new Error('Upload selesai tetapi id video tidak terbaca. Video kemungkinan sudah tersimpan; tempel link video secara manual.')
-}
-
-export async function unggahVideoYouTube(file, judul, onProgress) {
-  const sesiData = await supabase.auth.getSession()
-  const token = await ambilTokenSesi()
-  const sesi = await startYouTubeSession(judul || 'Dokumentasi Magang', 'Diunggah dari portal magang BSI.', file.type || 'video/mp4', token)
-  return await uploadToYouTube(sesi.sessionUri, file, onProgress)
-}
-
-export async function ambilTokenSesi() {
-  try {
-    const r = await supabase.auth.getSession()
-    const ssn = r && r.data ? r.data.session : null
-    return ssn && ssn.access_token ? ssn.access_token : ''
-  } catch (e) {
-    return ''
-  }
-}
+## File: .gitignore
 ````
-
-## File: supabase/schema.sql
-````sql
-create extension if not exists "pgcrypto";
-create table public.mahasiswa (
-  id uuid primary key default gen_random_uuid(),
-  auth_uid uuid unique references auth.users(id) on delete cascade,
-  nim varchar(20) not null unique,
-  nama varchar(100) not null,
-  created_at timestamptz not null default now()
-);
-create table public.logbooks (
-  id uuid primary key default gen_random_uuid(),
-  mahasiswa_id uuid not null references public.mahasiswa(id) on delete cascade,
-  tanggal date not null,
-  unit varchar(50),
-  kategori varchar(50) not null,
-  judul varchar(255) not null,
-  kendala text,
-  solusi text,
-  pembelajaran text,
-  status varchar(20) not null default 'draft' check (status in ('draft','publik')),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-create table public.logbook_items (
-  id uuid primary key default gen_random_uuid(),
-  logbook_id uuid not null references public.logbooks(id) on delete cascade,
-  urutan integer not null default 1,
-  judul varchar(255) not null,
-  deskripsi text,
-  hasil text,
-  media_path text,
-  media_type varchar(10) check (media_type in ('foto','video')),
-  show_in_gallery boolean not null default false,
-  created_at timestamptz not null default now()
-);
-create table public.galeri (
-  id uuid primary key default gen_random_uuid(),
-  mahasiswa_id uuid not null references public.mahasiswa(id) on delete cascade,
-  logbook_item_id uuid unique references public.logbook_items(id) on delete cascade,
-  judul varchar(255) not null,
-  deskripsi text,
-  tanggal date not null,
-  kegiatan varchar(50),
-  media_path text not null,
-  media_type varchar(10) not null check (media_type in ('foto','video')),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-create table public.daftar_hadir (
-  id uuid primary key default gen_random_uuid(),
-  mahasiswa_id uuid not null references public.mahasiswa(id) on delete cascade,
-  tanggal date not null,
-  status varchar(20) not null check (status in ('Masuk','Izin','Bolos')),
-  alasan text,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (mahasiswa_id, tanggal)
-);
-create or replace function public.set_updated_at() returns trigger language plpgsql as $$
-begin
-  new.updated_at = now();
-  return new;
-end $$;
-create trigger trg_logbooks_upd before update on public.logbooks for each row execute function public.set_updated_at();
-create trigger trg_galeri_upd before update on public.galeri for each row execute function public.set_updated_at();
-create trigger trg_hadir_upd before update on public.daftar_hadir for each row execute function public.set_updated_at();
-create index idx_logbooks_mahasiswa on public.logbooks(mahasiswa_id, tanggal desc);
-create index idx_logbooks_status on public.logbooks(status);
-create index idx_items_logbook on public.logbook_items(logbook_id, urutan);
-create index idx_galeri_mahasiswa on public.galeri(mahasiswa_id, tanggal desc);
-create index idx_galeri_item on public.galeri(logbook_item_id);
-create index idx_hadir_mahasiswa on public.daftar_hadir(mahasiswa_id, tanggal desc);
-alter table public.mahasiswa enable row level security;
-alter table public.logbooks enable row level security;
-alter table public.logbook_items enable row level security;
-alter table public.galeri enable row level security;
-alter table public.daftar_hadir enable row level security;
-create policy "mahasiswa_read_all" on public.mahasiswa for select using (true);
-create policy "mahasiswa_update_self" on public.mahasiswa for update using (auth_uid = auth.uid());
-create policy "logbooks_read" on public.logbooks for select using (
-  status = 'publik' or mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
-);
-create policy "logbooks_insert_self" on public.logbooks for insert with check (
-  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
-);
-create policy "logbooks_update_self" on public.logbooks for update using (
-  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
-);
-create policy "logbooks_delete_self" on public.logbooks for delete using (
-  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
-);
-create policy "items_read" on public.logbook_items for select using (
-  exists (select 1 from public.logbooks l where l.id = logbook_id
-    and (l.status = 'publik' or l.mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())))
-);
-create policy "items_write_self" on public.logbook_items for all using (
-  exists (select 1 from public.logbooks l where l.id = logbook_id
-    and l.mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid()))
-) with check (
-  exists (select 1 from public.logbooks l where l.id = logbook_id
-    and l.mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid()))
-);
-create policy "galeri_read_all" on public.galeri for select using (true);
-create policy "galeri_insert_self" on public.galeri for insert with check (
-  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
-);
-create policy "galeri_update_self" on public.galeri for update using (
-  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
-);
-create policy "galeri_delete_self" on public.galeri for delete using (
-  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
-);
-create policy "hadir_read_all" on public.daftar_hadir for select using (true);
-create policy "hadir_insert_self" on public.daftar_hadir for insert with check (
-  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
-);
-create policy "hadir_update_self" on public.daftar_hadir for update using (
-  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
-);
-create policy "hadir_delete_self" on public.daftar_hadir for delete using (
-  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
-);
-````
-
-## File: tailwind.config.js
-````javascript
-export default {
-  darkMode: 'class',
-  content: ['./index.html', './src/**/*.{js,jsx}'],
-  theme: {
-    extend: {
-      colors: {
-        bsi: {
-           50: '#f4fbf6', 100: '#dff0e4', 200: '#bfe3cc', 300: '#86ecb0',
-           400: '#4ed58f', 500: '#27c06d', 600: '#1a9e57', 700: '#177c48',
-           800: '#16623c', 900: '#135033', 950: '#081a13'
-         },
-         gold: { 400: '#fbbf24', 500: '#f59e0b', 600: '#d97706' }
-      }
-    }
-  },
-  plugins: []
-}
-````
-
-## File: api/r2/presign.js
-````javascript
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
-import { cekSesi } from '../_lib/sesi.js'
-
-const s3 = new S3Client({
-  region: 'auto',
-  endpoint: 'https://' + process.env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
-  }
-})
-
-export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
-  const user = await cekSesi(process.env, req.headers.authorization)
-  if (!user) return res.status(401).json({ error: 'Sesi tidak valid' })
-  const { filename, contentType, kind } = req.body || {}
-  if (!filename || !contentType || !kind) return res.status(400).json({ error: 'Payload tidak lengkap' })
-  const ext = (filename.split('.').pop() || 'bin').toLowerCase()
-  const key = kind + '/' + new Date().getFullYear() + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + ext
-  const uploadUrl = await getSignedUrl(
-    s3,
-    new PutObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key, ContentType: contentType }),
-    { expiresIn: 300 }
-  )
-  const publicUrl = '/api/r2/file?key=' + key
-  return res.status(200).json({ uploadUrl, publicUrl, key })
-}
+node_modules
+dist
+.env.local
+.env
+*.log
+.env.youtube-*
+repomix-output.md
 ````
 
 ## File: api/youtube/latest.js
@@ -1132,248 +3383,6 @@ Aplikasi single page berbasis React dengan data tersimpan di Supabase dan media 
 ## Catatan teknis
 - Seluruh konten dimuat lewat JavaScript, tersedia blok noscript berisi tautan halaman utama.
 - robots.txt mengizinkan perayap umum dan agen AI.
-````
-
-## File: src/components/QrPrintTab.jsx
-````javascript
-import { useRef, useState } from 'react'
-import { QRCodeSVG } from 'qrcode.react'
-import { useAuth } from '../lib/auth.js'
-import { SizedIcon } from './icons.jsx'
-
-export default function QrPrintTab() {
-  const { mahasiswa } = useAuth()
-  const cardRef = useRef(null)
-  const [unduh, setUnduh] = useState(false)
-
-  const targetUrl = window.location.origin + '/qr'
-
-  async function unduhPng() {
-    if (!cardRef.current || unduh) return
-    setUnduh(true)
-    try {
-      const html2canvas = (await import('html2canvas')).default
-      const canvas = await html2canvas(cardRef.current, {
-        scale: 3,
-        useCORS: true,
-        backgroundColor: null,
-        logging: false,
-        onclone: function (clonedDoc) {
-          const url = clonedDoc.querySelector('.qr-print-card .font-mono')
-          if (!url) return
-          const box = url.parentElement
-          box.style.paddingTop = '6px'
-          box.style.paddingBottom = '18px'
-        }
-      })
-      const url = canvas.toDataURL('image/png', 1.0)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'Standee-QR-' + (mahasiswa ? mahasiswa.nama.replace(/\s+/g, '-') : 'mahasiswa') + '.png'
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-    } catch (e) {
-      console.error(e)
-      alert('Gagal membuat PNG: ' + e.message)
-    } finally {
-      setUnduh(false)
-    }
-  }
-
-  return (
-    <>
-      {/* === Print CSS: hanya kartu QR yang dicetak === */}
-      <style>{`
-        @media print {
-          @page {
-            size: A4 portrait;
-            margin: 1.5cm;
-          }
-          *, *::before, *::after {
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-            color-adjust: exact !important;
-          }
-          html body,
-html.dark body {
-  background-color: #ffffff !important;
-  background-image: none !important;
-}
-html, body {
-  height: 100% !important;
-  overflow: hidden !important;
-}
-          body * {
-            visibility: hidden !important;
-          }
-          .qr-print-card,
-          .qr-print-card * {
-            visibility: visible !important;
-          }
-.qr-print-card {
-  position: fixed !important;
-  top: 0 !important;
-  bottom: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  margin: auto !important;
-  height: fit-content !important;
-  box-shadow: none !important;
-  background: linear-gradient(135deg, #e7f6ec 0%, #f4fbee 55%, #fdf4e3 100%) !important;
-}
-/* Paksa warna light mode saat print (aman dari dark mode) */
-.qr-print-card .text-slate-900 { color: #0f172a !important; }
-.qr-print-card .text-slate-700 { color: #334155 !important; }
-.qr-print-card .text-slate-500 { color: #64748b !important; }
-.qr-print-card .text-slate-400 { color: #94a3b8 !important; }
-        }
-
-        /* Kartu QR selalu bertema terang: batalkan override dark mode di dalam kartu saja */
-.dark .qr-print-card { border-color: rgba(15,42,29,.10) !important; }
-.dark .qr-print-card .text-slate-900,
-.dark .qr-print-card .text-slate-700 { color: #0f2a1d !important; }
-.dark .qr-print-card .text-slate-500,
-.dark .qr-print-card .text-slate-400 { color: #5f6f64 !important; }
-.dark .qr-print-card .text-bsi-800 { color: #177c48 !important; }
-.dark .qr-print-card .bg-bsi-800 { background-color: #16623c !important; }
-.dark .qr-print-card .bg-slate-50 { background-color: rgba(15,42,29,.06) !important; }
-.dark .qr-print-card .border-slate-100,
-.dark .qr-print-card .border-slate-200 { border-color: rgba(15,42,29,.10) !important; }
-      `}</style>
-
-      <div className="anim-tab mt-8 space-y-6">
-        {/* Kartu Poster Siap Cetak */}
-        <section
-  ref={cardRef}
-    className="qr-print-card isolate mx-auto w-full max-w-md rounded-[2rem] p-8 shadow-xl border border-slate-200 flex flex-col items-center text-center relative overflow-hidden"
-  style={{ background: 'linear-gradient(135deg, #e7f6ec 0%, #f4fbee 55%, #fdf4e3 100%)' }}
->
-  {/* Accent Top Bar */}
-  <div className="absolute top-0 inset-x-0 h-2 bg-bsi-800" />
-
-  {/* Aksen dekoratif sudut (terinspirasi logo.svg) */}
-<div className="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full opacity-20 -z-10" style={{ background: '#f59e0b' }} />
-<div className="pointer-events-none absolute -bottom-10 -left-10 h-36 w-36 rounded-full opacity-20 -z-10" style={{ background: '#16623c' }} />
-
-          {/* Header Branding */}
-          <div className="flex flex-col items-center gap-3 mt-4">
-            <div className="h-16 w-16 rounded-2xl bg-bsi-800 text-white grid place-items-center shadow-md">
-              <svg className="w-9 h-9" viewBox="0 0 24 24" fill="none">
-                <path d="M4 7V17C4 18.1 4.9 19 6 19H18C19.1 19 20 18.1 20 17V7" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M4 7L12 12L20 7" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M12 12V19" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </div>
-            <div className="flex flex-col items-center">
-              <h2 className="text-2xl font-black tracking-tight text-slate-900 uppercase flex items-center gap-2">
-                <span className="text-bsi-800">GANK</span>
-                <span className="text-slate-700">SKUYY</span>
-              </h2>
-              <p className="text-[11px] font-bold text-slate-500 tracking-[0.2em] uppercase mt-1.5">
-                Portal Presensi &amp; Logbook
-              </p>
-            </div>
-          </div>
-
-          <hr className="w-full border-slate-100 my-6" />
-
-          <div className="space-y-1">
-            <p className="text-xs font-bold text-bsi-800 uppercase tracking-widest">
-              Scan QR Code di Bawah Ini
-            </p>
-            <p className="text-xs text-slate-500">
-              Untuk mengisi Logbook harian & Presensi magang
-            </p>
-          </div>
-
-          <div className="my-6 p-4 border-2 border-dashed border-bsi-300 rounded-3xl" style={{ background: '#ffffff' }}>
-            <QRCodeSVG
-              value={targetUrl}
-              size={200}
-              bgColor="#ffffff"
-              fgColor="#16623c"
-              level="H"
-            />
-          </div>
-
-          <div className="w-full max-w-[20rem] border border-slate-200 px-4 py-3 rounded-2xl" style={{ background: '#ffffff' }}>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-              Akses Tautan Manual
-            </p>
-            <p className="text-xs font-mono font-bold text-slate-700 break-all leading-normal mt-1">
-              {targetUrl}
-            </p>
-          </div>
-        </section>
-
-        {/* Tombol Aksi (tidak ikut tercetak / terunduh) */}
-        <section className="mx-auto w-full max-w-md bsi-panel rounded-2xl p-5 flex flex-col sm:flex-row gap-3">
-          <button
-            type="button"
-            onClick={unduhPng}
-            disabled={unduh}
-            className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 transition disabled:opacity-60"
-          >
-            <SizedIcon name="download" size={16} />
-            {unduh ? 'Mengunduh...' : 'Unduh PNG'}
-          </button>
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-bsi-800 px-4 py-3 text-sm font-bold text-white hover:bg-bsi-900 transition"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-            </svg>
-            Cetak PDF
-          </button>
-        </section>
-      </div>
-    </>
-  )
-}
-````
-
-## File: src/lib/constants.js
-````javascript
-export const KATEGORI = [
-  'Administrasi',
-  'Pengarsipan',
-  'Layanan Nasabah',
-  'Back Office',
-  'Edukasi Produk',
-  'Pendataan',
-  'Rapat',
-  'Pelatihan',
-  'Dokumentasi',
-  'Pendukung Lain'
-]
-
-export const UNIT = ['Frontliner', 'Back Office', 'Marketing', 'Operasional', 'Umum']
-
-export const GALERI_KEGIATAN = [
-  'Dokumentasi',
-  'Administrasi',
-  'Layanan Nasabah',
-  'Edukasi',
-  'Pelatihan',
-  'Operasional',
-  'Lainnya'
-]
-/* Hari pertama masa magang BSI; form tidak menerima tanggal sebelum ini */
-export const MULAI_MAGANG = '2026-09-08'
-````
-
-## File: .gitignore
-````
-node_modules
-dist
-.env.local
-.env
-*.log
-.env.youtube-*
-repomix-output.md
 ````
 
 ## File: src/lib/auth.js
@@ -1526,6 +3535,116 @@ export function ThemeProvider(props) {
 
 export function useTheme() {
   return useContext(ThemeContext)
+}
+````
+
+## File: src/lib/youtube.js
+````javascript
+import { supabase } from './supabase.js'
+
+export function parseYouTubeId(url) {
+  if (!url) return null
+  const s = String(url).trim()
+  if (/^[A-Za-z0-9_-]{11}$/.test(s)) return s
+  try {
+    const u = new URL(s)
+    const host = u.hostname.replace('www.', '').replace('m.', '')
+    if (host === 'youtu.be') {
+      const id = u.pathname.slice(1).split('/')[0]
+      return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null
+    }
+    if (host.endsWith('youtube.com') || host.endsWith('youtube-nocookie.com')) {
+      const v = u.searchParams.get('v')
+      if (v && /^[A-Za-z0-9_-]{11}$/.test(v)) return v
+      const parts = u.pathname.split('/').filter(Boolean)
+      if (parts[0] === 'embed' || parts[0] === 'shorts' || parts[0] === 'live') {
+        const id = parts[1]
+        return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null
+      }
+    }
+  } catch (e) {}
+  return null
+}
+export function ytThumb(id) {
+  return 'https://i.ytimg.com/vi/' + id + '/hqdefault.jpg'
+}
+export async function fetchYouTubeQuota() {
+  try {
+    const r = await fetch('/api/youtube/quota', { cache: 'no-store' })
+    if (!r.ok) return { limit: 5, used: 0, remaining: 5 }
+    return await r.json()
+  } catch (e) {
+    return { limit: 5, used: 0, remaining: 5 }
+  }
+}
+export async function startYouTubeSession(title, description, contentType, token) {
+  if (!token) throw new Error('Sesi login tidak terbaca. Silakan masuk ulang lalu coba lagi.')
+  const r = await fetch('/api/youtube/session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ title: title, description: description, contentType: contentType })
+  })
+  if (!r.ok) {
+    const j = await r.json().catch(function () { return { error: 'Gagal memulai sesi upload video' } })
+    throw new Error(j.error || 'Gagal memulai sesi upload video')
+  }
+  return await r.json()
+}
+export async function uploadToYouTube(sessionUri, blob, onProgress) {
+  const hasil = await new Promise(function (resolve) {
+    const xhr = new XMLHttpRequest()
+    xhr.open('PUT', sessionUri)
+    xhr.setRequestHeader('Content-Type', blob.type || 'video/mp4')
+    if (onProgress) {
+      xhr.upload.onprogress = function (e) {
+        if (e.lengthComputable) onProgress(e.loaded / e.total)
+      }
+    }
+    xhr.onload = function () { resolve({ status: xhr.status, body: xhr.responseText }) }
+    xhr.onerror = function () { resolve({ status: 0, body: '' }) }
+    xhr.send(blob)
+  })
+  if (hasil.status >= 200 && hasil.status < 300) {
+    try {
+      const j = JSON.parse(hasil.body || '{}')
+      if (j && j.id) return { videoId: j.id }
+    } catch (e) { /* respons tidak terbaca, pulihkan lewat server */ }
+  } else if (hasil.status !== 0) {
+    throw new Error('Upload video gagal (status ' + hasil.status + ')')
+  }
+  const sesi = await supabase.auth.getSession()
+  const token = await ambilTokenSesi()
+  const r = await fetch('/api/youtube/latest', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({})
+  })
+  if (r.ok) {
+    try {
+      const j = await r.json()
+      if (j && j.videoId) return { videoId: j.videoId }
+    } catch (e) {
+      console.warn('Respons pemulihan bukan JSON, dilewati:', e.message)
+    }
+  }
+  throw new Error('Upload selesai tetapi id video tidak terbaca. Video kemungkinan sudah tersimpan; tempel link video secara manual.')
+}
+
+export async function unggahVideoYouTube(file, judul, onProgress) {
+  const sesiData = await supabase.auth.getSession()
+  const token = await ambilTokenSesi()
+  const sesi = await startYouTubeSession(judul || 'Dokumentasi Magang', 'Diunggah dari portal magang BSI.', file.type || 'video/mp4', token)
+  return await uploadToYouTube(sesi.sessionUri, file, onProgress)
+}
+
+export async function ambilTokenSesi() {
+  try {
+    const r = await supabase.auth.getSession()
+    const ssn = r && r.data ? r.data.session : null
+    return ssn && ssn.access_token ? ssn.access_token : ''
+  } catch (e) {
+    return ''
+  }
 }
 ````
 
@@ -1742,6 +3861,95 @@ Setiap project YouTube mendapat kuota **5 upload/hari** (zona waktu Pacific). Ta
 Proyek internal untuk kegiatan magang Bank Syariah Indonesia. Hak cipta © 2026 Tim Magang BSI.
 ````
 
+## File: src/lib/format.js
+````javascript
+import { MULAI_MAGANG } from './constants.js'
+export function formatTanggal(s) {
+  if (!s) return 'Tanggal belum diisi'
+  const d = new Date(s + 'T00:00:00')
+  if (Number.isNaN(d.getTime())) return s
+  return d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+export function formatTanggalShort(s) {
+  if (!s) return ''
+  const d = new Date(s + 'T00:00:00')
+  if (Number.isNaN(d.getTime())) return s
+  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+export function todayInput() {
+  const d = new Date()
+  const m = ('0' + (d.getMonth() + 1)).slice(-2)
+  const day = ('0' + d.getDate()).slice(-2)
+  return d.getFullYear() + '-' + m + '-' + day
+}
+/* Batas pilihan tanggal form: tidak sebelum hari pertama magang, tidak setelah hari ini.
+   Dinamis karena max diambil dari tanggal perangkat saat web dibuka. */
+export function batasTanggalPilihan() {
+  return { min: MULAI_MAGANG, max: todayInput() }
+}
+/* Mengembalikan pesan error bila tanggal di luar batas, atau null bila valid.
+   Perbandingan string aman karena format tanggal ISO (YYYY-MM-DD). */
+export function pesanTanggalTerlarang(value, min, max) {
+  if (!value) return null
+  if (max && value > max) {
+    return 'Tanggal ini belum kamu lewati!'
+  }
+  if (min && value < min) {
+    return 'Hari pertama magang tanggal (8 September 2026).'
+  }
+  return null
+}
+
+
+export function detectMediaType(u) {
+  let s = String(u || '')
+  const iK = s.indexOf('key=')
+  if (iK !== -1) s = decodeURIComponent(s.slice(iK + 4).split('&')[0])
+  const ext = s.split('?')[0].split('.').pop().toLowerCase()
+  return ['mp4', 'webm', 'ogg', 'mov', 'm4v'].indexOf(ext) !== -1 ? 'video' : 'foto'
+}
+
+export function matchesDateFilters(dateString, f) {
+  if (!dateString) return false
+  if (f.timeMode === 'bulan') {
+    if (f.bulan) {
+      if (f.bulan.length === 7) return dateString.slice(0, 7) === f.bulan
+      const p = dateString.split('-')
+      if (p.length < 2 || p[1] !== f.bulan) return false
+    }
+  } else if (f.timeMode === 'rentang') {
+    if (f.dari && dateString < f.dari) return false
+    if (f.sampai && dateString > f.sampai) return false
+  }
+  return true
+}
+export function waktuUrut(x) {
+  if (!x) return 0
+  const src = x.created_at || x.updated_at || ''
+  if (!src) return 0
+  const t = new Date(src).getTime()
+  return isNaN(t) ? 0 : t
+}
+export function urutkanTanggal(list, mode) {
+  const arr = (list || []).slice()
+  arr.sort(function (a, b) {
+    const ta = new Date(a.tanggal + 'T00:00:00').getTime()
+    const tb = new Date(b.tanggal + 'T00:00:00').getTime()
+    if (ta !== tb) return mode === 'terlama' ? ta - tb : tb - ta
+    const ca = waktuUrut(a)
+    const cb = waktuUrut(b)
+    if (ca !== cb) return mode === 'terlama' ? ca - cb : cb - ca
+    const ia = a.id || ''
+    const ib = b.id || ''
+    if (ia !== ib) return ia < ib ? (mode === 'terlama' ? -1 : 1) : (mode === 'terlama' ? 1 : -1)
+    return 0
+  })
+  return arr
+}
+````
+
 ## File: src/lib/logbook.js
 ````javascript
 import { supabase } from './supabase.js'
@@ -1935,6 +4143,430 @@ export async function deleteMedia(key) {
     </noscript>
   </body>
 </html>
+````
+
+## File: src/components/QrPrintTab.jsx
+````javascript
+import { useRef, useState } from 'react'
+import { QRCodeSVG } from 'qrcode.react'
+import { useAuth } from '../lib/auth.js'
+import { SizedIcon } from './icons.jsx'
+
+/* Kapasitas card A7 (saku) dalam 1 lembar A4 = 4 (grid 2x2).
+   Card A4 (standee) memenuhi 1 lembar sendiri, jadi maks 1. */
+const MAKS_SAKU = 4
+
+/* Komponen kartu dipakai berkali-kali: preview & kartu print ke-N */
+function KartuQR({ targetUrl }) {
+  return (
+    <section
+      className="qr-print-card isolate w-full rounded-[2rem] p-8 shadow-xl border border-slate-200 flex flex-col items-center text-center relative overflow-hidden"
+      style={{ background: 'linear-gradient(135deg, #e7f6ec 0%, #f4fbee 55%, #fdf4e3 100%)' }}
+    >
+      {/* Accent Top Bar */}
+      <div className="absolute top-0 inset-x-0 h-2 bg-bsi-800" />
+
+      {/* Aksen dekoratif sudut (terinspirasi logo.svg) */}
+      <div className="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full opacity-20 -z-10" style={{ background: '#f59e0b' }} />
+      <div className="pointer-events-none absolute -bottom-10 -left-10 h-36 w-36 rounded-full opacity-20 -z-10" style={{ background: '#16623c' }} />
+
+      {/* Header Branding */}
+      <div className="flex flex-col items-center gap-3 mt-4">
+        <div className="h-16 w-16 rounded-2xl bg-bsi-800 text-white grid place-items-center shadow-md">
+          <svg className="w-9 h-9" viewBox="0 0 24 24" fill="none">
+            <path d="M4 7V17C4 18.1 4.9 19 6 19H18C19.1 19 20 18.1 20 17V7" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M4 7L12 12L20 7" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M12 12V19" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </div>
+        <div className="flex flex-col items-center">
+          <h2 className="text-2xl font-black tracking-tight text-slate-900 uppercase flex items-center gap-2">
+            <span className="text-bsi-800">GANK</span>
+            <span className="text-slate-700">SKUYY</span>
+          </h2>
+          <p className="text-[11px] font-bold text-slate-500 tracking-[0.2em] uppercase mt-1.5">
+            Portal Presensi &amp; Logbook
+          </p>
+        </div>
+      </div>
+
+      <hr className="w-full border-slate-100 my-6" />
+
+      <div className="space-y-1">
+        <p className="text-xs font-bold text-bsi-800 uppercase tracking-widest">
+          Scan QR Code di Bawah Ini
+        </p>
+        <p className="text-xs text-slate-500">
+          Untuk mengisi Logbook harian &amp; Presensi magang
+        </p>
+      </div>
+
+      <div className="my-6 p-4 border-2 border-dashed border-bsi-300 rounded-3xl" style={{ background: '#ffffff' }}>
+        <QRCodeSVG
+          value={targetUrl}
+          size={200}
+          bgColor="#ffffff"
+          fgColor="#16623c"
+          level="H"
+        />
+      </div>
+
+      <div className="url-box w-full max-w-[20rem] border border-slate-200 px-4 py-3 rounded-2xl" style={{ background: '#ffffff' }}>
+        <p className="url-label text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+          Akses Tautan Manual
+        </p>
+        <p className="url-text text-xs font-mono font-bold text-slate-700 break-all leading-normal mt-1">
+          {targetUrl}
+        </p>
+      </div>
+    </section>
+  )
+}
+
+export default function QrPrintTab() {
+  const { mahasiswa } = useAuth()
+  const cardRef = useRef(null)
+  const [unduh, setUnduh] = useState(false)
+  const [ukuranPrint, setUkuranPrint] = useState('a7')
+  const [jumlahCard, setJumlahCard] = useState(1)
+
+  const targetUrl = window.location.origin + '/qr'
+
+  // Batas jumlah card sesuai ukuran terpilih
+  const maksCard = ukuranPrint === 'a7' ? MAKS_SAKU : 1
+  // Clamp: kalau state lebih besar dari batas, turunkan otomatis
+  const amanJumlah = Math.min(jumlahCard, maksCard)
+
+  // Konfigurasi halaman & grid print
+  const singleA7 = ukuranPrint === 'a7' && amanJumlah === 1
+  const pageSize = singleA7 ? 'A7 portrait' : 'A4 portrait'
+  const pageMargin = singleA7 ? '4mm' : (ukuranPrint === 'a7' ? '10mm' : '1.5cm')
+  const gridGap = amanJumlah > 1 ? '6mm' : '0'
+  const cardWidth = ukuranPrint === 'a7' ? '66mm' : '430px'
+  const cardPadding = ukuranPrint === 'a7' ? '4mm' : '2rem'
+  const cardRadius = ukuranPrint === 'a7' ? '5mm' : '2.5rem'
+
+  async function unduhPng() {
+    if (!cardRef.current || unduh) return
+    setUnduh(true)
+    try {
+      const html2canvas = (await import('html2canvas')).default
+      const multi = amanJumlah > 1
+      const canvas = await html2canvas(cardRef.current, {
+        scale: 3,
+        useCORS: true,
+        backgroundColor: null,
+        logging: false,
+        onclone: function (clonedDoc) {
+          const wrap = clonedDoc.querySelector('.qr-print-wrap')
+          if (!wrap) return
+          // Tampilkan semua card (yang di layar cuma card pertama yang tampil)
+          wrap.querySelectorAll('.qr-print-card').forEach(function (el) {
+            el.style.display = 'flex'
+          })
+          // Set layout grid supaya PNG berisi N card rapi
+          wrap.style.display = 'grid'
+          wrap.style.gridTemplateColumns = multi ? 'repeat(2, 1fr)' : '1fr'
+          wrap.style.gap = multi ? '20px' : '0'
+          wrap.style.width = multi ? '960px' : '448px'
+          wrap.style.maxWidth = 'none'
+          wrap.style.margin = '0'
+          // Perbaiki padding kotak URL di setiap card
+          wrap.querySelectorAll('.qr-print-card .font-mono').forEach(function (url) {
+            const box = url.parentElement
+            if (!box) return
+            box.style.paddingTop = '6px'
+            box.style.paddingBottom = '18px'
+          })
+        }
+      })
+      const url = canvas.toDataURL('image/png', 1.0)
+      const suffix = amanJumlah > 1 ? '-' + amanJumlah + 'card' : ''
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'QR-' + (mahasiswa ? mahasiswa.nama.replace(/\s+/g, '-') : 'mahasiswa') + suffix + '.png'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+    } catch (e) {
+      console.error(e)
+      alert('Gagal membuat PNG: ' + e.message)
+    } finally {
+      setUnduh(false)
+    }
+  }
+
+  return (
+    <>
+      {/* === Print CSS: hanya kartu QR yang dicetak === */}
+      <style>{`
+        /* Di layar: hanya card pertama yang tampil, sisanya disembunyikan.
+           Ini bikin preview tetap 1 card walau user pilih qty > 1. */
+        .qr-print-wrap .qr-print-card:not(:first-child) {
+          display: none;
+        }
+
+        @media print {
+          @page {
+            size: ${pageSize};
+            margin: ${pageMargin};
+          }
+          *, *::before, *::after {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          html body,
+          html.dark body {
+            background-color: #ffffff !important;
+            background-image: none !important;
+          }
+          html, body {
+            height: auto !important;
+            overflow: visible !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          body * {
+            visibility: hidden !important;
+          }
+          .qr-print-wrap,
+          .qr-print-wrap * {
+            visibility: visible !important;
+          }
+          /* Tampilkan semua card saat print */
+          .qr-print-wrap .qr-print-card {
+            display: flex !important;
+          }
+.qr-print-wrap {
+  position: absolute !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  width: auto !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  justify-content: center !important;
+  align-content: center !important;
+  gap: ${gridGap} !important;
+  background: transparent !important;
+}
+          .qr-print-card {
+            position: relative !important;
+            flex: 0 0 auto !important;
+            margin: 0 !important;
+            box-shadow: none !important;
+            background: linear-gradient(135deg, #e7f6ec 0%, #f4fbee 55%, #fdf4e3 100%) !important;
+            width: ${cardWidth} !important;
+            max-width: ${cardWidth} !important;
+            min-width: ${cardWidth} !important;
+            padding: ${cardPadding} !important;
+            border-radius: ${cardRadius} !important;
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+          /* Paksa warna light mode saat print (aman dari dark mode) */
+          .qr-print-card .text-slate-900 { color: #0f172a !important; }
+          .qr-print-card .text-slate-700 { color: #334155 !important; }
+          .qr-print-card .text-slate-500 { color: #64748b !important; }
+          .qr-print-card .text-slate-400 { color: #94a3b8 !important; }
+
+          ${ukuranPrint === 'a7' ? `
+          /* === Skala internal A7 (sama seperti sebelumnya) === */
+          .qr-print-card svg[width="200"] { width: 32mm !important; height: 32mm !important; }
+          .qr-print-card .h-16.w-16 {
+            width: 10mm !important;
+            height: 10mm !important;
+            border-radius: 2.5mm !important;
+          }
+          .qr-print-card .h-16.w-16 svg { width: 6.5mm !important; height: 6.5mm !important; }
+          .qr-print-card h2 {
+            font-size: 11.5pt !important;
+            line-height: 1.15 !important;
+            gap: 1.8mm !important;
+            margin-bottom: 0.5mm !important;
+          }
+          .qr-print-card [class*="text-[11px]"] {
+            font-size: 5.5pt !important;
+            line-height: 1.25 !important;
+            letter-spacing: 0.15em !important;
+            margin-top: 1.3mm !important;
+          }
+          .qr-print-card .text-xs {
+            font-size: 5.5pt !important;
+            line-height: 1.35 !important;
+          }
+          .qr-print-card .space-y-1 > * + * { margin-top: 0.9mm !important; }
+          .qr-print-card .p-4 {
+            padding: 2.5mm !important;
+            border-width: 0.3mm !important;
+            border-style: dashed !important;
+            border-radius: 3mm !important;
+            width: fit-content !important;
+            margin-left: auto !important;
+            margin-right: auto !important;
+          }
+          .qr-print-card .url-box {
+            width: 80% !important;
+            max-width: 51mm !important;
+            padding: 1.7mm 2mm !important;
+            border-radius: 1.5mm !important;
+          }
+          .qr-print-card .url-label {
+            font-size: 4pt !important;
+            line-height: 1.15 !important;
+            letter-spacing: 0.12em !important;
+            margin: 0 !important;
+          }
+          .qr-print-card .url-text {
+            font-size: 4.5pt !important;
+            line-height: 1.2 !important;
+            margin-top: 0.9mm !important;
+          }
+          .qr-print-card .leading-normal { line-height: 1.2 !important; }
+          .qr-print-card .mt-1 { margin-top: 0.9mm !important; }
+          .qr-print-card .mt-4 { margin-top: 2mm !important; }
+          .qr-print-card .gap-3 { gap: 2mm !important; }
+          .qr-print-card .my-6 { margin-top: 3mm !important; margin-bottom: 3mm !important; }
+          .qr-print-card hr { margin-top: 3mm !important; margin-bottom: 3mm !important; }
+          .qr-print-card .pointer-events-none.absolute { width: 22mm !important; height: 22mm !important; }
+          .qr-print-card .-right-10.-top-10 { right: -7mm !important; top: -7mm !important; }
+          .qr-print-card .-bottom-10.-left-10 { bottom: -7mm !important; left: -7mm !important; }
+          .qr-print-card .top-0.inset-x-0.h-2 { height: 1mm !important; }
+          ` : ''}
+        }
+
+        /* Kartu QR selalu bertema terang: batalkan override dark mode di dalam kartu saja */
+        .dark .qr-print-card { border-color: rgba(15,42,29,.10) !important; }
+        .dark .qr-print-card .text-slate-900,
+        .dark .qr-print-card .text-slate-700 { color: #0f2a1d !important; }
+        .dark .qr-print-card .text-slate-500,
+        .dark .qr-print-card .text-slate-400 { color: #5f6f64 !important; }
+        .dark .qr-print-card .text-bsi-800 { color: #177c48 !important; }
+        .dark .qr-print-card .bg-bsi-800 { background-color: #16623c !important; }
+        .dark .qr-print-card .bg-slate-50 { background-color: rgba(15,42,29,.06) !important; }
+        .dark .qr-print-card .border-slate-100,
+        .dark .qr-print-card .border-slate-200 { border-color: rgba(15,42,29,.10) !important; }
+      `}</style>
+
+      <div className="anim-tab mt-8 space-y-6">
+        {/* Preview — di layar hanya card pertama yang tampil.
+            Sisanya (kalau qty > 1) disembunyikan CSS, tapi tetap ada di DOM
+            supaya saat print / unduh PNG tinggal ditampilkan. */}
+        <div
+          ref={cardRef}
+          className="qr-print-wrap mx-auto w-full max-w-md"
+        >
+          {Array.from({ length: amanJumlah }).map(function (_, i) {
+            return <KartuQR key={i} targetUrl={targetUrl} />
+          })}
+        </div>
+
+        {/* Pengaturan Ukuran & Jumlah */}
+        <section className="mx-auto w-full max-w-md bsi-panel rounded-2xl p-5">
+          <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">Ukuran Cetak</p>
+          <div className="mt-3 flex gap-2">
+            {[{ id: 'a7', label: 'Saku (A7)', sub: '7,4 × 10,5 cm' }, { id: 'a4', label: 'Standee (A4)', sub: '21 × 29,7 cm' }].map(function (u) {
+              const aktif = ukuranPrint === u.id
+              return (
+                <button
+                  key={u.id}
+                  type="button"
+                  onClick={function () { setUkuranPrint(u.id) }}
+                  className={
+                    'flex-1 rounded-2xl px-3 py-3 text-left transition ' +
+                    (aktif ? 'bg-bsi-800 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200')
+                  }
+                >
+                  <p className={'text-sm font-bold ' + (aktif ? 'text-white' : 'text-slate-800')}>{u.label}</p>
+                  <p className={'mt-0.5 text-xs ' + (aktif ? 'text-white/75' : 'text-slate-500')}>{u.sub}</p>
+                </button>
+              )
+            })}
+          </div>
+          <p className="mt-3 text-xs text-slate-500">
+            Pilihan <strong>Saku</strong> untuk kartu kecil di dompet atau ditempel di meja. Pilihan <strong>Standee</strong> untuk kartu besar yang berdiri.
+          </p>
+
+          {/* Selector Jumlah Card per lembar */}
+          <div className="mt-5 border-t border-slate-200 pt-5">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                Jumlah Card per Lembar
+              </p>
+              <span className="text-xs font-bold text-slate-500">
+                {amanJumlah}/{maksCard}
+              </span>
+            </div>
+            <div className="mt-3 flex gap-2">
+              {[1, 2, 3, 4].map(function (n) {
+                const aktif = amanJumlah === n
+                const terlarang = n > maksCard
+                return (
+                  <button
+                    key={n}
+                    type="button"
+                    disabled={terlarang}
+                    onClick={function () { setJumlahCard(n) }}
+                    title={
+                      terlarang
+                        ? (ukuranPrint === 'a4'
+                            ? 'Card Standee memenuhi 1 lembar A4, maksimal 1 card.'
+                            : 'Maksimal ' + maksCard + ' card per lembar A4.')
+                        : 'Cetak ' + n + ' card'
+                    }
+                    className={
+                      'flex-1 rounded-2xl px-3 py-3 text-sm font-bold transition ' +
+                      (terlarang
+                        ? 'bg-slate-50 text-slate-300 cursor-not-allowed'
+                        : aktif
+                          ? 'bg-bsi-800 text-white shadow-sm'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200')
+                    }
+                  >
+                    {n}
+                  </button>
+                )
+              })}
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              {ukuranPrint === 'a7'
+                ? 'Maksimal ' + MAKS_SAKU + ' card A7 per lembar A4 (susunan 2×2). Pilihan 1 akan dicetak di kertas A7.'
+                : 'Card ukuran Standee otomatis hanya 1 per lembar karena memenuhi kertas A4.'}
+            </p>
+          </div>
+        </section>
+
+        {/* Tombol Aksi (tidak ikut tercetak / terunduh) */}
+        <section className="mx-auto w-full max-w-md bsi-panel rounded-2xl p-5 flex flex-col sm:flex-row gap-3">
+          <button
+            type="button"
+            onClick={unduhPng}
+            disabled={unduh}
+            className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 transition disabled:opacity-60"
+          >
+            <SizedIcon name="download" size={16} />
+            {unduh ? 'Mengunduh...' : 'Unduh PNG'}
+          </button>
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-bsi-800 px-4 py-3 text-sm font-bold text-white hover:bg-bsi-900 transition"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+            </svg>
+            Cetak PDF
+          </button>
+        </section>
+      </div>
+    </>
+  )
+}
 ````
 
 ## File: src/components/PengingatBanner.jsx
@@ -2147,332 +4779,129 @@ export default function PengingatBanner(props) {
 }
 ````
 
-## File: src/components/Skeleton.jsx
+## File: src/components/Carousel.jsx
 ````javascript
-export function SkeletonLogbookCard() {
-  return (
-    <div className="card-hover bsi-panel flex h-full flex-col gap-4 rounded-3xl p-6">
-      {/* Media / carousel */}
-      <div className="skeleton aspect-video w-full rounded-2xl"></div>
+import { useEffect, useRef, useState } from 'react'
+import { SizedIcon } from './icons.jsx'
+import { Lightbox, SmartFit, MediaDrive } from './ui.jsx'
 
-      {/* Badge kategori, unit, dan status */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-1.5">
-          <div className="skeleton h-6 w-24 rounded-full"></div>
-          <div className="skeleton h-6 w-20 rounded-full"></div>
+export default function Carousel(props) {
+  const slides = props.slides || []
+  const autoMs = props.autoMs || 4000
+  const [idx, setIdx] = useState(0)
+  const [paused, setPaused] = useState(false)
+  const [zoom, setZoom] = useState(null)
+  const trackRef = useRef(null)
+  const touchX = useRef(0)
+  const moved = useRef(false)
+
+  useEffect(function () {
+    if (slides.length < 2 || paused) return undefined
+    const t = setInterval(function () {
+      setIdx(function (i) { return (i + 1) % slides.length })
+    }, autoMs)
+    return function () { clearInterval(t) }
+  }, [slides.length, paused, autoMs])
+
+  useEffect(function () {
+    if (trackRef.current) trackRef.current.style.transform = 'translateX(-' + (idx * 100) + '%)'
+  }, [idx])
+
+  if (!slides.length) return null
+
+  if (slides.length === 1) {
+    const s = slides[0]
+    return (
+      <>
+        <div className="relative group rounded-2xl overflow-hidden aspect-video bg-slate-900">
+          {s.drive ? (
+            <MediaDrive driveId={s.drive} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} className="absolute inset-0 h-full w-full object-cover cursor-zoom-in" />
+          ) : (
+            <SmartFit src={s.src} full={s.full} type={s.type} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} />
+          )}
+          <button type="button" title="Perbesar Media" onClick={function () { setZoom(s) }}
+            className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
+            <SizedIcon name="expand" size={15} />
+          </button>
         </div>
-        <div className="skeleton h-6 w-20 rounded-full"></div>
-      </div>
-
-      {/* Tanggal, judul, dan daftar kegiatan */}
-      <div>
-        <div className="skeleton h-4 w-36 rounded-full"></div>
-        <div className="skeleton mt-2 h-6 w-4/5 rounded-full"></div>
-        <div className="skeleton mt-3 h-3 w-28 rounded-full"></div>
-        <div className="mt-2 space-y-1">
-          <div className="skeleton h-3 w-full rounded-full"></div>
-          <div className="skeleton h-3 w-2/3 rounded-full"></div>
-        </div>
-      </div>
-
-      {/* Footer: profil + tombol detail */}
-      <div className="mt-auto flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-4">
-        <div className="flex items-center gap-3">
-          <div className="skeleton h-11 w-11 shrink-0" style={{ borderRadius: '28%' }}></div>
-          <div className="space-y-1.5">
-            <div className="skeleton h-3.5 w-28 rounded-full"></div>
-            <div className="skeleton h-3 w-20 rounded-full"></div>
-          </div>
-        </div>
-        <div className="skeleton h-8 w-16 rounded-xl"></div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonGalleryCard() {
-  return (
-    <div className="card-hover bsi-panel flex h-full flex-col overflow-hidden rounded-3xl">
-      {/* Media menempel tepi atas sesuai GalleryCard asli */}
-      <div className="skeleton aspect-video w-full"></div>
-
-      <div className="flex flex-1 flex-col gap-3 p-5">
-        {/* Badge kegiatan dan tanggal */}
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap gap-1.5">
-            <div className="skeleton h-6 w-24 rounded-full"></div>
-            <div className="skeleton h-5 w-20 rounded-full"></div>
-          </div>
-          <div className="skeleton h-3 w-16 rounded-full"></div>
-        </div>
-
-        {/* Judul dan deskripsi */}
-        <div className="skeleton h-5 w-3/4 rounded-full"></div>
-        <div className="space-y-1.5">
-          <div className="skeleton h-3.5 w-full rounded-full"></div>
-          <div className="skeleton h-3.5 w-2/3 rounded-full"></div>
-        </div>
-
-        {/* Footer: profil + keterangan */}
-        <div className="mt-auto space-y-3 border-t border-slate-100 pt-3">
-          <div className="flex items-center gap-3">
-            <div className="skeleton h-11 w-11 shrink-0" style={{ borderRadius: '28%' }}></div>
-            <div className="space-y-1.5">
-              <div className="skeleton h-3.5 w-28 rounded-full"></div>
-              <div className="skeleton h-3 w-20 rounded-full"></div>
-            </div>
-          </div>
-          <div className="skeleton h-3 w-40 rounded-full"></div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonAttendanceCard() {
-  return (
-    <div className="card-hover bsi-panel flex h-full flex-col rounded-3xl p-5">
-      {/* Tanggal + profil + badge status */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="skeleton h-4 w-40 rounded-full"></div>
-          <div className="mt-4 flex items-center gap-3">
-            <div className="skeleton h-11 w-11 shrink-0" style={{ borderRadius: '28%' }}></div>
-            <div className="space-y-1.5">
-              <div className="skeleton h-4 w-28 rounded-full"></div>
-              <div className="skeleton h-3 w-20 rounded-full"></div>
-            </div>
-          </div>
-        </div>
-        <div className="skeleton h-6 w-16 rounded-full"></div>
-      </div>
-
-      {/* Box alasan / keterangan */}
-      <div className="mt-4 flex-1 rounded-2xl bg-slate-50 p-4">
-        <div className="skeleton h-3 w-32 rounded-full"></div>
-        <div className="skeleton mt-2 h-3.5 w-3/4 rounded-full"></div>
-      </div>
-
-      {/* Tombol aksi */}
-      <div className="mt-4 flex gap-2">
-        <div className="skeleton h-8 w-16 rounded-xl"></div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonPersonCard() {
-  return (
-    <div className="card-hover bsi-panel flex h-full flex-col rounded-3xl p-5">
-      {/* Profil mahasiswa */}
-      <div className="flex items-center gap-4">
-        <div className="skeleton h-14 w-14 shrink-0" style={{ borderRadius: '28%' }}></div>
-        <div className="min-w-0 flex-1 space-y-1.5">
-          <div className="skeleton h-5 w-36 rounded-full"></div>
-          <div className="skeleton h-3 w-24 rounded-full"></div>
-          <div className="skeleton h-5 w-20 rounded-full"></div>
-        </div>
-      </div>
-
-      {/* Statistik logbook dan media */}
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <div className="rounded-2xl bg-slate-50 p-3">
-          <div className="skeleton h-3 w-16 rounded-full"></div>
-          <div className="skeleton mt-1.5 h-5 w-8 rounded-full"></div>
-        </div>
-        <div className="rounded-2xl bg-slate-50 p-3">
-          <div className="skeleton h-3 w-16 rounded-full"></div>
-          <div className="skeleton mt-1.5 h-5 w-8 rounded-full"></div>
-        </div>
-      </div>
-
-      {/* Rekap kehadiran */}
-      <div className="mt-3 border-t border-slate-100 pt-3">
-        <div className="skeleton h-3 w-24 rounded-full"></div>
-        <div className="mt-2 grid grid-cols-3 gap-2">
-          <div className="rounded-xl bg-slate-50 p-2">
-            <div className="skeleton h-3 w-full rounded-full"></div>
-            <div className="skeleton mx-auto mt-1.5 h-4 w-6 rounded-full"></div>
-          </div>
-          <div className="rounded-xl bg-slate-50 p-2">
-            <div className="skeleton h-3 w-full rounded-full"></div>
-            <div className="skeleton mx-auto mt-1.5 h-4 w-6 rounded-full"></div>
-          </div>
-          <div className="rounded-xl bg-slate-50 p-2">
-            <div className="skeleton h-3 w-full rounded-full"></div>
-            <div className="skeleton mx-auto mt-1.5 h-4 w-6 rounded-full"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonDashboard() {
-  return (
-    <div className="space-y-6">
-      {/* Header profil + tab */}
-      <div className="bsi-panel rounded-[2rem] p-5 shadow-sm sm:p-8 lg:p-10">
-        <div className="flex flex-wrap items-center gap-4 sm:gap-6">
-          <div className="skeleton h-14 w-14 shrink-0 sm:h-24 sm:w-24" style={{ borderRadius: '28%' }}></div>
-          <div className="min-w-0 flex-1 space-y-2">
-            <div className="skeleton h-5 w-48 rounded-full sm:h-6"></div>
-            <div className="skeleton h-3.5 w-28 rounded-full"></div>
-            <div className="skeleton h-3.5 w-32 rounded-full"></div>
-          </div>
-        </div>
-        <div className="mt-6 flex flex-wrap gap-2 sm:mt-8">
-          <div className="skeleton h-9 w-24 rounded-2xl"></div>
-          <div className="skeleton h-9 w-20 rounded-2xl"></div>
-          <div className="skeleton h-9 w-28 rounded-2xl"></div>
-          <div className="skeleton h-9 w-20 rounded-2xl"></div>
-        </div>
-      </div>
-
-      {/* Form logbook + daftar logbook */}
-      <div className="grid items-start gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-        <div className="space-y-4 bsi-panel rounded-[2rem] p-5 shadow-sm sm:p-8">
-          <div className="skeleton h-6 w-48 rounded-full"></div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="skeleton h-11 w-full rounded-2xl"></div>
-            <div className="skeleton h-11 w-full rounded-2xl"></div>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="skeleton h-11 w-full rounded-2xl"></div>
-            <div className="skeleton h-11 w-full rounded-2xl"></div>
-          </div>
-          <div className="skeleton h-11 w-full rounded-2xl"></div>
-          <div className="skeleton h-40 w-full rounded-2xl"></div>
-          <div className="skeleton h-11 w-full rounded-2xl"></div>
-        </div>
-        <div className="space-y-5">
-          <div className="skeleton h-6 w-32 rounded-full"></div>
-          <div className="skeleton h-12 w-full rounded-3xl"></div>
-          <div className="skeleton h-4 w-28 rounded-full"></div>
-          <div className="grid gap-5 md:grid-cols-2 kartu-grid">
-            <SkeletonLogbookCard />
-            <SkeletonLogbookCard />
-            <SkeletonLogbookCard />
-            <SkeletonLogbookCard />
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonStatCard() {
-  return (
-    <div className="card-hover bsi-panel rounded-3xl p-3 shadow-sm sm:p-6">
-      <div className="skeleton h-3 w-3/4 rounded-full sm:h-4 sm:w-28"></div>
-      <div className="skeleton mt-1 h-6 w-1/2 rounded-full sm:mt-3 sm:h-9 sm:w-16"></div>
-      <div className="skeleton mt-2 h-3 w-36 rounded-full hidden sm:block"></div>
-    </div>
-  )
-}
-
-export function SkeletonChartRow() {
-  return (
-    <div className="card-hover bsi-panel rounded-[1.5rem] p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="space-y-1.5">
-          <div className="skeleton h-4 w-32 rounded-full"></div>
-          <div className="skeleton h-3 w-20 rounded-full"></div>
-        </div>
-        <div className="skeleton h-3 w-36 rounded-full"></div>
-      </div>
-      <div className="skeleton mt-4 h-4 w-full rounded-full"></div>
-    </div>
-  )
-}
-````
-
-## File: src/lib/format.js
-````javascript
-import { MULAI_MAGANG } from './constants.js'
-export function formatTanggal(s) {
-  if (!s) return 'Tanggal belum diisi'
-  const d = new Date(s + 'T00:00:00')
-  if (Number.isNaN(d.getTime())) return s
-  return d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-}
-
-export function formatTanggalShort(s) {
-  if (!s) return ''
-  const d = new Date(s + 'T00:00:00')
-  if (Number.isNaN(d.getTime())) return s
-  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
-}
-
-export function todayInput() {
-  const d = new Date()
-  const m = ('0' + (d.getMonth() + 1)).slice(-2)
-  const day = ('0' + d.getDate()).slice(-2)
-  return d.getFullYear() + '-' + m + '-' + day
-}
-/* Batas pilihan tanggal form: tidak sebelum hari pertama magang, tidak setelah hari ini.
-   Dinamis karena max diambil dari tanggal perangkat saat web dibuka. */
-export function batasTanggalPilihan() {
-  return { min: MULAI_MAGANG, max: todayInput() }
-}
-/* Mengembalikan pesan error bila tanggal di luar batas, atau null bila valid.
-   Perbandingan string aman karena format tanggal ISO (YYYY-MM-DD). */
-export function pesanTanggalTerlarang(value, min, max) {
-  if (!value) return null
-  if (max && value > max) {
-    return 'Tanggal ini belum kamu lewati!'
+        {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} driveId={zoom.drive || null} onClose={function () { setZoom(null) }} /> : null}
+      </>
+    )
   }
-  if (min && value < min) {
-    return 'Hari pertama magang tanggal (8 September 2026).'
-  }
-  return null
-}
 
-
-export function detectMediaType(u) {
-  let s = String(u || '')
-  const iK = s.indexOf('key=')
-  if (iK !== -1) s = decodeURIComponent(s.slice(iK + 4).split('&')[0])
-  const ext = s.split('?')[0].split('.').pop().toLowerCase()
-  return ['mp4', 'webm', 'ogg', 'mov', 'm4v'].indexOf(ext) !== -1 ? 'video' : 'foto'
-}
-
-export function matchesDateFilters(dateString, f) {
-  if (!dateString) return false
-  if (f.timeMode === 'bulan') {
-    if (f.bulan) {
-      if (f.bulan.length === 7) return dateString.slice(0, 7) === f.bulan
-      const p = dateString.split('-')
-      if (p.length < 2 || p[1] !== f.bulan) return false
-    }
-  } else if (f.timeMode === 'rentang') {
-    if (f.dari && dateString < f.dari) return false
-    if (f.sampai && dateString > f.sampai) return false
-  }
-  return true
-}
-export function waktuUrut(x) {
-  if (!x) return 0
-  const src = x.created_at || x.updated_at || ''
-  if (!src) return 0
-  const t = new Date(src).getTime()
-  return isNaN(t) ? 0 : t
-}
-export function urutkanTanggal(list, mode) {
-  const arr = (list || []).slice()
-  arr.sort(function (a, b) {
-    const ta = new Date(a.tanggal + 'T00:00:00').getTime()
-    const tb = new Date(b.tanggal + 'T00:00:00').getTime()
-    if (ta !== tb) return mode === 'terlama' ? ta - tb : tb - ta
-    const ca = waktuUrut(a)
-    const cb = waktuUrut(b)
-    if (ca !== cb) return mode === 'terlama' ? ca - cb : cb - ca
-    const ia = a.id || ''
-    const ib = b.id || ''
-    if (ia !== ib) return ia < ib ? (mode === 'terlama' ? -1 : 1) : (mode === 'terlama' ? 1 : -1)
-    return 0
-  })
-  return arr
+  return (
+    <>
+      <div
+        className="media-carousel group"
+        onMouseEnter={function () { setPaused(true) }}
+        onMouseLeave={function () { setPaused(false) }}
+        onTouchStart={function (e) { touchX.current = e.touches[0].clientX; moved.current = false }}
+        onTouchEnd={function (e) {
+          const dx = e.changedTouches[0].clientX - touchX.current
+          if (Math.abs(dx) > 40) {
+            moved.current = true
+            setIdx(function (i) { return (i + (dx < 0 ? 1 : -1) + slides.length) % slides.length })
+          }
+        }}
+      >
+        <div ref={trackRef} className="carousel-track">
+          {slides.map(function (s, i) {
+            return (
+              <div key={i} className="carousel-slide">
+                {s.drive ? (
+                  <MediaDrive driveId={s.drive} alt={s.title || 'Media'} onClick={function () { if (moved.current) { moved.current = false; return } setZoom(s) }} className="absolute inset-0 h-full w-full object-cover cursor-zoom-in" />
+                ) : (
+                <SmartFit
+                  src={s.src}
+                  full={s.full}
+                   type={s.type}
+                  alt={s.title || 'Media'}
+                  onClick={function () {
+                    if (moved.current) { moved.current = false; return }
+                    setZoom(s)
+                  }}
+                />
+                )}
+                <button type="button" title="Perbesar Media" onClick={function (e) { e.stopPropagation(); setZoom(s) }}
+                  className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
+                  <SizedIcon name="expand" size={15} />
+                </button>
+                {s.title ? (
+                  <span className="absolute bottom-2 left-2 z-10 px-2 py-1 rounded-lg bg-black/60 text-white text-xs max-w-[85%] truncate">
+                    {s.title}
+                  </span>
+                ) : null}
+              </div>
+            )
+          })}
+        </div>
+        <button
+          onClick={function () { setIdx(function (i) { return (i - 1 + slides.length) % slides.length }) }}
+          className="absolute left-2 top-0 bottom-0 my-auto z-10 h-8 w-8 rounded-full bg-black/40 text-white grid place-items-center opacity-100 xl:opacity-0 xl:group-hover:opacity-100 hover:bg-black/60"
+        >
+          &#8249;
+        </button>
+        <button
+          onClick={function () { setIdx(function (i) { return (i + 1) % slides.length }) }}
+          className="absolute right-2 top-0 bottom-0 my-auto z-10 h-8 w-8 rounded-full bg-black/40 text-white grid place-items-center opacity-100 xl:opacity-0 xl:group-hover:opacity-100 hover:bg-black/60"
+        >
+          &#8250;
+        </button>
+        <div className="absolute bottom-2 right-2 z-10 flex gap-1.5">
+          {slides.map(function (s, i) {
+            return (
+              <button
+                key={i}
+                onClick={function () { setIdx(i) }} aria-label={'Ke slide ' + (i + 1)}
+                className={'carousel-dot h-2 w-2 rounded-full transition-all ' + (i === idx ? 'bg-white' : 'bg-white/40')}
+              />
+            )
+          })}
+        </div>
+      </div>
+      {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} driveId={zoom.drive || null} onClose={function () { setZoom(null) }} /> : null}
+    </>
+  )
 }
 ````
 
@@ -2765,6 +5194,300 @@ export default function PemutarVideo(props) {
 }
 ````
 
+## File: src/components/Skeleton.jsx
+````javascript
+export function SkeletonLogbookCard() {
+  return (
+    <div className="card-hover bsi-panel flex h-full flex-col gap-4 rounded-3xl p-6">
+      {/* Media / carousel */}
+      <div className="skeleton aspect-video w-full rounded-2xl"></div>
+
+      {/* Badge kategori, unit, dan status */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-1.5">
+          <div className="skeleton h-6 w-24 rounded-full"></div>
+          <div className="skeleton h-6 w-20 rounded-full"></div>
+        </div>
+        <div className="skeleton h-6 w-20 rounded-full"></div>
+      </div>
+
+      {/* Tanggal, judul, dan daftar kegiatan */}
+      <div>
+        <div className="skeleton h-4 w-36 rounded-full"></div>
+        <div className="skeleton mt-2 h-6 w-4/5 rounded-full"></div>
+        <div className="skeleton mt-3 h-3 w-28 rounded-full"></div>
+        <div className="mt-2 space-y-1">
+          <div className="skeleton h-3 w-full rounded-full"></div>
+          <div className="skeleton h-3 w-2/3 rounded-full"></div>
+        </div>
+      </div>
+
+      {/* Footer: profil + tombol detail */}
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-4">
+        <div className="flex items-center gap-3">
+          <div className="skeleton h-11 w-11 shrink-0" style={{ borderRadius: '28%' }}></div>
+          <div className="space-y-1.5">
+            <div className="skeleton h-3.5 w-28 rounded-full"></div>
+            <div className="skeleton h-3 w-20 rounded-full"></div>
+          </div>
+        </div>
+        <div className="skeleton h-8 w-16 rounded-xl"></div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonGalleryCard() {
+  return (
+    <div className="card-hover bsi-panel flex h-full flex-col overflow-hidden rounded-3xl">
+      {/* Media menempel tepi atas sesuai GalleryCard asli */}
+      <div className="skeleton aspect-video w-full"></div>
+
+      <div className="flex flex-1 flex-col gap-3 p-5">
+        {/* Badge kegiatan dan tanggal */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap gap-1.5">
+            <div className="skeleton h-6 w-24 rounded-full"></div>
+            <div className="skeleton h-5 w-20 rounded-full"></div>
+          </div>
+          <div className="skeleton h-3 w-16 rounded-full"></div>
+        </div>
+
+        {/* Judul dan deskripsi */}
+        <div className="skeleton h-5 w-3/4 rounded-full"></div>
+        <div className="space-y-1.5">
+          <div className="skeleton h-3.5 w-full rounded-full"></div>
+          <div className="skeleton h-3.5 w-2/3 rounded-full"></div>
+        </div>
+
+        {/* Footer: profil + keterangan */}
+        <div className="mt-auto space-y-3 border-t border-slate-100 pt-3">
+          <div className="flex items-center gap-3">
+            <div className="skeleton h-11 w-11 shrink-0" style={{ borderRadius: '28%' }}></div>
+            <div className="space-y-1.5">
+              <div className="skeleton h-3.5 w-28 rounded-full"></div>
+              <div className="skeleton h-3 w-20 rounded-full"></div>
+            </div>
+          </div>
+          <div className="skeleton h-3 w-40 rounded-full"></div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonAttendanceCard() {
+  return (
+    <div className="card-hover bsi-panel flex h-full flex-col rounded-3xl p-5">
+      {/* Tanggal + profil + badge status */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="skeleton h-4 w-40 rounded-full"></div>
+          <div className="mt-4 flex items-center gap-3">
+            <div className="skeleton h-11 w-11 shrink-0" style={{ borderRadius: '28%' }}></div>
+            <div className="space-y-1.5">
+              <div className="skeleton h-4 w-28 rounded-full"></div>
+              <div className="skeleton h-3 w-20 rounded-full"></div>
+            </div>
+          </div>
+        </div>
+        <div className="skeleton h-6 w-16 rounded-full"></div>
+      </div>
+
+      {/* Box alasan / keterangan */}
+      <div className="mt-4 flex-1 rounded-2xl bg-slate-50 p-4">
+        <div className="skeleton h-3 w-32 rounded-full"></div>
+        <div className="skeleton mt-2 h-3.5 w-3/4 rounded-full"></div>
+      </div>
+
+      {/* Tombol aksi */}
+      <div className="mt-4 flex gap-2">
+        <div className="skeleton h-8 w-16 rounded-xl"></div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonPersonCard() {
+  return (
+    <div className="card-hover bsi-panel flex h-full flex-col rounded-3xl p-5">
+      {/* Profil mahasiswa */}
+      <div className="flex items-center gap-4">
+        <div className="skeleton h-14 w-14 shrink-0" style={{ borderRadius: '28%' }}></div>
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <div className="skeleton h-5 w-36 rounded-full"></div>
+          <div className="skeleton h-3 w-24 rounded-full"></div>
+          <div className="skeleton h-5 w-20 rounded-full"></div>
+        </div>
+      </div>
+
+      {/* Statistik logbook dan media */}
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <div className="rounded-2xl bg-slate-50 p-3">
+          <div className="skeleton h-3 w-16 rounded-full"></div>
+          <div className="skeleton mt-1.5 h-5 w-8 rounded-full"></div>
+        </div>
+        <div className="rounded-2xl bg-slate-50 p-3">
+          <div className="skeleton h-3 w-16 rounded-full"></div>
+          <div className="skeleton mt-1.5 h-5 w-8 rounded-full"></div>
+        </div>
+      </div>
+
+      {/* Rekap kehadiran */}
+      <div className="mt-3 border-t border-slate-100 pt-3">
+        <div className="skeleton h-3 w-24 rounded-full"></div>
+        <div className="mt-2 grid grid-cols-3 gap-2">
+          <div className="rounded-xl bg-slate-50 p-2">
+            <div className="skeleton h-3 w-full rounded-full"></div>
+            <div className="skeleton mx-auto mt-1.5 h-4 w-6 rounded-full"></div>
+          </div>
+          <div className="rounded-xl bg-slate-50 p-2">
+            <div className="skeleton h-3 w-full rounded-full"></div>
+            <div className="skeleton mx-auto mt-1.5 h-4 w-6 rounded-full"></div>
+          </div>
+          <div className="rounded-xl bg-slate-50 p-2">
+            <div className="skeleton h-3 w-full rounded-full"></div>
+            <div className="skeleton mx-auto mt-1.5 h-4 w-6 rounded-full"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonDashboard() {
+  return (
+    <div className="space-y-6">
+      {/* skeleton-dash-v2: header meniru layout baru (identitas di atas, tab di bawah) */}
+      <div className="bsi-panel rounded-[2rem] p-5 sm:p-8 lg:p-10">
+        <div className="flex flex-col gap-5 sm:gap-6">
+          {/* Baris identitas: avatar + badge, nama, NIM, prodi */}
+          <div className="flex flex-wrap items-center gap-4 sm:gap-6 min-w-0">
+            <div className="avatar-kepala-dash relative shrink-0">
+              <div className="skeleton h-14 w-14 shrink-0 rounded-[28%] sm:h-24 sm:w-24"></div>
+              <div className="skeleton !absolute h-[22px] w-[22px] rounded-full -bottom-[3px] -right-[3px] sm:h-9 sm:w-9 sm:-bottom-1.5 sm:-right-1.5"></div>
+            </div>
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className="skeleton h-4 w-48 rounded-full sm:h-7"></div>
+              <div className="skeleton h-3 w-28 rounded-full sm:h-4"></div>
+              <div className="skeleton h-3 w-32 rounded-full sm:h-4"></div>
+            </div>
+          </div>
+
+          {/* Baris tab: 4 pill (Logbook, Galeri, Hadir, Cetak QR) */}
+          <div className="flex flex-wrap gap-1.5 sm:gap-2">
+            <div className="skeleton h-9 w-20 rounded-xl sm:h-11 sm:w-28 sm:rounded-2xl"></div>
+            <div className="skeleton h-9 w-16 rounded-xl sm:h-11 sm:w-24 sm:rounded-2xl"></div>
+            <div className="skeleton h-9 w-16 rounded-xl sm:h-11 sm:w-32 sm:rounded-2xl"></div>
+            <div className="skeleton h-9 w-12 rounded-xl sm:h-11 sm:w-28 sm:rounded-2xl"></div>
+          </div>
+        </div>
+      </div>
+
+      {/* Form logbook + daftar logbook */}
+      <div className="grid items-start gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+        <div className="space-y-4 bsi-panel rounded-[2rem] p-5 shadow-sm sm:p-8">
+          <div className="skeleton h-6 w-48 rounded-full"></div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="skeleton h-11 w-full rounded-2xl"></div>
+            <div className="skeleton h-11 w-full rounded-2xl"></div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="skeleton h-11 w-full rounded-2xl"></div>
+            <div className="skeleton h-11 w-full rounded-2xl"></div>
+          </div>
+          <div className="skeleton h-11 w-full rounded-2xl"></div>
+          <div className="skeleton h-40 w-full rounded-2xl"></div>
+          <div className="skeleton h-11 w-full rounded-2xl"></div>
+        </div>
+        <div className="space-y-5">
+          <div className="skeleton h-6 w-32 rounded-full"></div>
+          <div className="skeleton h-12 w-full rounded-3xl"></div>
+          <div className="skeleton h-4 w-28 rounded-full"></div>
+          <div className="grid gap-5 md:grid-cols-2 kartu-grid">
+            <SkeletonLogbookCard />
+            <SkeletonLogbookCard />
+            <SkeletonLogbookCard />
+            <SkeletonLogbookCard />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonStatCard() {
+  return (
+    <div className="card-hover bsi-panel rounded-3xl p-3 shadow-sm sm:p-6">
+      <div className="skeleton h-3 w-3/4 rounded-full sm:h-4 sm:w-28"></div>
+      <div className="skeleton mt-1 h-6 w-1/2 rounded-full sm:mt-3 sm:h-9 sm:w-16"></div>
+      <div className="skeleton mt-2 h-3 w-36 rounded-full hidden sm:block"></div>
+    </div>
+  )
+}
+
+export function SkeletonChartRow() {
+  return (
+    <div className="card-hover bsi-panel rounded-[1.5rem] p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="space-y-1.5">
+          <div className="skeleton h-4 w-32 rounded-full"></div>
+          <div className="skeleton h-3 w-20 rounded-full"></div>
+        </div>
+        <div className="skeleton h-3 w-36 rounded-full"></div>
+      </div>
+      <div className="skeleton mt-4 h-4 w-full rounded-full"></div>
+    </div>
+  )
+}
+
+export function SkeletonQuick() {
+  return (
+    <div className="mx-auto w-full max-w-xl space-y-5">
+      {/* Hero: avatar + identitas + tab switcher */}
+      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="avatar-kepala-cepat">
+            <div className="skeleton h-14 w-14 sm:h-[67px] sm:w-[67px]" style={{ borderRadius: '20px' }} />
+          </div>
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="skeleton h-5 w-48 rounded-full sm:h-6" />
+            <div className="skeleton h-3.5 w-40 rounded-full" />
+          </div>
+        </div>
+        <div className="mt-4 flex gap-2">
+          <div className="skeleton h-10 flex-1 rounded-xl sm:h-12 sm:rounded-2xl" />
+          <div className="skeleton h-10 flex-1 rounded-xl sm:h-12 sm:rounded-2xl" />
+        </div>
+      </section>
+
+      {/* Form logbook: info terakhir + kartu kegiatan */}
+      <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
+        <div className="mb-4 flex items-center gap-1.5">
+          <div className="skeleton h-3.5 w-3.5 rounded-full" />
+          <div className="skeleton h-3 w-56 rounded-full" />
+        </div>
+
+        <div className="mt-1.5 skeleton h-11 w-full rounded-2xl" />
+
+        <div className="mt-5 space-y-4">
+          <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="skeleton h-3 w-24 rounded-full" />
+            <div className="skeleton h-11 w-full rounded-2xl" />
+            <div className="skeleton h-16 w-full rounded-2xl" />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="skeleton h-12 w-full rounded-2xl" />
+              <div className="skeleton h-12 w-full rounded-2xl" />
+            </div>
+          </div>
+          <div className="skeleton h-12 w-full rounded-xl sm:h-14 sm:rounded-2xl" />
+        </div>
+      </section>
+    </div>
+  )
+}
+````
+
 ## File: src/lib/konversi.js
 ````javascript
 const MAKS_SISI_FULL = 2048
@@ -2929,711 +5652,6 @@ export async function siapkanFotoProfil(file, maksSisi, kualitas) {
   } finally {
     URL.revokeObjectURL(muat.url)
   }
-}
-````
-
-## File: src/pages/QuickPage.jsx
-````javascript
-import { useEffect, useRef, useState } from 'react'
-import { supabase } from '../lib/supabase.js'
-import { useAuth } from '../lib/auth.js'
-import { uploadMedia } from '../lib/upload.js'
-import { syncGaleriFromLogbook } from '../lib/logbook.js'
-import { urlPratinjau } from '../lib/konversi.js'
-import { todayInput, formatTanggal } from '../lib/format.js'
-import { KATEGORI } from '../lib/constants.js'
-import { inputCls, labelCls, btnPrimary, useToast, AutoTextArea, LabelProses, Avatar } from '../components/ui.jsx'
-import { CustomSelect } from '../components/controls.jsx'
-import { SizedIcon } from '../components/icons.jsx'
-import { useNavigate } from 'react-router-dom'
-import PengingatBanner from '../components/PengingatBanner.jsx'
-
-const STATUS_HADIR = ['Masuk', 'Izin', 'Bolos']
-
-export default function QuickPage() {
-  const { mahasiswa } = useAuth()
-  const toast = useToast()
-  const tanggal = todayInput()
-
-  const [tab, setTab] = useState('logbook')
-  const [loading, setLoading] = useState(true)
-  const [todayLog, setTodayLog] = useState(null)
-  const [hadirHariIni, setHadirHariIni] = useState(null)
-  const [lastLogTanggal, setLastLogTanggal] = useState(null)
-  const [lastHadirTanggal, setLastHadirTanggal] = useState(null)
-
-  const [kategori, setKategori] = useState('')
-  const [judulKegiatan, setJudulKegiatan] = useState('')
-  const [deskripsi, setDeskripsi] = useState('')
-  const [file, setFile] = useState(null)
-  const [preview, setPreview] = useState('')
-  const [showGal, setShowGal] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [info, setInfo] = useState('')
-
-  const [status, setStatus] = useState('Masuk')
-  const [alasan, setAlasan] = useState('')
-  const navigate = useNavigate()
-  const [tanggalLogs, setTanggalLogs] = useState([])
-  const [hadirRows, setHadirRows] = useState([])
-
-  const cameraRef = useRef(null)
-  const galeriRef = useRef(null)
-
-  async function muatData(mhs, senyap) {
-    if (!senyap) setLoading(true)
-    const l = await supabase
-      .from('logbooks')
-      .select('*, logbook_items(*)')
-      .eq('mahasiswa_id', mhs.id)
-      .eq('tanggal', tanggal)
-      .order('created_at', { ascending: false })
-      .limit(1)
-    const log = (l.data || [])[0] || null
-    if (log) {
-      log.logbook_items = (log.logbook_items || []).sort(function (a, b) { return (a.urutan || 0) - (b.urutan || 0) })
-    }
-    const h = await supabase
-      .from('daftar_hadir')
-      .select('*')
-      .eq('mahasiswa_id', mhs.id)
-      .eq('tanggal', tanggal)
-      .limit(1)
-    const hadir = (h.data || [])[0] || null
-    const ll = await supabase
-      .from('logbooks')
-      .select('tanggal')
-      .eq('mahasiswa_id', mhs.id)
-      .order('tanggal', { ascending: false })
-      .limit(1)
-    const lh = await supabase
-      .from('daftar_hadir')
-      .select('tanggal')
-      .eq('mahasiswa_id', mhs.id)
-      .order('tanggal', { ascending: false })
-      .limit(1)
-    setTodayLog(log)
-    setHadirHariIni(hadir)
-    setLastLogTanggal(ll.data && ll.data[0] ? ll.data[0].tanggal : null)
-    setLastHadirTanggal(lh.data && lh.data[0] ? lh.data[0].tanggal : null)
-    if (hadir) {
-      setStatus(hadir.status)
-      setAlasan(hadir.alasan || '')
-    }
-        const pg = await supabase.from('logbooks').select('tanggal').eq('mahasiswa_id', mhs.id)
-    const ph = await supabase.from('daftar_hadir').select('tanggal, status').eq('mahasiswa_id', mhs.id)
-    setTanggalLogs((pg.data || []).map(function (x) { return x.tanggal }))
-    setHadirRows(ph.data || [])
-    if (!senyap) setLoading(false)
-  }
-
-  useEffect(function () {
-    if (mahasiswa) muatData(mahasiswa)
-  }, [mahasiswa])
-
-  async function pilihFile(e) {
-    const f = e.target.files[0]
-    e.target.value = ''
-    if (!f) return
-    if (preview && preview.indexOf('blob:') === 0) URL.revokeObjectURL(preview)
-    setFile(f)
-    setPreview(await urlPratinjau(f))
-  }
-
-  function hapusFile() {
-    if (preview && preview.indexOf('blob:') === 0) URL.revokeObjectURL(preview)
-    setFile(null)
-    setPreview('')
-    setShowGal(false)
-  }
-
-  async function submitLogbook(e) {
-    e.preventDefault()
-    if (!todayLog && !kategori) { toast.gagal('Pilih kategori terlebih dahulu.'); return }
-    if (!judulKegiatan.trim()) { toast.gagal('Judul kegiatan wajib diisi.'); return }
-    setBusy(true)
-    try {
-      let mediaPath = null
-      let mediaThumb = null
-      if (file) {
-        const up = await uploadMedia(file, 'logbook', setInfo)
-        mediaPath = up.publicUrl
-        mediaThumb = up.thumbUrl || null
-      }
-      let logId = todayLog ? todayLog.id : null
-      if (!todayLog) {
-        const ins = await supabase.from('logbooks').insert({
-          mahasiswa_id: mahasiswa.id, tanggal: tanggal, unit: '', kategori: kategori,
-          judul: judulKegiatan.trim(), kendala: '', solusi: '', pembelajaran: '', status: 'publik'
-        }).select().single()
-        if (ins.error) throw new Error(ins.error.message)
-        logId = ins.data.id
-      }
-      const urutan = todayLog ? todayLog.logbook_items.reduce(function (m, it) { return Math.max(m, it.urutan || 0) }, 0) + 1 : 1
-      const insItem = await supabase.from('logbook_items').insert({
-        logbook_id: logId,
-        urutan: urutan,
-        judul: judulKegiatan.trim(),
-        deskripsi: deskripsi.trim(),
-        hasil: '',
-        media_path: mediaPath,
-        media_type: mediaPath ? 'foto' : null,
-        media_thumb: mediaThumb,
-        media_source: 'r2',
-        youtube_id: null,
-        drive_id: null,
-        show_in_gallery: showGal && !!mediaPath
-      }).select().single()
-      if (insItem.error) throw new Error(insItem.error.message)
-      if (todayLog && todayLog.status !== 'publik') {
-        await supabase.from('logbooks').update({ status: 'publik' }).eq('id', todayLog.id)
-      }
-      if (showGal && mediaPath) {
-        await syncGaleriFromLogbook(mahasiswa.id, [insItem.data], {
-          tanggal: tanggal,
-          kategori: todayLog ? todayLog.kategori : kategori
-        })
-      }
-      const pertama = !todayLog
-      setJudulKegiatan('')
-      setDeskripsi('')
-      hapusFile()
-      if (pertama) setKategori('')
-      await muatData(mahasiswa, true)
-      toast.sukses(pertama ? 'Logbook hari ini berhasil dibuat' : 'Kegiatan baru berhasil ditambahkan')
-    } catch (err) {
-      toast.gagal('Gagal menyimpan logbook: ' + err.message)
-    }
-    setInfo('')
-    setBusy(false)
-  }
-
-  async function submitAbsen(e) {
-    e.preventDefault()
-    setBusy(true)
-    try {
-      const payload = {
-        mahasiswa_id: mahasiswa.id,
-        tanggal: tanggal,
-        status: status,
-        alasan: status === 'Masuk' ? '' : alasan.trim()
-      }
-      let res
-      if (hadirHariIni) {
-        res = await supabase.from('daftar_hadir').update(payload).eq('id', hadirHariIni.id)
-      } else {
-        res = await supabase.from('daftar_hadir').insert(payload)
-      }
-      if (res.error) throw new Error(res.error.message)
-      await muatData(mahasiswa, true)
-      toast.sukses(hadirHariIni ? 'Daftar hadir berhasil diperbarui' : 'Daftar hadir berhasil disimpan')
-    } catch (err) {
-      toast.gagal('Gagal menyimpan kehadiran: ' + err.message)
-    }
-    setBusy(false)
-  }
-
-  function infoTerakhir(tgl) {
-    if (!tgl) return { teks: 'belum pernah', lama: true }
-    const selisih = Math.round((new Date(tanggal + 'T00:00:00').getTime() - new Date(tgl + 'T00:00:00').getTime()) / 86400000)
-    if (selisih <= 0) return { teks: 'hari ini', lama: false }
-    if (selisih === 1) return { teks: 'kemarin', lama: false }
-    return { teks: selisih + ' hari yang lalu', lama: true }
-  }
-
-  if (loading) {
-    return <div className="grid min-h-[50vh] place-items-center"><div className="h-10 w-10 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div></div>
-  }
-
-  const infoLog = infoTerakhir(lastLogTanggal)
-  const infoHadir = infoTerakhir(lastHadirTanggal)
-
-  const tabCls = function (t) {
-    return 'flex-1 px-4 py-2.5 rounded-xl text-xs sm:rounded-2xl sm:py-3 sm:text-sm font-bold ' + (tab === t ? 'bg-bsi-800 text-white shadow-sm' : 'bsi-panel text-slate-600 hover:text-bsi-800')
-  }
-
-  return (
-    <div className="mx-auto w-full max-w-xl space-y-5">
-      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="avatar-kepala-dash avatar-kepala-cepat"><Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl" /></div>
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate text-xl font-black text-slate-900 sm:text-2xl">{mahasiswa.nama}</h1>
-            <p className="mt-1 truncate text-sm text-slate-600">{formatTanggal(tanggal)}</p>
-          </div>
-        </div>
-        <div className="mt-4 flex gap-2">
-          <button type="button" onClick={function () { setTab('logbook') }} className={tabCls('logbook')}>Logbook</button>
-          <button type="button" onClick={function () { setTab('absen') }} className={tabCls('absen')}>Daftar Hadir</button>
-        </div>
-      </section>
-
-      <div className={tab === 'logbook' ? '' : 'hidden'} style={{ marginTop: 0 }}>
-        {!loading ? (
-          <PengingatBanner
-            tipe="logbook"
-            tanggalLogbook={tanggalLogs}
-            hadir={hadirRows}
-            onIsi={function (t) { navigate('/dashboard?isi=' + t) }}
-          />
-        ) : null}
-      </div>
-      <div className={tab === 'absen' ? '' : 'hidden'} style={{ marginTop: 0 }}>
-        {!loading ? (
-          <PengingatBanner
-            tipe="hadir"
-            tanggalLogbook={tanggalLogs}
-            hadir={hadirRows}
-            onIsi={function (t) { navigate('/dashboard?isiHadir=' + t) }}
-          />
-        ) : null}
-      </div>
-      {tab === 'logbook' ? (
-        <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
-          <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoLog.lama ? 'text-amber-600' : 'text-slate-500')}>
-            <SizedIcon name="calendar" size={13} />
-            Terakhir mengisi logbook: {infoLog.teks}
-          </p>
-          {todayLog ? (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-              <p className="text-sm font-bold text-emerald-800">Logbook hari ini sudah ada</p>
-              <p className="mt-1 text-sm text-emerald-800">{todayLog.judul} • {todayLog.logbook_items.length} kegiatan</p>
-              <div className="mt-2 space-y-1">
-                {todayLog.logbook_items.map(function (it, i) {
-                  return <p key={it.id} className="truncate text-xs text-emerald-800">{i + 1}. {it.judul}</p>
-                })}
-              </div>
-              <p className="mt-2 text-xs text-emerald-800">Kegiatan baru ditambahkan di bawahnya tanpa menghapus kegiatan lama.</p>
-              {todayLog.status !== 'publik' ? <p className="mt-1 text-xs font-semibold text-emerald-800">Status masih draf — akan otomatis dipublikasikan.</p> : null}
-            </div>
-          ) : (
-            <div>
-              <label className={labelCls}>Kategori Utama <span className="text-red-500">*</span></label>
-              <div className="mt-1.5">
-                <CustomSelect placeholder="Pilih Kategori" value={kategori} onChange={setKategori} options={KATEGORI.map(function (k) { return { value: k, label: k } })} />
-              </div>
-            </div>
-          )}
-
-          <form onSubmit={submitLogbook} className="mt-5 space-y-4">
-            <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-xs font-bold text-bsi-800">{todayLog ? 'Kegiatan Baru (kegiatan ' + (todayLog.logbook_items.length + 1) + ')' : 'Kegiatan'}</p>
-              <input className={inputCls} value={judulKegiatan} onChange={function (e) { setJudulKegiatan(e.target.value) }} aria-label="Judul Kegiatan" placeholder="Judul kegiatan" />
-              <AutoTextArea className={inputCls} value={deskripsi} onChange={function (e) { setDeskripsi(e.target.value) }} aria-label="Deskripsi Kegiatan" placeholder="Deskripsi singkat kegiatan" />
-              {preview ? (
-                <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-900">
-                  <img src={preview} alt="Pratinjau" className="absolute inset-0 h-full w-full object-contain" />
-                  <button type="button" onClick={hapusFile} title="Hapus Gambar" className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-red-500 text-white hover:bg-red-600">
-                    <SizedIcon name="close" size={14} />
-                  </button>
-                </div>
-              ) : null}
-              <div className="grid grid-cols-2 gap-3">
-                <button type="button" onClick={function () { cameraRef.current.click() }} className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-3 py-3.5 text-sm font-semibold text-slate-700 hover:border-bsi-500 hover:bg-slate-100">
-                  <SizedIcon name="camera" size={18} /> Ambil Foto
-                </button>
-                <button type="button" onClick={function () { galeriRef.current.click() }} className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-3 py-3.5 text-sm font-semibold text-slate-700 hover:border-bsi-500 hover:bg-slate-100">
-                  <SizedIcon name="image" size={18} /> Dari Galeri
-                </button>
-              </div>
-              <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={pilihFile} />
-              <input ref={galeriRef} type="file" accept="image/*" className="hidden" onChange={pilihFile} />
-              {preview ? (
-                <label className="flex w-full cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 p-3">
-                  <input type="checkbox" checked={showGal} onChange={function (e) { setShowGal(e.target.checked) }} className="mt-0.5 h-4 w-4 rounded accent-bsi-800" />
-                  <span className="text-sm font-semibold text-slate-800">Tampilkan kegiatan ini di galeri</span>
-                </label>
-              ) : null}
-            </div>
-            <button type="submit" disabled={busy} className={btnPrimary}>
-              {busy ? <LabelProses teks={info || 'Menyimpan'} /> : (todayLog ? 'Tambah Kegiatan' : 'Simpan Logbook')}
-            </button>
-          </form>
-        </section>
-      ) : null}
-
-      {tab === 'absen' ? (
-        <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
-          <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoHadir.lama ? 'text-amber-600' : 'text-slate-500')}>
-            <SizedIcon name="clipboard" size={13} />
-            Terakhir mengisi daftar hadir: {infoHadir.teks}
-          </p>
-          {hadirHariIni ? (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-              <p className="text-sm font-bold text-emerald-800">Kamu sudah mengisi daftar hadir hari ini ({hadirHariIni.status})</p>
-              <p className="mt-1 text-xs text-emerald-800">Form di bawah bisa dipakai untuk memperbarui status bila ada perubahan.</p>
-            </div>
-          ) : null}
-          <form onSubmit={submitAbsen} className={'space-y-4 ' + (hadirHariIni ? 'mt-5' : '')}>
-            <div>
-              <label className={labelCls}>Status Kehadiran <span className="text-red-500">*</span></label>
-              <div className="mt-1.5 flex gap-2">
-                {STATUS_HADIR.map(function (s) {
-                  const aktif = status === s
-                  const warna = aktif
-                    ? (s === 'Masuk' ? 'bg-emerald-500 text-white' : s === 'Izin' ? 'bg-amber-500 text-white' : 'bg-red-500 text-white')
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  return <button type="button" key={s} onClick={function () { setStatus(s) }} className={'flex-1 rounded-2xl px-3 py-3 text-sm font-bold ' + warna}>{s}</button>
-                })}
-              </div>
-            </div>
-            <div>
-              <label className={labelCls}>Alasan atau Keterangan</label>
-              <AutoTextArea
-                className={inputCls + (status === 'Masuk' ? ' cursor-not-allowed opacity-60' : '')}
-                value={alasan}
-                onChange={function (e) { setAlasan(e.target.value) }}
-                aria-label="Alasan atau Keterangan"
-                placeholder={status === 'Masuk' ? 'Status Masuk tidak memerlukan alasan' : 'Contoh: Keperluan keluarga, sakit.'}
-                disabled={status === 'Masuk'}
-              />
-            </div>
-            <button type="submit" disabled={busy} className={btnPrimary}>
-              {busy ? <LabelProses teks="Menyimpan" /> : (hadirHariIni ? 'Perbarui Daftar Hadir' : 'Simpan Daftar Hadir')}
-            </button>
-          </form>
-        </section>
-      ) : null}
-    </div>
-  )
-}
-````
-
-## File: src/components/Carousel.jsx
-````javascript
-import { useEffect, useRef, useState } from 'react'
-import { SizedIcon } from './icons.jsx'
-import { Lightbox, SmartFit, MediaDrive } from './ui.jsx'
-
-export default function Carousel(props) {
-  const slides = props.slides || []
-  const autoMs = props.autoMs || 4000
-  const [idx, setIdx] = useState(0)
-  const [paused, setPaused] = useState(false)
-  const [zoom, setZoom] = useState(null)
-  const trackRef = useRef(null)
-  const touchX = useRef(0)
-  const moved = useRef(false)
-
-  useEffect(function () {
-    if (slides.length < 2 || paused) return undefined
-    const t = setInterval(function () {
-      setIdx(function (i) { return (i + 1) % slides.length })
-    }, autoMs)
-    return function () { clearInterval(t) }
-  }, [slides.length, paused, autoMs])
-
-  useEffect(function () {
-    if (trackRef.current) trackRef.current.style.transform = 'translateX(-' + (idx * 100) + '%)'
-  }, [idx])
-
-  if (!slides.length) return null
-
-  if (slides.length === 1) {
-    const s = slides[0]
-    return (
-      <>
-        <div className="relative group rounded-2xl overflow-hidden aspect-video bg-slate-900">
-          {s.drive ? (
-            <MediaDrive driveId={s.drive} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} className="absolute inset-0 h-full w-full object-cover cursor-zoom-in" />
-          ) : (
-            <SmartFit src={s.src} full={s.full} type={s.type} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} />
-          )}
-          <button type="button" title="Perbesar Media" onClick={function () { setZoom(s) }}
-            className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
-            <SizedIcon name="expand" size={15} />
-          </button>
-        </div>
-        {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} driveId={zoom.drive || null} onClose={function () { setZoom(null) }} /> : null}
-      </>
-    )
-  }
-
-  return (
-    <>
-      <div
-        className="media-carousel group"
-        onMouseEnter={function () { setPaused(true) }}
-        onMouseLeave={function () { setPaused(false) }}
-        onTouchStart={function (e) { touchX.current = e.touches[0].clientX; moved.current = false }}
-        onTouchEnd={function (e) {
-          const dx = e.changedTouches[0].clientX - touchX.current
-          if (Math.abs(dx) > 40) {
-            moved.current = true
-            setIdx(function (i) { return (i + (dx < 0 ? 1 : -1) + slides.length) % slides.length })
-          }
-        }}
-      >
-        <div ref={trackRef} className="carousel-track">
-          {slides.map(function (s, i) {
-            return (
-              <div key={i} className="carousel-slide">
-                {s.drive ? (
-                  <MediaDrive driveId={s.drive} alt={s.title || 'Media'} onClick={function () { if (moved.current) { moved.current = false; return } setZoom(s) }} className="absolute inset-0 h-full w-full object-cover cursor-zoom-in" />
-                ) : (
-                <SmartFit
-                  src={s.src}
-                  full={s.full}
-                   type={s.type}
-                  alt={s.title || 'Media'}
-                  onClick={function () {
-                    if (moved.current) { moved.current = false; return }
-                    setZoom(s)
-                  }}
-                />
-                )}
-                <button type="button" title="Perbesar Media" onClick={function (e) { e.stopPropagation(); setZoom(s) }}
-                  className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
-                  <SizedIcon name="expand" size={15} />
-                </button>
-                {s.title ? (
-                  <span className="absolute bottom-2 left-2 z-10 px-2 py-1 rounded-lg bg-black/60 text-white text-xs max-w-[85%] truncate">
-                    {s.title}
-                  </span>
-                ) : null}
-              </div>
-            )
-          })}
-        </div>
-        <button
-          onClick={function () { setIdx(function (i) { return (i - 1 + slides.length) % slides.length }) }}
-          className="absolute left-2 top-0 bottom-0 my-auto z-10 h-8 w-8 rounded-full bg-black/40 text-white grid place-items-center opacity-100 xl:opacity-0 xl:group-hover:opacity-100 hover:bg-black/60"
-        >
-          &#8249;
-        </button>
-        <button
-          onClick={function () { setIdx(function (i) { return (i + 1) % slides.length }) }}
-          className="absolute right-2 top-0 bottom-0 my-auto z-10 h-8 w-8 rounded-full bg-black/40 text-white grid place-items-center opacity-100 xl:opacity-0 xl:group-hover:opacity-100 hover:bg-black/60"
-        >
-          &#8250;
-        </button>
-        <div className="absolute bottom-2 right-2 z-10 flex gap-1.5">
-          {slides.map(function (s, i) {
-            return (
-              <button
-                key={i}
-                onClick={function () { setIdx(i) }} aria-label={'Ke slide ' + (i + 1)}
-                className={'carousel-dot h-2 w-2 rounded-full transition-all ' + (i === idx ? 'bg-white' : 'bg-white/40')}
-              />
-            )
-          })}
-        </div>
-      </div>
-      {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} driveId={zoom.drive || null} onClose={function () { setZoom(null) }} /> : null}
-    </>
-  )
-}
-````
-
-## File: src/components/icons.jsx
-````javascript
-function svg(inner, size) {
-  const s = size || 16
-  return (
-    <svg
-      width={s}
-      height={s}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      {inner}
-    </svg>
-  )
-}
-
-const paths = {
-  funnel: <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />,
-  user: (
-    <>
-      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-      <circle cx="12" cy="7" r="4" />
-    </>
-  ),
-  tag: (
-    <>
-      <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
-      <line x1="7" y1="7" x2="7.01" y2="7" />
-    </>
-  ),
-  calendar: (
-    <>
-      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-      <line x1="16" y1="2" x2="16" y2="6" />
-      <line x1="8" y1="2" x2="8" y2="6" />
-      <line x1="3" y1="10" x2="21" y2="10" />
-    </>
-  ),
-  image: (
-    <>
-      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-      <circle cx="8.5" cy="8.5" r="1.5" />
-      <polyline points="21 15 16 10 5 21" />
-    </>
-  ),
-  close: (
-    <>
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
-    </>
-  ),
-  check: (
-    <>
-      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-      <polyline points="22 4 12 14.01 9 11.01" />
-    </>
-  ),
-  chevron: <polyline points="6 9 12 15 18 9" />,
-  list: (
-    <>
-      <line x1="8" y1="6" x2="21" y2="6" />
-      <line x1="8" y1="12" x2="21" y2="12" />
-      <line x1="8" y1="18" x2="21" y2="18" />
-      <line x1="3" y1="6" x2="3.01" y2="6" />
-      <line x1="3" y1="12" x2="3.01" y2="12" />
-      <line x1="3" y1="18" x2="3.01" y2="18" />
-    </>
-  ),
-  link: (
-    <>
-      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-    </>
-  ),
-  sun: (
-    <>
-      <circle cx="12" cy="12" r="4" />
-      <path d="M12 2v2" />
-      <path d="M12 20v2" />
-      <path d="m4.93 4.93 1.41 1.41" />
-      <path d="m17.66 17.66 1.41 1.41" />
-      <path d="M2 12h2" />
-      <path d="M20 12h2" />
-      <path d="m6.34 17.66-1.41 1.41" />
-      <path d="m19.07 4.93-1.41 1.41" />
-    </>
-  ),
-  moon: <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />,
-  file: (
-    <>
-      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
-      <path d="M14 2v4a2 2 0 0 0 2 2h4" />
-      <path d="M10 9H8" />
-      <path d="M16 13H8" />
-      <path d="M16 17H8" />
-    </>
-  ),
-  camera: (
-    <>
-      <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
-      <circle cx="12" cy="13" r="3" />
-    </>
-  ),
-  clipboard: (
-    <>
-      <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
-      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-      <path d="M9 12h6" />
-      <path d="M9 16h6" />
-    </>
-  ),
-  trash: (
-    <>
-      <path d="M3 6h18" />
-      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
-      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-      <line x1="10" y1="11" x2="10" y2="17" />
-      <line x1="14" y1="11" x2="14" y2="17" />
-    </>
-  ),
-  eye: (
-    <>
-      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
-      <circle cx="12" cy="12" r="3" />
-    </>
-  ),
-  eyeOff: (
-    <>
-      <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
-      <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
-      <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
-      <line x1="2" y1="2" x2="22" y2="22" />
-    </>
-  ),
-  expand: (
-    <>
-      <path d="M15 3h6v6" />
-      <path d="M9 21H3v-6" />
-      <path d="M21 3l-7 7" />
-      <path d="M3 21l7-7" />
-    </>
-  ),
-  youtube: (
-    <>
-      <path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z" />
-      <polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02" />
-    </>
-  ),
-  download: (
-    <>
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-      <polyline points="7 10 12 15 17 10" />
-      <line x1="12" y1="3" x2="12" y2="15" />
-    </>
-  ),
-  sort: (
-    <>
-      <path d="M3 6h13" />
-      <path d="M3 12h9" />
-      <path d="M3 18h5" />
-      <path d="M17 6v12" />
-      <path d="m14 15 3 3 3-3" />
-    </>
-  )
-}
-
-export const ICONS = {
-  funnel: svg(paths.funnel),
-  user: svg(paths.user),
-  tag: svg(paths.tag),
-  calendar: svg(paths.calendar),
-  image: svg(paths.image),
-  close: svg(paths.close),
-  check: svg(paths.check),
-  chevron: svg(paths.chevron),
-  list: svg(paths.list),
-  link: svg(paths.link)
-}
-
-export function SizedIcon(props) {
-  const inner = paths[props.name]
-  if (!inner) return null
-  return svg(inner, props.size || 16)
-}
-
-export function EyeToggle(props) {
-  return (
-    <svg
-      width={props.size || 18}
-      height={props.size || 18}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      className={'eye-icon ' + (props.open ? 'terbuka' : '')}
-    >
-      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
-      <circle cx="12" cy="12" r="3" className="eye-pupil" />
-      <line x1="2" y1="2" x2="22" y2="22" className="eye-slash" />
-    </svg>
-  )
 }
 ````
 
@@ -4164,6 +6182,367 @@ export function SumberVideo(props) {
 }
 ````
 
+## File: src/components/FilterBar.jsx
+````javascript
+import { useEffect, useState } from 'react'
+import { ICONS } from './icons.jsx'
+import { CustomSelect, CustomDateInput } from './controls.jsx'
+
+export function FilterSelect(props) {
+  return (
+    <CustomSelect
+      icon={props.icon}
+      value={props.value}
+      onChange={props.onChange}
+      options={props.options}
+      className="min-w-[190px]"
+      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+    />
+  )
+}
+
+export function FilterDate(props) {
+  return (
+    <CustomDateInput
+      mode={props.mode || 'date'}
+      value={props.value}
+      onChange={props.onChange}
+      className="min-w-[170px]"
+      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+    />
+  )
+}
+
+export function TimeFilter(props) {
+  const f = props.filter
+  const set = props.set
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <div className="time-toggle">
+        <button type="button" className={f.timeMode === 'bulan' ? 'active' : ''}
+          onClick={function () { set(Object.assign({}, f, { timeMode: 'bulan', bulan: '', dari: '', sampai: '' })) }}>Bulan</button>
+        <button type="button" className={f.timeMode === 'rentang' ? 'active' : ''}
+          onClick={function () { set(Object.assign({}, f, { timeMode: 'rentang', bulan: '', dari: '', sampai: '' })) }}>Rentang Waktu</button>
+      </div>
+      {f.timeMode === 'bulan'
+        ? <div key="bulan" className="anim-ganti-bulan flex flex-wrap items-center gap-2">
+<FilterDate mode="month" value={f.bulan} onChange={function (v) { set(Object.assign({}, f, { bulan: v })) }} />
+</div>
+        : <div key="rentang" className="anim-ganti-rentang flex flex-wrap items-center gap-2">
+            <FilterDate value={f.dari} onChange={function (v) { set(Object.assign({}, f, { dari: v })) }} />
+            <span className="text-slate-600 text-sm">sampai</span>
+            <FilterDate value={f.sampai} onChange={function (v) { set(Object.assign({}, f, { sampai: v })) }} />
+          </div>}
+    </div>
+  )
+}
+
+export function FilterBar(props) {
+  const [settled, setSettled] = useState(false)
+  useEffect(function () {
+    if (props.open) {
+      const t = setTimeout(function () { setSettled(true) }, 400)
+      return function () { clearTimeout(t) }
+    }
+    setSettled(false)
+    return undefined
+  }, [props.open])
+  return (
+    <div className="bsi-panel relative z-40 rounded-3xl p-4 lg:p-5">
+      <div className="flex items-center justify-between gap-3">
+        <button onClick={props.onToggle}
+          className="xl:hidden flex items-center gap-2 px-4 py-2.5 rounded-2xl border border-slate-200 bg-slate-50 text-sm font-semibold text-slate-700 hover:bg-slate-100">
+          <span className="text-bsi-700">{ICONS.funnel}</span>
+          <span>Filter</span>
+          {props.activeCount > 0 ? (
+            <span className="inline-flex items-center justify-center h-6 min-w-6 px-2 rounded-full bg-bsi-800 text-white text-xs font-bold">{props.activeCount}</span>
+          ) : null}
+          <span className={'transition-transform duration-200 text-slate-600 ' + (props.open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
+        </button>
+        <div className="hidden xl:block text-sm text-slate-600">
+          {props.activeCount > 0
+            ? <span className="inline-flex items-center gap-2"><span className="text-bsi-700">{ICONS.funnel}</span><span><strong className="text-slate-900">{props.activeCount}</strong> filter aktif</span></span>
+            : <span className="inline-flex items-center gap-2"><span className="text-slate-600">{ICONS.funnel}</span><span>Belum ada filter aktif</span></span>}
+        </div>
+      </div>
+            <div className={'filter-wrap' + (props.open ? ' filter-wrap-buka' : '')}>
+        <div className={'filter-dalam' + (props.open && settled ? ' filter-dalam-santai' : '')}>
+          <div className="filter-isi flex flex-wrap items-center gap-3">
+            {props.children}
+            {props.activeCount > 0 ? (
+              <button onClick={props.onReset}
+                className="inline-flex items-center gap-2 rounded-2xl bg-red-50 border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100">
+                {ICONS.close}<span>Hapus Filter</span>
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function SortSelect(props) {
+  return (
+    <CustomSelect
+      icon={ICONS.sort}
+      value={props.value}
+      onChange={props.onChange}
+      options={[{ value: 'terbaru', label: 'Terbaru' }, { value: 'terlama', label: 'Terlama' }]}
+      className="min-w-[150px]"
+      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+    />
+  )
+}
+export function countActiveFilters(o) {
+  let c = 0
+  for (const k in o) {
+    if (k === 'timeMode') continue
+    if (o[k]) c++
+  }
+  return c
+}
+````
+
+## File: src/components/icons.jsx
+````javascript
+function svg(inner, size) {
+  const s = size || 16
+  return (
+    <svg
+      width={s}
+      height={s}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {inner}
+    </svg>
+  )
+}
+
+const paths = {
+  funnel: <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />,
+  user: (
+    <>
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </>
+  ),
+  tag: (
+    <>
+      <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+      <line x1="7" y1="7" x2="7.01" y2="7" />
+    </>
+  ),
+  calendar: (
+    <>
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+    </>
+  ),
+  image: (
+    <>
+      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <polyline points="21 15 16 10 5 21" />
+    </>
+  ),
+  close: (
+    <>
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </>
+  ),
+  check: (
+    <>
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+      <polyline points="22 4 12 14.01 9 11.01" />
+    </>
+  ),
+  chevron: <polyline points="6 9 12 15 18 9" />,
+  list: (
+    <>
+      <line x1="8" y1="6" x2="21" y2="6" />
+      <line x1="8" y1="12" x2="21" y2="12" />
+      <line x1="8" y1="18" x2="21" y2="18" />
+      <line x1="3" y1="6" x2="3.01" y2="6" />
+      <line x1="3" y1="12" x2="3.01" y2="12" />
+      <line x1="3" y1="18" x2="3.01" y2="18" />
+    </>
+  ),
+  link: (
+    <>
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+    </>
+  ),
+  sun: (
+    <>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2" />
+      <path d="M12 20v2" />
+      <path d="m4.93 4.93 1.41 1.41" />
+      <path d="m17.66 17.66 1.41 1.41" />
+      <path d="M2 12h2" />
+      <path d="M20 12h2" />
+      <path d="m6.34 17.66-1.41 1.41" />
+      <path d="m19.07 4.93-1.41 1.41" />
+    </>
+  ),
+  moon: <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />,
+  file: (
+    <>
+      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+      <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+      <path d="M10 9H8" />
+      <path d="M16 13H8" />
+      <path d="M16 17H8" />
+    </>
+  ),
+  camera: (
+    <>
+      <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
+      <circle cx="12" cy="13" r="3" />
+    </>
+  ),
+  clipboard: (
+    <>
+      <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+      <path d="M9 12h6" />
+      <path d="M9 16h6" />
+    </>
+  ),
+  trash: (
+    <>
+      <path d="M3 6h18" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <line x1="10" y1="11" x2="10" y2="17" />
+      <line x1="14" y1="11" x2="14" y2="17" />
+    </>
+  ),
+  eye: (
+    <>
+      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" />
+    </>
+  ),
+  eyeOff: (
+    <>
+      <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+      <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+      <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+      <line x1="2" y1="2" x2="22" y2="22" />
+    </>
+  ),
+  expand: (
+    <>
+      <path d="M15 3h6v6" />
+      <path d="M9 21H3v-6" />
+      <path d="M21 3l-7 7" />
+      <path d="M3 21l7-7" />
+    </>
+  ),
+  youtube: (
+    <>
+      <path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z" />
+      <polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02" />
+    </>
+  ),
+  download: (
+    <>
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="3" x2="12" y2="15" />
+    </>
+  ),
+  sort: (
+    <>
+      <path d="M3 6h13" />
+      <path d="M3 12h9" />
+      <path d="M3 18h5" />
+      <path d="M17 6v12" />
+      <path d="m14 15 3 3 3-3" />
+    </>
+  ),
+  qrcode: (
+    <>
+      {/* 3 finder pattern (kotak sudut) */}
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="5" y="5" width="3" height="3" fill="currentColor" stroke="none" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="16" y="5" width="3" height="3" fill="currentColor" stroke="none" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+      <rect x="5" y="16" width="3" height="3" fill="currentColor" stroke="none" />
+      {/* pixel data (diagonal, biar terbaca sebagai QR) */}
+      <rect x="14" y="14" width="3" height="3" fill="currentColor" stroke="none" />
+      <rect x="18" y="18" width="3" height="3" fill="currentColor" stroke="none" />
+    </>
+  ),
+  pencil: (
+    <>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+    </>
+  ),
+  menu: (
+    <>
+      <line x1="3" y1="6" x2="21" y2="6" />
+      <line x1="3" y1="12" x2="21" y2="12" />
+      <line x1="3" y1="18" x2="21" y2="18" />
+    </>
+  )
+}
+
+export const ICONS = {
+  funnel: svg(paths.funnel),
+  user: svg(paths.user),
+  tag: svg(paths.tag),
+  calendar: svg(paths.calendar),
+  image: svg(paths.image),
+  close: svg(paths.close),
+  check: svg(paths.check),
+  chevron: svg(paths.chevron),
+  list: svg(paths.list),
+  link: svg(paths.link)
+}
+
+export function SizedIcon(props) {
+  const inner = paths[props.name]
+  if (!inner) return null
+  return svg(inner, props.size || 16)
+}
+
+export function EyeToggle(props) {
+  return (
+    <svg
+      width={props.size || 18}
+      height={props.size || 18}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={'eye-icon ' + (props.open ? 'terbuka' : '')}
+    >
+      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" className="eye-pupil" />
+      <line x1="2" y1="2" x2="22" y2="22" className="eye-slash" />
+    </svg>
+  )
+}
+````
+
 ## File: src/main.jsx
 ````javascript
 import React from 'react'
@@ -4388,191 +6767,370 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 })()
 ````
 
-## File: src/components/FilterBar.jsx
+## File: src/pages/QuickPage.jsx
 ````javascript
-import { useEffect, useState } from 'react'
-import { ICONS } from './icons.jsx'
-import { CustomSelect, CustomDateInput } from './controls.jsx'
+import { useEffect, useRef, useState } from 'react'
+import { supabase } from '../lib/supabase.js'
+import { useAuth } from '../lib/auth.js'
+import { uploadMedia } from '../lib/upload.js'
+import { syncGaleriFromLogbook } from '../lib/logbook.js'
+import { urlPratinjau } from '../lib/konversi.js'
+import { todayInput, formatTanggal } from '../lib/format.js'
+import { KATEGORI } from '../lib/constants.js'
+import { inputCls, labelCls, btnPrimary, useToast, AutoTextArea, LabelProses, Avatar } from '../components/ui.jsx'
+import { CustomSelect } from '../components/controls.jsx'
+import { SizedIcon } from '../components/icons.jsx'
+import { useNavigate } from 'react-router-dom'
+import PengingatBanner from '../components/PengingatBanner.jsx'
+import { SkeletonQuick } from '../components/Skeleton.jsx'
 
-export function FilterSelect(props) {
-  return (
-    <CustomSelect
-      icon={props.icon}
-      value={props.value}
-      onChange={props.onChange}
-      options={props.options}
-      className="min-w-[190px]"
-      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
-    />
-  )
-}
+const STATUS_HADIR = ['Masuk', 'Izin', 'Bolos']
 
-export function FilterDate(props) {
-  return (
-    <CustomDateInput
-      mode={props.mode || 'date'}
-      value={props.value}
-      onChange={props.onChange}
-      className="min-w-[170px]"
-      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
-    />
-  )
-}
+export default function QuickPage() {
+  const { mahasiswa } = useAuth()
+  const toast = useToast()
+  const tanggal = todayInput()
 
-export function TimeFilter(props) {
-  const f = props.filter
-  const set = props.set
-  return (
-    <div className="flex flex-wrap items-center gap-3">
-      <div className="time-toggle">
-        <button type="button" className={f.timeMode === 'bulan' ? 'active' : ''}
-          onClick={function () { set(Object.assign({}, f, { timeMode: 'bulan', bulan: '', dari: '', sampai: '' })) }}>Bulan</button>
-        <button type="button" className={f.timeMode === 'rentang' ? 'active' : ''}
-          onClick={function () { set(Object.assign({}, f, { timeMode: 'rentang', bulan: '', dari: '', sampai: '' })) }}>Rentang Waktu</button>
-      </div>
-      {f.timeMode === 'bulan'
-        ? <div key="bulan" className="anim-ganti-bulan flex flex-wrap items-center gap-2">
-<FilterDate mode="month" value={f.bulan} onChange={function (v) { set(Object.assign({}, f, { bulan: v })) }} />
-</div>
-        : <div key="rentang" className="anim-ganti-rentang flex flex-wrap items-center gap-2">
-            <FilterDate value={f.dari} onChange={function (v) { set(Object.assign({}, f, { dari: v })) }} />
-            <span className="text-slate-600 text-sm">sampai</span>
-            <FilterDate value={f.sampai} onChange={function (v) { set(Object.assign({}, f, { sampai: v })) }} />
-          </div>}
-    </div>
-  )
-}
+  const [tab, setTab] = useState('logbook')
+  const [loading, setLoading] = useState(true)
+  const [todayLog, setTodayLog] = useState(null)
+  const [hadirHariIni, setHadirHariIni] = useState(null)
+  const [lastLogTanggal, setLastLogTanggal] = useState(null)
+  const [lastHadirTanggal, setLastHadirTanggal] = useState(null)
 
-export function FilterBar(props) {
-  const [settled, setSettled] = useState(false)
-  useEffect(function () {
-    if (props.open) {
-      const t = setTimeout(function () { setSettled(true) }, 400)
-      return function () { clearTimeout(t) }
+  const [kategori, setKategori] = useState('')
+  const [judulKegiatan, setJudulKegiatan] = useState('')
+  const [deskripsi, setDeskripsi] = useState('')
+  const [file, setFile] = useState(null)
+  const [preview, setPreview] = useState('')
+  const [showGal, setShowGal] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [info, setInfo] = useState('')
+
+  const [status, setStatus] = useState('Masuk')
+  const [alasan, setAlasan] = useState('')
+  const navigate = useNavigate()
+  const [tanggalLogs, setTanggalLogs] = useState([])
+  const [hadirRows, setHadirRows] = useState([])
+
+  const cameraRef = useRef(null)
+  const galeriRef = useRef(null)
+
+  async function muatData(mhs, senyap) {
+    if (!senyap) setLoading(true)
+    const l = await supabase
+      .from('logbooks')
+      .select('*, logbook_items(*)')
+      .eq('mahasiswa_id', mhs.id)
+      .eq('tanggal', tanggal)
+      .order('created_at', { ascending: false })
+      .limit(1)
+    const log = (l.data || [])[0] || null
+    if (log) {
+      log.logbook_items = (log.logbook_items || []).sort(function (a, b) { return (a.urutan || 0) - (b.urutan || 0) })
     }
-    setSettled(false)
-    return undefined
-  }, [props.open])
+    const h = await supabase
+      .from('daftar_hadir')
+      .select('*')
+      .eq('mahasiswa_id', mhs.id)
+      .eq('tanggal', tanggal)
+      .limit(1)
+    const hadir = (h.data || [])[0] || null
+    const ll = await supabase
+      .from('logbooks')
+      .select('tanggal')
+      .eq('mahasiswa_id', mhs.id)
+      .order('tanggal', { ascending: false })
+      .limit(1)
+    const lh = await supabase
+      .from('daftar_hadir')
+      .select('tanggal')
+      .eq('mahasiswa_id', mhs.id)
+      .order('tanggal', { ascending: false })
+      .limit(1)
+    setTodayLog(log)
+    setHadirHariIni(hadir)
+    setLastLogTanggal(ll.data && ll.data[0] ? ll.data[0].tanggal : null)
+    setLastHadirTanggal(lh.data && lh.data[0] ? lh.data[0].tanggal : null)
+    if (hadir) {
+      setStatus(hadir.status)
+      setAlasan(hadir.alasan || '')
+    }
+        const pg = await supabase.from('logbooks').select('tanggal').eq('mahasiswa_id', mhs.id)
+    const ph = await supabase.from('daftar_hadir').select('tanggal, status').eq('mahasiswa_id', mhs.id)
+    setTanggalLogs((pg.data || []).map(function (x) { return x.tanggal }))
+    setHadirRows(ph.data || [])
+    if (!senyap) setLoading(false)
+  }
+
+  useEffect(function () {
+    if (mahasiswa) muatData(mahasiswa)
+  }, [mahasiswa])
+
+  async function pilihFile(e) {
+    const f = e.target.files[0]
+    e.target.value = ''
+    if (!f) return
+    if (preview && preview.indexOf('blob:') === 0) URL.revokeObjectURL(preview)
+    setFile(f)
+    setPreview(await urlPratinjau(f))
+  }
+
+  function hapusFile() {
+    if (preview && preview.indexOf('blob:') === 0) URL.revokeObjectURL(preview)
+    setFile(null)
+    setPreview('')
+    setShowGal(false)
+  }
+
+  async function submitLogbook(e) {
+    e.preventDefault()
+    if (!todayLog && !kategori) { toast.gagal('Pilih kategori terlebih dahulu.'); return }
+    if (!judulKegiatan.trim()) { toast.gagal('Judul kegiatan wajib diisi.'); return }
+    setBusy(true)
+    try {
+      let mediaPath = null
+      let mediaThumb = null
+      if (file) {
+        const up = await uploadMedia(file, 'logbook', setInfo)
+        mediaPath = up.publicUrl
+        mediaThumb = up.thumbUrl || null
+      }
+      let logId = todayLog ? todayLog.id : null
+      if (!todayLog) {
+        const ins = await supabase.from('logbooks').insert({
+          mahasiswa_id: mahasiswa.id, tanggal: tanggal, unit: '', kategori: kategori,
+          judul: judulKegiatan.trim(), kendala: '', solusi: '', pembelajaran: '', status: 'publik'
+        }).select().single()
+        if (ins.error) throw new Error(ins.error.message)
+        logId = ins.data.id
+      }
+      const urutan = todayLog ? todayLog.logbook_items.reduce(function (m, it) { return Math.max(m, it.urutan || 0) }, 0) + 1 : 1
+      const insItem = await supabase.from('logbook_items').insert({
+        logbook_id: logId,
+        urutan: urutan,
+        judul: judulKegiatan.trim(),
+        deskripsi: deskripsi.trim(),
+        hasil: '',
+        media_path: mediaPath,
+        media_type: mediaPath ? 'foto' : null,
+        media_thumb: mediaThumb,
+        media_source: 'r2',
+        youtube_id: null,
+        drive_id: null,
+        show_in_gallery: showGal && !!mediaPath
+      }).select().single()
+      if (insItem.error) throw new Error(insItem.error.message)
+      if (todayLog && todayLog.status !== 'publik') {
+        await supabase.from('logbooks').update({ status: 'publik' }).eq('id', todayLog.id)
+      }
+      if (showGal && mediaPath) {
+        await syncGaleriFromLogbook(mahasiswa.id, [insItem.data], {
+          tanggal: tanggal,
+          kategori: todayLog ? todayLog.kategori : kategori
+        })
+      }
+      const pertama = !todayLog
+      setJudulKegiatan('')
+      setDeskripsi('')
+      hapusFile()
+      if (pertama) setKategori('')
+      await muatData(mahasiswa, true)
+      toast.sukses(pertama ? 'Logbook hari ini berhasil dibuat' : 'Kegiatan baru berhasil ditambahkan')
+    } catch (err) {
+      toast.gagal('Gagal menyimpan logbook: ' + err.message)
+    }
+    setInfo('')
+    setBusy(false)
+  }
+
+  async function submitAbsen(e) {
+    e.preventDefault()
+    setBusy(true)
+    try {
+      const payload = {
+        mahasiswa_id: mahasiswa.id,
+        tanggal: tanggal,
+        status: status,
+        alasan: status === 'Masuk' ? '' : alasan.trim()
+      }
+      let res
+      if (hadirHariIni) {
+        res = await supabase.from('daftar_hadir').update(payload).eq('id', hadirHariIni.id)
+      } else {
+        res = await supabase.from('daftar_hadir').insert(payload)
+      }
+      if (res.error) throw new Error(res.error.message)
+      await muatData(mahasiswa, true)
+      toast.sukses(hadirHariIni ? 'Daftar hadir berhasil diperbarui' : 'Daftar hadir berhasil disimpan')
+    } catch (err) {
+      toast.gagal('Gagal menyimpan kehadiran: ' + err.message)
+    }
+    setBusy(false)
+  }
+
+  function infoTerakhir(tgl) {
+    if (!tgl) return { teks: 'belum pernah', lama: true }
+    const selisih = Math.round((new Date(tanggal + 'T00:00:00').getTime() - new Date(tgl + 'T00:00:00').getTime()) / 86400000)
+    if (selisih <= 0) return { teks: 'hari ini', lama: false }
+    if (selisih === 1) return { teks: 'kemarin', lama: false }
+    return { teks: selisih + ' hari yang lalu', lama: true }
+  }
+
+  if (loading) {
+    return <SkeletonQuick />
+  }
+
+  const infoLog = infoTerakhir(lastLogTanggal)
+  const infoHadir = infoTerakhir(lastHadirTanggal)
+
+  const tabCls = function (t) {
+    return 'flex-1 px-4 py-2.5 rounded-xl text-xs sm:rounded-2xl sm:py-3 sm:text-sm font-bold ' + (tab === t ? 'bg-bsi-800 text-white shadow-sm' : 'bsi-panel text-slate-600 hover:text-bsi-800')
+  }
+
   return (
-    <div className="bsi-panel relative z-40 rounded-3xl p-4 lg:p-5">
-      <div className="flex items-center justify-between gap-3">
-        <button onClick={props.onToggle}
-          className="xl:hidden flex items-center gap-2 px-4 py-2.5 rounded-2xl border border-slate-200 bg-slate-50 text-sm font-semibold text-slate-700 hover:bg-slate-100">
-          <span className="text-bsi-700">{ICONS.funnel}</span>
-          <span>Filter</span>
-          {props.activeCount > 0 ? (
-            <span className="inline-flex items-center justify-center h-6 min-w-6 px-2 rounded-full bg-bsi-800 text-white text-xs font-bold">{props.activeCount}</span>
-          ) : null}
-          <span className={'transition-transform duration-200 text-slate-600 ' + (props.open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
-        </button>
-        <div className="hidden xl:block text-sm text-slate-600">
-          {props.activeCount > 0
-            ? <span className="inline-flex items-center gap-2"><span className="text-bsi-700">{ICONS.funnel}</span><span><strong className="text-slate-900">{props.activeCount}</strong> filter aktif</span></span>
-            : <span className="inline-flex items-center gap-2"><span className="text-slate-600">{ICONS.funnel}</span><span>Belum ada filter aktif</span></span>}
-        </div>
-      </div>
-            <div className={'filter-wrap' + (props.open ? ' filter-wrap-buka' : '')}>
-        <div className={'filter-dalam' + (props.open && settled ? ' filter-dalam-santai' : '')}>
-          <div className="filter-isi flex flex-wrap items-center gap-3">
-            {props.children}
-            {props.activeCount > 0 ? (
-              <button onClick={props.onReset}
-                className="inline-flex items-center gap-2 rounded-2xl bg-red-50 border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100">
-                {ICONS.close}<span>Hapus Filter</span>
-              </button>
-            ) : null}
+    <div className="mx-auto w-full max-w-xl space-y-5">
+      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="avatar-kepala-dash avatar-kepala-cepat"><Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl" /></div>
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-xl font-black text-slate-900 sm:text-2xl">{mahasiswa.nama}</h1>
+            <p className="mt-1 truncate text-sm text-slate-600">{formatTanggal(tanggal)}</p>
           </div>
         </div>
+        <div className="mt-4 flex gap-2">
+          <button type="button" onClick={function () { setTab('logbook') }} className={tabCls('logbook')}>Logbook</button>
+          <button type="button" onClick={function () { setTab('absen') }} className={tabCls('absen')}>Daftar Hadir</button>
+        </div>
+      </section>
+
+      <div className={tab === 'logbook' ? '' : 'hidden'} style={{ marginTop: 0 }}>
+        {!loading ? (
+          <PengingatBanner
+            tipe="logbook"
+            tanggalLogbook={tanggalLogs}
+            hadir={hadirRows}
+            onIsi={function (t) { navigate('/dashboard?isi=' + t) }}
+          />
+        ) : null}
       </div>
+      <div className={tab === 'absen' ? '' : 'hidden'} style={{ marginTop: 0 }}>
+        {!loading ? (
+          <PengingatBanner
+            tipe="hadir"
+            tanggalLogbook={tanggalLogs}
+            hadir={hadirRows}
+            onIsi={function (t) { navigate('/dashboard?isiHadir=' + t) }}
+          />
+        ) : null}
+      </div>
+      {tab === 'logbook' ? (
+        <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
+          <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoLog.lama ? 'text-amber-600' : 'text-slate-500')}>
+            <SizedIcon name="calendar" size={13} />
+            Terakhir mengisi logbook: {infoLog.teks}
+          </p>
+          {todayLog ? (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+              <p className="text-sm font-bold text-emerald-800">Logbook hari ini sudah ada</p>
+              <p className="mt-1 text-sm text-emerald-800">{todayLog.judul} • {todayLog.logbook_items.length} kegiatan</p>
+              <div className="mt-2 space-y-1">
+                {todayLog.logbook_items.map(function (it, i) {
+                  return <p key={it.id} className="truncate text-xs text-emerald-800">{i + 1}. {it.judul}</p>
+                })}
+              </div>
+              <p className="mt-2 text-xs text-emerald-800">Kegiatan baru ditambahkan di bawahnya tanpa menghapus kegiatan lama.</p>
+              {todayLog.status !== 'publik' ? <p className="mt-1 text-xs font-semibold text-emerald-800">Status masih draf — akan otomatis dipublikasikan.</p> : null}
+            </div>
+          ) : (
+            <div>
+              <label className={labelCls}>Kategori Utama <span className="text-red-500">*</span></label>
+              <div className="mt-1.5">
+                <CustomSelect placeholder="Pilih Kategori" value={kategori} onChange={setKategori} options={KATEGORI.map(function (k) { return { value: k, label: k } })} />
+              </div>
+            </div>
+          )}
+
+          <form onSubmit={submitLogbook} className="mt-5 space-y-4">
+            <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-bold text-bsi-800">{todayLog ? 'Kegiatan Baru (kegiatan ' + (todayLog.logbook_items.length + 1) + ')' : 'Kegiatan'}</p>
+              <input className={inputCls} value={judulKegiatan} onChange={function (e) { setJudulKegiatan(e.target.value) }} aria-label="Judul Kegiatan" placeholder="Judul kegiatan" />
+              <AutoTextArea className={inputCls} value={deskripsi} onChange={function (e) { setDeskripsi(e.target.value) }} aria-label="Deskripsi Kegiatan" placeholder="Deskripsi singkat kegiatan" />
+              {preview ? (
+                <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-900">
+                  <img src={preview} alt="Pratinjau" className="absolute inset-0 h-full w-full object-contain" />
+                  <button type="button" onClick={hapusFile} title="Hapus Gambar" className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-red-500 text-white hover:bg-red-600">
+                    <SizedIcon name="close" size={14} />
+                  </button>
+                </div>
+              ) : null}
+              <div className="grid grid-cols-2 gap-3">
+                <button type="button" onClick={function () { cameraRef.current.click() }} className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-3 py-3.5 text-sm font-semibold text-slate-700 hover:border-bsi-500 hover:bg-slate-100">
+                  <SizedIcon name="camera" size={18} /> Ambil Foto
+                </button>
+                <button type="button" onClick={function () { galeriRef.current.click() }} className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-3 py-3.5 text-sm font-semibold text-slate-700 hover:border-bsi-500 hover:bg-slate-100">
+                  <SizedIcon name="image" size={18} /> Dari Galeri
+                </button>
+              </div>
+              <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={pilihFile} />
+              <input ref={galeriRef} type="file" accept="image/*" className="hidden" onChange={pilihFile} />
+              {preview ? (
+                <label className="flex w-full cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 p-3">
+                  <input type="checkbox" checked={showGal} onChange={function (e) { setShowGal(e.target.checked) }} className="mt-0.5 h-4 w-4 rounded accent-bsi-800" />
+                  <span className="text-sm font-semibold text-slate-800">Tampilkan kegiatan ini di galeri</span>
+                </label>
+              ) : null}
+            </div>
+            <button type="submit" disabled={busy} className={btnPrimary}>
+              {busy ? <LabelProses teks={info || 'Menyimpan'} /> : 'Simpan'}
+            </button>
+          </form>
+        </section>
+      ) : null}
+
+      {tab === 'absen' ? (
+        <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
+          <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoHadir.lama ? 'text-amber-600' : 'text-slate-500')}>
+            <SizedIcon name="clipboard" size={13} />
+            Terakhir mengisi daftar hadir: {infoHadir.teks}
+          </p>
+          {hadirHariIni ? (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+              <p className="text-sm font-bold text-emerald-800">Kamu sudah mengisi daftar hadir hari ini ({hadirHariIni.status})</p>
+              <p className="mt-1 text-xs text-emerald-800">Form di bawah bisa dipakai untuk memperbarui status bila ada perubahan.</p>
+            </div>
+          ) : null}
+          <form onSubmit={submitAbsen} className={'space-y-4 ' + (hadirHariIni ? 'mt-5' : '')}>
+            <div>
+              <label className={labelCls}>Status Kehadiran <span className="text-red-500">*</span></label>
+              <div className="mt-1.5 flex gap-2">
+                {STATUS_HADIR.map(function (s) {
+                  const aktif = status === s
+                  const warna = aktif
+                    ? (s === 'Masuk' ? 'bg-emerald-500 text-white' : s === 'Izin' ? 'bg-amber-500 text-white' : 'bg-red-500 text-white')
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  return <button type="button" key={s} onClick={function () { setStatus(s) }} className={'flex-1 rounded-2xl px-3 py-3 text-sm font-bold ' + warna}>{s}</button>
+                })}
+              </div>
+            </div>
+            <div>
+              <label className={labelCls}>Alasan atau Keterangan</label>
+              <AutoTextArea
+                className={inputCls + (status === 'Masuk' ? ' cursor-not-allowed opacity-60' : '')}
+                value={alasan}
+                onChange={function (e) { setAlasan(e.target.value) }}
+                aria-label="Alasan atau Keterangan"
+                placeholder={status === 'Masuk' ? 'Status Masuk tidak memerlukan alasan' : 'Contoh: Keperluan keluarga, sakit.'}
+                disabled={status === 'Masuk'}
+              />
+            </div>
+            <button type="submit" disabled={busy} className={btnPrimary}>
+              {busy ? <LabelProses teks="Menyimpan" /> : 'Simpan'}
+            </button>
+          </form>
+        </section>
+      ) : null}
     </div>
-  )
-}
-
-export function SortSelect(props) {
-  return (
-    <CustomSelect
-      icon={ICONS.sort}
-      value={props.value}
-      onChange={props.onChange}
-      options={[{ value: 'terbaru', label: 'Terbaru' }, { value: 'terlama', label: 'Terlama' }]}
-      className="min-w-[150px]"
-      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
-    />
-  )
-}
-export function countActiveFilters(o) {
-  let c = 0
-  for (const k in o) {
-    if (k === 'timeMode') continue
-    if (o[k]) c++
-  }
-  return c
-}
-````
-
-## File: src/App.jsx
-````javascript
-import { SkeletonDashboard } from './components/Skeleton.jsx'
-import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import { ThemeProvider } from './lib/theme.jsx'
- import { ToastProvider } from './components/ui.jsx'
-import { useAuth } from './lib/auth.js'
-import Layout from './components/Layout.jsx'
-import HomePage from './pages/HomePage.jsx'
-import LogbookPage from './pages/LogbookPage.jsx'
-import GalleryPage from './pages/GalleryPage.jsx'
-import AttendancePage from './pages/AttendancePage.jsx'
-import DospemPage from './pages/DospemPage.jsx'
-import LoginPage from './pages/LoginPage.jsx'
-import DashboardPage from './pages/DashboardPage.jsx'
-import QuickPage from './pages/QuickPage.jsx'
-
-function ScrollToTop() {
-  const { pathname } = useLocation()
-  useEffect(function () {
-    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
-  }, [pathname])
-  return null
-}
-function RequireAuth(props) {
-  const { mahasiswa, loading } = useAuth()
-  const location = useLocation()
-  if (loading) return <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:py-8"><SkeletonDashboard /></div>
-  if (!mahasiswa) return <Navigate to={'/login?next=' + encodeURIComponent(location.pathname + location.search)} replace />
-  return props.children
-}
-
-function RequireGuest(props) {
-  const { mahasiswa, loading } = useAuth()
-  if (loading) return <div className="grid min-h-[60vh] place-items-center"><div className="h-10 w-10 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div></div>
-  if (mahasiswa) return <Navigate to="/dashboard" replace />
-  return props.children
-}
-
-export default function App() {
-  return (
-    <ThemeProvider>
-      <ToastProvider>
-      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <ScrollToTop />
-        <Routes>
-          <Route element={<Layout />}>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/logbook" element={<LogbookPage />} />
-            <Route path="/galeri" element={<GalleryPage />} />
-            <Route path="/absen" element={<AttendancePage />} />
-            <Route path="/dospem" element={<DospemPage />} />
-            <Route path="/tim" element={<Navigate to="/dospem" replace />} />
-            <Route path="/login" element={<RequireGuest><LoginPage /></RequireGuest>} />
-            <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
-            <Route path="/qr" element={<RequireAuth><QuickPage /></RequireAuth>} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-      </ToastProvider>
-    </ThemeProvider>
   )
 }
 ````
@@ -4730,111 +7288,6 @@ return (
 }
 ````
 
-## File: src/pages/LoginPage.jsx
-````javascript
-import { useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { loginWithNim } from '../lib/auth.js'
-import { inputCls, labelCls, btnPrimary } from '../components/ui.jsx'
-import { EyeToggle, SizedIcon } from '../components/icons.jsx'
-
-function pesanErrorLogin(err) {
-  const pesan = String((err && err.message) || '')
-  const rendah = pesan.toLowerCase()
-  if (rendah.indexOf('invalid login credentials') !== -1) {
-    return 'NIM atau kode akses yang kamu masukkan tidak cocok dengan data kami. Periksa kembali penulisannya, pastikan tidak ada spasi berlebih, lalu coba lagi.'
-  }
-  if (rendah.indexOf('not confirmed') !== -1) {
-    return 'Akun untuk NIM ini belum diaktifkan. Hubungi admin tim magang untuk mengaktifkan akunmu terlebih dahulu.'
-  }
-  if (rendah.indexOf('too many requests') !== -1 || rendah.indexOf('try again after') !== -1 || rendah.indexOf('rate limit') !== -1) {
-    return 'Terlalu banyak percobaan masuk dalam waktu singkat demi keamanan. Tunggu sekitar satu menit, lalu coba lagi.'
-  }
-  if (rendah.indexOf('fetch') !== -1 || rendah.indexOf('network') !== -1 || rendah.indexOf('failed to load') !== -1 || (typeof navigator !== 'undefined' && !navigator.onLine)) {
-    return 'Tidak bisa terhubung ke server. Periksa koneksi internetmu, lalu coba lagi.'
-  }
-  if (rendah.indexOf('email') !== -1 && rendah.indexOf('format') !== -1) {
-    return 'Format NIM tidak terbaca. Masukkan NIM berupa angka tanpa spasi, contoh: 24070041.'
-  }
-  if (pesan) return 'Gagal masuk: ' + pesan + '. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
-  return 'Terjadi kesalahan tidak terduga saat masuk. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
-}
-export default function LoginPage() {
-  const navigate = useNavigate()
-  const [params] = useSearchParams()
-  const [nim, setNim] = useState('')
-  const [kode, setKode] = useState('')
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [lihatKode, setLihatKode] = useState(false)
-
-  async function submit(e) {
-    e.preventDefault()
-    setBusy(true)
-    setError('')
-    try {
-  await loginWithNim(nim, kode)
-  const next = params.get('next')
-  navigate(next && next.charAt(0) === '/' && next.indexOf('//') !== 0 ? next : '/dashboard')
-} catch (err) {
-  setError(pesanErrorLogin(err))
-}
-    setBusy(false)
-  }
-
-  return (
-    <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr] items-start">
-      <div className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8 lg:p-10">
-        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black leading-tight text-slate-900">Masuk untuk Mengisi Logbook, Galeri, dan Daftar Hadir</h1>
-        <p className="mt-3 text-sm leading-relaxed text-slate-600 sm:mt-4 sm:text-base">Halaman ini khusus mahasiswa magang. Dosen pembimbing dan kaprodi dapat melihat halaman umum tanpa masuk.</p>
-      </div>
-      <div className="card-hover bsi-panel rounded-[2rem] p-5 sm:p-8 lg:p-10">
-        <h2 className="text-xl sm:text-2xl font-black text-slate-900">Masuk Dashboard</h2>
-        {error ? (
-          <div className="mt-3 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-red-100 text-red-600">
-              <SizedIcon name="close" size={12} />
-            </span>
-            <div className="min-w-0">
-              <p className="font-bold">Gagal Masuk</p>
-              <p className="mt-1 leading-relaxed">{error}</p>
-            </div>
-          </div>
-        ) : null}
-        <form onSubmit={submit} className="mt-6 space-y-5">
-          <div>
-            <label className={labelCls}>NIM <span className="text-red-500">*</span></label>
-            <input className={inputCls} value={nim} onChange={function (e) { setNim(e.target.value) }} aria-label="NIM" placeholder="Contoh: 20260001" required />
-          </div>
-          <div>
-            <label className={labelCls}>Kode akses <span className="text-red-500">*</span></label>
-            <div className="relative mt-1.5">
-              <input
-                type={lihatKode ? 'text' : 'password'}
-                className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 pr-12 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
-                value={kode}
-                onChange={function (e) { setKode(e.target.value) }}
-                aria-label="Kode Akses" placeholder="Masukkan kode akses"
-                required
-              />
-              <button
-                type="button"
-                onClick={function () { setLihatKode(function (v) { return !v }) }}
-                title={lihatKode ? 'Sembunyikan Kode Akses' : 'Lihat Kode Akses'}
-                className="absolute right-2 top-0 bottom-0 my-auto grid h-9 w-9 place-items-center rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-600"
-              >
-                <EyeToggle open={lihatKode} size={18} />
-              </button>
-            </div>
-          </div>
-          <button type="submit" disabled={busy} className={btnPrimary}>{busy ? 'Memproses...' : 'Masuk'}</button>
-        </form>
-      </div>
-    </section>
-  )
-}
-````
-
 ## File: src/pages/LogbookPage.jsx
 ````javascript
 import { useEffect, useState } from 'react'
@@ -4945,138 +7398,174 @@ export default function LogbookPage() {
 }
 ````
 
-## File: src/components/Layout.jsx
+## File: src/App.jsx
 ````javascript
-import { Outlet, Link, NavLink, useNavigate } from 'react-router-dom'
-import { useTheme } from '../lib/theme.jsx'
-import { useAuth, logoutMahasiswa } from '../lib/auth.js'
-import { SizedIcon } from './icons.jsx'
-import { ConfirmModal } from './ui.jsx'
-import { useEffect, useState } from 'react'
+import { SkeletonDashboard, SkeletonQuick } from './components/Skeleton.jsx'
+import { useEffect } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { ThemeProvider } from './lib/theme.jsx'
+ import { ToastProvider } from './components/ui.jsx'
+import { useAuth } from './lib/auth.js'
+import Layout from './components/Layout.jsx'
+import HomePage from './pages/HomePage.jsx'
+import LogbookPage from './pages/LogbookPage.jsx'
+import GalleryPage from './pages/GalleryPage.jsx'
+import AttendancePage from './pages/AttendancePage.jsx'
+import DospemPage from './pages/DospemPage.jsx'
+import LoginPage from './pages/LoginPage.jsx'
+import DashboardPage from './pages/DashboardPage.jsx'
+import QuickPage from './pages/QuickPage.jsx'
 
-const LINKS = [
-  { to: '/', label: 'Beranda' },
-  { to: '/logbook', label: 'Logbook' },
-  { to: '/galeri', label: 'Galeri' },
-  { to: '/absen', label: 'Daftar Hadir' },
-  { to: '/dospem', label: 'Tim & Dospem' }
-]
+function ScrollToTop() {
+  const { pathname } = useLocation()
+  useEffect(function () {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+  }, [pathname])
+  return null
+}
+function RequireAuth(props) {
+  const { mahasiswa, loading } = useAuth()
+  const location = useLocation()
+  if (loading) return props.fallback || <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:py-8"><SkeletonDashboard /></div>
+  if (!mahasiswa) return <Navigate to={'/login?next=' + encodeURIComponent(location.pathname + location.search)} replace />
+  return props.children
+}
 
-function MenuMobile(props) {
+function RequireGuest(props) {
+  const { mahasiswa, loading } = useAuth()
+  if (loading) return <div className="grid min-h-[60vh] place-items-center"><div className="h-10 w-10 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div></div>
+  if (mahasiswa) return <Navigate to="/dashboard" replace />
+  return props.children
+}
+
+export default function App() {
   return (
-    <div className={'menu-mobile-wrap xl:hidden' + (props.open ? ' menu-mobile-buka' : '')}>
-      <div className="menu-mobile-dalam">
-        <div className="menu-mobile-isi border-t border-slate-200 bg-white px-4 py-4 space-y-2">
-          {props.children}
-        </div>
-      </div>
-    </div>
+    <ThemeProvider>
+      <ToastProvider>
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ScrollToTop />
+        <Routes>
+          <Route element={<Layout />}>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/logbook" element={<LogbookPage />} />
+            <Route path="/galeri" element={<GalleryPage />} />
+            <Route path="/absen" element={<AttendancePage />} />
+            <Route path="/dospem" element={<DospemPage />} />
+            <Route path="/tim" element={<Navigate to="/dospem" replace />} />
+            <Route path="/login" element={<RequireGuest><LoginPage /></RequireGuest>} />
+            <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
+            <Route path="/qr" element={<RequireAuth fallback={<SkeletonQuick />}><QuickPage /></RequireAuth>} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+      </ToastProvider>
+    </ThemeProvider>
   )
 }
-export default function Layout() {
-  const theme = useTheme()
-  const { mahasiswa } = useAuth()
-  const [open, setOpen] = useState(false)
-  const [konfirmasiKeluar, setKonfirmasiKeluar] = useState(false)
+````
+
+## File: src/pages/LoginPage.jsx
+````javascript
+import { useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { loginWithNim } from '../lib/auth.js'
+import { inputCls, labelCls, btnPrimary, LabelProses } from '../components/ui.jsx'
+import { EyeToggle, SizedIcon } from '../components/icons.jsx'
+
+function pesanErrorLogin(err) {
+  const pesan = String((err && err.message) || '')
+  const rendah = pesan.toLowerCase()
+  if (rendah.indexOf('invalid login credentials') !== -1) {
+    return 'NIM atau kode akses yang kamu masukkan tidak cocok dengan data kami. Periksa kembali penulisannya, pastikan tidak ada spasi berlebih, lalu coba lagi.'
+  }
+  if (rendah.indexOf('not confirmed') !== -1) {
+    return 'Akun untuk NIM ini belum diaktifkan. Hubungi admin tim magang untuk mengaktifkan akunmu terlebih dahulu.'
+  }
+  if (rendah.indexOf('too many requests') !== -1 || rendah.indexOf('try again after') !== -1 || rendah.indexOf('rate limit') !== -1) {
+    return 'Terlalu banyak percobaan masuk dalam waktu singkat demi keamanan. Tunggu sekitar satu menit, lalu coba lagi.'
+  }
+  if (rendah.indexOf('fetch') !== -1 || rendah.indexOf('network') !== -1 || rendah.indexOf('failed to load') !== -1 || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+    return 'Tidak bisa terhubung ke server. Periksa koneksi internetmu, lalu coba lagi.'
+  }
+  if (rendah.indexOf('email') !== -1 && rendah.indexOf('format') !== -1) {
+    return 'Format NIM tidak terbaca. Masukkan NIM berupa angka tanpa spasi, contoh: 24070041.'
+  }
+  if (pesan) return 'Gagal masuk: ' + pesan + '. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
+  return 'Terjadi kesalahan tidak terduga saat masuk. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
+}
+export default function LoginPage() {
   const navigate = useNavigate()
-  function mintaKeluar(e) {
+  const [params] = useSearchParams()
+  const [nim, setNim] = useState('')
+  const [kode, setKode] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [lihatKode, setLihatKode] = useState(false)
+
+  async function submit(e) {
     e.preventDefault()
-    setOpen(false)
-    setKonfirmasiKeluar(true)
-  }
-  async function benarKeluar() {
-    setKonfirmasiKeluar(false)
-    await logoutMahasiswa()
-    navigate('/')
-  }
-
-  const linkCls = function (active) {
-    return 'px-3 py-2 rounded-xl text-sm font-semibold ' + (active ? 'bg-[rgba(39,192,109,.12)] text-[#177c48] dark:bg-[rgba(39,192,109,.18)] dark:text-[#86ecb0]' : 'text-[#5f6f64] hover:bg-[rgba(15,42,29,.06)] dark:text-[#9db4a6] dark:hover:bg-[rgba(234,244,238,.07)]')
-  }
-
-  const themeBtn = function (extra) {
-    return (
-      <button onClick={theme.toggle} className={'rounded-xl border border-slate-300 grid place-items-center hover:bg-slate-100 text-slate-700 ' + (extra || 'h-10 w-10')} title="Ganti Tema">
-        <SizedIcon name={theme.dark ? 'sun' : 'moon'} size={18} />
-      </button>
-    )
+    setBusy(true)
+    setError('')
+    try {
+  await loginWithNim(nim, kode)
+  const next = params.get('next')
+  navigate(next && next.charAt(0) === '/' && next.indexOf('//') !== 0 ? next : '/dashboard')
+} catch (err) {
+  setError(pesanErrorLogin(err))
+}
+    setBusy(false)
   }
 
   return (
-    <div className="flex flex-col min-h-screen">
-      <header className="sticky top-0 z-50 bg-[rgba(255,255,255,.65)] backdrop-blur-[14px] border-b border-slate-200 dark:bg-[rgba(16,42,29,.6)]">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="h-16 flex items-center justify-between gap-4">
-            <Link to="/" className="flex items-center gap-3">
-<div className="h-10 w-10 rounded-2xl grid place-items-center shadow-md" style={{ background: '#16623c' }}>
-  <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path d="M4 7V17C4 18.1 4.9 19 6 19H18C19.1 19 20 18.1 20 17V7" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-    <path d="M4 7L12 12L20 7" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-    <path d="M12 12V19" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-  </svg>
-</div>
-              <div>
-                <p className="font-bold leading-none text-slate-900">Portal Magang</p>
-                <p className="text-xs text-slate-600 mt-1">Bank Syariah Indonesia</p>
-              </div>
-            </Link>
-            <nav className="hidden xl:flex items-center gap-1">
-              {LINKS.map(function (l) {
-                return <NavLink key={l.to} to={l.to} end={l.to === '/'} className={function (s) { return linkCls(s.isActive) }}>{l.label}</NavLink>
-              })}
-            </nav>
-            <div className="hidden xl:flex items-center gap-3">
-              {themeBtn()}
-              {mahasiswa ? (
-                <>
-                  <Link to="/dashboard" className="px-4 py-2 rounded-xl bg-bsi-800 text-white text-sm font-semibold hover:bg-bsi-900">Dashboard</Link>
-                  <button type="button" onClick={mintaKeluar} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-100">Keluar</button>
-                </>
-              ) : (
-                <Link to="/login" className="px-4 py-2 rounded-xl bg-bsi-800 text-white text-sm font-semibold hover:bg-bsi-900">Masuk</Link>
-              )}
-            </div>
-            <div className="flex xl:hidden items-center gap-2">
-              {themeBtn()}
-              <button onClick={function () { setOpen(function (o) { return !o }) }} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700">Menu</button>
+    <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr] items-start">
+      <div className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8 lg:p-10">
+        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black leading-tight text-slate-900">Masuk untuk Mengisi Logbook, Galeri, dan Daftar Hadir</h1>
+        <p className="mt-3 text-sm leading-relaxed text-slate-600 sm:mt-4 sm:text-base">Halaman ini khusus mahasiswa magang. Dosen pembimbing dan kaprodi dapat melihat halaman umum tanpa masuk.</p>
+      </div>
+      <div className="card-hover bsi-panel rounded-[2rem] p-5 sm:p-8 lg:p-10">
+        <h2 className="text-xl sm:text-2xl font-black text-slate-900">Masuk Dashboard</h2>
+        {error ? (
+          <div className="mt-3 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-red-100 text-red-600">
+              <SizedIcon name="close" size={12} />
+            </span>
+            <div className="min-w-0">
+              <p className="font-bold">Gagal Masuk</p>
+              <p className="mt-1 leading-relaxed">{error}</p>
             </div>
           </div>
-        </div>
-        <MenuMobile open={open}>
-            {LINKS.map(function (l) {
-              return <NavLink key={l.to} to={l.to} end={l.to === '/'} onClick={function () { setOpen(false) }} className={function (s) { return 'flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm ' + (s.isActive ? 'bg-[rgba(39,192,109,.12)] text-[#177c48] font-bold dark:bg-[rgba(39,192,109,.18)] dark:text-[#86ecb0]' : 'font-semibold text-[#5f6f64] hover:bg-[rgba(15,42,29,.06)] dark:text-[#9db4a6] dark:hover:bg-[rgba(234,244,238,.07)]') }}>{function (s) { return <>{s.isActive ? <span className="h-2 w-2 shrink-0 rounded-full bg-current" /> : null}<span className="truncate">{l.label}</span></> }}</NavLink>
-            })}
-            {mahasiswa ? (
-              <>
-                <NavLink to="/dashboard" onClick={function () { setOpen(false) }} className={function (s) { return 'flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm font-semibold bg-bsi-800 text-white ' + (s.isActive ? 'ring-2 ring-gold-400' : '') }}>{function (s) { return <>{s.isActive ? <span className="h-2 w-2 shrink-0 rounded-full bg-gold-400" /> : null}<span className="truncate">Dashboard</span></> }}</NavLink>
-                <button type="button" onClick={mintaKeluar} className="block w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700">Keluar</button>
-              </>
-            ) : (
-              <Link to="/login" onClick={function () { setOpen(false) }} className="block px-4 py-3 rounded-xl bg-bsi-800 text-white text-sm font-semibold">Masuk</Link>
-            )}
-        </MenuMobile>
-      </header>
-
-      <main className="anim-page max-w-7xl mx-auto px-4 py-8 lg:py-10 flex-1 w-full">
-        <Outlet />
-      </main>
-
-      <footer className="footer-ramping border-t border-slate-200 bg-white">
-<div className="mx-auto max-w-7xl px-4 py-4 text-center">
-<p className="text-xs text-slate-600">© 2026 Tim Magang BSI</p>
-</div>
-</footer>
-<ConfirmModal
-  open={konfirmasiKeluar}
-  title="Keluar dari Akun?"
-  message="Sesi login kamu akan berakhir dan area intern tidak bisa diakses sampai kamu masuk lagi. Data yang sudah disimpan tetap aman."
-  confirmLabel="Keluar"
-  icon="user"
-  tone="netral"
-  onCancel={function () { setKonfirmasiKeluar(false) }}
-  onConfirm={benarKeluar}
-/>
-    </div>
+        ) : null}
+        <form onSubmit={submit} className="mt-6 space-y-5">
+          <div>
+            <label className={labelCls}>NIM <span className="text-red-500">*</span></label>
+            <input className={inputCls} value={nim} onChange={function (e) { setNim(e.target.value) }} aria-label="NIM" placeholder="Contoh: 20260001" required />
+          </div>
+          <div>
+            <label className={labelCls}>Kode akses <span className="text-red-500">*</span></label>
+            <div className="relative mt-1.5">
+              <input
+                type={lihatKode ? 'text' : 'password'}
+                className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 pr-12 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+                value={kode}
+                onChange={function (e) { setKode(e.target.value) }}
+                aria-label="Kode Akses" placeholder="Masukkan kode akses"
+                required
+              />
+              <button
+                type="button"
+                onClick={function () { setLihatKode(function (v) { return !v }) }}
+                title={lihatKode ? 'Sembunyikan Kode Akses' : 'Lihat Kode Akses'}
+                className="absolute right-2 top-0 bottom-0 my-auto grid h-9 w-9 place-items-center rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-600"
+              >
+                <EyeToggle open={lihatKode} size={18} />
+              </button>
+            </div>
+          </div>
+          <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks="Memproses" /> : 'Masuk'}</button>
+        </form>
+      </div>
+    </section>
   )
 }
 ````
@@ -5517,6 +8006,179 @@ export default function HomePage() {
       <Modal open={!!detail} onClose={function () { setDetail(null) }}>
         {detail ? <LogbookDetail log={detail} /> : null}
       </Modal>
+    </div>
+  )
+}
+````
+
+## File: src/components/Layout.jsx
+````javascript
+import { Outlet, Link, NavLink, useNavigate, useLocation } from 'react-router-dom'
+import { useTheme } from '../lib/theme.jsx'
+import { useAuth, logoutMahasiswa } from '../lib/auth.js'
+import { SizedIcon } from './icons.jsx'
+import { ConfirmModal } from './ui.jsx'
+import { useEffect, useRef, useState } from 'react'
+
+const LINKS = [
+  { to: '/', label: 'Beranda' },
+  { to: '/logbook', label: 'Logbook' },
+  { to: '/galeri', label: 'Galeri' },
+  { to: '/absen', label: 'Daftar Hadir' },
+  { to: '/dospem', label: 'Tim & Dospem' }
+]
+
+function MenuMobile(props) {
+  return (
+    <div ref={props.menuRef} className={'menu-mobile-wrap xl:hidden' + (props.open ? ' menu-mobile-buka' : '')}>
+      <div className="menu-mobile-dalam">
+        <div className="menu-mobile-isi border-t border-slate-200 px-4 py-4 space-y-2">
+          {props.children}
+        </div>
+      </div>
+    </div>
+  )
+}
+export default function Layout() {
+  const theme = useTheme()
+  const { mahasiswa } = useAuth()
+  const [open, setOpen] = useState(false)
+  const [konfirmasiKeluar, setKonfirmasiKeluar] = useState(false)
+  const refMenu = useRef(null)
+  const refBtnHamburger = useRef(null)
+  const navigate = useNavigate()
+  const location = useLocation()
+  const isAreaIntern = location.pathname.indexOf('/dashboard') === 0 ||
+    location.pathname.indexOf('/qr') === 0
+
+  /* menu-auto-close-v1: tutup menu mobile saat user berinteraksi di luar
+     area menu atau tombol hamburger. Escape juga menutup menu. */
+  useEffect(function () {
+    if (!open) return undefined
+    function onDocPointer(e) {
+      const t = e.target
+      if (!t || !t.nodeType) return
+      if (refMenu.current && refMenu.current.contains(t)) return
+      if (refBtnHamburger.current && refBtnHamburger.current.contains(t)) return
+      if (t.closest && t.closest('.theme-toggle-btn')) return
+      setOpen(false)
+    }
+    function onKeyDown(e) {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('pointerdown', onDocPointer, true)
+    document.addEventListener('keydown', onKeyDown)
+    return function () {
+      document.removeEventListener('pointerdown', onDocPointer, true)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [open])
+
+  /* safety net: tutup menu saat rute berubah (misal back/forward browser) */
+  useEffect(function () {
+    setOpen(false)
+  }, [location.pathname])
+  function mintaKeluar(e) {
+    e.preventDefault()
+    setOpen(false)
+    setKonfirmasiKeluar(true)
+  }
+  async function benarKeluar() {
+    setKonfirmasiKeluar(false)
+    await logoutMahasiswa()
+    navigate('/')
+  }
+
+  const linkCls = function (active) {
+    return 'px-3 py-2 rounded-xl text-sm font-semibold ' + (active ? 'bg-[rgba(39,192,109,.12)] text-[#177c48] dark:bg-[rgba(39,192,109,.18)] dark:text-[#86ecb0]' : 'text-[#5f6f64] hover:bg-[rgba(15,42,29,.06)] dark:text-[#9db4a6] dark:hover:bg-[rgba(234,244,238,.07)]')
+  }
+
+  const themeBtn = function (extra) {
+    return (
+      <button onClick={theme.toggle} className={'theme-toggle-btn rounded-xl border border-slate-300 grid place-items-center hover:bg-slate-100 text-slate-700 ' + (extra || 'h-10 w-10')} title="Ganti Tema">
+        <SizedIcon name={theme.dark ? 'sun' : 'moon'} size={18} />
+      </button>
+    )
+  }
+
+  return (
+    <div className="flex flex-col min-h-screen">
+      <header className="sticky top-0 z-50 bg-[rgba(255,255,255,.65)] backdrop-blur-[14px] border-b border-slate-200 dark:bg-[rgba(16,42,29,.6)]">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="h-16 flex items-center justify-between gap-4">
+            <Link to="/" className="flex items-center gap-3">
+<div className="h-10 w-10 rounded-2xl grid place-items-center shadow-md" style={{ background: '#16623c' }}>
+  <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M4 7V17C4 18.1 4.9 19 6 19H18C19.1 19 20 18.1 20 17V7" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M4 7L12 12L20 7" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M12 12V19" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+</div>
+              <div>
+                <p className="font-bold leading-none text-slate-900">Portal Magang</p>
+                <p className="text-xs text-slate-600 mt-1">Bank Syariah Indonesia</p>
+              </div>
+            </Link>
+            <nav className="hidden xl:flex items-center gap-1">
+              {LINKS.map(function (l) {
+                return <NavLink key={l.to} to={l.to} end={l.to === '/'} className={function (s) { return linkCls(s.isActive) }}>{l.label}</NavLink>
+              })}
+            </nav>
+            <div className="hidden xl:flex items-center gap-3">
+              {themeBtn()}
+              {mahasiswa ? (
+                <>
+                  <Link to="/dashboard" className="px-4 py-2 rounded-xl bg-bsi-800 text-white text-sm font-semibold hover:bg-bsi-900">Dashboard</Link>
+                  {isAreaIntern ? (
+                    <button type="button" onClick={mintaKeluar} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-100">Keluar</button>
+                  ) : null}
+                </>
+              ) : (
+                <Link to="/login" className="px-4 py-2 rounded-xl bg-bsi-800 text-white text-sm font-semibold hover:bg-bsi-900">Masuk</Link>
+              )}
+            </div>
+            <div className="flex xl:hidden items-center gap-2">
+              {themeBtn()}
+              <button ref={refBtnHamburger} onClick={function () { setOpen(function (o) { return !o }) }} aria-label="Buka Menu" aria-expanded={open} title="Buka Menu" className="h-10 w-10 rounded-xl border border-slate-300 grid place-items-center text-slate-700 hover:bg-slate-100"><SizedIcon name="menu" size={20} /></button>
+            </div>
+          </div>
+        </div>
+        <MenuMobile open={open} menuRef={refMenu}>
+            {LINKS.map(function (l) {
+              return <NavLink key={l.to} to={l.to} end={l.to === '/'} onClick={function () { setOpen(false) }} className={function (s) { return 'flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm ' + (s.isActive ? 'bg-[rgba(39,192,109,.12)] text-[#177c48] font-bold dark:bg-[rgba(39,192,109,.18)] dark:text-[#86ecb0]' : 'font-semibold text-[#5f6f64] hover:bg-[rgba(15,42,29,.06)] dark:text-[#9db4a6] dark:hover:bg-[rgba(234,244,238,.07)]') }}>{function (s) { return <>{s.isActive ? <span className="h-2 w-2 shrink-0 rounded-full bg-current" /> : null}<span className="truncate">{l.label}</span></> }}</NavLink>
+            })}
+            {mahasiswa ? (
+              <>
+                <NavLink to="/dashboard" onClick={function () { setOpen(false) }} className={function (s) { return 'flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm font-semibold bg-bsi-800 text-white ' + (s.isActive ? 'ring-2 ring-gold-400' : '') }}>{function (s) { return <>{s.isActive ? <span className="h-2 w-2 shrink-0 rounded-full bg-gold-400" /> : null}<span className="truncate">Dashboard</span></> }}</NavLink>
+                {isAreaIntern ? (
+                  <button type="button" onClick={mintaKeluar} className="block w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700">Keluar</button>
+                ) : null}
+              </>
+            ) : (
+              <Link to="/login" onClick={function () { setOpen(false) }} className="block px-4 py-3 rounded-xl bg-bsi-800 text-white text-sm font-semibold">Masuk</Link>
+            )}
+        </MenuMobile>
+      </header>
+
+      <main className="anim-page max-w-7xl mx-auto px-4 py-8 lg:py-10 flex-1 w-full">
+        <Outlet />
+      </main>
+
+      <footer className="footer-ramping border-t border-slate-200 bg-white">
+<div className="mx-auto max-w-7xl px-4 py-4 text-center">
+<p className="text-xs text-slate-600">© 2026 Tim Magang BSI</p>
+</div>
+</footer>
+<ConfirmModal
+  open={konfirmasiKeluar}
+  title="Keluar dari Akun?"
+  message="Sesi login kamu akan berakhir dan area intern tidak bisa diakses sampai kamu masuk lagi. Data yang sudah disimpan tetap aman."
+  confirmLabel="Keluar"
+  icon="user"
+  tone="netral"
+  onCancel={function () { setKonfirmasiKeluar(false) }}
+  onConfirm={benarKeluar}
+/>
     </div>
   )
 }
@@ -7069,7 +9731,7 @@ button:active:not(:disabled), a:active, .clickable:active { transition-duration:
 
 /* kepala-dash-responsif: avatar header dashboard mengecil proporsional di layar sempit, desktop tetap 96px */
 @media (max-width: 639px) {
-  .avatar-kepala-dash > button, .avatar-kepala-dash > span {
+  .avatar-kepala-dash > button:not(.avatar-edit-badge), .avatar-kepala-dash > span:not(.avatar-edit-badge) {
     width: 56px !important;
     height: 56px !important;
     border-radius: 16px !important;
@@ -7082,7 +9744,7 @@ button:active:not(:disabled), a:active, .clickable:active { transition-duration:
 
 /* proporsional-mobile-v1: teks header dashboard, avatar profil, dan iframe video menyesuaikan layar sempit */
 @media (max-width: 639px) {
-  .avatar-kepala-dash ~ div h1 { font-size: 1.125rem !important; line-height: 1.625rem !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }
+  .avatar-kepala-dash ~ div h1 { font-size: 1rem !important; line-height: 1.375rem !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }
   .avatar-kepala-dash ~ div p { font-size: 0.75rem !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }
   .avatar-kepala-dash ~ div .inline-flex { font-size: 0.625rem !important; padding: 0.25rem 0.5rem !important; }
   
@@ -7386,6 +10048,180 @@ body { background-color: #f4f8f4; background-image: linear-gradient(160deg, #dff
     font-size: 25px !important;
   }
 }
+
+
+/* tab-scroll-v1: deret tab dashboard jadi satu baris yang bisa digeser horizontal
+   di mobile/tablet, tanpa scrollbar terlihat dan dengan gradien tepi sebagai isyarat.
+   Di sm ke atas kembali wrap normal supaya tetap rapi di layar lebar. */
+.tab-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+}
+.tab-scroll::-webkit-scrollbar { display: none; }
+.tab-scroll > button { scroll-snap-align: start; }
+
+/* fade .tab-scroll lama dihapus, diganti overlay tab-scroll-wrap */
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-scroll { scroll-behavior: auto; }
+}
+
+
+/* tab-fade-smooth-v1: fade tepi nav tab dashboard pakai overlay pseudo-element.
+   opacity-nya dianimasikan supaya muncul/hilang mulus, tidak mengandalkan
+   animasi mask-image yang tidak stabil antar browser.
+   Warna fade diambil dari CSS variable --tab-fade-bg yang otomatis switch
+   di dark mode, jadi tidak perlu duplikasi rules per tema. */
+:root { --tab-fade-bg: rgba(244, 251, 245, 1); }
+html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
+
+.tab-scroll-wrap {
+  position: relative;
+  width: 100%;
+}
+
+@media (min-width: 640px) {
+  /* di layar lebar nav wrap, tidak ada scroll, fade tidak perlu */
+  .tab-scroll-wrap { display: contents; }
+}
+
+@media (max-width: 639px) {
+  .tab-scroll-wrap::before,
+  .tab-scroll-wrap::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 32px;
+    z-index: 2;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: opacity;
+  }
+  .tab-scroll-wrap::before {
+    left: 0;
+    background: linear-gradient(to right, var(--tab-fade-bg) 0%, var(--tab-fade-bg) 25%, transparent 100%);
+  }
+  .tab-scroll-wrap::after {
+    right: 0;
+    background: linear-gradient(to left, var(--tab-fade-bg) 0%, var(--tab-fade-bg) 25%, transparent 100%);
+  }
+  .tab-scroll-wrap.tab-scroll-kiri::before { opacity: 1; }
+  .tab-scroll-wrap.tab-scroll-kanan::after { opacity: 1; }
+}
+
+@media (max-width: 639px) and (prefers-reduced-motion: reduce) {
+  .tab-scroll-wrap::before,
+  .tab-scroll-wrap::after {
+    transition-duration: 0.01ms;
+  }
+}
+
+
+/* tab-icon-sizeflex: ikon tab sedikit lebih besar di sm ke atas supaya
+   seimbang dengan label yang juga membesar (text-xs -> text-sm).
+   Nilai height diset juga karena svg punya attr height dari JSX. */
+.tab-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+@media (min-width: 640px) {
+  .tab-icon svg {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+
+/* avatar-edit-badge: tombol pensil kecil di sudut kanan-bawah avatar,
+   pola edit foto profil ala aplikasi sosial media.
+   Ukuran proporsional berbeda di mobile (avatar 56px) dan desktop (avatar 96px).
+   Border putih supaya "pop" dari avatar, dan border gelap di dark mode.
+   Warna hijau mengikuti palet bsi (bsi-800 di light, bsi-500 di dark). */
+.avatar-edit-badge {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  line-height: 0;
+  border-radius: 9999px;
+  background: #16623c;
+  color: #ffffff;
+  border: 2px solid #ffffff;
+  box-shadow: 0 2px 6px rgba(15, 42, 29, 0.28);
+  cursor: pointer;
+  z-index: 2;
+  transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.15s ease;
+}
+.avatar-edit-badge:hover { background: #135033; transform: scale(1.08); }
+.avatar-edit-badge:active { transform: scale(0.94); }
+.avatar-edit-badge svg { display: block; }
+
+@media (max-width: 639px) {
+  .avatar-edit-badge {
+    width: 22px;
+    height: 22px;
+    right: -3px;
+    bottom: -3px;
+    border-width: 1.5px;
+  }
+  .avatar-edit-badge svg { width: 11px; height: 11px; }
+}
+@media (min-width: 640px) {
+  .avatar-edit-badge {
+    width: 36px;
+    height: 36px;
+    right: -6px;
+    bottom: -6px;
+  }
+  .avatar-edit-badge svg { width: 16px; height: 16px; }
+}
+
+/* dark mode: border warna card gelap, badge pakai hijau terang bsi-500 */
+.dark .avatar-edit-badge {
+  border-color: #0e2a1c;
+  background: #27c06d;
+  color: #06281a;
+}
+.dark .avatar-edit-badge:hover { background: #34d399; }
+
+
+/* descender-fix-v1: heading nama di header dashboard (dan halaman QR)
+   sering kepotong descender huruf 'y', 'g', 'p', 'q' karena kombinasi
+   overflow: hidden dari utility `truncate` dan line-height Tailwind
+   text-4xl (1.11) yang terlalu ketat untuk font weight 800.
+   Perbaikan: line-height lebih longgar + padding-bottom kecil sebagai
+   safety margin, dan margin-bottom negatif setara supaya tinggi total
+   h1 tidak bertambah (layout di bawahnya tetap sama). */
+@media (min-width: 640px) {
+  .avatar-kepala-dash ~ div h1,
+  .avatar-kepala-cepat ~ div h1 {
+    line-height: 1.3 !important;
+    padding-bottom: 0.06em;
+    margin-bottom: -0.06em;
+  }
+}
+
+
+/* quick-header-bigger-v1: halaman /qr fokus ke identitas singkat,
+   jadi nama + tanggal sedikit lebih besar dari dashboard pada mobile.
+   Selector compound .avatar-kepala-dash.avatar-kepala-cepat punya
+   specificity (0,3,1) yang menang atas rule dashboard (0,2,1),
+   jadi hanya /qr yang berubah dan /dashboard tetap seperti semula. */
+@media (max-width: 639px) {
+  .avatar-kepala-dash.avatar-kepala-cepat ~ div h1 {
+    font-size: 1.125rem !important;
+    line-height: 1.5rem !important;
+  }
+  .avatar-kepala-dash.avatar-kepala-cepat ~ div p {
+    font-size: 0.875rem !important;
+  }
+}
 ````
 
 ## File: src/pages/DashboardPage.jsx
@@ -7435,6 +10271,12 @@ const LOG_INITIAL = { kategori: '', status: '', timeMode: 'bulan', bulan: '', da
 const GAL_INITIAL = { kegiatan: '', tipe: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
 const HADIR_INITIAL = { status: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
 const PER_PAGE_DASH = 6
+const TAB_DASHBOARD = [
+  { id: 'logbook', label: 'Logbook',      mobile: 'Logbook', icon: 'file' },
+  { id: 'galeri',  label: 'Galeri',       mobile: 'Galeri',  icon: 'image' },
+  { id: 'absen',   label: 'Daftar Hadir', mobile: 'Hadir',   icon: 'clipboard' },
+  { id: 'qr',      label: 'Cetak QR',     mobile: 'QR',      icon: 'qrcode' }
+]
 
 function ModeIndicator(props) {
   return (
@@ -7460,6 +10302,7 @@ export default function DashboardPage() {
   const batas = batasTanggalPilihan()
   function tolakTanggal(pesan) { toast.gagal(pesan) }
   const [tab, setTab] = useState('logbook')
+  const [tabEdge, setTabEdge] = useState({ left: false, right: false })
   const [logs, setLogs] = useState([])
   const [galeri, setGaleri] = useState([])
   const [hadir, setHadir] = useState([])
@@ -7582,6 +10425,7 @@ export default function DashboardPage() {
   const refFormHadir = useRef(null)
   const refListGal = useRef(null)
   const refListHadir = useRef(null)
+  const refNavTab = useRef(null)
 
   async function refresh() {
     if (!mahasiswa) return
@@ -7612,6 +10456,39 @@ export default function DashboardPage() {
     setGalPage(1)
     setHadirPage(1)
   }, [logFilter, galFilter, hadirFilter, sort])
+
+  useEffect(function () {
+    const nav = refNavTab.current
+    if (!nav) return
+    const aktif = nav.querySelector('[aria-current="page"]')
+    if (!aktif || typeof aktif.scrollIntoView !== 'function') return
+    aktif.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+  }, [tab])
+
+  useEffect(function () {
+    const nav = refNavTab.current
+    if (!nav) return
+    function perbaruiTabEdge() {
+      const max = nav.scrollWidth - nav.clientWidth
+      setTabEdge({
+        left: nav.scrollLeft > 2,
+        right: max > 2 && nav.scrollLeft < max - 2
+      })
+    }
+    perbaruiTabEdge()
+    nav.addEventListener('scroll', perbaruiTabEdge, { passive: true })
+    window.addEventListener('resize', perbaruiTabEdge)
+    let ro = null
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(perbaruiTabEdge)
+      ro.observe(nav)
+    }
+    return function () {
+      nav.removeEventListener('scroll', perbaruiTabEdge)
+      window.removeEventListener('resize', perbaruiTabEdge)
+      if (ro) ro.disconnect()
+    }
+  }, [tab, dataSiap])
 
    /* ===== proteksi-unsaved-v1: cegah kehilangan draf saat pindah tab/halaman, batal edit, atau tutup tab ===== */
    const [unsavedModal, setUnsavedModal] = useState(null)
@@ -8255,30 +11132,59 @@ async function executeDelete() {
      setTab(tabBaru)
    }
 
-  const tabCls = function (t) {
-    return 'px-4 py-2.5 rounded-xl text-xs sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm font-bold ' + (tab === t ? 'bg-bsi-800 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200')
-  }
-
-  return (
+    return (
     <div>
       <section className="card-hover bsi-panel rounded-[2rem] p-5 sm:p-8 lg:p-10">
-        <div className="flex flex-wrap items-center justify-between gap-4 sm:gap-6">
-          <div>
-            <div className="flex flex-wrap items-center gap-4 sm:gap-6">
-              <div className="avatar-kepala-dash"><Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl" onClick={function () { gantiTab('profil') }} title="Kelola Foto Profil" /></div>
-              <div className="min-w-0 flex-1">
-                <h1 className="truncate text-lg sm:text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">{mahasiswa.nama}</h1>
-                <p className="text-sm text-slate-600">NIM {mahasiswa.nim}</p>
-                {mahasiswa.prodi ? <p className="truncate text-sm text-slate-600">{mahasiswa.prodi}</p> : null}
-              </div>
+        <div className="flex flex-col gap-5 sm:gap-6">
+          <div className="flex flex-wrap items-center gap-4 sm:gap-6 min-w-0">
+            <div className="avatar-kepala-dash relative shrink-0">
+              <Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl" onClick={function () { gantiTab('profil') }} title="Kelola Profil" />
+              <button
+                type="button"
+                onClick={function () { gantiTab('profil') }}
+                aria-label="Edit Profil"
+                title="Edit Profil"
+                className="avatar-edit-badge"
+              >
+                <SizedIcon name="pencil" size={13} />
+              </button>
+            </div>
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-lg sm:text-2xl md:text-3xl lg:text-4xl font-black text-slate-900">{mahasiswa.nama}</h1>
+              <p className="text-sm sm:text-base text-slate-600">NIM {mahasiswa.nim}</p>
+              {mahasiswa.prodi ? <p className="truncate text-sm sm:text-base text-slate-600">{mahasiswa.prodi}</p> : null}
             </div>
           </div>
-          <div className="flex flex-wrap gap-2 sm:mt-8">
-            <button onClick={function () { gantiTab('logbook') }} className={tabCls('logbook')}>Logbook</button>
-            <button onClick={function () { gantiTab('galeri') }} className={tabCls('galeri')}>Galeri</button>
-            <button onClick={function () { gantiTab('absen') }} className={tabCls('absen')}>Daftar Hadir</button>
-            <button onClick={function () { gantiTab('profil') }} className={tabCls('profil')}>Profil</button>
-             <button onClick={function () { gantiTab('qr') }} className={tabCls('qr')}>Cetak QR</button>
+          <div className={'tab-scroll-wrap' + (tabEdge.left ? ' tab-scroll-kiri' : '') + (tabEdge.right ? ' tab-scroll-kanan' : '')}>
+            <nav
+              ref={refNavTab}
+              aria-label="Navigasi dashboard"
+              className="tab-scroll flex gap-1.5 overflow-x-auto w-full sm:flex-wrap"
+            >
+            {TAB_DASHBOARD.map(function (t) {
+              const aktif = tab === t.id
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={function () { gantiTab(t.id) }}
+                  aria-label={t.label}
+                  aria-current={aktif ? 'page' : undefined}
+                  className={
+                    'shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap ' +
+                    'sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm ' +
+                    (aktif
+                      ? 'bg-bsi-800 text-white shadow-sm'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800/60 dark:text-slate-200 dark:hover:bg-slate-800')
+                  }
+                >
+                  <span className="tab-icon shrink-0"><SizedIcon name={t.icon} size={15} /></span>
+                  <span className="hidden sm:inline">{t.label}</span>
+                  <span className="sm:hidden">{t.mobile}</span>
+                </button>
+              )
+            })}
+            </nav>
           </div>
         </div>
       </section>
@@ -8328,7 +11234,7 @@ async function executeDelete() {
                     </div>
                   </div>
                   <div className="mt-4 flex gap-2">
-                    <button type="button" onClick={simpanFotoProfil} disabled={uploadingFoto || !fotoFile} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition disabled:opacity-50">{uploadingFoto ? 'Mengunggah...' : 'Simpan Foto'}</button>
+                    <button type="button" onClick={simpanFotoProfil} disabled={uploadingFoto || !fotoFile} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-bsi-800 text-white hover:bg-bsi-700 transition disabled:opacity-50">{uploadingFoto ? 'Mengunggah...' : 'Simpan'}</button>
                     <button type="button" onClick={function () { setShowUploadFoto(false) }} className="px-3.5 py-2 rounded-lg text-xs sm:px-4 sm:py-2 sm:rounded-xl sm:text-sm font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition">Batal</button>
                   </div>
                 </div>
@@ -8461,7 +11367,7 @@ async function executeDelete() {
                   onFocus={function () { fokusRefleksi('pembelajaran') }} onBlur={blurRefleksi} />
               </div>
               </div>
-              <button ref={function (el) { refleksiRefs.current.tombol = el }} type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks={infoProses || 'Menyimpan'} /> : (editLogId ? 'Simpan Perubahan' : 'Simpan Logbook')}</button>
+              <button ref={function (el) { refleksiRefs.current.tombol = el }} type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks={infoProses || 'Menyimpan'} /> : 'Simpan'}</button>
             </form>
           </div>
           <div className="space-y-5 min-w-0">
@@ -8561,7 +11467,7 @@ async function executeDelete() {
                 {editGalDerived ? <p className="mt-1 text-xs text-slate-600">Media ini berasal dari logbook. Perubahan hanya berlaku di galeri dan tidak mengubah logbook aslinya.</p> : null}
               </div>
               <div><label className={labelCls}>Deskripsi (Opsional)</label><AutoTextArea className={inputCls} value={galForm.deskripsi} onChange={function (e) { setGalForm(Object.assign({}, galForm, { deskripsi: e.target.value })) }} aria-label="Deskripsi Media" placeholder="Tambahkan keterangan media." /></div>
-              <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks={infoProses || 'Menyimpan'} /> : (editGalId ? 'Simpan Perubahan Media' : 'Unggah Media')}</button>
+              <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks={infoProses || 'Menyimpan'} /> : 'Simpan'}</button>
             </form>
           </div>
           <div className="space-y-5 min-w-0">
@@ -8613,7 +11519,7 @@ async function executeDelete() {
                 />
                 {hadirForm.status === 'Masuk' ? <p className="mt-1 text-xs text-slate-600">Alasan hanya diisi untuk status Izin atau Bolos.</p> : null}
               </div>
-              <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks="Menyimpan" /> : (editHadirId ? 'Simpan Perubahan' : 'Simpan Daftar Hadir')}</button>
+              <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks="Menyimpan" /> : 'Simpan'}</button>
             </form>
           </div>
           <div className="space-y-5 min-w-0">
@@ -8621,7 +11527,7 @@ async function executeDelete() {
             <FilterBar open={hadirFilterOpen} onToggle={function () { setHadirFilterOpen(function (o) { return !o }) }} activeCount={hadirFilterActive} onReset={function () { setHadirFilter(HADIR_INITIAL) }}>
               <FilterSelect icon={ICONS.check} value={hadirFilter.status} onChange={function (v) { setHadirFilter(Object.assign({}, hadirFilter, { status: v })) }} options={[{ value: '', label: 'Semua Status' }, { value: 'Masuk', label: 'Masuk' }, { value: 'Izin', label: 'Izin' }, { value: 'Bolos', label: 'Bolos' }]} />
               <TimeFilter filter={hadirFilter} set={setHadirFilter} />
-              <SortSelect value={sort} onChange={setHadirFilterOpen && setSort ? setSort : setSort} />
+              <SortSelect value={sort} onChange={setSort} />
             </FilterBar>
             <p className="text-sm text-slate-600">Total {filteredHadir.length} catatan{hadirTotalPages > 1 ? ' • Halaman ' + hadirPageAman + ' dari ' + hadirTotalPages : ''}</p>
             <div className="grid gap-5 md:grid-cols-2 kartu-grid">
