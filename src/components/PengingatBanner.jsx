@@ -25,9 +25,12 @@ function kemarinIso() {
    logbook dan tidak berstatus Izin/Bolos pada daftar hadir. */
 export function hitungTanggalTerlewat(tanggalLogbook, hadir) {
   const punyaLog = new Set(tanggalLogbook || [])
-  const absen = new Set()
+  /* Hanya tanggal dengan status "Masuk" yang perlu logbook.
+     Hari tanpa catatan hadir, atau yang berstatus Izin/Bolos,
+     tidak diingatkan karena user belum tentu berada di tempat magang. */
+  const hariMasuk = new Set()
   ;(hadir || []).forEach(function (h) {
-    if (h.status === 'Izin' || h.status === 'Bolos') absen.add(h.tanggal)
+    if (h.status === 'Masuk') hariMasuk.add(h.tanggal)
   })
   const hasil = []
   const d = new Date(MULAI_MAGANG + 'T00:00:00')
@@ -35,7 +38,7 @@ export function hitungTanggalTerlewat(tanggalLogbook, hadir) {
   while (d <= batas) {
     const iso = isoDari(d)
     const hari = d.getDay()
-    if (hari !== 0 && hari !== 6 && !punyaLog.has(iso) && !absen.has(iso)) hasil.push(iso)
+    if (hari !== 0 && hari !== 6 && !punyaLog.has(iso) && hariMasuk.has(iso)) hasil.push(iso)
     d.setDate(d.getDate() + 1)
   }
   return hasil
@@ -100,11 +103,11 @@ export default function PengingatBanner(props) {
         deskripsi: 'Sabtu-Minggu tidak dihitung. Isi daftar hadir untuk tanggal di bawah supaya catatan kehadiranmu lengkap.',
         aksi: 'Isi Daftar Hadir'
       }
-    : {
-        judul: terlewat.length + ' hari kerja belum punya logbook',
-        deskripsi: 'Sabtu-Minggu serta hari berstatus Izin atau Bolos tidak dihitung. Isi logbook untuk tanggal di bawah supaya catatan magangmu lengkap.',
-        aksi: 'Isi Logbook'
-      }
+: {
+    judul: terlewat.length + ' hari kerja belum punya logbook',
+    deskripsi: 'Hanya hari dengan status kehadiran Masuk yang perlu logbook. Sabtu-Minggu, Izin, dan Bolos tidak dihitung.',
+    aksi: 'Isi Logbook'
+  }
   /* ukur tinggi 3 item pertama supaya tinggi lipatan presisi di semua lebar layar */
   useLayoutEffect(function () {
     function ukur() {

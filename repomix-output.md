@@ -4145,430 +4145,6 @@ export async function deleteMedia(key) {
 </html>
 ````
 
-## File: src/components/QrPrintTab.jsx
-````javascript
-import { useRef, useState } from 'react'
-import { QRCodeSVG } from 'qrcode.react'
-import { useAuth } from '../lib/auth.js'
-import { SizedIcon } from './icons.jsx'
-
-/* Kapasitas card A7 (saku) dalam 1 lembar A4 = 4 (grid 2x2).
-   Card A4 (standee) memenuhi 1 lembar sendiri, jadi maks 1. */
-const MAKS_SAKU = 4
-
-/* Komponen kartu dipakai berkali-kali: preview & kartu print ke-N */
-function KartuQR({ targetUrl }) {
-  return (
-    <section
-      className="qr-print-card isolate w-full rounded-[2rem] p-8 shadow-xl border border-slate-200 flex flex-col items-center text-center relative overflow-hidden"
-      style={{ background: 'linear-gradient(135deg, #e7f6ec 0%, #f4fbee 55%, #fdf4e3 100%)' }}
-    >
-      {/* Accent Top Bar */}
-      <div className="absolute top-0 inset-x-0 h-2 bg-bsi-800" />
-
-      {/* Aksen dekoratif sudut (terinspirasi logo.svg) */}
-      <div className="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full opacity-20 -z-10" style={{ background: '#f59e0b' }} />
-      <div className="pointer-events-none absolute -bottom-10 -left-10 h-36 w-36 rounded-full opacity-20 -z-10" style={{ background: '#16623c' }} />
-
-      {/* Header Branding */}
-      <div className="flex flex-col items-center gap-3 mt-4">
-        <div className="h-16 w-16 rounded-2xl bg-bsi-800 text-white grid place-items-center shadow-md">
-          <svg className="w-9 h-9" viewBox="0 0 24 24" fill="none">
-            <path d="M4 7V17C4 18.1 4.9 19 6 19H18C19.1 19 20 18.1 20 17V7" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M4 7L12 12L20 7" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M12 12V19" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </div>
-        <div className="flex flex-col items-center">
-          <h2 className="text-2xl font-black tracking-tight text-slate-900 uppercase flex items-center gap-2">
-            <span className="text-bsi-800">GANK</span>
-            <span className="text-slate-700">SKUYY</span>
-          </h2>
-          <p className="text-[11px] font-bold text-slate-500 tracking-[0.2em] uppercase mt-1.5">
-            Portal Presensi &amp; Logbook
-          </p>
-        </div>
-      </div>
-
-      <hr className="w-full border-slate-100 my-6" />
-
-      <div className="space-y-1">
-        <p className="text-xs font-bold text-bsi-800 uppercase tracking-widest">
-          Scan QR Code di Bawah Ini
-        </p>
-        <p className="text-xs text-slate-500">
-          Untuk mengisi Logbook harian &amp; Presensi magang
-        </p>
-      </div>
-
-      <div className="my-6 p-4 border-2 border-dashed border-bsi-300 rounded-3xl" style={{ background: '#ffffff' }}>
-        <QRCodeSVG
-          value={targetUrl}
-          size={200}
-          bgColor="#ffffff"
-          fgColor="#16623c"
-          level="H"
-        />
-      </div>
-
-      <div className="url-box w-full max-w-[20rem] border border-slate-200 px-4 py-3 rounded-2xl" style={{ background: '#ffffff' }}>
-        <p className="url-label text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-          Akses Tautan Manual
-        </p>
-        <p className="url-text text-xs font-mono font-bold text-slate-700 break-all leading-normal mt-1">
-          {targetUrl}
-        </p>
-      </div>
-    </section>
-  )
-}
-
-export default function QrPrintTab() {
-  const { mahasiswa } = useAuth()
-  const cardRef = useRef(null)
-  const [unduh, setUnduh] = useState(false)
-  const [ukuranPrint, setUkuranPrint] = useState('a7')
-  const [jumlahCard, setJumlahCard] = useState(1)
-
-  const targetUrl = window.location.origin + '/qr'
-
-  // Batas jumlah card sesuai ukuran terpilih
-  const maksCard = ukuranPrint === 'a7' ? MAKS_SAKU : 1
-  // Clamp: kalau state lebih besar dari batas, turunkan otomatis
-  const amanJumlah = Math.min(jumlahCard, maksCard)
-
-  // Konfigurasi halaman & grid print
-  const singleA7 = ukuranPrint === 'a7' && amanJumlah === 1
-  const pageSize = singleA7 ? 'A7 portrait' : 'A4 portrait'
-  const pageMargin = singleA7 ? '4mm' : (ukuranPrint === 'a7' ? '10mm' : '1.5cm')
-  const gridGap = amanJumlah > 1 ? '6mm' : '0'
-  const cardWidth = ukuranPrint === 'a7' ? '66mm' : '430px'
-  const cardPadding = ukuranPrint === 'a7' ? '4mm' : '2rem'
-  const cardRadius = ukuranPrint === 'a7' ? '5mm' : '2.5rem'
-
-  async function unduhPng() {
-    if (!cardRef.current || unduh) return
-    setUnduh(true)
-    try {
-      const html2canvas = (await import('html2canvas')).default
-      const multi = amanJumlah > 1
-      const canvas = await html2canvas(cardRef.current, {
-        scale: 3,
-        useCORS: true,
-        backgroundColor: null,
-        logging: false,
-        onclone: function (clonedDoc) {
-          const wrap = clonedDoc.querySelector('.qr-print-wrap')
-          if (!wrap) return
-          // Tampilkan semua card (yang di layar cuma card pertama yang tampil)
-          wrap.querySelectorAll('.qr-print-card').forEach(function (el) {
-            el.style.display = 'flex'
-          })
-          // Set layout grid supaya PNG berisi N card rapi
-          wrap.style.display = 'grid'
-          wrap.style.gridTemplateColumns = multi ? 'repeat(2, 1fr)' : '1fr'
-          wrap.style.gap = multi ? '20px' : '0'
-          wrap.style.width = multi ? '960px' : '448px'
-          wrap.style.maxWidth = 'none'
-          wrap.style.margin = '0'
-          // Perbaiki padding kotak URL di setiap card
-          wrap.querySelectorAll('.qr-print-card .font-mono').forEach(function (url) {
-            const box = url.parentElement
-            if (!box) return
-            box.style.paddingTop = '6px'
-            box.style.paddingBottom = '18px'
-          })
-        }
-      })
-      const url = canvas.toDataURL('image/png', 1.0)
-      const suffix = amanJumlah > 1 ? '-' + amanJumlah + 'card' : ''
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'QR-' + (mahasiswa ? mahasiswa.nama.replace(/\s+/g, '-') : 'mahasiswa') + suffix + '.png'
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-    } catch (e) {
-      console.error(e)
-      alert('Gagal membuat PNG: ' + e.message)
-    } finally {
-      setUnduh(false)
-    }
-  }
-
-  return (
-    <>
-      {/* === Print CSS: hanya kartu QR yang dicetak === */}
-      <style>{`
-        /* Di layar: hanya card pertama yang tampil, sisanya disembunyikan.
-           Ini bikin preview tetap 1 card walau user pilih qty > 1. */
-        .qr-print-wrap .qr-print-card:not(:first-child) {
-          display: none;
-        }
-
-        @media print {
-          @page {
-            size: ${pageSize};
-            margin: ${pageMargin};
-          }
-          *, *::before, *::after {
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-            color-adjust: exact !important;
-          }
-          html body,
-          html.dark body {
-            background-color: #ffffff !important;
-            background-image: none !important;
-          }
-          html, body {
-            height: auto !important;
-            overflow: visible !important;
-            margin: 0 !important;
-            padding: 0 !important;
-          }
-          body * {
-            visibility: hidden !important;
-          }
-          .qr-print-wrap,
-          .qr-print-wrap * {
-            visibility: visible !important;
-          }
-          /* Tampilkan semua card saat print */
-          .qr-print-wrap .qr-print-card {
-            display: flex !important;
-          }
-.qr-print-wrap {
-  position: absolute !important;
-  top: 0 !important;
-  bottom: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  width: auto !important;
-  max-width: none !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  display: flex !important;
-  flex-wrap: wrap !important;
-  justify-content: center !important;
-  align-content: center !important;
-  gap: ${gridGap} !important;
-  background: transparent !important;
-}
-          .qr-print-card {
-            position: relative !important;
-            flex: 0 0 auto !important;
-            margin: 0 !important;
-            box-shadow: none !important;
-            background: linear-gradient(135deg, #e7f6ec 0%, #f4fbee 55%, #fdf4e3 100%) !important;
-            width: ${cardWidth} !important;
-            max-width: ${cardWidth} !important;
-            min-width: ${cardWidth} !important;
-            padding: ${cardPadding} !important;
-            border-radius: ${cardRadius} !important;
-            break-inside: avoid !important;
-            page-break-inside: avoid !important;
-          }
-          /* Paksa warna light mode saat print (aman dari dark mode) */
-          .qr-print-card .text-slate-900 { color: #0f172a !important; }
-          .qr-print-card .text-slate-700 { color: #334155 !important; }
-          .qr-print-card .text-slate-500 { color: #64748b !important; }
-          .qr-print-card .text-slate-400 { color: #94a3b8 !important; }
-
-          ${ukuranPrint === 'a7' ? `
-          /* === Skala internal A7 (sama seperti sebelumnya) === */
-          .qr-print-card svg[width="200"] { width: 32mm !important; height: 32mm !important; }
-          .qr-print-card .h-16.w-16 {
-            width: 10mm !important;
-            height: 10mm !important;
-            border-radius: 2.5mm !important;
-          }
-          .qr-print-card .h-16.w-16 svg { width: 6.5mm !important; height: 6.5mm !important; }
-          .qr-print-card h2 {
-            font-size: 11.5pt !important;
-            line-height: 1.15 !important;
-            gap: 1.8mm !important;
-            margin-bottom: 0.5mm !important;
-          }
-          .qr-print-card [class*="text-[11px]"] {
-            font-size: 5.5pt !important;
-            line-height: 1.25 !important;
-            letter-spacing: 0.15em !important;
-            margin-top: 1.3mm !important;
-          }
-          .qr-print-card .text-xs {
-            font-size: 5.5pt !important;
-            line-height: 1.35 !important;
-          }
-          .qr-print-card .space-y-1 > * + * { margin-top: 0.9mm !important; }
-          .qr-print-card .p-4 {
-            padding: 2.5mm !important;
-            border-width: 0.3mm !important;
-            border-style: dashed !important;
-            border-radius: 3mm !important;
-            width: fit-content !important;
-            margin-left: auto !important;
-            margin-right: auto !important;
-          }
-          .qr-print-card .url-box {
-            width: 80% !important;
-            max-width: 51mm !important;
-            padding: 1.7mm 2mm !important;
-            border-radius: 1.5mm !important;
-          }
-          .qr-print-card .url-label {
-            font-size: 4pt !important;
-            line-height: 1.15 !important;
-            letter-spacing: 0.12em !important;
-            margin: 0 !important;
-          }
-          .qr-print-card .url-text {
-            font-size: 4.5pt !important;
-            line-height: 1.2 !important;
-            margin-top: 0.9mm !important;
-          }
-          .qr-print-card .leading-normal { line-height: 1.2 !important; }
-          .qr-print-card .mt-1 { margin-top: 0.9mm !important; }
-          .qr-print-card .mt-4 { margin-top: 2mm !important; }
-          .qr-print-card .gap-3 { gap: 2mm !important; }
-          .qr-print-card .my-6 { margin-top: 3mm !important; margin-bottom: 3mm !important; }
-          .qr-print-card hr { margin-top: 3mm !important; margin-bottom: 3mm !important; }
-          .qr-print-card .pointer-events-none.absolute { width: 22mm !important; height: 22mm !important; }
-          .qr-print-card .-right-10.-top-10 { right: -7mm !important; top: -7mm !important; }
-          .qr-print-card .-bottom-10.-left-10 { bottom: -7mm !important; left: -7mm !important; }
-          .qr-print-card .top-0.inset-x-0.h-2 { height: 1mm !important; }
-          ` : ''}
-        }
-
-        /* Kartu QR selalu bertema terang: batalkan override dark mode di dalam kartu saja */
-        .dark .qr-print-card { border-color: rgba(15,42,29,.10) !important; }
-        .dark .qr-print-card .text-slate-900,
-        .dark .qr-print-card .text-slate-700 { color: #0f2a1d !important; }
-        .dark .qr-print-card .text-slate-500,
-        .dark .qr-print-card .text-slate-400 { color: #5f6f64 !important; }
-        .dark .qr-print-card .text-bsi-800 { color: #177c48 !important; }
-        .dark .qr-print-card .bg-bsi-800 { background-color: #16623c !important; }
-        .dark .qr-print-card .bg-slate-50 { background-color: rgba(15,42,29,.06) !important; }
-        .dark .qr-print-card .border-slate-100,
-        .dark .qr-print-card .border-slate-200 { border-color: rgba(15,42,29,.10) !important; }
-      `}</style>
-
-      <div className="anim-tab mt-8 space-y-6">
-        {/* Preview — di layar hanya card pertama yang tampil.
-            Sisanya (kalau qty > 1) disembunyikan CSS, tapi tetap ada di DOM
-            supaya saat print / unduh PNG tinggal ditampilkan. */}
-        <div
-          ref={cardRef}
-          className="qr-print-wrap mx-auto w-full max-w-md"
-        >
-          {Array.from({ length: amanJumlah }).map(function (_, i) {
-            return <KartuQR key={i} targetUrl={targetUrl} />
-          })}
-        </div>
-
-        {/* Pengaturan Ukuran & Jumlah */}
-        <section className="mx-auto w-full max-w-md bsi-panel rounded-2xl p-5">
-          <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">Ukuran Cetak</p>
-          <div className="mt-3 flex gap-2">
-            {[{ id: 'a7', label: 'Saku (A7)', sub: '7,4 × 10,5 cm' }, { id: 'a4', label: 'Standee (A4)', sub: '21 × 29,7 cm' }].map(function (u) {
-              const aktif = ukuranPrint === u.id
-              return (
-                <button
-                  key={u.id}
-                  type="button"
-                  onClick={function () { setUkuranPrint(u.id) }}
-                  className={
-                    'flex-1 rounded-2xl px-3 py-3 text-left transition ' +
-                    (aktif ? 'bg-bsi-800 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200')
-                  }
-                >
-                  <p className={'text-sm font-bold ' + (aktif ? 'text-white' : 'text-slate-800')}>{u.label}</p>
-                  <p className={'mt-0.5 text-xs ' + (aktif ? 'text-white/75' : 'text-slate-500')}>{u.sub}</p>
-                </button>
-              )
-            })}
-          </div>
-          <p className="mt-3 text-xs text-slate-500">
-            Pilihan <strong>Saku</strong> untuk kartu kecil di dompet atau ditempel di meja. Pilihan <strong>Standee</strong> untuk kartu besar yang berdiri.
-          </p>
-
-          {/* Selector Jumlah Card per lembar */}
-          <div className="mt-5 border-t border-slate-200 pt-5">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">
-                Jumlah Card per Lembar
-              </p>
-              <span className="text-xs font-bold text-slate-500">
-                {amanJumlah}/{maksCard}
-              </span>
-            </div>
-            <div className="mt-3 flex gap-2">
-              {[1, 2, 3, 4].map(function (n) {
-                const aktif = amanJumlah === n
-                const terlarang = n > maksCard
-                return (
-                  <button
-                    key={n}
-                    type="button"
-                    disabled={terlarang}
-                    onClick={function () { setJumlahCard(n) }}
-                    title={
-                      terlarang
-                        ? (ukuranPrint === 'a4'
-                            ? 'Card Standee memenuhi 1 lembar A4, maksimal 1 card.'
-                            : 'Maksimal ' + maksCard + ' card per lembar A4.')
-                        : 'Cetak ' + n + ' card'
-                    }
-                    className={
-                      'flex-1 rounded-2xl px-3 py-3 text-sm font-bold transition ' +
-                      (terlarang
-                        ? 'bg-slate-50 text-slate-300 cursor-not-allowed'
-                        : aktif
-                          ? 'bg-bsi-800 text-white shadow-sm'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200')
-                    }
-                  >
-                    {n}
-                  </button>
-                )
-              })}
-            </div>
-            <p className="mt-2 text-xs text-slate-500">
-              {ukuranPrint === 'a7'
-                ? 'Maksimal ' + MAKS_SAKU + ' card A7 per lembar A4 (susunan 2×2). Pilihan 1 akan dicetak di kertas A7.'
-                : 'Card ukuran Standee otomatis hanya 1 per lembar karena memenuhi kertas A4.'}
-            </p>
-          </div>
-        </section>
-
-        {/* Tombol Aksi (tidak ikut tercetak / terunduh) */}
-        <section className="mx-auto w-full max-w-md bsi-panel rounded-2xl p-5 flex flex-col sm:flex-row gap-3">
-          <button
-            type="button"
-            onClick={unduhPng}
-            disabled={unduh}
-            className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 transition disabled:opacity-60"
-          >
-            <SizedIcon name="download" size={16} />
-            {unduh ? 'Mengunduh...' : 'Unduh PNG'}
-          </button>
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-bsi-800 px-4 py-3 text-sm font-bold text-white hover:bg-bsi-900 transition"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-            </svg>
-            Cetak PDF
-          </button>
-        </section>
-      </div>
-    </>
-  )
-}
-````
-
 ## File: src/components/PengingatBanner.jsx
 ````javascript
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
@@ -4905,6 +4481,245 @@ export default function Carousel(props) {
 }
 ````
 
+## File: src/components/icons.jsx
+````javascript
+function svg(inner, size) {
+  const s = size || 16
+  return (
+    <svg
+      width={s}
+      height={s}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {inner}
+    </svg>
+  )
+}
+
+const paths = {
+  funnel: <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />,
+  user: (
+    <>
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </>
+  ),
+  tag: (
+    <>
+      <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+      <line x1="7" y1="7" x2="7.01" y2="7" />
+    </>
+  ),
+  calendar: (
+    <>
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+    </>
+  ),
+  image: (
+    <>
+      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <polyline points="21 15 16 10 5 21" />
+    </>
+  ),
+  close: (
+    <>
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </>
+  ),
+  check: (
+    <>
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+      <polyline points="22 4 12 14.01 9 11.01" />
+    </>
+  ),
+  chevron: <polyline points="6 9 12 15 18 9" />,
+  list: (
+    <>
+      <line x1="8" y1="6" x2="21" y2="6" />
+      <line x1="8" y1="12" x2="21" y2="12" />
+      <line x1="8" y1="18" x2="21" y2="18" />
+      <line x1="3" y1="6" x2="3.01" y2="6" />
+      <line x1="3" y1="12" x2="3.01" y2="12" />
+      <line x1="3" y1="18" x2="3.01" y2="18" />
+    </>
+  ),
+  link: (
+    <>
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+    </>
+  ),
+  sun: (
+    <>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2" />
+      <path d="M12 20v2" />
+      <path d="m4.93 4.93 1.41 1.41" />
+      <path d="m17.66 17.66 1.41 1.41" />
+      <path d="M2 12h2" />
+      <path d="M20 12h2" />
+      <path d="m6.34 17.66-1.41 1.41" />
+      <path d="m19.07 4.93-1.41 1.41" />
+    </>
+  ),
+  moon: <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />,
+  file: (
+    <>
+      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+      <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+      <path d="M10 9H8" />
+      <path d="M16 13H8" />
+      <path d="M16 17H8" />
+    </>
+  ),
+  camera: (
+    <>
+      <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
+      <circle cx="12" cy="13" r="3" />
+    </>
+  ),
+  clipboard: (
+    <>
+      <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+      <path d="M9 12h6" />
+      <path d="M9 16h6" />
+    </>
+  ),
+  trash: (
+    <>
+      <path d="M3 6h18" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <line x1="10" y1="11" x2="10" y2="17" />
+      <line x1="14" y1="11" x2="14" y2="17" />
+    </>
+  ),
+  eye: (
+    <>
+      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" />
+    </>
+  ),
+  eyeOff: (
+    <>
+      <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+      <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+      <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+      <line x1="2" y1="2" x2="22" y2="22" />
+    </>
+  ),
+  expand: (
+    <>
+      <path d="M15 3h6v6" />
+      <path d="M9 21H3v-6" />
+      <path d="M21 3l-7 7" />
+      <path d="M3 21l7-7" />
+    </>
+  ),
+  youtube: (
+    <>
+      <path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z" />
+      <polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02" />
+    </>
+  ),
+  download: (
+    <>
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="3" x2="12" y2="15" />
+    </>
+  ),
+  sort: (
+    <>
+      <path d="M3 6h13" />
+      <path d="M3 12h9" />
+      <path d="M3 18h5" />
+      <path d="M17 6v12" />
+      <path d="m14 15 3 3 3-3" />
+    </>
+  ),
+  qrcode: (
+    <>
+      {/* 3 finder pattern (kotak sudut) */}
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="5" y="5" width="3" height="3" fill="currentColor" stroke="none" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="16" y="5" width="3" height="3" fill="currentColor" stroke="none" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+      <rect x="5" y="16" width="3" height="3" fill="currentColor" stroke="none" />
+      {/* pixel data (diagonal, biar terbaca sebagai QR) */}
+      <rect x="14" y="14" width="3" height="3" fill="currentColor" stroke="none" />
+      <rect x="18" y="18" width="3" height="3" fill="currentColor" stroke="none" />
+    </>
+  ),
+  pencil: (
+    <>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+    </>
+  ),
+  menu: (
+    <>
+      <line x1="3" y1="6" x2="21" y2="6" />
+      <line x1="3" y1="12" x2="21" y2="12" />
+      <line x1="3" y1="18" x2="21" y2="18" />
+    </>
+  )
+}
+
+export const ICONS = {
+  funnel: svg(paths.funnel),
+  user: svg(paths.user),
+  tag: svg(paths.tag),
+  calendar: svg(paths.calendar),
+  image: svg(paths.image),
+  close: svg(paths.close),
+  check: svg(paths.check),
+  chevron: svg(paths.chevron),
+  list: svg(paths.list),
+  link: svg(paths.link)
+}
+
+export function SizedIcon(props) {
+  const inner = paths[props.name]
+  if (!inner) return null
+  return svg(inner, props.size || 16)
+}
+
+export function EyeToggle(props) {
+  return (
+    <svg
+      width={props.size || 18}
+      height={props.size || 18}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={'eye-icon ' + (props.open ? 'terbuka' : '')}
+    >
+      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" className="eye-pupil" />
+      <line x1="2" y1="2" x2="22" y2="22" className="eye-slash" />
+    </svg>
+  )
+}
+````
+
 ## File: src/components/PemutarVideo.jsx
 ````javascript
 import { useEffect, useRef, useState } from 'react'
@@ -5190,6 +5005,369 @@ export default function PemutarVideo(props) {
         </div>
       ) : null}
     </div>
+  )
+}
+````
+
+## File: src/components/QrPrintTab.jsx
+````javascript
+import { useRef, useState } from 'react'
+import { QRCodeSVG } from 'qrcode.react'
+import { useAuth } from '../lib/auth.js'
+import { SizedIcon } from './icons.jsx'
+
+/* Kapasitas card A7 (saku) dalam 1 lembar A4 = 4 (grid 2x2).
+   Card A4 (standee) memenuhi 1 lembar sendiri, jadi maks 1. */
+const MAKS_SAKU = 4
+
+/* Komponen kartu dipakai berkali-kali: preview & kartu print ke-N */
+function KartuQR({ targetUrl }) {
+  return (
+    <section
+      className="qr-print-card isolate w-full rounded-[2rem] p-8 shadow-xl border border-slate-200 flex flex-col items-center text-center relative overflow-hidden"
+      style={{ background: 'linear-gradient(135deg, #e7f6ec 0%, #f4fbee 55%, #fdf4e3 100%)' }}
+    >
+      <div className="absolute top-0 inset-x-0 h-2 bg-bsi-800" />
+      <div className="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full opacity-20 -z-10" style={{ background: '#f59e0b' }} />
+      <div className="pointer-events-none absolute -bottom-10 -left-10 h-36 w-36 rounded-full opacity-20 -z-10" style={{ background: '#16623c' }} />
+
+      <div className="flex flex-col items-center gap-3 mt-4">
+        <div className="h-16 w-16 rounded-2xl bg-bsi-800 text-white grid place-items-center shadow-md">
+          <svg className="w-9 h-9" viewBox="0 0 24 24" fill="none">
+            <path d="M4 7V17C4 18.1 4.9 19 6 19H18C19.1 19 20 18.1 20 17V7" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M4 7L12 12L20 7" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M12 12V19" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </div>
+        <div className="flex flex-col items-center">
+          <h2 className="text-2xl font-black tracking-tight text-slate-900 uppercase flex items-center gap-2">
+            <span className="text-bsi-800">GANK</span>
+            <span className="text-slate-700">SKUYY</span>
+          </h2>
+          <p className="text-[11px] font-bold text-slate-500 tracking-[0.2em] uppercase mt-1.5">
+            Portal Presensi &amp; Logbook
+          </p>
+        </div>
+      </div>
+
+      <hr className="w-full border-slate-100 my-6" />
+
+      <div className="space-y-1">
+        <p className="text-xs font-bold text-bsi-800 uppercase tracking-widest">
+          Scan QR Code di Bawah Ini
+        </p>
+        <p className="text-xs text-slate-500">
+          Untuk mengisi Logbook harian &amp; Presensi magang
+        </p>
+      </div>
+
+      <div className="my-6 p-4 border-2 border-dashed border-bsi-300 rounded-3xl" style={{ background: '#ffffff' }}>
+        <QRCodeSVG value={targetUrl} size={200} bgColor="#ffffff" fgColor="#16623c" level="H" />
+      </div>
+
+      <div className="url-box w-full max-w-[20rem] border border-slate-200 px-4 py-3 rounded-2xl" style={{ background: '#ffffff' }}>
+        <p className="url-label text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+          Akses Tautan Manual
+        </p>
+        <p className="url-text text-xs font-mono font-bold text-slate-700 break-all leading-normal mt-1">
+          {targetUrl}
+        </p>
+      </div>
+    </section>
+  )
+}
+
+export default function QrPrintTab() {
+  const { mahasiswa } = useAuth()
+  const cardRef = useRef(null)
+  const [unduh, setUnduh] = useState(false)
+  const [ukuranPrint, setUkuranPrint] = useState('a7')
+  const [jumlahCard, setJumlahCard] = useState(1)
+
+  const targetUrl = window.location.origin + '/qr'
+
+  const maksCard = ukuranPrint === 'a7' ? MAKS_SAKU : 1
+  const amanJumlah = Math.min(jumlahCard, maksCard)
+
+  const singleA7 = ukuranPrint === 'a7' && amanJumlah === 1
+  const pageSize = singleA7 ? 'A7 portrait' : 'A4 portrait'
+  const pageMargin = singleA7 ? '4mm' : (ukuranPrint === 'a7' ? '10mm' : '1.5cm')
+  const gridGap = amanJumlah > 1 ? '6mm' : '0'
+  const cardWidth = ukuranPrint === 'a7' ? '66mm' : '430px'
+  const cardPadding = ukuranPrint === 'a7' ? '4mm' : '2rem'
+  const cardRadius = ukuranPrint === 'a7' ? '5mm' : '2.5rem'
+
+async function unduhPng() {
+  if (!cardRef.current || unduh) return
+  setUnduh(true)
+  try {
+    const html2canvas = (await import('html2canvas')).default
+    const canvas = await html2canvas(cardRef.current, {
+      scale: 3,
+      useCORS: true,
+      backgroundColor: null,
+      logging: false,
+      onclone: function (clonedDoc) {
+        const wrap = clonedDoc.querySelector('.qr-print-wrap')
+        if (!wrap) return
+        /* PNG selalu 1 card, terlepas dari qty yang dipilih untuk print.
+           Sembunyikan semua card kecuali yang pertama. */
+        wrap.querySelectorAll('.qr-print-card').forEach(function (el, idx) {
+          el.style.display = idx === 0 ? 'flex' : 'none'
+        })
+        wrap.style.display = 'block'
+        wrap.style.width = '448px'
+        wrap.style.maxWidth = 'none'
+        wrap.style.margin = '0'
+        wrap.style.position = 'static'
+        // Perbaiki padding kotak URL pada card yang di-capture
+        const url = wrap.querySelector('.qr-print-card .font-mono')
+        if (url) {
+          const box = url.parentElement
+          if (box) {
+            box.style.paddingTop = '6px'
+            box.style.paddingBottom = '18px'
+          }
+        }
+      }
+    })
+    const urlData = canvas.toDataURL('image/png', 1.0)
+    const a = document.createElement('a')
+    a.href = urlData
+    a.download = 'QR-' + (mahasiswa ? mahasiswa.nama.replace(/\s+/g, '-') : 'mahasiswa') + '.png'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  } catch (e) {
+    console.error(e)
+    alert('Gagal membuat PNG: ' + e.message)
+  } finally {
+    setUnduh(false)
+  }
+}
+
+  return (
+    <>
+      <style>{`
+        .qr-print-wrap .qr-print-card:not(:first-child) { display: none; }
+
+        @media print {
+          /* Layout grid 2-kolom dimatikan supaya wrapper bisa absolute &
+             centering print tetap konsisten seperti sebelumnya. */
+          .qr-tab-grid { display: block !important; }
+          .qr-tab-panel { display: none !important; }
+
+          @page {
+            size: ${pageSize};
+            margin: ${pageMargin};
+          }
+          *, *::before, *::after {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          html body,
+          html.dark body {
+            background-color: #ffffff !important;
+            background-image: none !important;
+          }
+          html, body {
+            height: auto !important;
+            overflow: visible !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          body * { visibility: hidden !important; }
+          .qr-print-wrap, .qr-print-wrap * { visibility: visible !important; }
+          .qr-print-wrap .qr-print-card { display: flex !important; }
+
+          .qr-print-wrap {
+            position: absolute !important;
+            top: 0 !important;
+            bottom: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            width: auto !important;
+            max-width: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            display: flex !important;
+            flex-wrap: wrap !important;
+            justify-content: center !important;
+            align-content: center !important;
+            gap: ${gridGap} !important;
+            background: transparent !important;
+          }
+          .qr-print-card {
+            position: relative !important;
+            flex: 0 0 auto !important;
+            margin: 0 !important;
+            box-shadow: none !important;
+            background: linear-gradient(135deg, #e7f6ec 0%, #f4fbee 55%, #fdf4e3 100%) !important;
+            width: ${cardWidth} !important;
+            max-width: ${cardWidth} !important;
+            min-width: ${cardWidth} !important;
+            padding: ${cardPadding} !important;
+            border-radius: ${cardRadius} !important;
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+          .qr-print-card .text-slate-900 { color: #0f172a !important; }
+          .qr-print-card .text-slate-700 { color: #334155 !important; }
+          .qr-print-card .text-slate-500 { color: #64748b !important; }
+          .qr-print-card .text-slate-400 { color: #94a3b8 !important; }
+
+          ${ukuranPrint === 'a7' ? `
+          .qr-print-card svg[width="200"] { width: 32mm !important; height: 32mm !important; }
+          .qr-print-card .h-16.w-16 {
+            width: 10mm !important; height: 10mm !important;
+            border-radius: 2.5mm !important;
+          }
+          .qr-print-card .h-16.w-16 svg { width: 6.5mm !important; height: 6.5mm !important; }
+          .qr-print-card h2 { font-size: 11.5pt !important; line-height: 1.15 !important; gap: 1.8mm !important; margin-bottom: 0.5mm !important; }
+          .qr-print-card [class*="text-[11px]"] { font-size: 5.5pt !important; line-height: 1.25 !important; letter-spacing: 0.15em !important; margin-top: 1.3mm !important; }
+          .qr-print-card .text-xs { font-size: 5.5pt !important; line-height: 1.35 !important; }
+          .qr-print-card .space-y-1 > * + * { margin-top: 0.9mm !important; }
+          .qr-print-card .p-4 { padding: 2.5mm !important; border-width: 0.3mm !important; border-style: dashed !important; border-radius: 3mm !important; width: fit-content !important; margin-left: auto !important; margin-right: auto !important; }
+          .qr-print-card .url-box { width: 80% !important; max-width: 51mm !important; padding: 1.7mm 2mm !important; border-radius: 1.5mm !important; }
+          .qr-print-card .url-label { font-size: 4pt !important; line-height: 1.15 !important; letter-spacing: 0.12em !important; margin: 0 !important; }
+          .qr-print-card .url-text { font-size: 4.5pt !important; line-height: 1.2 !important; margin-top: 0.9mm !important; }
+          .qr-print-card .leading-normal { line-height: 1.2 !important; }
+          .qr-print-card .mt-1 { margin-top: 0.9mm !important; }
+          .qr-print-card .mt-4 { margin-top: 2mm !important; }
+          .qr-print-card .gap-3 { gap: 2mm !important; }
+          .qr-print-card .my-6 { margin-top: 3mm !important; margin-bottom: 3mm !important; }
+          .qr-print-card hr { margin-top: 3mm !important; margin-bottom: 3mm !important; }
+          .qr-print-card .pointer-events-none.absolute { width: 22mm !important; height: 22mm !important; }
+          .qr-print-card .-right-10.-top-10 { right: -7mm !important; top: -7mm !important; }
+          .qr-print-card .-bottom-10.-left-10 { bottom: -7mm !important; left: -7mm !important; }
+          .qr-print-card .top-0.inset-x-0.h-2 { height: 1mm !important; }
+          ` : ''}
+        }
+
+        .dark .qr-print-card { border-color: rgba(15,42,29,.10) !important; }
+        .dark .qr-print-card .text-slate-900,
+        .dark .qr-print-card .text-slate-700 { color: #0f2a1d !important; }
+        .dark .qr-print-card .text-slate-500,
+        .dark .qr-print-card .text-slate-400 { color: #5f6f64 !important; }
+        .dark .qr-print-card .text-bsi-800 { color: #177c48 !important; }
+        .dark .qr-print-card .bg-bsi-800 { background-color: #16623c !important; }
+        .dark .qr-print-card .bg-slate-50 { background-color: rgba(15,42,29,.06) !important; }
+        .dark .qr-print-card .border-slate-100,
+        .dark .qr-print-card .border-slate-200 { border-color: rgba(15,42,29,.10) !important; }
+      `}</style>
+
+      {/* Layout: mobile = stack vertikal, desktop (lg) = 2 kolom
+          Kiri: preview card · Kanan: panel pengaturan + tombol */}
+      <div className="anim-tab mt-8">
+        <div className="qr-tab-grid mx-auto grid w-full max-w-4xl gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(320px,360px)] lg:items-start">
+          {/* Kolom kiri — preview card */}
+          <div ref={cardRef} className="qr-print-wrap mx-auto w-full max-w-md">
+            {Array.from({ length: amanJumlah }).map(function (_, i) {
+              return <KartuQR key={i} targetUrl={targetUrl} />
+            })}
+          </div>
+
+          {/* Kolom kanan — pengaturan + tombol */}
+          <div className="qr-tab-panel mx-auto w-full max-w-md space-y-5 lg:mx-0 lg:sticky lg:top-24">
+            <section className="bsi-panel rounded-2xl p-5">
+              <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">Ukuran Cetak</p>
+              <div className="mt-3 flex gap-2">
+                {[{ id: 'a7', label: 'Saku (A7)', sub: '7,4 × 10,5 cm' }, { id: 'a4', label: 'Standee (A4)', sub: '21 × 29,7 cm' }].map(function (u) {
+                  const aktif = ukuranPrint === u.id
+                  return (
+                    <button
+                      key={u.id}
+                      type="button"
+                      onClick={function () { setUkuranPrint(u.id) }}
+                      className={
+                        'flex-1 rounded-2xl px-3 py-3 text-left transition ' +
+                        (aktif ? 'bg-bsi-800 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200')
+                      }
+                    >
+                      <p className={'text-sm font-bold ' + (aktif ? 'text-white' : 'text-slate-800')}>{u.label}</p>
+                      <p className={'mt-0.5 text-xs ' + (aktif ? 'text-white/75' : 'text-slate-500')}>{u.sub}</p>
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="mt-3 text-xs text-slate-500">
+                Pilihan <strong>Saku</strong> untuk kartu kecil di dompet atau ditempel di meja. Pilihan <strong>Standee</strong> untuk kartu besar yang berdiri.
+              </p>
+
+              <div className="mt-5 border-t border-slate-200 pt-5">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                    Jumlah Card per Lembar
+                  </p>
+                  <span className="text-xs font-bold text-slate-500">
+                    {amanJumlah}/{maksCard}
+                  </span>
+                </div>
+                <div className="mt-3 flex gap-2">
+                  {[1, 2, 3, 4].map(function (n) {
+                    const aktif = amanJumlah === n
+                    const terlarang = n > maksCard
+                    return (
+                      <button
+                        key={n}
+                        type="button"
+                        disabled={terlarang}
+                        onClick={function () { setJumlahCard(n) }}
+                        title={
+                          terlarang
+                            ? (ukuranPrint === 'a4'
+                                ? 'Card Standee memenuhi 1 lembar A4, maksimal 1 card.'
+                                : 'Maksimal ' + maksCard + ' card per lembar A4.')
+                            : 'Cetak ' + n + ' card'
+                        }
+                        className={
+                          'flex-1 rounded-2xl px-3 py-3 text-sm font-bold transition ' +
+                          (terlarang
+                            ? 'bg-slate-50 text-slate-300 cursor-not-allowed'
+                            : aktif
+                              ? 'bg-bsi-800 text-white shadow-sm'
+                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200')
+                        }
+                      >
+                        {n}
+                      </button>
+                    )
+                  })}
+                </div>
+                <p className="mt-2 text-xs text-slate-500">
+                  {ukuranPrint === 'a7'
+                    ? 'Maksimal ' + MAKS_SAKU + ' card A7 per lembar A4 (susunan 2×2). Pilihan 1 akan dicetak di kertas A7.'
+                    : 'Card ukuran Standee otomatis hanya 1 per lembar karena memenuhi kertas A4.'}
+                </p>
+              </div>
+            </section>
+
+            <section className="bsi-panel rounded-2xl p-5 flex flex-col sm:flex-row gap-3">
+              <button
+                type="button"
+                onClick={unduhPng}
+                disabled={unduh}
+                className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 transition disabled:opacity-60"
+              >
+                <SizedIcon name="download" size={16} />
+                {unduh ? 'Mengunduh...' : 'Unduh PNG'}
+              </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-bsi-800 px-4 py-3 text-sm font-bold text-white hover:bg-bsi-900 transition"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                </svg>
+                Cetak PDF
+              </button>
+            </section>
+          </div>
+        </div>
+      </div>
+    </>
   )
 }
 ````
@@ -6301,245 +6479,6 @@ export function countActiveFilters(o) {
     if (o[k]) c++
   }
   return c
-}
-````
-
-## File: src/components/icons.jsx
-````javascript
-function svg(inner, size) {
-  const s = size || 16
-  return (
-    <svg
-      width={s}
-      height={s}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      {inner}
-    </svg>
-  )
-}
-
-const paths = {
-  funnel: <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />,
-  user: (
-    <>
-      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-      <circle cx="12" cy="7" r="4" />
-    </>
-  ),
-  tag: (
-    <>
-      <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
-      <line x1="7" y1="7" x2="7.01" y2="7" />
-    </>
-  ),
-  calendar: (
-    <>
-      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-      <line x1="16" y1="2" x2="16" y2="6" />
-      <line x1="8" y1="2" x2="8" y2="6" />
-      <line x1="3" y1="10" x2="21" y2="10" />
-    </>
-  ),
-  image: (
-    <>
-      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-      <circle cx="8.5" cy="8.5" r="1.5" />
-      <polyline points="21 15 16 10 5 21" />
-    </>
-  ),
-  close: (
-    <>
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
-    </>
-  ),
-  check: (
-    <>
-      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-      <polyline points="22 4 12 14.01 9 11.01" />
-    </>
-  ),
-  chevron: <polyline points="6 9 12 15 18 9" />,
-  list: (
-    <>
-      <line x1="8" y1="6" x2="21" y2="6" />
-      <line x1="8" y1="12" x2="21" y2="12" />
-      <line x1="8" y1="18" x2="21" y2="18" />
-      <line x1="3" y1="6" x2="3.01" y2="6" />
-      <line x1="3" y1="12" x2="3.01" y2="12" />
-      <line x1="3" y1="18" x2="3.01" y2="18" />
-    </>
-  ),
-  link: (
-    <>
-      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-    </>
-  ),
-  sun: (
-    <>
-      <circle cx="12" cy="12" r="4" />
-      <path d="M12 2v2" />
-      <path d="M12 20v2" />
-      <path d="m4.93 4.93 1.41 1.41" />
-      <path d="m17.66 17.66 1.41 1.41" />
-      <path d="M2 12h2" />
-      <path d="M20 12h2" />
-      <path d="m6.34 17.66-1.41 1.41" />
-      <path d="m19.07 4.93-1.41 1.41" />
-    </>
-  ),
-  moon: <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />,
-  file: (
-    <>
-      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
-      <path d="M14 2v4a2 2 0 0 0 2 2h4" />
-      <path d="M10 9H8" />
-      <path d="M16 13H8" />
-      <path d="M16 17H8" />
-    </>
-  ),
-  camera: (
-    <>
-      <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
-      <circle cx="12" cy="13" r="3" />
-    </>
-  ),
-  clipboard: (
-    <>
-      <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
-      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-      <path d="M9 12h6" />
-      <path d="M9 16h6" />
-    </>
-  ),
-  trash: (
-    <>
-      <path d="M3 6h18" />
-      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
-      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-      <line x1="10" y1="11" x2="10" y2="17" />
-      <line x1="14" y1="11" x2="14" y2="17" />
-    </>
-  ),
-  eye: (
-    <>
-      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
-      <circle cx="12" cy="12" r="3" />
-    </>
-  ),
-  eyeOff: (
-    <>
-      <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
-      <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
-      <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
-      <line x1="2" y1="2" x2="22" y2="22" />
-    </>
-  ),
-  expand: (
-    <>
-      <path d="M15 3h6v6" />
-      <path d="M9 21H3v-6" />
-      <path d="M21 3l-7 7" />
-      <path d="M3 21l7-7" />
-    </>
-  ),
-  youtube: (
-    <>
-      <path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z" />
-      <polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02" />
-    </>
-  ),
-  download: (
-    <>
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-      <polyline points="7 10 12 15 17 10" />
-      <line x1="12" y1="3" x2="12" y2="15" />
-    </>
-  ),
-  sort: (
-    <>
-      <path d="M3 6h13" />
-      <path d="M3 12h9" />
-      <path d="M3 18h5" />
-      <path d="M17 6v12" />
-      <path d="m14 15 3 3 3-3" />
-    </>
-  ),
-  qrcode: (
-    <>
-      {/* 3 finder pattern (kotak sudut) */}
-      <rect x="3" y="3" width="7" height="7" rx="1" />
-      <rect x="5" y="5" width="3" height="3" fill="currentColor" stroke="none" />
-      <rect x="14" y="3" width="7" height="7" rx="1" />
-      <rect x="16" y="5" width="3" height="3" fill="currentColor" stroke="none" />
-      <rect x="3" y="14" width="7" height="7" rx="1" />
-      <rect x="5" y="16" width="3" height="3" fill="currentColor" stroke="none" />
-      {/* pixel data (diagonal, biar terbaca sebagai QR) */}
-      <rect x="14" y="14" width="3" height="3" fill="currentColor" stroke="none" />
-      <rect x="18" y="18" width="3" height="3" fill="currentColor" stroke="none" />
-    </>
-  ),
-  pencil: (
-    <>
-      <path d="M12 20h9" />
-      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-    </>
-  ),
-  menu: (
-    <>
-      <line x1="3" y1="6" x2="21" y2="6" />
-      <line x1="3" y1="12" x2="21" y2="12" />
-      <line x1="3" y1="18" x2="21" y2="18" />
-    </>
-  )
-}
-
-export const ICONS = {
-  funnel: svg(paths.funnel),
-  user: svg(paths.user),
-  tag: svg(paths.tag),
-  calendar: svg(paths.calendar),
-  image: svg(paths.image),
-  close: svg(paths.close),
-  check: svg(paths.check),
-  chevron: svg(paths.chevron),
-  list: svg(paths.list),
-  link: svg(paths.link)
-}
-
-export function SizedIcon(props) {
-  const inner = paths[props.name]
-  if (!inner) return null
-  return svg(inner, props.size || 16)
-}
-
-export function EyeToggle(props) {
-  return (
-    <svg
-      width={props.size || 18}
-      height={props.size || 18}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      className={'eye-icon ' + (props.open ? 'terbuka' : '')}
-    >
-      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
-      <circle cx="12" cy="12" r="3" className="eye-pupil" />
-      <line x1="2" y1="2" x2="22" y2="22" className="eye-slash" />
-    </svg>
-  )
 }
 ````
 
