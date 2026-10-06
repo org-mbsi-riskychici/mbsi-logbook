@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../lib/auth.js'
 import { uploadMedia, deleteMedia } from '../lib/upload.js'
-import { syncGaleriFromLogbook } from '../lib/logbook.js'
+import { syncGaleriFromLogbook, autoIsiBolos } from '../lib/logbook.js'
 import { parseYouTubeId, ytThumb, fetchYouTubeQuota, unggahVideoYouTube } from '../lib/youtube.js'
 import { parseDriveId, driveThumbUrl, driveViewUrl } from '../lib/drive.js'
 import { uploadFotoProfil, updateFotoProfilMahasiswa, hapusFotoProfil } from '../lib/profil.js'
@@ -199,18 +199,29 @@ export default function DashboardPage() {
   const refListHadir = useRef(null)
   const refNavTab = useRef(null)
 
-  async function refresh() {
-    if (!mahasiswa) return
-    const l = await supabase.from('logbooks').select('*, mahasiswa(*), logbook_items(*)')
-      .eq('mahasiswa_id', mahasiswa.id).order('tanggal', { ascending: false })
-      .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
-    const g = await supabase.from('galeri').select('*, mahasiswa(*)').eq('mahasiswa_id', mahasiswa.id).order('tanggal', { ascending: false })
-    const h = await supabase.from('daftar_hadir').select('*, mahasiswa(*)').eq('mahasiswa_id', mahasiswa.id).order('tanggal', { ascending: false })
-    setLogs(l.data || [])
-    setGaleri(g.data || [])
-    setHadir(h.data || [])
-    setDataSiap(true)
+async function refresh() {
+  if (!mahasiswa) return
+  const l = await supabase.from('logbooks').select('*, mahasiswa(*), logbook_items(*)')
+    .eq('mahasiswa_id', mahasiswa.id).order('tanggal', { ascending: false })
+    .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
+  const g = await supabase.from('galeri').select('*, mahasiswa(*)').eq('mahasiswa_id', mahasiswa.id).order('tanggal', { ascending: false })
+  let h = await supabase.from('daftar_hadir').select('*, mahasiswa(*)').eq('mahasiswa_id', mahasiswa.id).order('tanggal', { ascending: false })
+
+  /* Auto-Bolos: cek kemarin dan sebelumnya yang kosong, isi sebagai "Bolos" */
+  let hadirData = h.data || []
+  const tanggalAda = hadirData.map(function (x) { return x.tanggal })
+  const baru = await autoIsiBolos(mahasiswa.id, tanggalAda)
+  if (baru.length) {
+    /* Kalau ada yang baru di-Bolos, refetch supaya id + relasi mahasiswa lengkap */
+    h = await supabase.from('daftar_hadir').select('*, mahasiswa(*)').eq('mahasiswa_id', mahasiswa.id).order('tanggal', { ascending: false })
+    hadirData = h.data || []
   }
+
+  setLogs(l.data || [])
+  setGaleri(g.data || [])
+  setHadir(hadirData)
+  setDataSiap(true)
+}
 
   useEffect(function () {
     if (mahasiswa) refresh()
