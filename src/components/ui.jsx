@@ -1,8 +1,9 @@
 import { createPortal } from 'react-dom'
 import PemutarVideo from './PemutarVideo.jsx'
 import { drivePreviewUrl, driveDownloadUrl, driveThumbUrl } from '../lib/drive.js'
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { SizedIcon } from './icons.jsx'
+
 function useBodyScrollLock(active) {
   useEffect(function () {
     if (!active) return undefined
@@ -13,7 +14,6 @@ function useBodyScrollLock(active) {
     }
   }, [active])
 }
-
 
 export const inputCls = 'mt-1.5 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-bsi-500'
 export const labelCls = 'text-sm font-semibold text-slate-700'
@@ -37,6 +37,7 @@ export function StatCard(props) {
     </div>
   )
 }
+
 export function EmptyState(props) {
   return (
     <div className={cardCls + ' border-dashed p-10 text-center'}>
@@ -189,7 +190,6 @@ export function ConfirmModal(props) {
   )
 }
 
-
 export function MediaDrive(props) {
   const [gagal, setGagal] = useState(false)
   useEffect(function () {
@@ -217,6 +217,7 @@ export function MediaDrive(props) {
     />
   )
 }
+
 export function Lightbox(props) {
   useBodyScrollLock(true)
   const [busyUnduh, setBusyUnduh] = useState(false)
@@ -332,6 +333,7 @@ export function Lightbox(props) {
     </div>
   , document.body)
 }
+
 export function ZoomableMedia(props) {
   const [open, setOpen] = useState(false)
   const isVideo = props.type === 'video'
@@ -342,7 +344,7 @@ export function ZoomableMedia(props) {
         type={props.type}
         alt={props.title || 'Media'}
         full={props.full || props.src}
-         controls={isVideo}
+        controls={isVideo}
         onClick={isVideo ? null : function (e) { e.stopPropagation(); setOpen(true) }}
       />
       <button
@@ -357,7 +359,6 @@ export function ZoomableMedia(props) {
     </div>
   )
 }
-
 
 export function SmartFit(props) {
   const [ratio, setRatio] = useState(null)
@@ -467,7 +468,6 @@ export function MediaYouTube(props) {
 }
 
 export function TitikAnim() {
-
   return (
     <span className="titik-anim" aria-hidden="true">
       <i></i>
@@ -476,6 +476,7 @@ export function TitikAnim() {
     </span>
   )
 }
+
 export function LabelProses(props) {
   const bersih = String(props.teks || '').replace(/\.{3}/g, '').replace(/\s+/g, ' ').trim()
   return (
@@ -623,38 +624,144 @@ export function Pagination(props) {
   )
 }
 
+/* ===== TOAST =====
+   - Maksimal 3 toast aktif.
+   - Toast paling lama otomatis main animasi keluar (fade + slide) sebelum dihapus.
+   - Ketika toast di atas dihapus, toast di bawahnya naik dengan halus
+     memakai teknik FLIP (First-Last-Invert-Play) via Web Animations API.
+   - Toast yang sedang animasi keluar tidak dihitung sebagai slot aktif. */
 const ToastContext = createContext(null)
- export function ToastProvider(props) {
+
+const DURASI_TOAST = 4000
+const DURASI_ANIMASI = 240   // >= durasi .toast-keluar di CSS (0.22s)
+const MAKS_TOAST = 3
+
+export function ToastProvider(props) {
   const [toasts, setToasts] = useState([])
+  const wadahRef = useRef(null)
+  const posisiLama = useRef(new Map())   // id -> top (px dari viewport)
+  const flipAnims = useRef(new Map())    // id -> Animation
+
+  /* Rekam posisi element toast saat ini SEBELUM state berubah,
+     supaya FLIP di useLayoutEffect bisa tahu dari mana toast harus berangkat. */
+  function simpanPosisi() {
+    if (!wadahRef.current) return
+    const map = new Map()
+    wadahRef.current.querySelectorAll('[data-toast-id]').forEach(function (el) {
+      map.set(el.dataset.toastId, el.getBoundingClientRect().top)
+    })
+    posisiLama.current = map
+  }
+
+  /* FLIP: setelah DOM commit, bandingkan posisi baru vs lama dan animasikan
+     pergeserannya. Hanya element yang posisinya berubah dan sudah pernah ada
+     di frame sebelumnya yang dianimasikan (toast baru dibiarkan main animasi masuk). */
+  useLayoutEffect(function () {
+    const wadah = wadahRef.current
+    if (!wadah) return
+    const lamaMap = posisiLama.current
+    const baruMap = new Map()
+
+    wadah.querySelectorAll('[data-toast-id]').forEach(function (el) {
+      const id = el.dataset.toastId
+      const rect = el.getBoundingClientRect()
+      baruMap.set(id, rect.top)
+      const topLama = lamaMap.get(id)
+      if (topLama === undefined) return
+      const dy = topLama - rect.top
+      if (Math.abs(dy) < 1) return
+
+      /* Batalkan animasi FLIP sebelumnya pada element yang sama
+         supaya spam trigger tidak menumpuk animasi. */
+      const prev = flipAnims.current.get(id)
+      if (prev) prev.cancel()
+
+      const anim = el.animate(
+        [
+          { transform: 'translateY(' + dy + 'px)' },
+          { transform: 'translateY(0)' }
+        ],
+        { duration: 300, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' }
+      )
+      flipAnims.current.set(id, anim)
+      anim.onfinish = function () { flipAnims.current.delete(id) }
+      anim.oncancel = function () { flipAnims.current.delete(id) }
+    })
+
+    posisiLama.current = baruMap
+  })
+
   function tutupToast(id) {
-    setToasts(function (prev) { return prev.map(function (t) { return t.id === id ? Object.assign({}, t, { tutup: true }) : t }) })
-    setTimeout(function () {
-      setToasts(function (prev) { return prev.filter(function (t) { return t.id !== id }) })
-    }, 240)
+    setToasts(function (prev) {
+      let sudahAda = false
+      const next = prev.map(function (t) {
+        if (t.id === id && !t.tutup) {
+          sudahAda = true
+          return Object.assign({}, t, { tutup: true })
+        }
+        return t
+      })
+      if (sudahAda) {
+        setTimeout(function () {
+          simpanPosisi()
+          setToasts(function (p) { return p.filter(function (t) { return t.id !== id }) })
+        }, DURASI_ANIMASI)
+      }
+      return next
+    })
   }
+
   function tambahToast(tipe, pesan) {
+    simpanPosisi()
     const id = Date.now() + Math.random()
-    setToasts(function (prev) { return prev.concat([{ id: id, tipe: tipe, pesan: pesan, tutup: false }]) })
-    setTimeout(function () { tutupToast(id) }, 4000)
+    const baru = { id: id, tipe: tipe, pesan: pesan, tutup: false }
+
+    setToasts(function (prev) {
+      const next = prev.concat([baru])
+      const aktif = next.filter(function (t) { return !t.tutup })
+      if (aktif.length > MAKS_TOAST) {
+        const jumlahBuang = aktif.length - MAKS_TOAST
+        const buangSet = new Set(aktif.slice(0, jumlahBuang).map(function (t) { return t.id }))
+        const nextMarked = next.map(function (t) {
+          return buangSet.has(t.id) ? Object.assign({}, t, { tutup: true }) : t
+        })
+        setTimeout(function () {
+          simpanPosisi()
+          setToasts(function (p) { return p.filter(function (t) { return !buangSet.has(t.id) }) })
+        }, DURASI_ANIMASI)
+        return nextMarked
+      }
+      return next
+    })
+
+    setTimeout(function () { tutupToast(id) }, DURASI_TOAST)
   }
+
   function toastSukses(pesan) { tambahToast('sukses', pesan) }
   function toastGagal(pesan) { tambahToast('gagal', pesan) }
+
   return (
     <ToastContext.Provider value={{ sukses: toastSukses, gagal: toastGagal }}>
       {props.children}
-      <div className="toast-wadah fixed z-[100] flex flex-col gap-2 pointer-events-none">
+      <div ref={wadahRef} className="toast-wadah fixed z-[100] flex flex-col gap-2 pointer-events-none">
         {toasts.map(function (t) {
           const sukses = t.tipe === 'sukses'
           return (
-            <div key={t.id} className={'toast-kartu pointer-events-auto flex items-center gap-3 ' + (sukses ? 'toast-sukses' : 'toast-gagal') + (t.tutup ? ' toast-keluar' : '')}>
-              <span className={'toast-ikon ' + (sukses ? 'toast-ikon-sukses' : 'toast-ikon-gagal')}>
-                <SizedIcon name={sukses ? 'check' : 'close'} size={15} />
-              </span>
-              <p className="toast-teks flex-1 text-sm font-semibold">{t.pesan}</p>
-              <button type="button" onClick={function () { tutupToast(t.id) }} title="Tutup Notifikasi"
-                className="toast-tutup grid h-7 w-7 shrink-0 place-items-center rounded-lg">
-                <SizedIcon name="close" size={13} />
-              </button>
+            <div
+              key={t.id}
+              data-toast-id={t.id}
+              className="toast-flip"
+            >
+              <div className={'toast-kartu pointer-events-auto flex items-center gap-3 ' + (sukses ? 'toast-sukses' : 'toast-gagal') + (t.tutup ? ' toast-keluar' : '')}>
+                <span className={'toast-ikon ' + (sukses ? 'toast-ikon-sukses' : 'toast-ikon-gagal')}>
+                  <SizedIcon name={sukses ? 'check' : 'close'} size={15} />
+                </span>
+                <p className="toast-teks flex-1 text-sm font-semibold">{t.pesan}</p>
+                <button type="button" onClick={function () { tutupToast(t.id) }} title="Tutup Notifikasi"
+                  className="toast-tutup grid h-7 w-7 shrink-0 place-items-center rounded-lg">
+                  <SizedIcon name="close" size={13} />
+                </button>
+              </div>
             </div>
           )
         })}
@@ -662,9 +769,10 @@ const ToastContext = createContext(null)
     </ToastContext.Provider>
   )
 }
+
 export function useToast() {
-   return useContext(ToastContext)
- }
+  return useContext(ToastContext)
+}
 
 export function SelubungPanel(props) {
   const [tampil, setTampil] = useState(props.open)

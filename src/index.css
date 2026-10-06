@@ -252,9 +252,8 @@ textarea {
   .kolom-kartu-rapat { width: calc(33.3333% - 0.66667rem); }
 }
 
-/* toast-modern-v1: kartu glass blur, ikon kotak berwarna lembut, posisi responsif, animasi masuk dan keluar */
 .toast-wadah {
-  top: 1rem;
+  top: calc(4rem + 1rem);
   left: 1rem;
   right: 1rem;
 }
@@ -262,7 +261,7 @@ textarea {
   .toast-wadah {
     left: auto;
     right: 1.25rem;
-    top: 1.25rem;
+    top: calc(4rem + 1.25rem);
     width: 100%;
     max-width: 24rem;
   }
