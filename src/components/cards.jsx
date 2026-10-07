@@ -19,6 +19,7 @@ function PersonChip(props) {
     </div>
   )
 }
+
 function ActionButtons(props) {
   return (
     <div className="flex flex-wrap gap-2">
@@ -50,7 +51,7 @@ export function LogbookCard(props) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-1.5">
           <CategoryBadge value={log.kategori} />
-          <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">{log.unit || 'Unit Belum Diisi'}</span>
+          {log.unit ? <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">{log.unit}</span> : null}
         </div>
         <StatusBadge status={log.status} />
       </div>
@@ -80,7 +81,7 @@ export function LogbookDetail(props) {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-2">
         <CategoryBadge value={log.kategori} />
-        <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">{log.unit || 'Unit Belum Diisi'}</span>
+        {log.unit ? <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">{log.unit}</span> : null}
         <StatusBadge status={log.status} />
       </div>
       <div>
@@ -95,16 +96,16 @@ export function LogbookDetail(props) {
               <div key={it.id} className={'relative pl-12 ' + (i < items.length - 1 ? 'pb-6' : 'pb-0')}>
                 <span className="absolute left-0 top-0 h-9 w-9 rounded-full bg-bsi-800 text-white grid place-items-center text-sm font-bold">{i + 1}</span>
                 {i < items.length - 1 ? <span className="absolute left-4 top-9 bottom-0 w-px bg-slate-200 dark:bg-slate-700" /> : null}
-                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                   {it.media_path ? (
-                      it.media_source === 'youtube' ? (
-                        <PemutarVideo key={it.youtube_id} youtubeId={it.youtube_id} title={it.judul} className="aspect-video w-full rounded-2xl mb-3" />
-                      ) : it.media_source === 'drive' ? (
-                        <div className="iframe-video-wrap mb-3"><iframe key={it.media_path} src={drivePreviewUrl(it.media_path)} title={it.judul} allow="autoplay; encrypted-media; fullscreen" allowFullScreen className="aspect-video w-full rounded-2xl border-0 bg-black" /></div>
-                      ) : (
-                        <ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3" />
-                      )
-                    ) : null}
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  {it.media_path ? (
+                    it.media_source === 'youtube' ? (
+                      <PemutarVideo key={it.youtube_id} youtubeId={it.youtube_id} title={it.judul} className="aspect-video w-full rounded-2xl mb-3" />
+                    ) : it.media_source === 'drive' ? (
+                      <div className="iframe-video-wrap mb-3"><iframe key={it.media_path} src={drivePreviewUrl(it.media_path)} title={it.judul} allow="autoplay; encrypted-media; fullscreen" allowFullScreen className="aspect-video w-full rounded-2xl border-0 bg-black" /></div>
+                    ) : (
+                      <ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3" />
+                    )
+                  ) : null}
                   <p className="font-bold text-slate-900">
                     {it.judul}
                     {it.show_in_gallery && it.media_path ? <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gold-500/15 text-gold-600 dark:text-gold-400">Di Galeri</span> : null}
@@ -139,12 +140,12 @@ export function GalleryCard(props) {
     <article onClick={props.onDetail} className="clickable cursor-pointer bsi-panel rounded-3xl overflow-hidden flex flex-col h-full">
       <div className="relative aspect-video w-full overflow-hidden bg-slate-900">
         {item.media_source === 'youtube' ? (
-        <MediaYouTube src={item.media_path} alt={item.judul} />
-      ) : item.media_source === 'drive' ? (
-        <MediaDrive driveId={item.media_path} alt={item.judul} />
-      ) : (
-        <SmartFit src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} alt={item.judul} />
-      )}
+          <MediaYouTube src={item.media_path} alt={item.judul} />
+        ) : item.media_source === 'drive' ? (
+          <MediaDrive driveId={item.media_path} alt={item.judul} />
+        ) : (
+          <SmartFit src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} alt={item.judul} />
+        )}
       </div>
       <div className="p-5 space-y-3 flex-1 flex flex-col">
         <div className="flex flex-wrap items-center justify-between gap-2">
