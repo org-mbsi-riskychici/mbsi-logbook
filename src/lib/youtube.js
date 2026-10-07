@@ -23,9 +23,14 @@ export function parseYouTubeId(url) {
   } catch (e) {}
   return null
 }
+
+/* Pakai maxresdefault (16:9 murni, resolusi tertinggi).
+   Kalau tidak tersedia, MediaYouTube akan fallback ke mqdefault -> hqdefault
+   secara otomatis via deteksi onError. */
 export function ytThumb(id) {
-  return 'https://i.ytimg.com/vi/' + id + '/hqdefault.jpg'
+  return 'https://i.ytimg.com/vi/' + id + '/maxresdefault.jpg'
 }
+
 export async function fetchYouTubeQuota() {
   try {
     const r = await fetch('/api/youtube/quota', { cache: 'no-store' })
@@ -35,6 +40,7 @@ export async function fetchYouTubeQuota() {
     return { limit: 5, used: 0, remaining: 5 }
   }
 }
+
 export async function startYouTubeSession(title, description, contentType, token) {
   if (!token) throw new Error('Sesi login tidak terbaca. Silakan masuk ulang lalu coba lagi.')
   const r = await fetch('/api/youtube/session', {
@@ -48,6 +54,7 @@ export async function startYouTubeSession(title, description, contentType, token
   }
   return await r.json()
 }
+
 export async function uploadToYouTube(sessionUri, blob, onProgress) {
   const hasil = await new Promise(function (resolve) {
     const xhr = new XMLHttpRequest()
@@ -70,7 +77,6 @@ export async function uploadToYouTube(sessionUri, blob, onProgress) {
   } else if (hasil.status !== 0) {
     throw new Error('Upload video gagal (status ' + hasil.status + ')')
   }
-  const sesi = await supabase.auth.getSession()
   const token = await ambilTokenSesi()
   const r = await fetch('/api/youtube/latest', {
     method: 'POST',
@@ -89,7 +95,6 @@ export async function uploadToYouTube(sessionUri, blob, onProgress) {
 }
 
 export async function unggahVideoYouTube(file, judul, onProgress) {
-  const sesiData = await supabase.auth.getSession()
   const token = await ambilTokenSesi()
   const sesi = await startYouTubeSession(judul || 'Dokumentasi Magang', 'Diunggah dari portal magang BSI.', file.type || 'video/mp4', token)
   return await uploadToYouTube(sesi.sessionUri, file, onProgress)

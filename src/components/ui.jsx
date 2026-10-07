@@ -365,8 +365,10 @@ export function SmartFit(props) {
   const [near, setNear] = useState(false)
   const mediaRef = useRef(null)
   const isVideo = props.type === 'video'
+  /* Thumbnail YouTube punya komponen khusus (MediaYouTube) yang handle fallback
+     kualitas maxres -> mq -> hq dan selalu pakai object-cover. */
   if (!isVideo && String(props.src || '').indexOf('i.ytimg.com') !== -1) {
-    return <MediaYouTube src={props.src} alt={props.alt} onClick={props.onClick} className="absolute inset-0 h-full w-full object-cover" />
+    return <MediaYouTube src={props.src} alt={props.alt} onClick={props.onClick} className="absolute inset-0 h-full w-full" />
   }
   useEffect(function () {
     const el = mediaRef.current
@@ -434,35 +436,52 @@ export function SmartFit(props) {
   )
 }
 
+/* Thumbnail YouTube dengan fallback kualitas bertingkat.
+   Urutan: maxresdefault (1280x720, 16:9) -> mqdefault (320x180, 16:9) -> hqdefault (480x360, 4:3).
+   Selalu pakai object-cover supaya card terisi penuh tanpa ruang kosong.
+   Kalau video tidak punya maxres (video lama / resolusi rendah), otomatis turun ke kualitas berikutnya. */
 export function MediaYouTube(props) {
   const [status, setStatus] = useState('muat')
-  const [coba, setCoba] = useState(0)
-  useEffect(function () {
-    if (status !== 'tunggu') return undefined
-    const t = setTimeout(function () {
-      setCoba(function (c) { return c + 1 })
-      setStatus('muat')
-    }, 15000)
-    return function () { clearTimeout(t) }
-  }, [status])
-  if (status === 'tunggu' || status === 'habis') {
+  const [kualitas, setKualitas] = useState('max')
+
+  /* Ekstrak videoId dari URL thumbnail supaya kita bisa ganti kualitas
+     tanpa peduli URL awalnya pakai resolusi apa. */
+  function srcDenganKualitas() {
+    const m = String(props.src).match(/\/vi\/([A-Za-z0-9_-]+)\//)
+    if (!m) return props.src
+    const id = m[1]
+    const nama = kualitas === 'max' ? 'maxresdefault'
+                : kualitas === 'mq' ? 'mqdefault'
+                : 'hqdefault'
+    return 'https://i.ytimg.com/vi/' + id + '/' + nama + '.jpg'
+  }
+
+  function saatError() {
+    if (kualitas === 'max') setKualitas('mq')
+    else if (kualitas === 'mq') setKualitas('hq')
+    else setStatus('habis')
+  }
+
+  if (status === 'habis') {
     return (
       <div className={'grid place-items-center bg-slate-800 ' + (props.className || 'absolute inset-0 h-full w-full')}>
         <div className="flex flex-col items-center gap-2 text-slate-400">
           <SizedIcon name="video" size={26} />
-          <p className="px-2 text-center text-[11px] font-semibold">{status === 'habis' ? 'Pratinjau Video Belum Siap' : 'Menyiapkan Pratinjau Video'}</p>
+          <p className="px-2 text-center text-[11px] font-semibold">Pratinjau Video Belum Siap</p>
         </div>
       </div>
     )
   }
+
   return (
     <img
-      src={props.src + (coba > 0 ? (String(props.src).indexOf('?') === -1 ? '?' : '&') + 'r=' + coba : '')}
+      src={srcDenganKualitas()}
       alt={props.alt || 'Pratinjau video'}
       onClick={props.onClick || undefined}
-      onError={function () { setStatus(coba >= 3 ? 'habis' : 'tunggu') }}
-      onLoad={function () { setStatus('muat') }}
-      className={props.className || 'absolute inset-0 h-full w-full object-cover'}
+      onError={saatError}
+      loading="lazy"
+      decoding="async"
+      className={'absolute inset-0 h-full w-full object-cover' + (props.onClick ? ' cursor-zoom-in' : '')}
     />
   )
 }
