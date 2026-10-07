@@ -16,7 +16,7 @@ import { LogbookCard, LogbookDetail, GalleryCard, GalleryDetail, AttendanceCard,
 import { CustomSelect, CustomDateInput, FileInput, ToggleModeMedia, SumberVideo } from '../components/controls.jsx'
 import { SizedIcon, ICONS } from '../components/icons.jsx'
 import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
-import PengingatBanner from '../components/PengingatBanner.jsx'
+import PengingatBanner, { hitungTanggalTerlewat, hitungTanggalTerlewatHadir } from '../components/PengingatBanner.jsx'
 import QrPrintTab from '../components/QrPrintTab.jsx'
 
 function newItem() {
@@ -105,82 +105,82 @@ export default function DashboardPage() {
   const [konfirmasiEdit, setKonfirmasiEdit] = useState(null)
   const [dataSiap, setDataSiap] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
-   const [refleksiFokus, setRefleksiFokus] = useState('')
-   const refleksiRefs = useRef({})
-   const refleksiPrevRects = useRef(null)
-   const refleksiCardAnim = useRef(null)
-   const refleksiBlurTimer = useRef(null)
-   function rekamRefleksi() {
-     const map = {}
-     ;['kendala', 'solusi', 'pembelajaran', 'tombol'].forEach(function (k) {
-       const el = refleksiRefs.current[k]
-       if (el) map[k] = el.getBoundingClientRect()
-     })
-     if (refFormLog.current) map.kartu = refFormLog.current.getBoundingClientRect()
-     refleksiPrevRects.current = map
-   }
-   function fokusRefleksi(key) {
-     if (refleksiBlurTimer.current) { clearTimeout(refleksiBlurTimer.current); refleksiBlurTimer.current = null }
-     rekamRefleksi()
-     setRefleksiFokus(key)
-   }
-   function blurRefleksi() {
-     if (refleksiBlurTimer.current) clearTimeout(refleksiBlurTimer.current)
-     refleksiBlurTimer.current = setTimeout(function () {
-       refleksiBlurTimer.current = null
-       rekamRefleksi()
-       setRefleksiFokus('')
-     }, 0)
-   }
-   const refleksiExpand = {
-     kendala: refleksiFokus === 'kendala' || form.kendala.trim() !== '',
-     solusi: refleksiFokus === 'solusi' || form.solusi.trim() !== '',
-     pembelajaran: refleksiFokus === 'pembelajaran' || form.pembelajaran.trim() !== ''
-   }
-   const refleksiExpandKey = (refleksiExpand.kendala ? 'k' : '-') + (refleksiExpand.solusi ? 's' : '-') + (refleksiExpand.pembelajaran ? 'p' : '-')
-   useLayoutEffect(function () {
-     const prev = refleksiPrevRects.current
-     refleksiPrevRects.current = null
-     if (!prev) return
-     ;['kendala', 'solusi', 'pembelajaran', 'tombol'].forEach(function (k) {
-       const el = refleksiRefs.current[k]
-       const old = prev[k]
-       if (!el || !old || typeof el.animate !== 'function') return
-       if (typeof el.getAnimations === 'function') {
-         el.getAnimations().forEach(function (a) { a.cancel() })
-       }
-       const now = el.getBoundingClientRect()
-       const dx = old.left - now.left
-       const dy = old.top - now.top
-       const dw = old.width - now.width
-       if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(dw) < 1) return
-       el.animate([
-         { transform: 'translate(' + dx + 'px,' + dy + 'px)', width: old.width + 'px' },
-         { transform: 'translate(0,0)', width: now.width + 'px' }
-       ], { duration: 420, easing: 'cubic-bezier(0.4, 0, 0.2, 1)' })
-     })
-     const kartu = refFormLog.current
-     const oldKartu = prev.kartu
-     if (kartu && oldKartu && typeof kartu.animate === 'function') {
-              kartu.querySelectorAll('textarea').forEach(function (t) {
-                t.style.height = 'auto'
-                t.style.height = t.scrollHeight + 'px'
-              })
-       const nowKartu = kartu.getBoundingClientRect()
-       const dh = nowKartu.height - oldKartu.height
-       if (Math.abs(dh) >= 1) {
-         if (refleksiCardAnim.current) refleksiCardAnim.current.cancel()
-         kartu.style.overflow = 'hidden'
-         const anim = kartu.animate([
-           { height: oldKartu.height + 'px' },
-           { height: nowKartu.height + 'px' }
-         ], { duration: 420, easing: 'cubic-bezier(0.4, 0, 0.2, 1)' })
-         refleksiCardAnim.current = anim
-         anim.onfinish = function () { kartu.style.overflow = ''; refleksiCardAnim.current = null }
-         anim.oncancel = function () { kartu.style.overflow = ''; refleksiCardAnim.current = null }
-       }
-     }
-   }, [refleksiExpandKey])
+  const [refleksiFokus, setRefleksiFokus] = useState('')
+  const refleksiRefs = useRef({})
+  const refleksiPrevRects = useRef(null)
+  const refleksiCardAnim = useRef(null)
+  const refleksiBlurTimer = useRef(null)
+  function rekamRefleksi() {
+    const map = {}
+    ;['kendala', 'solusi', 'pembelajaran', 'tombol'].forEach(function (k) {
+      const el = refleksiRefs.current[k]
+      if (el) map[k] = el.getBoundingClientRect()
+    })
+    if (refFormLog.current) map.kartu = refFormLog.current.getBoundingClientRect()
+    refleksiPrevRects.current = map
+  }
+  function fokusRefleksi(key) {
+    if (refleksiBlurTimer.current) { clearTimeout(refleksiBlurTimer.current); refleksiBlurTimer.current = null }
+    rekamRefleksi()
+    setRefleksiFokus(key)
+  }
+  function blurRefleksi() {
+    if (refleksiBlurTimer.current) clearTimeout(refleksiBlurTimer.current)
+    refleksiBlurTimer.current = setTimeout(function () {
+      refleksiBlurTimer.current = null
+      rekamRefleksi()
+      setRefleksiFokus('')
+    }, 0)
+  }
+  const refleksiExpand = {
+    kendala: refleksiFokus === 'kendala' || form.kendala.trim() !== '',
+    solusi: refleksiFokus === 'solusi' || form.solusi.trim() !== '',
+    pembelajaran: refleksiFokus === 'pembelajaran' || form.pembelajaran.trim() !== ''
+  }
+  const refleksiExpandKey = (refleksiExpand.kendala ? 'k' : '-') + (refleksiExpand.solusi ? 's' : '-') + (refleksiExpand.pembelajaran ? 'p' : '-')
+  useLayoutEffect(function () {
+    const prev = refleksiPrevRects.current
+    refleksiPrevRects.current = null
+    if (!prev) return
+    ;['kendala', 'solusi', 'pembelajaran', 'tombol'].forEach(function (k) {
+      const el = refleksiRefs.current[k]
+      const old = prev[k]
+      if (!el || !old || typeof el.animate !== 'function') return
+      if (typeof el.getAnimations === 'function') {
+        el.getAnimations().forEach(function (a) { a.cancel() })
+      }
+      const now = el.getBoundingClientRect()
+      const dx = old.left - now.left
+      const dy = old.top - now.top
+      const dw = old.width - now.width
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(dw) < 1) return
+      el.animate([
+        { transform: 'translate(' + dx + 'px,' + dy + 'px)', width: old.width + 'px' },
+        { transform: 'translate(0,0)', width: now.width + 'px' }
+      ], { duration: 420, easing: 'cubic-bezier(0.4, 0, 0.2, 1)' })
+    })
+    const kartu = refFormLog.current
+    const oldKartu = prev.kartu
+    if (kartu && oldKartu && typeof kartu.animate === 'function') {
+      kartu.querySelectorAll('textarea').forEach(function (t) {
+        t.style.height = 'auto'
+        t.style.height = t.scrollHeight + 'px'
+      })
+      const nowKartu = kartu.getBoundingClientRect()
+      const dh = nowKartu.height - oldKartu.height
+      if (Math.abs(dh) >= 1) {
+        if (refleksiCardAnim.current) refleksiCardAnim.current.cancel()
+        kartu.style.overflow = 'hidden'
+        const anim = kartu.animate([
+          { height: oldKartu.height + 'px' },
+          { height: nowKartu.height + 'px' }
+        ], { duration: 420, easing: 'cubic-bezier(0.4, 0, 0.2, 1)' })
+        refleksiCardAnim.current = anim
+        anim.onfinish = function () { kartu.style.overflow = ''; refleksiCardAnim.current = null }
+        anim.oncancel = function () { kartu.style.overflow = ''; refleksiCardAnim.current = null }
+      }
+    }
+  }, [refleksiExpandKey])
   const [logFilter, setLogFilter] = useState(LOG_INITIAL)
   const [logFilterOpen, setLogFilterOpen] = useState(false)
   const [galFilter, setGalFilter] = useState(GAL_INITIAL)
@@ -199,29 +199,37 @@ export default function DashboardPage() {
   const refListHadir = useRef(null)
   const refNavTab = useRef(null)
 
-async function refresh() {
-  if (!mahasiswa) return
-  const l = await supabase.from('logbooks').select('*, mahasiswa(*), logbook_items(*)')
-    .eq('mahasiswa_id', mahasiswa.id).order('tanggal', { ascending: false })
-    .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
-  const g = await supabase.from('galeri').select('*, mahasiswa(*)').eq('mahasiswa_id', mahasiswa.id).order('tanggal', { ascending: false })
-  let h = await supabase.from('daftar_hadir').select('*, mahasiswa(*)').eq('mahasiswa_id', mahasiswa.id).order('tanggal', { ascending: false })
+  /* ticker untuk badge tab: re-render tiap 60 detik supaya badge reminder
+     hadir otomatis muncul saat masuk jam 07:00 tanpa user perlu refresh. */
+  const [, setTickBadge] = useState(0)
+  useEffect(function () {
+    const iv = setInterval(function () { setTickBadge(function (t) { return t + 1 }) }, 60000)
+    return function () { clearInterval(iv) }
+  }, [])
 
-  /* Auto-Bolos: cek kemarin dan sebelumnya yang kosong, isi sebagai "Bolos" */
-  let hadirData = h.data || []
-  const tanggalAda = hadirData.map(function (x) { return x.tanggal })
-  const baru = await autoIsiBolos(mahasiswa.id, tanggalAda)
-  if (baru.length) {
-    /* Kalau ada yang baru di-Bolos, refetch supaya id + relasi mahasiswa lengkap */
-    h = await supabase.from('daftar_hadir').select('*, mahasiswa(*)').eq('mahasiswa_id', mahasiswa.id).order('tanggal', { ascending: false })
-    hadirData = h.data || []
+  async function refresh() {
+    if (!mahasiswa) return
+    const l = await supabase.from('logbooks').select('*, mahasiswa(*), logbook_items(*)')
+      .eq('mahasiswa_id', mahasiswa.id).order('tanggal', { ascending: false })
+      .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
+    const g = await supabase.from('galeri').select('*, mahasiswa(*)').eq('mahasiswa_id', mahasiswa.id).order('tanggal', { ascending: false })
+    let h = await supabase.from('daftar_hadir').select('*, mahasiswa(*)').eq('mahasiswa_id', mahasiswa.id).order('tanggal', { ascending: false })
+
+    /* Auto-Bolos: cek kemarin dan sebelumnya yang kosong, isi sebagai "Bolos" */
+    let hadirData = h.data || []
+    const tanggalAda = hadirData.map(function (x) { return x.tanggal })
+    const baru = await autoIsiBolos(mahasiswa.id, tanggalAda)
+    if (baru.length) {
+      /* Kalau ada yang baru di-Bolos, refetch supaya id + relasi mahasiswa lengkap */
+      h = await supabase.from('daftar_hadir').select('*, mahasiswa(*)').eq('mahasiswa_id', mahasiswa.id).order('tanggal', { ascending: false })
+      hadirData = h.data || []
+    }
+
+    setLogs(l.data || [])
+    setGaleri(g.data || [])
+    setHadir(hadirData)
+    setDataSiap(true)
   }
-
-  setLogs(l.data || [])
-  setGaleri(g.data || [])
-  setHadir(hadirData)
-  setDataSiap(true)
-}
 
   useEffect(function () {
     if (mahasiswa) refresh()
@@ -273,100 +281,99 @@ async function refresh() {
     }
   }, [tab, dataSiap])
 
-   /* ===== proteksi-unsaved-v1: cegah kehilangan draf saat pindah tab/halaman, batal edit, atau tutup tab ===== */
-   const [unsavedModal, setUnsavedModal] = useState(null)
-   const navigate = useNavigate()
-   function isLogbookDirty() {
-     if (editLogId) return true
-     return !!(form.judul || form.kategori || form.unit || form.kendala || form.solusi || form.pembelajaran ||
-       items.some(function (it) { return it.judul || it.deskripsi || it.hasil || it.file }))
-   }
-   function isGaleriDirty() {
-     if (editGalId) return true
-     return !!(galForm.judul || galForm.deskripsi || galForm.kegiatan || galForm.file || galYtLink || galDriveLink)
-   }
-   function isHadirDirty() {
-     if (editHadirId) return true
-     return hadirForm.status !== 'Masuk' || !!hadirForm.alasan
-   }
-   function isAnyFormDirty() {
-     return isLogbookDirty() || isGaleriDirty() || isHadirDirty()
-   }
-   function ulangAnimHalaman() {
-     requestAnimationFrame(function () {
-       const el = document.querySelector('main.anim-page') || document.querySelector('.anim-page')
-       if (!el) return
-       el.style.animation = 'none'
-       void el.offsetWidth
-       el.style.animation = ''
-     })
-   }
-   function bukaModalUnsaved(judul, pesan, labelConfirm, aksi) {
-     setUnsavedModal({
-       title: judul,
-       message: pesan,
-       confirmLabel: labelConfirm,
-       onConfirm: function () { setUnsavedModal(null); aksi() },
-       onCancel: function () { setUnsavedModal(null) }
-     })
-   }
-   function cobaCancelEditLog() {
-     if (isLogbookDirty()) { bukaModalUnsaved('Buang Perubahan Logbook?', 'Perubahan pada logbook akan hilang dan tidak bisa dikembalikan. Yakin ingin membatalkan?', 'Buang', cancelEditLog); return }
-     cancelEditLog()
-   }
-   function cobaCancelEditGal() {
-     if (isGaleriDirty()) { bukaModalUnsaved('Buang Perubahan Galeri?', 'Perubahan pada media galeri akan hilang dan tidak bisa dikembalikan. Yakin ingin membatalkan?', 'Buang', cancelEditGal); return }
-     cancelEditGal()
-   }
-   function cobaCancelEditHadir() {
-     if (isHadirDirty()) { bukaModalUnsaved('Buang Perubahan Kehadiran?', 'Perubahan pada daftar hadir akan hilang dan tidak bisa dikembalikan. Yakin ingin membatalkan?', 'Buang', cancelEditHadir); return }
-     cancelEditHadir()
-   }
-   useEffect(function () {
-     function onBeforeUnload(e) {
-       if (!isAnyFormDirty()) return
-       e.preventDefault()
-       e.returnValue = ''
-     }
-     function onClickLink(e) {
-       if (!isAnyFormDirty()) return
-       const t = e.target
-       const a = t && t.closest ? t.closest('a[href]') : null
-       if (!a) return
-       const href = a.getAttribute('href') || ''
-       if (!href || href.indexOf('http') === 0 || href.indexOf('#') === 0 || a.target === '_blank') return
-       e.preventDefault()
-       e.mbsiDicegah = true
-       bukaModalUnsaved('Pindah Halaman?', 'Kamu punya perubahan yang belum disimpan. Yakin ingin meninggalkan halaman ini? Semua perubahan akan hilang.', 'Tinggalkan', function () { navigate(href); ulangAnimHalaman() })
-     }
-     window.addEventListener('beforeunload', onBeforeUnload)
-     document.addEventListener('click', onClickLink, true)
-     return function () {
-       window.removeEventListener('beforeunload', onBeforeUnload)
-       document.removeEventListener('click', onClickLink, true)
-     }
-   })
-   useEffect(function () {
-     if (!mahasiswa || !dataSiap) return
-     const t = searchParams.get('isi')
-     const tHadir = searchParams.get('isiHadir')
-     if (!t && !tHadir) return
-     setSearchParams({}, { replace: true })
-     if (t) {
-       const pesan = pesanTanggalTerlarang(t, batas.min, batas.max)
-       if (pesan) { toast.gagal(pesan) } else { isiLogbookTanggal(t, true) }
-     }
-     if (tHadir) {
-       const pesanHadir = pesanTanggalTerlarang(tHadir, batas.min, batas.max)
-       if (pesanHadir) { toast.gagal(pesanHadir) } else { isiHadirTanggal(tHadir, true) }
-     }
-   }, [mahasiswa, dataSiap])
+  /* ===== proteksi-unsaved-v1: cegah kehilangan draf saat pindah tab/halaman, batal edit, atau tutup tab ===== */
+  const [unsavedModal, setUnsavedModal] = useState(null)
+  const navigate = useNavigate()
+  function isLogbookDirty() {
+    if (editLogId) return true
+    return !!(form.judul || form.kategori || form.unit || form.kendala || form.solusi || form.pembelajaran ||
+      items.some(function (it) { return it.judul || it.deskripsi || it.hasil || it.file }))
+  }
+  function isGaleriDirty() {
+    if (editGalId) return true
+    return !!(galForm.judul || galForm.deskripsi || galForm.kegiatan || galForm.file || galYtLink || galDriveLink)
+  }
+  function isHadirDirty() {
+    if (editHadirId) return true
+    return hadirForm.status !== 'Masuk' || !!hadirForm.alasan
+  }
+  function isAnyFormDirty() {
+    return isLogbookDirty() || isGaleriDirty() || isHadirDirty()
+  }
+  function ulangAnimHalaman() {
+    requestAnimationFrame(function () {
+      const el = document.querySelector('main.anim-page') || document.querySelector('.anim-page')
+      if (!el) return
+      el.style.animation = 'none'
+      void el.offsetWidth
+      el.style.animation = ''
+    })
+  }
+  function bukaModalUnsaved(judul, pesan, labelConfirm, aksi) {
+    setUnsavedModal({
+      title: judul,
+      message: pesan,
+      confirmLabel: labelConfirm,
+      onConfirm: function () { setUnsavedModal(null); aksi() },
+      onCancel: function () { setUnsavedModal(null) }
+    })
+  }
+  function cobaCancelEditLog() {
+    if (isLogbookDirty()) { bukaModalUnsaved('Buang Perubahan Logbook?', 'Perubahan pada logbook akan hilang dan tidak bisa dikembalikan. Yakin ingin membatalkan?', 'Buang', cancelEditLog); return }
+    cancelEditLog()
+  }
+  function cobaCancelEditGal() {
+    if (isGaleriDirty()) { bukaModalUnsaved('Buang Perubahan Galeri?', 'Perubahan pada media galeri akan hilang dan tidak bisa dikembalikan. Yakin ingin membatalkan?', 'Buang', cancelEditGal); return }
+    cancelEditGal()
+  }
+  function cobaCancelEditHadir() {
+    if (isHadirDirty()) { bukaModalUnsaved('Buang Perubahan Kehadiran?', 'Perubahan pada daftar hadir akan hilang dan tidak bisa dikembalikan. Yakin ingin membatalkan?', 'Buang', cancelEditHadir); return }
+    cancelEditHadir()
+  }
+  useEffect(function () {
+    function onBeforeUnload(e) {
+      if (!isAnyFormDirty()) return
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    function onClickLink(e) {
+      if (!isAnyFormDirty()) return
+      const t = e.target
+      const a = t && t.closest ? t.closest('a[href]') : null
+      if (!a) return
+      const href = a.getAttribute('href') || ''
+      if (!href || href.indexOf('http') === 0 || href.indexOf('#') === 0 || a.target === '_blank') return
+      e.preventDefault()
+      e.mbsiDicegah = true
+      bukaModalUnsaved('Pindah Halaman?', 'Kamu punya perubahan yang belum disimpan. Yakin ingin meninggalkan halaman ini? Semua perubahan akan hilang.', 'Tinggalkan', function () { navigate(href); ulangAnimHalaman() })
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    document.addEventListener('click', onClickLink, true)
+    return function () {
+      window.removeEventListener('beforeunload', onBeforeUnload)
+      document.removeEventListener('click', onClickLink, true)
+    }
+  })
+  useEffect(function () {
+    if (!mahasiswa || !dataSiap) return
+    const t = searchParams.get('isi')
+    const tHadir = searchParams.get('isiHadir')
+    if (!t && !tHadir) return
+    setSearchParams({}, { replace: true })
+    if (t) {
+      const pesan = pesanTanggalTerlarang(t, batas.min, batas.max)
+      if (pesan) { toast.gagal(pesan) } else { isiLogbookTanggal(t, true) }
+    }
+    if (tHadir) {
+      const pesanHadir = pesanTanggalTerlarang(tHadir, batas.min, batas.max)
+      if (pesanHadir) { toast.gagal(pesanHadir) } else { isiHadirTanggal(tHadir, true) }
+    }
+  }, [mahasiswa, dataSiap])
 
   if (loading || !mahasiswa) {
     return <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:py-8"><SkeletonDashboard /></div>
   }
 
-  
   function patchItem(i, patch) {
     setItems(function (prev) {
       return prev.map(function (it, idx) { return idx === i ? Object.assign({}, it, patch) : it })
@@ -418,14 +425,14 @@ async function refresh() {
       const totalUpload = items.reduce(function (n, x) { return n + (x.judul.trim() && x.file ? 1 : 0) }, 0)
       let nomorUpload = 0
       if (totalUpload > 1) setInfoProses('Mengunggah ' + totalUpload + ' file media sekaligus')
-      
+
       for (let i = 0; i < items.length; i++) {
         const it = items[i]
         if (!it.judul.trim()) continue
         let mediaPath = null, mediaType = null, mediaThumb = null
         let mediaSource = it.oldSource || 'r2'
         let youtubeId = it.oldYtId || null
-        
+
         if (it.mode === 'video' && it.ytLink && !it.file) {
           const id = parseYouTubeId(it.ytLink)
           if (!id) { toast.gagal('Link video tidak valid pada kegiatan ' + (i + 1) + '.'); setBusy(false); return }
@@ -449,7 +456,7 @@ async function refresh() {
         } else if (it.oldPath) {
           mediaPath = it.oldPath; mediaType = detectMediaType(it.oldPath); mediaThumb = it.oldThumb || null; mediaSource = 'r2'; youtubeId = null
         }
-        
+
         let driveIdLog = null
         if (it.mode === 'video' && it.driveLink) {
           driveIdLog = parseDriveId(it.driveLink)
@@ -457,10 +464,10 @@ async function refresh() {
         }
         clean.push({ judul: it.judul.trim(), deskripsi: it.deskripsi.trim(), hasil: it.hasil.trim(), media_path: mediaPath, media_type: mediaType, media_thumb: mediaThumb, media_source: mediaSource, youtube_id: youtubeId, drive_id: driveIdLog, show_in_gallery: it.show && !!mediaPath })
       }
-      
+
       setInfoProses('')
       if (!clean.length) { toast.gagal('Tambahkan minimal satu kegiatan dengan judul.'); setBusy(false); return }
-      
+
       let logId = editLogId
       let oldUrls = []
       if (editLogId) {
@@ -472,24 +479,24 @@ async function refresh() {
           if (it.media_thumb) oldUrls.push(it.media_thumb)
         })
         await supabase.from('logbooks').update({
-  tanggal: form.tanggal, unit: form.unit, kategori: form.kategori, judul: toTitleCase(form.judul),
-  kendala: form.kendala, solusi: form.solusi, pembelajaran: form.pembelajaran, status: form.status
-}).eq('id', editLogId)
+          tanggal: form.tanggal, unit: form.unit, kategori: form.kategori, judul: toTitleCase(form.judul),
+          kendala: form.kendala, solusi: form.solusi, pembelajaran: form.pembelajaran, status: form.status
+        }).eq('id', editLogId)
         await supabase.from('logbook_items').delete().eq('logbook_id', editLogId)
       } else {
         const ins = await supabase.from('logbooks').insert({
-  mahasiswa_id: mahasiswa.id, tanggal: form.tanggal, unit: form.unit, kategori: form.kategori, judul: toTitleCase(form.judul),
-  kendala: form.kendala, solusi: form.solusi, pembelajaran: form.pembelajaran, status: form.status
-}).select().single()
+          mahasiswa_id: mahasiswa.id, tanggal: form.tanggal, unit: form.unit, kategori: form.kategori, judul: toTitleCase(form.judul),
+          kendala: form.kendala, solusi: form.solusi, pembelajaran: form.pembelajaran, status: form.status
+        }).select().single()
         logId = ins.data.id
       }
-      
+
       const rows = clean.map(function (c, idx) {
         return { logbook_id: logId, urutan: idx + 1, judul: c.judul, deskripsi: c.deskripsi, hasil: c.hasil, media_path: c.media_path, media_type: c.media_type, media_thumb: c.media_thumb, media_source: c.media_source, youtube_id: c.youtube_id, drive_id: c.drive_id, show_in_gallery: c.show_in_gallery }
       })
       const insItems = await supabase.from('logbook_items').insert(rows).select()
       await syncGaleriFromLogbook(mahasiswa.id, insItems.data || [], { tanggal: form.tanggal, kategori: form.kategori })
-      
+
       const newUrls = []
       clean.forEach(function (c) {
         if (c.media_source === 'youtube') return
@@ -497,7 +504,7 @@ async function refresh() {
         if (c.media_thumb) newUrls.push(c.media_thumb)
       })
       for (const u of oldUrls) { if (newUrls.indexOf(u) === -1) await hapusMediaR2(u) }
-      
+
       setEditLogId(null)
       setForm({ tanggal: todayInput(), unit: '', kategori: '', judul: '', kendala: '', solusi: '', pembelajaran: '', status: 'draft' })
       setItems([newItem()])
@@ -512,22 +519,15 @@ async function refresh() {
   }
 
   function gulirKeFormTunda(ref, ms) {
-
-
     /* tunggu animasi masuk (halaman + banner pengingat) selesai supaya posisi form final */
-
-
     setTimeout(function () { gulirKeForm(ref) }, ms || 450)
-
-
   }
-
 
   function gulirKeForm(ref) {
     requestAnimationFrame(function () { if (ref && ref.current) ref.current.scrollIntoView({ behavior: 'smooth', block: 'start' }) })
   }
 
-    function startEditLog(log) {
+  function startEditLog(log) {
     if (isLogbookDirty()) {
       setKonfirmasiEdit({
         judul: 'Ganti Draf Logbook?',
@@ -559,7 +559,7 @@ async function refresh() {
     setItems([newItem()])
   }
 
-    function startEditGal(g) {
+  function startEditGal(g) {
     if (isGaleriDirty()) {
       setKonfirmasiEdit({
         judul: 'Ganti Draf Galeri?',
@@ -589,7 +589,7 @@ async function refresh() {
     setGalOldYt(null)
   }
 
-    function startEditHadir(h) {
+  function startEditHadir(h) {
     if (isHadirDirty()) {
       setKonfirmasiEdit({
         judul: 'Ganti Draf Daftar Hadir?',
@@ -611,44 +611,44 @@ async function refresh() {
     setEditHadirId(null)
     setHadirForm({ tanggal: todayInput(), status: 'Masuk', alasan: '' })
   }
-   function terapkanIsiTanggal(t, tunda) {
-     cancelEditLog()
-     setForm(function (f) { return Object.assign({}, f, { tanggal: t }) })
-     setTab('logbook')
-     if (tunda) gulirKeFormTunda(refFormLog, 450)
-     else gulirKeForm(refFormLog)
-   }
-   function isiLogbookTanggal(t, tunda) {
-     if (isLogbookDirty()) {
-       setKonfirmasiEdit({
-         judul: 'Ganti Draf Logbook?',
-         pesan: 'Isian form logbook yang belum disimpan akan hilang dan diganti dengan tanggal terlewat yang kamu pilih.',
-         aksi: function () { terapkanIsiTanggal(t, tunda) }
-       })
-       return
-     }
-     terapkanIsiTanggal(t, tunda)
-   }
 
+  function terapkanIsiTanggal(t, tunda) {
+    cancelEditLog()
+    setForm(function (f) { return Object.assign({}, f, { tanggal: t }) })
+    setTab('logbook')
+    if (tunda) gulirKeFormTunda(refFormLog, 450)
+    else gulirKeForm(refFormLog)
+  }
+  function isiLogbookTanggal(t, tunda) {
+    if (isLogbookDirty()) {
+      setKonfirmasiEdit({
+        judul: 'Ganti Draf Logbook?',
+        pesan: 'Isian form logbook yang belum disimpan akan hilang dan diganti dengan tanggal terlewat yang kamu pilih.',
+        aksi: function () { terapkanIsiTanggal(t, tunda) }
+      })
+      return
+    }
+    terapkanIsiTanggal(t, tunda)
+  }
 
   function terapkanIsiHadirTanggal(t, tunda) {
-  cancelEditHadir()
-  setHadirForm(function (f) { return Object.assign({}, f, { tanggal: t }) })
-  setTab('absen')
-  if (tunda) gulirKeFormTunda(refFormHadir, 450)
-  else gulirKeForm(refFormHadir)
-}
-function isiHadirTanggal(t, tunda) {
-  if (isHadirDirty()) {
-    setKonfirmasiEdit({
-      judul: 'Ganti Draf Daftar Hadir?',
-      pesan: 'Isian form daftar hadir yang belum disimpan akan hilang dan diganti dengan tanggal terlewat yang kamu pilih.',
-      aksi: function () { terapkanIsiHadirTanggal(t, tunda) }
-    })
-    return
+    cancelEditHadir()
+    setHadirForm(function (f) { return Object.assign({}, f, { tanggal: t }) })
+    setTab('absen')
+    if (tunda) gulirKeFormTunda(refFormHadir, 450)
+    else gulirKeForm(refFormHadir)
   }
-  terapkanIsiHadirTanggal(t, tunda)
-}
+  function isiHadirTanggal(t, tunda) {
+    if (isHadirDirty()) {
+      setKonfirmasiEdit({
+        judul: 'Ganti Draf Daftar Hadir?',
+        pesan: 'Isian form daftar hadir yang belum disimpan akan hilang dan diganti dengan tanggal terlewat yang kamu pilih.',
+        aksi: function () { terapkanIsiHadirTanggal(t, tunda) }
+      })
+      return
+    }
+    terapkanIsiHadirTanggal(t, tunda)
+  }
 
   function deleteLog(log) { setPendingDelete({ type: 'log', data: log }) }
 
@@ -662,7 +662,7 @@ function isiHadirTanggal(t, tunda) {
       let mediaPath = '', mediaType = '', mediaThumb = null
       let mediaSource = galOldYt ? 'youtube' : 'r2'
       let youtubeId = galOldYt || null
-      
+
       if (galMode === 'video' && galYtLink && !galForm.file) {
         const id = parseYouTubeId(galYtLink)
         if (!id) { toast.gagal('Link video tidak valid.'); setBusy(false); return }
@@ -680,21 +680,21 @@ function isiHadirTanggal(t, tunda) {
       } else if (galForm.oldPath) {
         mediaPath = galForm.oldPath; mediaType = detectMediaType(galForm.oldPath); mediaThumb = galForm.oldThumb || null; mediaSource = 'r2'; youtubeId = null
       }
-      
+
       if (!mediaPath) { toast.gagal('Galeri wajib memiliki media. Pilih file foto atau video terlebih dahulu.'); setBusy(false); return }
-      
+
       let driveIdGal = null
       if (galMode === 'video' && galDriveLink) {
         driveIdGal = parseDriveId(galDriveLink)
         if (!driveIdGal) { toast.gagal('Link Google Drive tidak valid.'); setBusy(false); return }
       }
-      
+
       const payload = {
-        mahasiswa_id: mahasiswa.id, judul: galForm.judul || ('Dokumentasi ' + galForm.tanggal), deskripsi: galForm.deskripsi,
+        mahasiswa_id: mahasiswa.id, judul: toTitleCase(galForm.judul) || ('Dokumentasi ' + galForm.tanggal), deskripsi: galForm.deskripsi,
         tanggal: galForm.tanggal, kegiatan: galForm.kegiatan || 'Lainnya', media_path: mediaPath, media_type: mediaType,
         media_thumb: mediaThumb, media_source: mediaSource, youtube_id: youtubeId, drive_id: driveIdGal
       }
-      
+
       let oldGalUrls = []
       if (editGalId) {
         const existing = galeri.find(function (g) { return g.id === editGalId })
@@ -706,7 +706,7 @@ function isiHadirTanggal(t, tunda) {
         await supabase.from('galeri').insert(payload)
       }
       for (const u of oldGalUrls) await hapusMediaR2(u)
-      
+
       setEditGalId(null)
       setGalForm({ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false })
       setGalMode('foto')
@@ -804,55 +804,55 @@ function isiHadirTanggal(t, tunda) {
     return { title: 'Hapus Catatan Hadir?', message: 'Catatan kehadiran tanggal ' + pendingDelete.data.tanggal + ' dengan status ' + pendingDelete.data.status + ' akan dihapus permanen.' }
   }
 
-async function executeDelete() {
-  if (!pendingDelete || deleteBusy) return
-  const target = pendingDelete
-  if (target.type === 'media-item') { setPendingDelete(null); removeItemFile(target.data); return }
-  if (target.type === 'media-gal') { setPendingDelete(null); setGalForm(function (g) { return Object.assign({}, g, { file: null, preview: '', oldPath: '' }) }); return }
-  if (target.type === 'kegiatan') {
-    setPendingDelete(null)
-    const buang = items[target.data]
-    const pratinjau = buang && buang.preview ? String(buang.preview) : ''
-    if (pratinjau.indexOf('blob:') === 0) URL.revokeObjectURL(pratinjau)
-    setItems(function (p) { return p.filter(function (x, idx) { return idx !== target.data }) })
-    toast.sukses('Kegiatan ' + (target.data + 1) + ' dihapus')
-    return
-  }
-  setDeleteBusy(true)
-  try {
-    if (target.type === 'log') {
-      const urls = []
-      ;(target.data.logbook_items || []).forEach(function (it) {
-        if (it.media_source === 'youtube') return
-        if (it.media_path) urls.push(it.media_path)
-        if (it.media_thumb) urls.push(it.media_thumb)
-      })
-      const res = await supabase.from('logbooks').delete().eq('id', target.data.id)
-      if (res.error) throw new Error(res.error.message)
-      await Promise.all(urls.map(function (u) { return hapusMediaR2(u) }))
-    } else if (target.type === 'gal') {
-      const urls = target.data.logbook_item_id || target.data.media_source === 'youtube' ? [] : [target.data.media_path, target.data.media_thumb].filter(Boolean)
-      const res = await supabase.from('galeri').delete().eq('id', target.data.id)
-      if (res.error) throw new Error(res.error.message)
-      if (target.data.logbook_item_id) {
-        const upd = await supabase.from('logbook_items').update({ show_in_gallery: false }).eq('id', target.data.logbook_item_id)
-        if (upd.error) throw new Error(upd.error.message)
-      }
-      await Promise.all(urls.map(function (u) { return hapusMediaR2(u) }))
-    } else if (target.type === 'hadir') {
-      const res = await supabase.from('daftar_hadir').delete().eq('id', target.data.id)
-      if (res.error) throw new Error(res.error.message)
+  async function executeDelete() {
+    if (!pendingDelete || deleteBusy) return
+    const target = pendingDelete
+    if (target.type === 'media-item') { setPendingDelete(null); removeItemFile(target.data); return }
+    if (target.type === 'media-gal') { setPendingDelete(null); setGalForm(function (g) { return Object.assign({}, g, { file: null, preview: '', oldPath: '' }) }); return }
+    if (target.type === 'kegiatan') {
+      setPendingDelete(null)
+      const buang = items[target.data]
+      const pratinjau = buang && buang.preview ? String(buang.preview) : ''
+      if (pratinjau.indexOf('blob:') === 0) URL.revokeObjectURL(pratinjau)
+      setItems(function (p) { return p.filter(function (x, idx) { return idx !== target.data }) })
+      toast.sukses('Kegiatan ' + (target.data + 1) + ' dihapus')
+      return
     }
-    await refresh()
-    toast.sukses('Data berhasil dihapus')
-  } catch (err) {
-    toast.gagal('Gagal menghapus data: ' + (err && err.message ? err.message : 'kesalahan tidak diketahui'))
-    await refresh()
-  } finally {
-    setDeleteBusy(false)
-    setPendingDelete(null)
+    setDeleteBusy(true)
+    try {
+      if (target.type === 'log') {
+        const urls = []
+        ;(target.data.logbook_items || []).forEach(function (it) {
+          if (it.media_source === 'youtube') return
+          if (it.media_path) urls.push(it.media_path)
+          if (it.media_thumb) urls.push(it.media_thumb)
+        })
+        const res = await supabase.from('logbooks').delete().eq('id', target.data.id)
+        if (res.error) throw new Error(res.error.message)
+        await Promise.all(urls.map(function (u) { return hapusMediaR2(u) }))
+      } else if (target.type === 'gal') {
+        const urls = target.data.logbook_item_id || target.data.media_source === 'youtube' ? [] : [target.data.media_path, target.data.media_thumb].filter(Boolean)
+        const res = await supabase.from('galeri').delete().eq('id', target.data.id)
+        if (res.error) throw new Error(res.error.message)
+        if (target.data.logbook_item_id) {
+          const upd = await supabase.from('logbook_items').update({ show_in_gallery: false }).eq('id', target.data.logbook_item_id)
+          if (upd.error) throw new Error(upd.error.message)
+        }
+        await Promise.all(urls.map(function (u) { return hapusMediaR2(u) }))
+      } else if (target.type === 'hadir') {
+        const res = await supabase.from('daftar_hadir').delete().eq('id', target.data.id)
+        if (res.error) throw new Error(res.error.message)
+      }
+      await refresh()
+      toast.sukses('Data berhasil dihapus')
+    } catch (err) {
+      toast.gagal('Gagal menghapus data: ' + (err && err.message ? err.message : 'kesalahan tidak diketahui'))
+      await refresh()
+    } finally {
+      setDeleteBusy(false)
+      setPendingDelete(null)
+    }
   }
-}
 
   const filteredLogs = logs.filter(function (l) {
     if (logFilter.kategori && l.kategori !== logFilter.kategori) return false
@@ -877,6 +877,21 @@ async function executeDelete() {
   const sortedHadir = urutkanTanggal(filteredHadir, sort)
   const hadirFilterActive = countActiveFilters(hadirFilter)
 
+  /* Jumlah reminder yang tersisa untuk ditampilkan di badge tab dashboard.
+     Dihitung pakai fungsi yang sama dengan PengingatBanner supaya konsisten. */
+  const jumlahReminderLogbook = dataSiap
+    ? hitungTanggalTerlewat(logs.map(function (l) { return l.tanggal }), hadir).length
+    : 0
+  const jumlahReminderHadir = dataSiap
+    ? hitungTanggalTerlewatHadir(hadir).length
+    : 0
+
+  function badgeUntuk(tabId) {
+    if (tabId === 'logbook') return jumlahReminderLogbook
+    if (tabId === 'absen') return jumlahReminderHadir
+    return 0
+  }
+
   const logTotal = filteredLogs.length
   const logTotalPages = Math.max(1, Math.ceil(logTotal / PER_PAGE_DASH))
   const logPageAman = Math.min(logPage, logTotalPages)
@@ -897,25 +912,25 @@ async function executeDelete() {
   function gantiHalamanHadir(p) { setHadirPage(p); if (refListHadir.current) refListHadir.current.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
 
   const editGalDerived = editGalId ? ((galeri.find(function (g) { return g.id === editGalId }) || {}).logbook_item_id || null) : null
-  
-     function gantiTab(tabBaru) {
-     if (tabBaru === tab) return
-     if (isAnyFormDirty()) {
-       bukaModalUnsaved('Pindah Tab?', 'Kamu punya perubahan yang belum disimpan. Yakin ingin pindah tab? Semua perubahan akan hilang.', 'Pindah', function () {
-         cancelEditLog()
-         cancelEditGal()
-         cancelEditHadir()
-         setTab(tabBaru)
-       })
-       return
-     }
-     cancelEditLog()
-     cancelEditGal()
-     cancelEditHadir()
-     setTab(tabBaru)
-   }
 
-    return (
+  function gantiTab(tabBaru) {
+    if (tabBaru === tab) return
+    if (isAnyFormDirty()) {
+      bukaModalUnsaved('Pindah Tab?', 'Kamu punya perubahan yang belum disimpan. Yakin ingin pindah tab? Semua perubahan akan hilang.', 'Pindah', function () {
+        cancelEditLog()
+        cancelEditGal()
+        cancelEditHadir()
+        setTab(tabBaru)
+      })
+      return
+    }
+    cancelEditLog()
+    cancelEditGal()
+    cancelEditHadir()
+    setTab(tabBaru)
+  }
+
+  return (
     <div>
       <section className="card-hover bsi-panel rounded-[2rem] p-5 sm:p-8 lg:p-10">
         <div className="flex flex-col gap-5 sm:gap-6">
@@ -946,12 +961,13 @@ async function executeDelete() {
             >
             {TAB_DASHBOARD.map(function (t) {
               const aktif = tab === t.id
+              const jumlah = badgeUntuk(t.id)
               return (
                 <button
                   key={t.id}
                   type="button"
                   onClick={function () { gantiTab(t.id) }}
-                  aria-label={t.label}
+                  aria-label={jumlah > 0 ? t.label + ' (' + jumlah + ' pengingat)' : t.label}
                   aria-current={aktif ? 'page' : undefined}
                   className={
                     'shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap ' +
@@ -964,6 +980,17 @@ async function executeDelete() {
                   <span className="tab-icon shrink-0"><SizedIcon name={t.icon} size={15} /></span>
                   <span className="hidden sm:inline">{t.label}</span>
                   <span className="sm:hidden">{t.mobile}</span>
+                  {jumlah > 0 ? (
+                    <span
+                      title={jumlah + ' pengingat menunggu'}
+                      className={
+                        'shrink-0 grid place-items-center min-w-[18px] h-[18px] rounded-full text-[10px] font-black leading-none px-1 ' +
+                        (aktif ? 'bg-white text-bsi-800' : 'bg-amber-500 text-white')
+                      }
+                    >
+                      {jumlah > 99 ? '99+' : jumlah}
+                    </span>
+                  ) : null}
                 </button>
               )
             })}
@@ -1084,7 +1111,7 @@ async function executeDelete() {
                       <input className={inputCls} value={it.judul} onChange={function (e) { patchItem(i, { judul: e.target.value }) }} aria-label="Judul Kegiatan" placeholder="Judul kegiatan" />
                       <AutoTextArea className={inputCls} value={it.deskripsi} onChange={function (e) { patchItem(i, { deskripsi: e.target.value }) }} aria-label="Deskripsi Kegiatan" placeholder="Deskripsi singkat kegiatan" />
                       <input className={inputCls} value={it.hasil} onChange={function (e) { patchItem(i, { hasil: e.target.value }) }} aria-label="Hasil kegiatan" placeholder="Hasil (opsional)" />
-                      
+
                       {it.previewLoading ? (
                         <div className="rounded-2xl border border-slate-200 bg-slate-100 aspect-video grid place-items-center">
                           <div className="flex flex-col items-center gap-3">
@@ -1093,7 +1120,7 @@ async function executeDelete() {
                           </div>
                         </div>
                       ) : null}
-                      
+
                       {it.preview ? (
                         <div className="relative rounded-2xl overflow-hidden aspect-video bg-slate-900">
                           {it.file && it.file.type.indexOf('video') === 0
@@ -1104,9 +1131,9 @@ async function executeDelete() {
                           </button>
                         </div>
                       ) : null}
-                      
+
                       <ToggleModeMedia value={it.mode} onChange={function (m) { patchItem(i, { mode: m }) }} />
-                      
+
                       {it.mode === 'video' ? (
                         <SumberVideo
                           inputCls={inputCls}
@@ -1123,7 +1150,7 @@ async function executeDelete() {
                       ) : (
                         <FileInput accept="image/*" fileName={it.file ? it.file.name : ''} label="Klik untuk Pilih Foto" hint="Foto JPG, PNG, atau HEIC otomatis dikonversi ke WebP." onChange={function (e) { onItemFile(i, e.target.files[0]) }} />
                       )}
-                      
+
                       <label className={'flex items-start gap-3 rounded-2xl border p-3 cursor-pointer w-full ' + (it.preview ? (it.show ? 'border-gold-500 bg-gold-500/5' : 'border-slate-200') : 'border-slate-200 bg-slate-50 opacity-50 cursor-not-allowed')}>
                         <input type="checkbox" disabled={!it.preview} checked={it.show} onChange={function (e) { patchItem(i, { show: e.target.checked }) }} className="mt-0.5 h-4 w-4 rounded accent-bsi-800" />
                         <span className="text-sm font-semibold text-slate-800">Tampilkan Kegiatan Ini di Galeri</span>
@@ -1214,7 +1241,7 @@ async function executeDelete() {
                   )}
                 </div>
               </div>
-              
+
               {galForm.previewLoading ? (
                 <div className="rounded-2xl border border-slate-200 bg-slate-100 aspect-video grid place-items-center">
                   <div className="flex flex-col items-center gap-3">
@@ -1223,7 +1250,7 @@ async function executeDelete() {
                   </div>
                 </div>
               ) : null}
-              
+
               {galForm.preview ? (
                 <div className="relative rounded-2xl overflow-hidden aspect-video bg-slate-900">
                   {galForm.file && galForm.file.type.indexOf('video') === 0
@@ -1234,7 +1261,7 @@ async function executeDelete() {
                   </button>
                 </div>
               ) : null}
-              
+
               <div className="grid gap-4 sm:grid-cols-2">
                 <div><label className={labelCls}>Judul (Opsional)</label><input className={inputCls} value={galForm.judul} onChange={function (e) { setGalForm(Object.assign({}, galForm, { judul: e.target.value })) }} aria-label="Judul Media" placeholder="Kosongkan untuk judul otomatis" /></div>
                 <div>
@@ -1323,45 +1350,45 @@ async function executeDelete() {
           </div>
         </section>
       ) : null}
-       {tab === 'qr' ? <QrPrintTab /> : null}
-
+      {tab === 'qr' ? <QrPrintTab /> : null}
 
       <Modal open={!!detail} onClose={function () { setDetail(null) }}>
         {detail && detail.type === 'log' ? <LogbookDetail log={detail.data} /> : null}
         {detail && detail.type === 'gal' ? <GalleryDetail item={detail.data} /> : null}
         {detail && detail.type === 'hadir' ? <AttendanceDetail row={detail.data} /> : null}
       </Modal>
-      
-<ConfirmModal
-  open={!!pendingDelete}
-  title={pendingDelete && confirmInfo() ? confirmInfo().title : ''}
-  message={pendingDelete && confirmInfo() ? confirmInfo().message : ''}
-  busy={deleteBusy}
-  busyLabel="Menghapus"
-  onCancel={function () { if (!deleteBusy) setPendingDelete(null) }}
-  onConfirm={executeDelete}
-/>
 
-        <ConfirmModal
-          open={!!konfirmasiEdit}
-          title={konfirmasiEdit ? konfirmasiEdit.judul : ''}
-          message={konfirmasiEdit ? konfirmasiEdit.pesan : ''}
-          confirmLabel="Ganti"
-          icon="trash"
-          tone="bahaya"
-          onCancel={function () { setKonfirmasiEdit(null) }}
-          onConfirm={function () { const aksi = konfirmasiEdit ? konfirmasiEdit.aksi : null; setKonfirmasiEdit(null); if (aksi) aksi() }}
-        />
-       <ConfirmModal
-         open={!!unsavedModal}
-         title={unsavedModal ? unsavedModal.title : ''}
-         message={unsavedModal ? unsavedModal.message : ''}
-         confirmLabel={unsavedModal ? unsavedModal.confirmLabel : 'Konfirmasi'}
-         icon="trash"
-         tone="bahaya"
-         onCancel={unsavedModal ? unsavedModal.onCancel : function () { setUnsavedModal(null) }}
-         onConfirm={unsavedModal ? unsavedModal.onConfirm : function () { setUnsavedModal(null) }}
-       />
+      <ConfirmModal
+        open={!!pendingDelete}
+        title={pendingDelete && confirmInfo() ? confirmInfo().title : ''}
+        message={pendingDelete && confirmInfo() ? confirmInfo().message : ''}
+        busy={deleteBusy}
+        busyLabel="Menghapus"
+        onCancel={function () { if (!deleteBusy) setPendingDelete(null) }}
+        onConfirm={executeDelete}
+      />
+
+      <ConfirmModal
+        open={!!konfirmasiEdit}
+        title={konfirmasiEdit ? konfirmasiEdit.judul : ''}
+        message={konfirmasiEdit ? konfirmasiEdit.pesan : ''}
+        confirmLabel="Ganti"
+        icon="trash"
+        tone="bahaya"
+        onCancel={function () { setKonfirmasiEdit(null) }}
+        onConfirm={function () { const aksi = konfirmasiEdit ? konfirmasiEdit.aksi : null; setKonfirmasiEdit(null); if (aksi) aksi() }}
+      />
+
+      <ConfirmModal
+        open={!!unsavedModal}
+        title={unsavedModal ? unsavedModal.title : ''}
+        message={unsavedModal ? unsavedModal.message : ''}
+        confirmLabel={unsavedModal ? unsavedModal.confirmLabel : 'Konfirmasi'}
+        icon="trash"
+        tone="bahaya"
+        onCancel={unsavedModal ? unsavedModal.onCancel : function () { setUnsavedModal(null) }}
+        onConfirm={unsavedModal ? unsavedModal.onConfirm : function () { setUnsavedModal(null) }}
+      />
     </div>
   )
 }

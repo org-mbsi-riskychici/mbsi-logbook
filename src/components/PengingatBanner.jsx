@@ -16,17 +16,14 @@ function formatTanggalMobile(s) {
 function pad2(n) { return (n < 10 ? '0' : '') + n }
 function isoDari(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) }
 
-/* Batas akhir pengingat logbook = kemarin; hari ini belum dianggap terlewat karena masih bisa diisi */
-function kemarinIso() {
-  const d = new Date()
-  d.setDate(d.getDate() - 1)
-  return isoDari(d)
-}
-
 /* ===== LOGIKA REMINDER LOGBOOK =====
    Hanya hari yang berstatus "Masuk" yang perlu logbook.
    Hari tanpa catatan hadir (akan jadi Bolos otomatis besoknya) atau
-   yang berstatus Izin/Bolos tidak perlu diingatkan. */
+   yang berstatus Izin/Bolos tidak perlu diingatkan.
+
+   Batas loop = HARI INI (bukan kemarin), tapi hari ini hanya masuk
+   daftar kalau user sudah presensi "Masuk" hari ini. Jadi user yang
+   baru presensi masuk pagi langsung dapat reminder logbook hari itu. */
 export function hitungTanggalTerlewat(tanggalLogbook, hadir) {
   const punyaLog = new Set(tanggalLogbook || [])
   const hariMasuk = new Set()
@@ -35,7 +32,8 @@ export function hitungTanggalTerlewat(tanggalLogbook, hadir) {
   })
   const hasil = []
   const d = new Date(MULAI_MAGANG + 'T00:00:00')
-  const batas = new Date(kemarinIso() + 'T00:00:00')
+  const batas = new Date()
+  batas.setHours(0, 0, 0, 0)
   while (d <= batas) {
     const iso = isoDari(d)
     const hari = d.getDay()
@@ -125,7 +123,7 @@ export default function PengingatBanner(props) {
       }
     : {
         judul: terlewat.length + ' hari kerja belum punya logbook',
-        deskripsi: 'Hanya hari dengan status kehadiran Masuk yang perlu logbook. Sabtu-Minggu, Izin, dan Bolos tidak dihitung.',
+        deskripsi: 'Hanya hari dengan status kehadiran Masuk yang perlu logbook — termasuk hari ini jika kamu sudah presensi masuk.',
         aksi: 'Isi Logbook'
       }
 
@@ -168,7 +166,7 @@ export default function PengingatBanner(props) {
   return (
     <div className={'pengingat-wrap' + (buka ? ' pengingat-wrap-buka' : '')}>
       <div className="pengingat-wrap-dalam">
-        <section className={'mt-6 rounded-[2rem] border border-amber-200 bg-amber-50 p-5 sm:p-6 ' + (keluar ? 'pengingat-keluar' : 'pengingat-masuk')}>
+        <section className={'mt-6 rounded-[2rem] border border-amber-200 bg-amber-50 p-5 sm:p-6 ' + (keluar ? ' pengingat-keluar' : ' pengingat-masuk')}>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex min-w-0 flex-1 items-start gap-3">
               <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-800">
