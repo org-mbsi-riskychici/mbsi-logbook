@@ -9,7 +9,7 @@ import { parseYouTubeId, ytThumb, fetchYouTubeQuota, unggahVideoYouTube } from '
 import { parseDriveId, driveThumbUrl, driveViewUrl } from '../lib/drive.js'
 import { uploadFotoProfil, updateFotoProfilMahasiswa, hapusFotoProfil } from '../lib/profil.js'
 import { urlPratinjau } from '../lib/konversi.js'
-import { todayInput, detectMediaType, matchesDateFilters, urutkanTanggal, batasTanggalPilihan, pesanTanggalTerlarang } from '../lib/format.js'
+import { todayInput, detectMediaType, matchesDateFilters, urutkanTanggal, batasTanggalPilihan, pesanTanggalTerlarang, toTitleCase } from '../lib/format.js'
 import { KATEGORI, UNIT, GALERI_KEGIATAN } from '../lib/constants.js'
 import { Avatar, LabelProses, EmptyState, Modal, ConfirmModal, inputCls, labelCls, btnPrimary, AutoTextArea, Pagination, useToast } from '../components/ui.jsx'
 import { LogbookCard, LogbookDetail, GalleryCard, GalleryDetail, AttendanceCard, AttendanceDetail } from '../components/cards.jsx'
@@ -472,15 +472,15 @@ async function refresh() {
           if (it.media_thumb) oldUrls.push(it.media_thumb)
         })
         await supabase.from('logbooks').update({
-          tanggal: form.tanggal, unit: form.unit, kategori: form.kategori, judul: form.judul,
-          kendala: form.kendala, solusi: form.solusi, pembelajaran: form.pembelajaran, status: form.status
-        }).eq('id', editLogId)
+  tanggal: form.tanggal, unit: form.unit, kategori: form.kategori, judul: toTitleCase(form.judul),
+  kendala: form.kendala, solusi: form.solusi, pembelajaran: form.pembelajaran, status: form.status
+}).eq('id', editLogId)
         await supabase.from('logbook_items').delete().eq('logbook_id', editLogId)
       } else {
         const ins = await supabase.from('logbooks').insert({
-          mahasiswa_id: mahasiswa.id, tanggal: form.tanggal, unit: form.unit, kategori: form.kategori, judul: form.judul,
-          kendala: form.kendala, solusi: form.solusi, pembelajaran: form.pembelajaran, status: form.status
-        }).select().single()
+  mahasiswa_id: mahasiswa.id, tanggal: form.tanggal, unit: form.unit, kategori: form.kategori, judul: toTitleCase(form.judul),
+  kendala: form.kendala, solusi: form.solusi, pembelajaran: form.pembelajaran, status: form.status
+}).select().single()
         logId = ins.data.id
       }
       

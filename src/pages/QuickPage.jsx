@@ -4,7 +4,7 @@ import { useAuth } from '../lib/auth.js'
 import { uploadMedia } from '../lib/upload.js'
 import { syncGaleriFromLogbook } from '../lib/logbook.js'
 import { urlPratinjau } from '../lib/konversi.js'
-import { todayInput, formatTanggal } from '../lib/format.js'
+import { todayInput, formatTanggal, toTitleCase } from '../lib/format.js'
 import { KATEGORI } from '../lib/constants.js'
 import { inputCls, labelCls, btnPrimary, useToast, AutoTextArea, LabelProses, Avatar } from '../components/ui.jsx'
 import { CustomSelect } from '../components/controls.jsx'
@@ -128,17 +128,17 @@ export default function QuickPage() {
       let logId = todayLog ? todayLog.id : null
       if (!todayLog) {
         const ins = await supabase.from('logbooks').insert({
-          mahasiswa_id: mahasiswa.id, tanggal: tanggal, unit: '', kategori: kategori,
-          judul: judulKegiatan.trim(), kendala: '', solusi: '', pembelajaran: '', status: 'publik'
-        }).select().single()
+  mahasiswa_id: mahasiswa.id, tanggal: tanggal, unit: '', kategori: kategori,
+  judul: toTitleCase(judulKegiatan), kendala: '', solusi: '', pembelajaran: '', status: 'publik'
+}).select().single()
         if (ins.error) throw new Error(ins.error.message)
         logId = ins.data.id
       }
       const urutan = todayLog ? todayLog.logbook_items.reduce(function (m, it) { return Math.max(m, it.urutan || 0) }, 0) + 1 : 1
       const insItem = await supabase.from('logbook_items').insert({
-        logbook_id: logId,
-        urutan: urutan,
-        judul: judulKegiatan.trim(),
+  logbook_id: logId,
+  urutan: urutan,
+  judul: toTitleCase(judulKegiatan),
         deskripsi: deskripsi.trim(),
         hasil: '',
         media_path: mediaPath,
