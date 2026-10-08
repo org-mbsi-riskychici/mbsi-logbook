@@ -5,6 +5,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { createClient } from '@supabase/supabase-js'
 import { LIMIT_PER_PROJECT, ptToday, daftarKredensial, getAccessToken } from './api/_lib/youtube.js'
 import { cekSesi, bacaBody } from './api/_lib/sesi.js'
+import { susunLogbookAi } from './api/_lib/ai-provider.js'
 
 function pluginApiR2(env) {
   const s3 = new S3Client({
@@ -16,7 +17,6 @@ function pluginApiR2(env) {
     }
   })
 
-  // Bungkus middlewares agar bisa dipakai di dev dan preview
   const setupMiddlewares = (server) => {
     server.middlewares.use('/api/r2/presign', async function (req, res) {
       if (req.method !== 'POST') {
@@ -63,6 +63,7 @@ function pluginApiR2(env) {
       res.setHeader('Content-Type', 'application/json')
       res.end(JSON.stringify({ ok: true }))
     })
+
     server.middlewares.use('/api/r2/file', async function (req, res) {
       if (req.method !== 'GET') {
         res.statusCode = 405
@@ -114,7 +115,6 @@ function pluginApiYoutube(env) {
     res.end(JSON.stringify(obj))
   }
 
-  // Bungkus middlewares agar bisa dipakai di dev dan preview
   const setupMiddlewares = (server) => {
     server.middlewares.use('/api/youtube/quota', async function (req, res) {
       const today = ptToday()
@@ -201,19 +201,90 @@ function pluginApiYoutube(env) {
   }
 }
 
+function pluginApiAi(env) {
+  function kirim(res, code, obj) {
+    res.statusCode = code
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify(obj))
+  }
+  const setupMiddlewares = (server) => {
+    server.middlewares.use('/api/ai/tulis', async function (req, res) {
+      // ====== DEBUG MULAI ======
+      console.log('\n[AI DEBUG] ============== REQUEST MASUK ==============')
+      console.log('[AI DEBUG] method:', req.method)
+      console.log('[AI DEBUG] url:', req.url)
+      const authHeader = req.headers.authorization || ''
+      console.log('[AI DEBUG] authorization ada?', !!authHeader)
+      console.log('[AI DEBUG] authorization preview:', authHeader ? authHeader.slice(0, 40) + '...' : '(kosong)')
+      console.log('[AI DEBUG] token length:', authHeader.replace('Bearer ', '').length)
+      console.log('[AI DEBUG] VITE_SUPABASE_URL:', env.VITE_SUPABASE_URL || '(kosong)')
+      console.log('[AI DEBUG] VITE_SUPABASE_ANON_KEY ada?', !!env.VITE_SUPABASE_ANON_KEY)
+      // ====== DEBUG END ======
+
+      if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
+
+      const user = await cekSesi(env, authHeader)
+
+      // ====== DEBUG MULAI ======
+      console.log('[AI DEBUG] hasil cekSesi:', user ? ('USER OK → ' + user.email + ' (id: ' + user.id + ')') : 'NULL / INVALID')
+      console.log('[AI DEBUG] ============================================\n')
+      // ====== DEBUG END ======
+
+      if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
+      const body = await bacaBody(req)
+      const draft = body.draft
+      if (!draft || !String(draft).trim()) {
+        kirim(res, 400, { error: 'Tuliskan dulu catatan kasar kegiatanmu.' })
+        return
+      }
+      try {
+        const hasil = await susunLogbookAi(env, {
+          draft: draft,
+          kategoriList: Array.isArray(body.kategori) ? body.kategori : [],
+          unitList: Array.isArray(body.unit) ? body.unit : []
+        })
+        kirim(res, 200, hasil)
+      } catch (err) {
+        console.log('[AI DEBUG] error dari Gemini:', err.message)
+        kirim(res, 500, { error: err.message || 'Gagal memanggil AI' })
+      }
+    })
+  }
+  return {
+    name: 'api-ai-dev',
+    configureServer: setupMiddlewares,
+    configurePreviewServer: setupMiddlewares
+  }
+}
+
 export default defineConfig(function ({ mode }) {
   const env = loadEnv(mode, process.cwd(), '')
+
+  // ====== DEBUG ENV ======
+  console.log('\n[ENV DEBUG] ===== CEK ENV SAAT STARTUP =====')
+  console.log('[ENV DEBUG] mode:', mode)
+  console.log('[ENV DEBUG] GEMINI_API_KEY:', env.GEMINI_API_KEY ? ('ADA (' + env.GEMINI_API_KEY.slice(0, 10) + '...), panjang: ' + env.GEMINI_API_KEY.length) : 'TIDAK ADA')
+  console.log('[ENV DEBUG] GEMINI_MODEL:', env.GEMINI_MODEL || 'TIDAK ADA')
+  console.log('[ENV DEBUG] VITE_SUPABASE_URL:', env.VITE_SUPABASE_URL || 'TIDAK ADA')
+  console.log('[ENV DEBUG] VITE_SUPABASE_ANON_KEY:', env.VITE_SUPABASE_ANON_KEY ? ('ADA (panjang: ' + env.VITE_SUPABASE_ANON_KEY.length + ')') : 'TIDAK ADA')
+  console.log('[ENV DEBUG] AI_PROVIDER:', env.AI_PROVIDER || '(default: gemini)')
+console.log('[ENV DEBUG] OPENROUTER_API_KEY:', env.OPENROUTER_API_KEY ? ('ADA (' + env.OPENROUTER_API_KEY.slice(0, 12) + '...), panjang: ' + env.OPENROUTER_API_KEY.length) : 'TIDAK ADA')
+console.log('[ENV DEBUG] OPENROUTER_MODEL:', env.OPENROUTER_MODEL || '(default: llama-3.3-70b)')
+console.log('[ENV DEBUG] GROQ_API_KEY:', env.GROQ_API_KEY ? ('ADA (' + env.GROQ_API_KEY.slice(0, 10) + '...), panjang: ' + env.GROQ_API_KEY.length) : 'TIDAK ADA')
+console.log('[ENV DEBUG] GROQ_MODEL:', env.GROQ_MODEL || '(default: qwen/qwen3.8-27b)')
+  console.log('[ENV DEBUG] =======================================\n')
+  // ====== DEBUG END ======
+
   return {
-    plugins: [react(), pluginApiR2(env), pluginApiYoutube(env)],
-    
-    // Konfigurasi agar bisa diakses lewat Network / IP lokal
+    plugins: [react(), pluginApiR2(env), pluginApiYoutube(env), pluginApiAi(env)],
+
     server: {
       host: true
     },
     preview: {
       host: true
     },
-    
+
     build: {
       chunkSizeWarningLimit: 1000,
       rollupOptions: {

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite --host",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "apply-ai": "node apply-ai.cjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.600.0",

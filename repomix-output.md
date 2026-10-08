@@ -117,6 +117,131 @@ export const supabase = createClient(
 )
 ````
 
+## File: supabase/schema.sql
+````sql
+create extension if not exists "pgcrypto";
+create table public.mahasiswa (
+  id uuid primary key default gen_random_uuid(),
+  auth_uid uuid unique references auth.users(id) on delete cascade,
+  nim varchar(20) not null unique,
+  nama varchar(100) not null,
+  created_at timestamptz not null default now()
+);
+create table public.logbooks (
+  id uuid primary key default gen_random_uuid(),
+  mahasiswa_id uuid not null references public.mahasiswa(id) on delete cascade,
+  tanggal date not null,
+  unit varchar(50),
+  kategori varchar(50) not null,
+  judul varchar(255) not null,
+  kendala text,
+  solusi text,
+  pembelajaran text,
+  status varchar(20) not null default 'draft' check (status in ('draft','publik')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create table public.logbook_items (
+  id uuid primary key default gen_random_uuid(),
+  logbook_id uuid not null references public.logbooks(id) on delete cascade,
+  urutan integer not null default 1,
+  judul varchar(255) not null,
+  deskripsi text,
+  hasil text,
+  media_path text,
+  media_type varchar(10) check (media_type in ('foto','video')),
+  show_in_gallery boolean not null default false,
+  created_at timestamptz not null default now()
+);
+create table public.galeri (
+  id uuid primary key default gen_random_uuid(),
+  mahasiswa_id uuid not null references public.mahasiswa(id) on delete cascade,
+  logbook_item_id uuid unique references public.logbook_items(id) on delete cascade,
+  judul varchar(255) not null,
+  deskripsi text,
+  tanggal date not null,
+  kegiatan varchar(50),
+  media_path text not null,
+  media_type varchar(10) not null check (media_type in ('foto','video')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create table public.daftar_hadir (
+  id uuid primary key default gen_random_uuid(),
+  mahasiswa_id uuid not null references public.mahasiswa(id) on delete cascade,
+  tanggal date not null,
+  status varchar(20) not null check (status in ('Masuk','Izin','Bolos')),
+  alasan text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (mahasiswa_id, tanggal)
+);
+create or replace function public.set_updated_at() returns trigger language plpgsql as $$
+begin
+  new.updated_at = now();
+  return new;
+end $$;
+create trigger trg_logbooks_upd before update on public.logbooks for each row execute function public.set_updated_at();
+create trigger trg_galeri_upd before update on public.galeri for each row execute function public.set_updated_at();
+create trigger trg_hadir_upd before update on public.daftar_hadir for each row execute function public.set_updated_at();
+create index idx_logbooks_mahasiswa on public.logbooks(mahasiswa_id, tanggal desc);
+create index idx_logbooks_status on public.logbooks(status);
+create index idx_items_logbook on public.logbook_items(logbook_id, urutan);
+create index idx_galeri_mahasiswa on public.galeri(mahasiswa_id, tanggal desc);
+create index idx_galeri_item on public.galeri(logbook_item_id);
+create index idx_hadir_mahasiswa on public.daftar_hadir(mahasiswa_id, tanggal desc);
+alter table public.mahasiswa enable row level security;
+alter table public.logbooks enable row level security;
+alter table public.logbook_items enable row level security;
+alter table public.galeri enable row level security;
+alter table public.daftar_hadir enable row level security;
+create policy "mahasiswa_read_all" on public.mahasiswa for select using (true);
+create policy "mahasiswa_update_self" on public.mahasiswa for update using (auth_uid = auth.uid());
+create policy "logbooks_read" on public.logbooks for select using (
+  status = 'publik' or mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
+);
+create policy "logbooks_insert_self" on public.logbooks for insert with check (
+  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
+);
+create policy "logbooks_update_self" on public.logbooks for update using (
+  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
+);
+create policy "logbooks_delete_self" on public.logbooks for delete using (
+  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
+);
+create policy "items_read" on public.logbook_items for select using (
+  exists (select 1 from public.logbooks l where l.id = logbook_id
+    and (l.status = 'publik' or l.mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())))
+);
+create policy "items_write_self" on public.logbook_items for all using (
+  exists (select 1 from public.logbooks l where l.id = logbook_id
+    and l.mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid()))
+) with check (
+  exists (select 1 from public.logbooks l where l.id = logbook_id
+    and l.mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid()))
+);
+create policy "galeri_read_all" on public.galeri for select using (true);
+create policy "galeri_insert_self" on public.galeri for insert with check (
+  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
+);
+create policy "galeri_update_self" on public.galeri for update using (
+  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
+);
+create policy "galeri_delete_self" on public.galeri for delete using (
+  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
+);
+create policy "hadir_read_all" on public.daftar_hadir for select using (true);
+create policy "hadir_insert_self" on public.daftar_hadir for insert with check (
+  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
+);
+create policy "hadir_update_self" on public.daftar_hadir for update using (
+  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
+);
+create policy "hadir_delete_self" on public.daftar_hadir for delete using (
+  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
+);
+````
+
 ## File: .env.example
 ````
 VITE_SUPABASE_URL=
@@ -356,6 +481,36 @@ User-agent: PerplexityBot
 Allow: /
 ````
 
+## File: src/lib/constants.js
+````javascript
+export const KATEGORI = [
+  'Administrasi',
+  'Pengarsipan',
+  'Layanan Nasabah',
+  'Back Office',
+  'Edukasi Produk',
+  'Pendataan',
+  'Rapat',
+  'Pelatihan',
+  'Dokumentasi',
+  'Pendukung Lain'
+]
+
+export const UNIT = ['Frontliner', 'Back Office', 'Marketing', 'Operasional', 'Umum']
+
+export const GALERI_KEGIATAN = [
+  'Dokumentasi',
+  'Administrasi',
+  'Layanan Nasabah',
+  'Edukasi',
+  'Pelatihan',
+  'Operasional',
+  'Lainnya'
+]
+/* Hari pertama masa magang BSI; form tidak menerima tanggal sebelum ini */
+export const MULAI_MAGANG = '2026-09-08'
+````
+
 ## File: src/lib/profil.js
 ````javascript
 import { supabase } from './supabase.js'
@@ -403,131 +558,6 @@ export async function hapusFotoProfil(mahasiswaId, fotoUrl) {
 
 alter table public.logbook_items add column if not exists drive_id text;
 alter table public.galeri add column if not exists drive_id text;
-````
-
-## File: supabase/schema.sql
-````sql
-create extension if not exists "pgcrypto";
-create table public.mahasiswa (
-  id uuid primary key default gen_random_uuid(),
-  auth_uid uuid unique references auth.users(id) on delete cascade,
-  nim varchar(20) not null unique,
-  nama varchar(100) not null,
-  created_at timestamptz not null default now()
-);
-create table public.logbooks (
-  id uuid primary key default gen_random_uuid(),
-  mahasiswa_id uuid not null references public.mahasiswa(id) on delete cascade,
-  tanggal date not null,
-  unit varchar(50),
-  kategori varchar(50) not null,
-  judul varchar(255) not null,
-  kendala text,
-  solusi text,
-  pembelajaran text,
-  status varchar(20) not null default 'draft' check (status in ('draft','publik')),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-create table public.logbook_items (
-  id uuid primary key default gen_random_uuid(),
-  logbook_id uuid not null references public.logbooks(id) on delete cascade,
-  urutan integer not null default 1,
-  judul varchar(255) not null,
-  deskripsi text,
-  hasil text,
-  media_path text,
-  media_type varchar(10) check (media_type in ('foto','video')),
-  show_in_gallery boolean not null default false,
-  created_at timestamptz not null default now()
-);
-create table public.galeri (
-  id uuid primary key default gen_random_uuid(),
-  mahasiswa_id uuid not null references public.mahasiswa(id) on delete cascade,
-  logbook_item_id uuid unique references public.logbook_items(id) on delete cascade,
-  judul varchar(255) not null,
-  deskripsi text,
-  tanggal date not null,
-  kegiatan varchar(50),
-  media_path text not null,
-  media_type varchar(10) not null check (media_type in ('foto','video')),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-create table public.daftar_hadir (
-  id uuid primary key default gen_random_uuid(),
-  mahasiswa_id uuid not null references public.mahasiswa(id) on delete cascade,
-  tanggal date not null,
-  status varchar(20) not null check (status in ('Masuk','Izin','Bolos')),
-  alasan text,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (mahasiswa_id, tanggal)
-);
-create or replace function public.set_updated_at() returns trigger language plpgsql as $$
-begin
-  new.updated_at = now();
-  return new;
-end $$;
-create trigger trg_logbooks_upd before update on public.logbooks for each row execute function public.set_updated_at();
-create trigger trg_galeri_upd before update on public.galeri for each row execute function public.set_updated_at();
-create trigger trg_hadir_upd before update on public.daftar_hadir for each row execute function public.set_updated_at();
-create index idx_logbooks_mahasiswa on public.logbooks(mahasiswa_id, tanggal desc);
-create index idx_logbooks_status on public.logbooks(status);
-create index idx_items_logbook on public.logbook_items(logbook_id, urutan);
-create index idx_galeri_mahasiswa on public.galeri(mahasiswa_id, tanggal desc);
-create index idx_galeri_item on public.galeri(logbook_item_id);
-create index idx_hadir_mahasiswa on public.daftar_hadir(mahasiswa_id, tanggal desc);
-alter table public.mahasiswa enable row level security;
-alter table public.logbooks enable row level security;
-alter table public.logbook_items enable row level security;
-alter table public.galeri enable row level security;
-alter table public.daftar_hadir enable row level security;
-create policy "mahasiswa_read_all" on public.mahasiswa for select using (true);
-create policy "mahasiswa_update_self" on public.mahasiswa for update using (auth_uid = auth.uid());
-create policy "logbooks_read" on public.logbooks for select using (
-  status = 'publik' or mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
-);
-create policy "logbooks_insert_self" on public.logbooks for insert with check (
-  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
-);
-create policy "logbooks_update_self" on public.logbooks for update using (
-  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
-);
-create policy "logbooks_delete_self" on public.logbooks for delete using (
-  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
-);
-create policy "items_read" on public.logbook_items for select using (
-  exists (select 1 from public.logbooks l where l.id = logbook_id
-    and (l.status = 'publik' or l.mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())))
-);
-create policy "items_write_self" on public.logbook_items for all using (
-  exists (select 1 from public.logbooks l where l.id = logbook_id
-    and l.mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid()))
-) with check (
-  exists (select 1 from public.logbooks l where l.id = logbook_id
-    and l.mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid()))
-);
-create policy "galeri_read_all" on public.galeri for select using (true);
-create policy "galeri_insert_self" on public.galeri for insert with check (
-  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
-);
-create policy "galeri_update_self" on public.galeri for update using (
-  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
-);
-create policy "galeri_delete_self" on public.galeri for delete using (
-  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
-);
-create policy "hadir_read_all" on public.daftar_hadir for select using (true);
-create policy "hadir_insert_self" on public.daftar_hadir for insert with check (
-  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
-);
-create policy "hadir_update_self" on public.daftar_hadir for update using (
-  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
-);
-create policy "hadir_delete_self" on public.daftar_hadir for delete using (
-  mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
-);
 ````
 
 ## File: mvp-qr.html
@@ -807,6 +837,186 @@ create policy "hadir_delete_self" on public.daftar_hadir for delete using (
   </script>
 </body>
 </html>
+````
+
+## File: README.md
+````markdown
+# Logbook Magang BSI
+
+Portal pencatatan kegiatan magang mahasiswa Bank Syariah Indonesia (BSI) yang menggabungkan **logbook harian**, **galeri foto & video**, dan **daftar kehadiran** dalam satu tempat.
+
+Dibangun untuk memudahkan mahasiswa mendokumentasikan kegiatan magang, serta memberikan akses **publik** (tanpa login) kepada Dosen Pembimbing (Dospem) dan Kaprodi untuk memantau progres tim.
+
+## ✨ Fitur Utama
+
+### Untuk Mahasiswa (Login)
+- **Dashboard** dengan empat tab: Logbook, Galeri, Daftar Hadir, dan Profil.
+- **Form Logbook** interaktif: kolom Kendala / Solusi / Pembelajaran melebar otomatis saat difokuskan atau terisi, dengan animasi halus pada kartu form dan tombol Simpan.
+- **Upload foto** otomatis dikonversi ke WebP ringan (mendukung HEIC iPhone).
+- **Upload video** melalui YouTube (unlisted) dengan sistem kuota harian per project, atau alternatif link YouTube/Google Drive.
+- **Proteksi draf**: konfirmasi otomatis saat pindah tab, pindah halaman, refresh, tutup tab, batal edit, atau menimpa draf melalui tombol Edit.
+- **Profil & avatar** dengan upload foto profil sendiri.
+
+### Untuk Dosen Pembimbing & Kaprodi (Publik)
+- Halaman **Beranda** menampilkan logbook terbaru tim yang sudah dibagikan.
+- Halaman **Logbook**, **Galeri**, dan **Absen** dengan filter & pencarian.
+- Halaman **Dospem** menampilkan profil tim magang beserta rekap kehadiran (Masuk / Izin / Bolos) dan grafik per mahasiswa.
+- Semua halaman tersedia dalam mode terang & gelap.
+
+### Umum
+- **Pagination responsif**: ikon panah + elipsis `...` ala web korporat, tampil satu baris rapi di mobile, tablet, dan desktop.
+- **Dark mode** dengan transisi tema halus.
+- **Tampilan responsif** penuh dari 360px hingga desktop lebar.
+- **Skeleton loading** yang konsisten di setiap daftar.
+
+## 🛠️ Tech Stack
+
+| Lapisan | Teknologi |
+|---------|-----------|
+| Frontend | React 18 + Vite 5 |
+| Styling | Tailwind CSS 3 |
+| Routing | React Router |
+| Database & Auth | Supabase (PostgreSQL + Row Level Security) |
+| Penyimpanan File | Cloudflare R2 |
+| Video Hosting | YouTube Data API v3 (unlisted) |
+| Hosting | Vercel (frontend + serverless functions) |
+| Build Tool | Vite, PostCSS |
+
+## 📁 Struktur Proyek
+
+```
+mbsi-logbook/
+├── api/                    # Fungsi serverless Vercel
+│   ├── _lib/               # Helper server (supabase admin, r2, youtube)
+│   ├── r2/                 # Endpoint upload/unduh/hapus media R2
+│   └── youtube/            # Endpoint kuota, sesi upload, cek video terbaru
+├── public/                 # File statis (favicon, robots.txt, llms.txt)
+├── src/
+│   ├── components/         # Komponen UI bersama
+│   │   ├── ui.jsx          # Toast, Modal, Pagination, AutoTextArea, dll.
+│   │   ├── cards.jsx       # Kartu logbook, galeri, kehadiran
+│   │   ├── controls.jsx    # Filter, pencarian, dropdown
+│   │   ├── Layout.jsx      # Navbar, footer, guard unsaved changes
+│   │   ├── Carousel.jsx    # Carousel media
+│   │   ├── PemutarVideo.jsx# Custom video player
+│   │   └── icons.jsx       # Kumpulan ikon SVG inline
+│   ├── lib/                # Logika & helper
+│   │   ├── auth.js         # Sesi & autentikasi
+│   │   ├── upload.js       # Pipeline upload foto/video
+│   │   ├── konversi.js     # Konversi HEIC → WebP
+│   │   ├── youtube.js      # Helper YouTube API
+│   │   ├── drive.js        # Helper Google Drive
+│   │   ├── profil.js       # Upload avatar
+│   │   ├── logbook.js      # Logika form logbook
+│   │   ├── format.js       # Format tanggal, angka, file size
+│   │   └── constants.js    # Konstanta bersama
+│   ├── pages/              # Halaman utama
+│   │   ├── HomePage.jsx    # Landing page publik
+│   │   ├── LoginPage.jsx   # Login mahasiswa
+│   │   ├── DashboardPage.jsx # Dashboard mahasiswa (4 tab)
+│   │   ├── LogbookPage.jsx # Daftar logbook publik
+│   │   ├── GalleryPage.jsx # Galeri publik
+│   │   ├── AttendancePage.jsx # Daftar hadir publik
+│   │   └── DospemPage.jsx  # Halaman Dospem/Kaprodi
+│   ├── App.jsx             # Router utama
+│   ├── main.jsx            # Entry point + animasi halaman
+│   └── index.css           # Tema & utilitas global
+├── supabase/
+│   ├── schema.sql          # Skema database lengkap
+│   └── migrasi-drive-download.sql
+├── .env.example            # Contoh variabel lingkungan
+├── vercel.json             # Konfigurasi Vercel (rewrite SPA)
+├── vite.config.js          # Plugin Vite untuk middleware API lokal
+└── tailwind.config.js      # Konfigurasi Tailwind + tema BSI
+```
+
+## 🚀 Menjalankan di Lokal
+
+### Prasyarat
+- Node.js 18+
+- Akun [Supabase](https://supabase.com) (untuk DB + Auth)
+- Akun [Cloudflare](https://cloudflare.com) (untuk R2)
+- Akun [Google Cloud Console](https://console.cloud.google.com) (untuk YouTube API)
+
+### Langkah Setup
+
+1. **Clone & install**
+   ```bash
+   git clone <repo-url>
+   cd mbsi-logbook
+   npm install
+   ```
+
+2. **Salin `.env.example` menjadi `.env.local`**
+   ```bash
+   cp .env.example .env.local
+   ```
+   Isi semua variabel sesuai layanan yang kamu miliki (lihat bagian **Variabel Lingkungan**).
+
+3. **Jalankan skema database**
+   - Buka Supabase → SQL Editor.
+   - Tempel seluruh isi `supabase/schema.sql`, lalu jalankan.
+   - Buat user Auth dengan pola `NIM@mbsi.local` (sesuai konvensi kampus) dan isi tabel `mahasiswa` dengan `auth_uid` yang cocok.
+
+4. **Jalankan server lokal**
+   ```bash
+   npm run dev
+   ```
+   Buka `http://localhost:5173` (atau `http://<IP-lokal>:5173` untuk uji dari HP satu jaringan).
+
+5. **Preview build production**
+   ```bash
+   npm run build
+   npm run preview
+   ```
+
+## 🔐 Variabel Lingkungan
+
+### Client (dipakai saat build, prefix `VITE_`)
+| Variabel | Keterangan |
+|----------|-----------|
+| `VITE_SUPABASE_URL` | URL proyek Supabase |
+| `VITE_SUPABASE_ANON_KEY` | Public anon key Supabase |
+
+### Server (dipakai fungsi `api/` saat runtime)
+| Variabel | Keterangan |
+|----------|-----------|
+| `SUPABASE_SERVICE_ROLE_KEY` | Service role key (hanya di server) |
+| `R2_ACCOUNT_ID` | Cloudflare Account ID |
+| `R2_ACCESS_KEY_ID` | R2 access key |
+| `R2_SECRET_ACCESS_KEY` | R2 secret key |
+| `R2_BUCKET_NAME` | Nama bucket R2 |
+| `R2_PUBLIC_BASE_URL` | URL publik bucket (mis. `https://pub-xxx.r2.dev`) |
+| `YOUTUBE_CLIENT_ID_1` | OAuth client ID Google project ke-1 |
+| `YOUTUBE_CLIENT_SECRET_1` | OAuth client secret project ke-1 |
+| `YOUTUBE_REFRESH_TOKEN_1` | Refresh token project ke-1 |
+| `YOUTUBE_CLIENT_ID_2.._6` | Opsional — untuk kuota video lebih besar |
+| `YOUTUBE_CLIENT_SECRET_2.._6` | Opsional |
+| `YOUTUBE_REFRESH_TOKEN_2.._6` | Opsional |
+
+Setiap project YouTube mendapat kuota **5 upload/hari** (zona waktu Pacific). Tambahkan project 2–6 bila butuh kuota harian lebih besar (total hingga 30 upload/hari).
+
+## 🌐 Deploy ke Vercel
+
+1. Push repo ke GitHub.
+2. Import proyek di [Vercel](https://vercel.com).
+3. Salin seluruh isi `.env.local` ke **Settings → Environment Variables** (berlaku untuk Production + Preview).
+4. Deploy. Vercel otomatis mendeteksi framework Vite dan menjalankan fungsi serverless dari folder `api/`.
+
+> ⚠️ Tanpa variabel server (terutama `SUPABASE_SERVICE_ROLE_KEY`, `R2_*`, dan `YOUTUBE_*`), build akan sukses tetapi API akan mengembalikan `500` / "Kredensial belum dikonfigurasi".
+
+## 📏 Batasan & Catatan Produksi
+
+- **Ukuran foto maksimum**: 15 MB (dikonversi ke WebP sebelum diunggah).
+- **Ukuran video maksimum**: 50 MB (diperiksa di sisi klien).
+- **Kuota video YouTube**: 5 upload/project/hari; bila habis, sistem menyarankan link eksternal.
+- **Privasi video YouTube**: `unlisted` (hanya dapat diakses lewat link tertanam).
+- **Row Level Security (RLS)** Supabase wajib aktif di semua tabel produksi (`logbooks`, `logbook_items`, `galeri`, `daftar_hadir`, `mahasiswa`, `youtube_quota_usage`).
+- **Service role key Supabase** hanya boleh berada di sisi server (`api/`), jangan pernah masuk ke kode klien.
+
+## 📄 Lisensi
+
+Proyek internal untuk kegiatan magang Bank Syariah Indonesia. Hak cipta © 2026 Tim Magang BSI.
 ````
 
 ## File: tailwind.config.js
@@ -3181,34 +3391,105 @@ export default async function handler(req, res) {
 }
 ````
 
-## File: src/lib/constants.js
+## File: src/lib/auth.js
 ````javascript
-export const KATEGORI = [
-  'Administrasi',
-  'Pengarsipan',
-  'Layanan Nasabah',
-  'Back Office',
-  'Edukasi Produk',
-  'Pendataan',
-  'Rapat',
-  'Pelatihan',
-  'Dokumentasi',
-  'Pendukung Lain'
-]
+import { useEffect, useState } from 'react'
+import { supabase } from './supabase.js'
 
-export const UNIT = ['Frontliner', 'Back Office', 'Marketing', 'Operasional', 'Umum']
+const EMAIL_DOMAIN = '@mbsi.local'
 
-export const GALERI_KEGIATAN = [
-  'Dokumentasi',
-  'Administrasi',
-  'Layanan Nasabah',
-  'Edukasi',
-  'Pelatihan',
-  'Operasional',
-  'Lainnya'
-]
-/* Hari pertama masa magang BSI; form tidak menerima tanggal sebelum ini */
-export const MULAI_MAGANG = '2026-09-08'
+export async function loginWithNim(nim, kode) {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: nim.trim() + EMAIL_DOMAIN,
+    password: kode
+  })
+  if (error) throw error
+  return data
+}
+
+export async function logoutMahasiswa() {
+  await supabase.auth.signOut()
+}
+
+async function cariMahasiswa(uid) {
+  if (!uid) return null
+  const { data } = await supabase
+    .from('mahasiswa')
+    .select('*')
+    .eq('auth_uid', uid)
+    .single()
+  return data || null
+}
+
+export function useAuth() {
+  const [mahasiswa, setMahasiswa] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(function () {
+    let active = true
+
+    async function sinkronkan(sessionUser) {
+      try {
+        let uid = sessionUser ? sessionUser.id : null
+
+        if (!uid) {
+          const { data } = await supabase.auth.getSession()
+          uid = data.session ? data.session.user.id : null
+        }
+
+        if (!uid) {
+          if (active) {
+            setMahasiswa(null)
+            setLoading(false)
+          }
+          return
+        }
+
+        const mhs = await cariMahasiswa(uid)
+        if (active) {
+          setMahasiswa(function (prev) {
+            if (prev && mhs && prev.id === mhs.id) return prev
+            if (!mhs && prev && prev.auth_uid === uid) return prev
+            return mhs
+          })
+          setLoading(false)
+        }
+      } catch (e) {
+        if (active) setLoading(false)
+      }
+    }
+
+    sinkronkan(null)
+
+    function onVisibility() {
+      if (document.visibilityState === 'visible') {
+        sinkronkan(null)
+      }
+    }
+
+    document.addEventListener('visibilitychange', onVisibility)
+
+    const sub = supabase.auth.onAuthStateChange(function (event, session) {
+      if (event === 'SIGNED_OUT') {
+        if (active) {
+          setMahasiswa(null)
+          setLoading(false)
+        }
+        return
+      }
+
+      sinkronkan(session && session.user ? session.user : null)
+    })
+
+    return function () {
+      active = false
+      document.removeEventListener('visibilitychange', onVisibility)
+      sub.data.subscription.unsubscribe()
+    }
+  }, [])
+
+  return { mahasiswa: mahasiswa, loading: loading }
+}
 ````
 
 ## File: src/lib/drive.js
@@ -3260,6 +3541,39 @@ dist
 *.log
 .env.youtube-*
 repomix-output.md
+````
+
+## File: package.json
+````json
+{
+  "name": "mbsi-logbook",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.600.0",
+    "@aws-sdk/s3-request-presigner": "^3.600.0",
+    "@supabase/supabase-js": "^2.45.0",
+    "heic2any": "^0.0.4",
+    "html2canvas": "^1.4.1",
+    "qrcode.react": "^4.2.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.10",
+    "vite": "^5.4.0"
+  }
+}
 ````
 
 ## File: api/youtube/latest.js
@@ -3385,104 +3699,96 @@ Aplikasi single page berbasis React dengan data tersimpan di Supabase dan media 
 - robots.txt mengizinkan perayap umum dan agen AI.
 ````
 
-## File: src/lib/auth.js
+## File: src/lib/logbook.js
 ````javascript
-import { useEffect, useState } from 'react'
 import { supabase } from './supabase.js'
+import { MULAI_MAGANG } from './constants.js'
 
-const EMAIL_DOMAIN = '@mbsi.local'
+const EMPTY = '00000000-0000-0000-0000-000000000000'
 
-export async function loginWithNim(nim, kode) {
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: nim.trim() + EMAIL_DOMAIN,
-    password: kode
-  })
-  if (error) throw error
-  return data
+export async function syncGaleriFromLogbook(mahasiswaId, items, meta) {
+  const itemIds = items.map(function (i) { return i.id }).filter(Boolean)
+  const all = await supabase
+    .from('galeri')
+    .select('id, logbook_item_id')
+    .in('logbook_item_id', itemIds.length ? itemIds : [EMPTY])
+  const existing = new Map((all.data || []).map(function (g) { return [g.logbook_item_id, g.id] }))
+
+  for (const item of items) {
+    if (!item.id) continue
+    if (item.show_in_gallery && item.media_path) {
+      if (existing.has(item.id)) {
+        await supabase.from('galeri').update({
+          media_path: item.media_path,
+          media_type: item.media_type || 'foto',
+          media_thumb: item.media_thumb || null,
+          media_source: item.media_source || 'r2',
+          youtube_id: item.youtube_id || null
+        }).eq('id', existing.get(item.id))
+      } else {
+        await supabase.from('galeri').insert({
+          mahasiswa_id: mahasiswaId,
+          logbook_item_id: item.id,
+          judul: item.judul,
+          deskripsi: item.deskripsi || 'Dokumentasi kegiatan dari logbook harian.',
+          tanggal: meta.tanggal,
+          kegiatan: meta.kategori,
+          media_path: item.media_path,
+          media_type: item.media_type || 'foto',
+          media_thumb: item.media_thumb || null,
+          media_source: item.media_source || 'r2',
+          youtube_id: item.youtube_id || null
+        })
+      }
+    } else if (existing.has(item.id)) {
+      await supabase.from('galeri').delete().eq('id', existing.get(item.id))
+    }
+  }
 }
 
-export async function logoutMahasiswa() {
-  await supabase.auth.signOut()
-}
+/* ===== AUTO-BOLOS =====
+   Untuk setiap hari kerja (Sen-Jum) dari MULAI_MAGANG s/d KEMARIN yang belum
+   ada catatan hadir, otomatis isi sebagai "Bolos".
+   Hari ini TIDAK di-auto-Bolos supaya user masih punya kesempatan isi absen.
 
-async function cariMahasiswa(uid) {
-  if (!uid) return null
-  const { data } = await supabase
-    .from('mahasiswa')
-    .select('*')
-    .eq('auth_uid', uid)
-    .single()
-  return data || null
-}
+   Dipanggil di refresh() DashboardPage. Aman dijalankan berulang karena
+   unique constraint (mahasiswa_id, tanggal) di DB mencegah duplikat.
 
-export function useAuth() {
-  const [mahasiswa, setMahasiswa] = useState(null)
-  const [loading, setLoading] = useState(true)
+   Return: array tanggal ISO yang baru di-auto-Bolos (buat re-fetch di caller). */
+function pad2(n) { return (n < 10 ? '0' : '') + n }
+function isoDari(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) }
 
-  useEffect(function () {
-    let active = true
+export async function autoIsiBolos(mahasiswaId, tanggalSudahAda) {
+  const sudahAda = new Set(tanggalSudahAda || [])
+  const d = new Date(MULAI_MAGANG + 'T00:00:00')
+  const batas = new Date()
+  batas.setDate(batas.getDate() - 1) // kemarin
 
-    async function sinkronkan(sessionUser) {
-      try {
-        let uid = sessionUser ? sessionUser.id : null
-
-        if (!uid) {
-          const { data } = await supabase.auth.getSession()
-          uid = data.session ? data.session.user.id : null
-        }
-
-        if (!uid) {
-          if (active) {
-            setMahasiswa(null)
-            setLoading(false)
-          }
-          return
-        }
-
-        const mhs = await cariMahasiswa(uid)
-        if (active) {
-          setMahasiswa(function (prev) {
-            if (prev && mhs && prev.id === mhs.id) return prev
-            if (!mhs && prev && prev.auth_uid === uid) return prev
-            return mhs
-          })
-          setLoading(false)
-        }
-      } catch (e) {
-        if (active) setLoading(false)
-      }
+  const rows = []
+  while (d <= batas) {
+    const iso = isoDari(d)
+    const hari = d.getDay()
+    if (hari !== 0 && hari !== 6 && !sudahAda.has(iso)) {
+      rows.push({
+        mahasiswa_id: mahasiswaId,
+        tanggal: iso,
+        status: 'Bolos',
+        alasan: 'Terisi otomatis: Tidak ada keterangan pada tanggal ini.'
+      })
     }
+    d.setDate(d.getDate() + 1)
+  }
 
-    sinkronkan(null)
+  if (!rows.length) return []
 
-    function onVisibility() {
-      if (document.visibilityState === 'visible') {
-        sinkronkan(null)
-      }
-    }
-
-    document.addEventListener('visibilitychange', onVisibility)
-
-    const sub = supabase.auth.onAuthStateChange(function (event, session) {
-      if (event === 'SIGNED_OUT') {
-        if (active) {
-          setMahasiswa(null)
-          setLoading(false)
-        }
-        return
-      }
-
-      sinkronkan(session && session.user ? session.user : null)
-    })
-
-    return function () {
-      active = false
-      document.removeEventListener('visibilitychange', onVisibility)
-      sub.data.subscription.unsubscribe()
-    }
-  }, [])
-
-  return { mahasiswa: mahasiswa, loading: loading }
+  const res = await supabase.from('daftar_hadir').insert(rows)
+  if (res.error) {
+    // Bisa terjadi race condition dengan tab lain yang sedang jalan auto-bolos.
+    // Unique constraint (mahasiswa_id, tanggal) mencegah duplikat, jadi error ini aman diabaikan.
+    console.warn('Auto-Bolos dilewati:', res.error.message)
+    return []
+  }
+  return rows.map(function (r) { return r.tanggal })
 }
 ````
 
@@ -3535,461 +3841,6 @@ export function ThemeProvider(props) {
 
 export function useTheme() {
   return useContext(ThemeContext)
-}
-````
-
-## File: src/lib/youtube.js
-````javascript
-import { supabase } from './supabase.js'
-
-export function parseYouTubeId(url) {
-  if (!url) return null
-  const s = String(url).trim()
-  if (/^[A-Za-z0-9_-]{11}$/.test(s)) return s
-  try {
-    const u = new URL(s)
-    const host = u.hostname.replace('www.', '').replace('m.', '')
-    if (host === 'youtu.be') {
-      const id = u.pathname.slice(1).split('/')[0]
-      return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null
-    }
-    if (host.endsWith('youtube.com') || host.endsWith('youtube-nocookie.com')) {
-      const v = u.searchParams.get('v')
-      if (v && /^[A-Za-z0-9_-]{11}$/.test(v)) return v
-      const parts = u.pathname.split('/').filter(Boolean)
-      if (parts[0] === 'embed' || parts[0] === 'shorts' || parts[0] === 'live') {
-        const id = parts[1]
-        return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null
-      }
-    }
-  } catch (e) {}
-  return null
-}
-export function ytThumb(id) {
-  return 'https://i.ytimg.com/vi/' + id + '/hqdefault.jpg'
-}
-export async function fetchYouTubeQuota() {
-  try {
-    const r = await fetch('/api/youtube/quota', { cache: 'no-store' })
-    if (!r.ok) return { limit: 5, used: 0, remaining: 5 }
-    return await r.json()
-  } catch (e) {
-    return { limit: 5, used: 0, remaining: 5 }
-  }
-}
-export async function startYouTubeSession(title, description, contentType, token) {
-  if (!token) throw new Error('Sesi login tidak terbaca. Silakan masuk ulang lalu coba lagi.')
-  const r = await fetch('/api/youtube/session', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify({ title: title, description: description, contentType: contentType })
-  })
-  if (!r.ok) {
-    const j = await r.json().catch(function () { return { error: 'Gagal memulai sesi upload video' } })
-    throw new Error(j.error || 'Gagal memulai sesi upload video')
-  }
-  return await r.json()
-}
-export async function uploadToYouTube(sessionUri, blob, onProgress) {
-  const hasil = await new Promise(function (resolve) {
-    const xhr = new XMLHttpRequest()
-    xhr.open('PUT', sessionUri)
-    xhr.setRequestHeader('Content-Type', blob.type || 'video/mp4')
-    if (onProgress) {
-      xhr.upload.onprogress = function (e) {
-        if (e.lengthComputable) onProgress(e.loaded / e.total)
-      }
-    }
-    xhr.onload = function () { resolve({ status: xhr.status, body: xhr.responseText }) }
-    xhr.onerror = function () { resolve({ status: 0, body: '' }) }
-    xhr.send(blob)
-  })
-  if (hasil.status >= 200 && hasil.status < 300) {
-    try {
-      const j = JSON.parse(hasil.body || '{}')
-      if (j && j.id) return { videoId: j.id }
-    } catch (e) { /* respons tidak terbaca, pulihkan lewat server */ }
-  } else if (hasil.status !== 0) {
-    throw new Error('Upload video gagal (status ' + hasil.status + ')')
-  }
-  const sesi = await supabase.auth.getSession()
-  const token = await ambilTokenSesi()
-  const r = await fetch('/api/youtube/latest', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify({})
-  })
-  if (r.ok) {
-    try {
-      const j = await r.json()
-      if (j && j.videoId) return { videoId: j.videoId }
-    } catch (e) {
-      console.warn('Respons pemulihan bukan JSON, dilewati:', e.message)
-    }
-  }
-  throw new Error('Upload selesai tetapi id video tidak terbaca. Video kemungkinan sudah tersimpan; tempel link video secara manual.')
-}
-
-export async function unggahVideoYouTube(file, judul, onProgress) {
-  const sesiData = await supabase.auth.getSession()
-  const token = await ambilTokenSesi()
-  const sesi = await startYouTubeSession(judul || 'Dokumentasi Magang', 'Diunggah dari portal magang BSI.', file.type || 'video/mp4', token)
-  return await uploadToYouTube(sesi.sessionUri, file, onProgress)
-}
-
-export async function ambilTokenSesi() {
-  try {
-    const r = await supabase.auth.getSession()
-    const ssn = r && r.data ? r.data.session : null
-    return ssn && ssn.access_token ? ssn.access_token : ''
-  } catch (e) {
-    return ''
-  }
-}
-````
-
-## File: package.json
-````json
-{
-  "name": "mbsi-logbook",
-  "private": true,
-  "version": "1.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite --host",
-    "build": "vite build",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "@aws-sdk/client-s3": "^3.600.0",
-    "@aws-sdk/s3-request-presigner": "^3.600.0",
-    "@supabase/supabase-js": "^2.45.0",
-    "heic2any": "^0.0.4",
-    "html2canvas": "^1.4.1",
-    "qrcode.react": "^4.2.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-router-dom": "^6.26.0"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.1",
-    "autoprefixer": "^10.4.19",
-    "postcss": "^8.4.38",
-    "tailwindcss": "^3.4.10",
-    "vite": "^5.4.0"
-  }
-}
-````
-
-## File: README.md
-````markdown
-# Logbook Magang BSI
-
-Portal pencatatan kegiatan magang mahasiswa Bank Syariah Indonesia (BSI) yang menggabungkan **logbook harian**, **galeri foto & video**, dan **daftar kehadiran** dalam satu tempat.
-
-Dibangun untuk memudahkan mahasiswa mendokumentasikan kegiatan magang, serta memberikan akses **publik** (tanpa login) kepada Dosen Pembimbing (Dospem) dan Kaprodi untuk memantau progres tim.
-
-## ✨ Fitur Utama
-
-### Untuk Mahasiswa (Login)
-- **Dashboard** dengan empat tab: Logbook, Galeri, Daftar Hadir, dan Profil.
-- **Form Logbook** interaktif: kolom Kendala / Solusi / Pembelajaran melebar otomatis saat difokuskan atau terisi, dengan animasi halus pada kartu form dan tombol Simpan.
-- **Upload foto** otomatis dikonversi ke WebP ringan (mendukung HEIC iPhone).
-- **Upload video** melalui YouTube (unlisted) dengan sistem kuota harian per project, atau alternatif link YouTube/Google Drive.
-- **Proteksi draf**: konfirmasi otomatis saat pindah tab, pindah halaman, refresh, tutup tab, batal edit, atau menimpa draf melalui tombol Edit.
-- **Profil & avatar** dengan upload foto profil sendiri.
-
-### Untuk Dosen Pembimbing & Kaprodi (Publik)
-- Halaman **Beranda** menampilkan logbook terbaru tim yang sudah dibagikan.
-- Halaman **Logbook**, **Galeri**, dan **Absen** dengan filter & pencarian.
-- Halaman **Dospem** menampilkan profil tim magang beserta rekap kehadiran (Masuk / Izin / Bolos) dan grafik per mahasiswa.
-- Semua halaman tersedia dalam mode terang & gelap.
-
-### Umum
-- **Pagination responsif**: ikon panah + elipsis `...` ala web korporat, tampil satu baris rapi di mobile, tablet, dan desktop.
-- **Dark mode** dengan transisi tema halus.
-- **Tampilan responsif** penuh dari 360px hingga desktop lebar.
-- **Skeleton loading** yang konsisten di setiap daftar.
-
-## 🛠️ Tech Stack
-
-| Lapisan | Teknologi |
-|---------|-----------|
-| Frontend | React 18 + Vite 5 |
-| Styling | Tailwind CSS 3 |
-| Routing | React Router |
-| Database & Auth | Supabase (PostgreSQL + Row Level Security) |
-| Penyimpanan File | Cloudflare R2 |
-| Video Hosting | YouTube Data API v3 (unlisted) |
-| Hosting | Vercel (frontend + serverless functions) |
-| Build Tool | Vite, PostCSS |
-
-## 📁 Struktur Proyek
-
-```
-mbsi-logbook/
-├── api/                    # Fungsi serverless Vercel
-│   ├── _lib/               # Helper server (supabase admin, r2, youtube)
-│   ├── r2/                 # Endpoint upload/unduh/hapus media R2
-│   └── youtube/            # Endpoint kuota, sesi upload, cek video terbaru
-├── public/                 # File statis (favicon, robots.txt, llms.txt)
-├── src/
-│   ├── components/         # Komponen UI bersama
-│   │   ├── ui.jsx          # Toast, Modal, Pagination, AutoTextArea, dll.
-│   │   ├── cards.jsx       # Kartu logbook, galeri, kehadiran
-│   │   ├── controls.jsx    # Filter, pencarian, dropdown
-│   │   ├── Layout.jsx      # Navbar, footer, guard unsaved changes
-│   │   ├── Carousel.jsx    # Carousel media
-│   │   ├── PemutarVideo.jsx# Custom video player
-│   │   └── icons.jsx       # Kumpulan ikon SVG inline
-│   ├── lib/                # Logika & helper
-│   │   ├── auth.js         # Sesi & autentikasi
-│   │   ├── upload.js       # Pipeline upload foto/video
-│   │   ├── konversi.js     # Konversi HEIC → WebP
-│   │   ├── youtube.js      # Helper YouTube API
-│   │   ├── drive.js        # Helper Google Drive
-│   │   ├── profil.js       # Upload avatar
-│   │   ├── logbook.js      # Logika form logbook
-│   │   ├── format.js       # Format tanggal, angka, file size
-│   │   └── constants.js    # Konstanta bersama
-│   ├── pages/              # Halaman utama
-│   │   ├── HomePage.jsx    # Landing page publik
-│   │   ├── LoginPage.jsx   # Login mahasiswa
-│   │   ├── DashboardPage.jsx # Dashboard mahasiswa (4 tab)
-│   │   ├── LogbookPage.jsx # Daftar logbook publik
-│   │   ├── GalleryPage.jsx # Galeri publik
-│   │   ├── AttendancePage.jsx # Daftar hadir publik
-│   │   └── DospemPage.jsx  # Halaman Dospem/Kaprodi
-│   ├── App.jsx             # Router utama
-│   ├── main.jsx            # Entry point + animasi halaman
-│   └── index.css           # Tema & utilitas global
-├── supabase/
-│   ├── schema.sql          # Skema database lengkap
-│   └── migrasi-drive-download.sql
-├── .env.example            # Contoh variabel lingkungan
-├── vercel.json             # Konfigurasi Vercel (rewrite SPA)
-├── vite.config.js          # Plugin Vite untuk middleware API lokal
-└── tailwind.config.js      # Konfigurasi Tailwind + tema BSI
-```
-
-## 🚀 Menjalankan di Lokal
-
-### Prasyarat
-- Node.js 18+
-- Akun [Supabase](https://supabase.com) (untuk DB + Auth)
-- Akun [Cloudflare](https://cloudflare.com) (untuk R2)
-- Akun [Google Cloud Console](https://console.cloud.google.com) (untuk YouTube API)
-
-### Langkah Setup
-
-1. **Clone & install**
-   ```bash
-   git clone <repo-url>
-   cd mbsi-logbook
-   npm install
-   ```
-
-2. **Salin `.env.example` menjadi `.env.local`**
-   ```bash
-   cp .env.example .env.local
-   ```
-   Isi semua variabel sesuai layanan yang kamu miliki (lihat bagian **Variabel Lingkungan**).
-
-3. **Jalankan skema database**
-   - Buka Supabase → SQL Editor.
-   - Tempel seluruh isi `supabase/schema.sql`, lalu jalankan.
-   - Buat user Auth dengan pola `NIM@mbsi.local` (sesuai konvensi kampus) dan isi tabel `mahasiswa` dengan `auth_uid` yang cocok.
-
-4. **Jalankan server lokal**
-   ```bash
-   npm run dev
-   ```
-   Buka `http://localhost:5173` (atau `http://<IP-lokal>:5173` untuk uji dari HP satu jaringan).
-
-5. **Preview build production**
-   ```bash
-   npm run build
-   npm run preview
-   ```
-
-## 🔐 Variabel Lingkungan
-
-### Client (dipakai saat build, prefix `VITE_`)
-| Variabel | Keterangan |
-|----------|-----------|
-| `VITE_SUPABASE_URL` | URL proyek Supabase |
-| `VITE_SUPABASE_ANON_KEY` | Public anon key Supabase |
-
-### Server (dipakai fungsi `api/` saat runtime)
-| Variabel | Keterangan |
-|----------|-----------|
-| `SUPABASE_SERVICE_ROLE_KEY` | Service role key (hanya di server) |
-| `R2_ACCOUNT_ID` | Cloudflare Account ID |
-| `R2_ACCESS_KEY_ID` | R2 access key |
-| `R2_SECRET_ACCESS_KEY` | R2 secret key |
-| `R2_BUCKET_NAME` | Nama bucket R2 |
-| `R2_PUBLIC_BASE_URL` | URL publik bucket (mis. `https://pub-xxx.r2.dev`) |
-| `YOUTUBE_CLIENT_ID_1` | OAuth client ID Google project ke-1 |
-| `YOUTUBE_CLIENT_SECRET_1` | OAuth client secret project ke-1 |
-| `YOUTUBE_REFRESH_TOKEN_1` | Refresh token project ke-1 |
-| `YOUTUBE_CLIENT_ID_2.._6` | Opsional — untuk kuota video lebih besar |
-| `YOUTUBE_CLIENT_SECRET_2.._6` | Opsional |
-| `YOUTUBE_REFRESH_TOKEN_2.._6` | Opsional |
-
-Setiap project YouTube mendapat kuota **5 upload/hari** (zona waktu Pacific). Tambahkan project 2–6 bila butuh kuota harian lebih besar (total hingga 30 upload/hari).
-
-## 🌐 Deploy ke Vercel
-
-1. Push repo ke GitHub.
-2. Import proyek di [Vercel](https://vercel.com).
-3. Salin seluruh isi `.env.local` ke **Settings → Environment Variables** (berlaku untuk Production + Preview).
-4. Deploy. Vercel otomatis mendeteksi framework Vite dan menjalankan fungsi serverless dari folder `api/`.
-
-> ⚠️ Tanpa variabel server (terutama `SUPABASE_SERVICE_ROLE_KEY`, `R2_*`, dan `YOUTUBE_*`), build akan sukses tetapi API akan mengembalikan `500` / "Kredensial belum dikonfigurasi".
-
-## 📏 Batasan & Catatan Produksi
-
-- **Ukuran foto maksimum**: 15 MB (dikonversi ke WebP sebelum diunggah).
-- **Ukuran video maksimum**: 50 MB (diperiksa di sisi klien).
-- **Kuota video YouTube**: 5 upload/project/hari; bila habis, sistem menyarankan link eksternal.
-- **Privasi video YouTube**: `unlisted` (hanya dapat diakses lewat link tertanam).
-- **Row Level Security (RLS)** Supabase wajib aktif di semua tabel produksi (`logbooks`, `logbook_items`, `galeri`, `daftar_hadir`, `mahasiswa`, `youtube_quota_usage`).
-- **Service role key Supabase** hanya boleh berada di sisi server (`api/`), jangan pernah masuk ke kode klien.
-
-## 📄 Lisensi
-
-Proyek internal untuk kegiatan magang Bank Syariah Indonesia. Hak cipta © 2026 Tim Magang BSI.
-````
-
-## File: src/lib/format.js
-````javascript
-import { MULAI_MAGANG } from './constants.js'
-export function formatTanggal(s) {
-  if (!s) return 'Tanggal belum diisi'
-  const d = new Date(s + 'T00:00:00')
-  if (Number.isNaN(d.getTime())) return s
-  return d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-}
-
-export function formatTanggalShort(s) {
-  if (!s) return ''
-  const d = new Date(s + 'T00:00:00')
-  if (Number.isNaN(d.getTime())) return s
-  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
-}
-
-export function todayInput() {
-  const d = new Date()
-  const m = ('0' + (d.getMonth() + 1)).slice(-2)
-  const day = ('0' + d.getDate()).slice(-2)
-  return d.getFullYear() + '-' + m + '-' + day
-}
-/* Batas pilihan tanggal form: tidak sebelum hari pertama magang, tidak setelah hari ini.
-   Dinamis karena max diambil dari tanggal perangkat saat web dibuka. */
-export function batasTanggalPilihan() {
-  return { min: MULAI_MAGANG, max: todayInput() }
-}
-/* Mengembalikan pesan error bila tanggal di luar batas, atau null bila valid.
-   Perbandingan string aman karena format tanggal ISO (YYYY-MM-DD). */
-export function pesanTanggalTerlarang(value, min, max) {
-  if (!value) return null
-  if (max && value > max) {
-    return 'Tanggal ini belum kamu lewati!'
-  }
-  if (min && value < min) {
-    return 'Hari pertama magang tanggal (8 September 2026).'
-  }
-  return null
-}
-
-
-export function detectMediaType(u) {
-  let s = String(u || '')
-  const iK = s.indexOf('key=')
-  if (iK !== -1) s = decodeURIComponent(s.slice(iK + 4).split('&')[0])
-  const ext = s.split('?')[0].split('.').pop().toLowerCase()
-  return ['mp4', 'webm', 'ogg', 'mov', 'm4v'].indexOf(ext) !== -1 ? 'video' : 'foto'
-}
-
-export function matchesDateFilters(dateString, f) {
-  if (!dateString) return false
-  if (f.timeMode === 'bulan') {
-    if (f.bulan) {
-      if (f.bulan.length === 7) return dateString.slice(0, 7) === f.bulan
-      const p = dateString.split('-')
-      if (p.length < 2 || p[1] !== f.bulan) return false
-    }
-  } else if (f.timeMode === 'rentang') {
-    if (f.dari && dateString < f.dari) return false
-    if (f.sampai && dateString > f.sampai) return false
-  }
-  return true
-}
-export function waktuUrut(x) {
-  if (!x) return 0
-  const src = x.created_at || x.updated_at || ''
-  if (!src) return 0
-  const t = new Date(src).getTime()
-  return isNaN(t) ? 0 : t
-}
-export function urutkanTanggal(list, mode) {
-  const arr = (list || []).slice()
-  arr.sort(function (a, b) {
-    const ta = new Date(a.tanggal + 'T00:00:00').getTime()
-    const tb = new Date(b.tanggal + 'T00:00:00').getTime()
-    if (ta !== tb) return mode === 'terlama' ? ta - tb : tb - ta
-    const ca = waktuUrut(a)
-    const cb = waktuUrut(b)
-    if (ca !== cb) return mode === 'terlama' ? ca - cb : cb - ca
-    const ia = a.id || ''
-    const ib = b.id || ''
-    if (ia !== ib) return ia < ib ? (mode === 'terlama' ? -1 : 1) : (mode === 'terlama' ? 1 : -1)
-    return 0
-  })
-  return arr
-}
-````
-
-## File: src/lib/logbook.js
-````javascript
-import { supabase } from './supabase.js'
-
-const EMPTY = '00000000-0000-0000-0000-000000000000'
-
-export async function syncGaleriFromLogbook(mahasiswaId, items, meta) {
-  const itemIds = items.map(function (i) { return i.id }).filter(Boolean)
-  const all = await supabase
-    .from('galeri')
-    .select('id, logbook_item_id')
-    .in('logbook_item_id', itemIds.length ? itemIds : [EMPTY])
-  const existing = new Map((all.data || []).map(function (g) { return [g.logbook_item_id, g.id] }))
-
-  for (const item of items) {
-    if (!item.id) continue
-    if (item.show_in_gallery && item.media_path) {
-      if (existing.has(item.id)) {
-        await supabase.from('galeri').update({
-          media_path: item.media_path,
-          media_type: item.media_type || 'foto',
-          media_thumb: item.media_thumb || null,
-        media_source: item.media_source || 'r2', youtube_id: item.youtube_id || null }).eq('id', existing.get(item.id))
-      } else {
-        await supabase.from('galeri').insert({
-          mahasiswa_id: mahasiswaId,
-          logbook_item_id: item.id,
-          judul: item.judul,
-          deskripsi: item.deskripsi || 'Dokumentasi kegiatan dari logbook harian.',
-          tanggal: meta.tanggal,
-          kegiatan: meta.kategori,
-          media_path: item.media_path,
-          media_type: item.media_type || 'foto',
-          media_thumb: item.media_thumb || null,
-        media_source: item.media_source || 'r2', youtube_id: item.youtube_id || null })
-      }
-    } else if (existing.has(item.id)) {
-      await supabase.from('galeri').delete().eq('id', existing.get(item.id))
-    }
-  }
 }
 ````
 
@@ -4100,6 +3951,121 @@ export async function deleteMedia(key) {
 }
 ````
 
+## File: src/lib/youtube.js
+````javascript
+import { supabase } from './supabase.js'
+
+export function parseYouTubeId(url) {
+  if (!url) return null
+  const s = String(url).trim()
+  if (/^[A-Za-z0-9_-]{11}$/.test(s)) return s
+  try {
+    const u = new URL(s)
+    const host = u.hostname.replace('www.', '').replace('m.', '')
+    if (host === 'youtu.be') {
+      const id = u.pathname.slice(1).split('/')[0]
+      return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null
+    }
+    if (host.endsWith('youtube.com') || host.endsWith('youtube-nocookie.com')) {
+      const v = u.searchParams.get('v')
+      if (v && /^[A-Za-z0-9_-]{11}$/.test(v)) return v
+      const parts = u.pathname.split('/').filter(Boolean)
+      if (parts[0] === 'embed' || parts[0] === 'shorts' || parts[0] === 'live') {
+        const id = parts[1]
+        return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null
+      }
+    }
+  } catch (e) {}
+  return null
+}
+
+/* Pakai maxresdefault (16:9 murni, resolusi tertinggi).
+   Kalau tidak tersedia, MediaYouTube akan fallback ke mqdefault -> hqdefault
+   secara otomatis via deteksi onError. */
+export function ytThumb(id) {
+  return 'https://i.ytimg.com/vi/' + id + '/maxresdefault.jpg'
+}
+
+export async function fetchYouTubeQuota() {
+  try {
+    const r = await fetch('/api/youtube/quota', { cache: 'no-store' })
+    if (!r.ok) return { limit: 5, used: 0, remaining: 5 }
+    return await r.json()
+  } catch (e) {
+    return { limit: 5, used: 0, remaining: 5 }
+  }
+}
+
+export async function startYouTubeSession(title, description, contentType, token) {
+  if (!token) throw new Error('Sesi login tidak terbaca. Silakan masuk ulang lalu coba lagi.')
+  const r = await fetch('/api/youtube/session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ title: title, description: description, contentType: contentType })
+  })
+  if (!r.ok) {
+    const j = await r.json().catch(function () { return { error: 'Gagal memulai sesi upload video' } })
+    throw new Error(j.error || 'Gagal memulai sesi upload video')
+  }
+  return await r.json()
+}
+
+export async function uploadToYouTube(sessionUri, blob, onProgress) {
+  const hasil = await new Promise(function (resolve) {
+    const xhr = new XMLHttpRequest()
+    xhr.open('PUT', sessionUri)
+    xhr.setRequestHeader('Content-Type', blob.type || 'video/mp4')
+    if (onProgress) {
+      xhr.upload.onprogress = function (e) {
+        if (e.lengthComputable) onProgress(e.loaded / e.total)
+      }
+    }
+    xhr.onload = function () { resolve({ status: xhr.status, body: xhr.responseText }) }
+    xhr.onerror = function () { resolve({ status: 0, body: '' }) }
+    xhr.send(blob)
+  })
+  if (hasil.status >= 200 && hasil.status < 300) {
+    try {
+      const j = JSON.parse(hasil.body || '{}')
+      if (j && j.id) return { videoId: j.id }
+    } catch (e) { /* respons tidak terbaca, pulihkan lewat server */ }
+  } else if (hasil.status !== 0) {
+    throw new Error('Upload video gagal (status ' + hasil.status + ')')
+  }
+  const token = await ambilTokenSesi()
+  const r = await fetch('/api/youtube/latest', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({})
+  })
+  if (r.ok) {
+    try {
+      const j = await r.json()
+      if (j && j.videoId) return { videoId: j.videoId }
+    } catch (e) {
+      console.warn('Respons pemulihan bukan JSON, dilewati:', e.message)
+    }
+  }
+  throw new Error('Upload selesai tetapi id video tidak terbaca. Video kemungkinan sudah tersimpan; tempel link video secara manual.')
+}
+
+export async function unggahVideoYouTube(file, judul, onProgress) {
+  const token = await ambilTokenSesi()
+  const sesi = await startYouTubeSession(judul || 'Dokumentasi Magang', 'Diunggah dari portal magang BSI.', file.type || 'video/mp4', token)
+  return await uploadToYouTube(sesi.sessionUri, file, onProgress)
+}
+
+export async function ambilTokenSesi() {
+  try {
+    const r = await supabase.auth.getSession()
+    const ssn = r && r.data ? r.data.session : null
+    return ssn && ssn.access_token ? ssn.access_token : ''
+  } catch (e) {
+    return ''
+  }
+}
+````
+
 ## File: index.html
 ````html
 <!DOCTYPE html>
@@ -4145,339 +4111,178 @@ export async function deleteMedia(key) {
 </html>
 ````
 
-## File: src/components/PengingatBanner.jsx
+## File: src/lib/format.js
 ````javascript
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { SizedIcon } from './icons.jsx'
-import { formatTanggal } from '../lib/format.js'
-import { MULAI_MAGANG } from '../lib/constants.js'
+import { MULAI_MAGANG } from './constants.js'
 
-const HARI_PENDEK = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
-const BULAN_PENDEK = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agt', 'Sept', 'Okt', 'Nov', 'Des']
-function formatTanggalMobile(s) {
+export function formatTanggal(s) {
+  if (!s) return 'Tanggal belum diisi'
+  const d = new Date(s + 'T00:00:00')
+  if (Number.isNaN(d.getTime())) return s
+  return d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+export function formatTanggalShort(s) {
   if (!s) return ''
   const d = new Date(s + 'T00:00:00')
   if (Number.isNaN(d.getTime())) return s
-  return HARI_PENDEK[d.getDay()] + ', ' + d.getDate() + ' ' + BULAN_PENDEK[d.getMonth()] + ' ' + d.getFullYear()
+  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-function pad2(n) { return (n < 10 ? '0' : '') + n }
-function isoDari(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) }
-/* Batas akhir pengingat = kemarin; hari ini belum dianggap terlewat karena masih bisa diisi */
-function kemarinIso() {
+export function todayInput() {
   const d = new Date()
-  d.setDate(d.getDate() - 1)
-  return isoDari(d)
+  const m = ('0' + (d.getMonth() + 1)).slice(-2)
+  const day = ('0' + d.getDate()).slice(-2)
+  return d.getFullYear() + '-' + m + '-' + day
 }
 
-/* Daftar hari kerja (Sen-Jum) dari MULAI_MAGANG s/d kemarin yang tidak punya
-   logbook dan tidak berstatus Izin/Bolos pada daftar hadir. */
-export function hitungTanggalTerlewat(tanggalLogbook, hadir) {
-  const punyaLog = new Set(tanggalLogbook || [])
-  const absen = new Set()
-  ;(hadir || []).forEach(function (h) {
-    if (h.status === 'Izin' || h.status === 'Bolos') absen.add(h.tanggal)
+/* Batas pilihan tanggal form: tidak sebelum hari pertama magang, tidak setelah hari ini.
+   Dinamis karena max diambil dari tanggal perangkat saat web dibuka. */
+export function batasTanggalPilihan() {
+  return { min: MULAI_MAGANG, max: todayInput() }
+}
+
+/* Mengembalikan pesan error bila tanggal di luar batas, atau null bila valid.
+   Perbandingan string aman karena format tanggal ISO (YYYY-MM-DD). */
+export function pesanTanggalTerlarang(value, min, max) {
+  if (!value) return null
+  if (max && value > max) {
+    return 'Tanggal ini belum kamu lewati!'
+  }
+  if (min && value < min) {
+    return 'Hari pertama magang tanggal (8 September 2026).'
+  }
+  return null
+}
+
+export function detectMediaType(u) {
+  let s = String(u || '')
+  const iK = s.indexOf('key=')
+  if (iK !== -1) s = decodeURIComponent(s.slice(iK + 4).split('&')[0])
+  const ext = s.split('?')[0].split('.').pop().toLowerCase()
+  return ['mp4', 'webm', 'ogg', 'mov', 'm4v'].indexOf(ext) !== -1 ? 'video' : 'foto'
+}
+
+export function matchesDateFilters(dateString, f) {
+  if (!dateString) return false
+  if (f.timeMode === 'bulan') {
+    if (f.bulan) {
+      if (f.bulan.length === 7) return dateString.slice(0, 7) === f.bulan
+      const p = dateString.split('-')
+      if (p.length < 2 || p[1] !== f.bulan) return false
+    }
+  } else if (f.timeMode === 'rentang') {
+    if (f.dari && dateString < f.dari) return false
+    if (f.sampai && dateString > f.sampai) return false
+  }
+  return true
+}
+
+export function waktuUrut(x) {
+  if (!x) return 0
+  const src = x.created_at || x.updated_at || ''
+  if (!src) return 0
+  const t = new Date(src).getTime()
+  return isNaN(t) ? 0 : t
+}
+
+export function urutkanTanggal(list, mode) {
+  const arr = (list || []).slice()
+  arr.sort(function (a, b) {
+    const ta = new Date(a.tanggal + 'T00:00:00').getTime()
+    const tb = new Date(b.tanggal + 'T00:00:00').getTime()
+    if (ta !== tb) return mode === 'terlama' ? ta - tb : tb - ta
+    const ca = waktuUrut(a)
+    const cb = waktuUrut(b)
+    if (ca !== cb) return mode === 'terlama' ? ca - cb : cb - ca
+    const ia = a.id || ''
+    const ib = b.id || ''
+    if (ia !== ib) return ia < ib ? (mode === 'terlama' ? -1 : 1) : (mode === 'terlama' ? 1 : -1)
+    return 0
   })
-  const hasil = []
-  const d = new Date(MULAI_MAGANG + 'T00:00:00')
-  const batas = new Date(kemarinIso() + 'T00:00:00')
-  while (d <= batas) {
-    const iso = isoDari(d)
-    const hari = d.getDay()
-    if (hari !== 0 && hari !== 6 && !punyaLog.has(iso) && !absen.has(iso)) hasil.push(iso)
-    d.setDate(d.getDate() + 1)
-  }
-  return hasil
+  return arr
 }
 
-/* Daftar hari kerja (Sen-Jum) dari MULAI_MAGANG s/d kemarin yang belum punya
-   catatan hadir sama sekali (status Masuk, Izin, maupun Bolos dianggap sudah isi). */
-export function hitungTanggalTerlewatHadir(hadir) {
-  const punyaHadir = new Set((hadir || []).map(function (h) { return h.tanggal }))
-  const hasil = []
-  const d = new Date(MULAI_MAGANG + 'T00:00:00')
-  const batas = new Date(kemarinIso() + 'T00:00:00')
-  while (d <= batas) {
-    const iso = isoDari(d)
-    const hari = d.getDay()
-    if (hari !== 0 && hari !== 6 && !punyaHadir.has(iso)) hasil.push(iso)
-    d.setDate(d.getDate() + 1)
-  }
-  return hasil
-}
+/* ===== TITLE CASE =====
+   Aturan:
+   - "ATM BSI"     → "ATM BSI"     (singkatan ALL CAPS dipertahankan)
+   - "iPhone app"  → "iPhone App"  (mixed case disengaja dipertahankan)
+   - "bsi"         → "BSI"         (whitelist singkatan umum)
+   - "bank bsi"    → "Bank BSI"    (lowercase diformat + whitelist)
+   - "kegiatan di bank" → "Kegiatan di Bank"  (kata sambung tetap lowercase)
+   - "bank,"       → "Bank,"       (tanda baca di akhir dipertahankan) */
 
-/* gulir-atas-dulu-v1: saat daftar tambahan ditutup, gulir internal dinaikkan
-   mulus ke puncak dulu; aksi penutup dipanggil setelah gulir selesai (atau
-   jatuh tempo) supaya tinggi banner baru menyusut sesudahnya */
-function gulirKeAtasLalu(el, selesai) {
-  if (!el || el.scrollTop <= 0) { selesai(); return }
-  const reduksi = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  if (reduksi) { el.scrollTop = 0; selesai(); return }
-  let done = false
-  const panggil = function () { if (done) return; done = true; selesai() }
-  el.addEventListener('scrollend', panggil, { once: true })
-  el.scrollTo({ top: 0, behavior: 'smooth' })
-  const mulai = Date.now()
-  const cek = function () {
-    if (done) return
-    if (el.scrollTop <= 0 || Date.now() - mulai > 700) { panggil(); return }
-    setTimeout(cek, 80)
-  }
-  setTimeout(cek, 80)
-}
-export default function PengingatBanner(props) {
-  const tipe = props.tipe || 'logbook'
-  const [tutup, setTutup] = useState(false)
-  const [lihatSemua, setLihatSemua] = useState(false)
-  const [buka, setBuka] = useState(false)
-  const [keluar, setKeluar] = useState(false)
-  const [hilang, setHilang] = useState(false)
-  const simpanRef = useRef(null)
-  const refScroll = useRef(null)
-  const sedangTutup = useRef(false)
-  const refTiga = useRef(null)
-  const [tinggiTiga, setTinggiTiga] = useState(0)
-  const [capBuka, setCapBuka] = useState(311)
-  const mentah = tipe === 'hadir' ? hitungTanggalTerlewatHadir(props.hadir) : hitungTanggalTerlewat(props.tanggalLogbook, props.hadir)
-  if (mentah.length && !tutup) simpanRef.current = mentah
-  const harusHilang = tutup || !mentah.length
-  /* saat menghilang, pakai salinan terakhir supaya isi banner tetap utuh selama animasi keluar */
-  const terlewat = mentah.length ? mentah : (simpanRef.current || [])
-  const konfigurasi = tipe === 'hadir'
-    ? {
-        judul: terlewat.length + ' hari kerja belum punya catatan hadir',
-        deskripsi: 'Sabtu-Minggu tidak dihitung. Isi daftar hadir untuk tanggal di bawah supaya catatan kehadiranmu lengkap.',
-        aksi: 'Isi Daftar Hadir'
-      }
-    : {
-        judul: terlewat.length + ' hari kerja belum punya logbook',
-        deskripsi: 'Sabtu-Minggu serta hari berstatus Izin atau Bolos tidak dihitung. Isi logbook untuk tanggal di bawah supaya catatan magangmu lengkap.',
-        aksi: 'Isi Logbook'
-      }
-  /* ukur tinggi 3 item pertama supaya tinggi lipatan presisi di semua lebar layar */
-  useLayoutEffect(function () {
-    function ukur() {
-      if (refTiga.current) setTinggiTiga(refTiga.current.offsetHeight)
-      setCapBuka(window.matchMedia('(max-width: 639px)').matches ? 293 : 311)
+/* Kata sambung/kata depan/artikel yang tetap lowercase di tengah kalimat. */
+const KATA_KECIL = new Set([
+  // Indonesia
+  'dan', 'atau', 'yang', 'untuk', 'dari', 'ke', 'di', 'pada', 'dengan',
+  'dalam', 'oleh', 'serta', 'juga', 'sebagai', 'tentang', 'ini', 'itu',
+  'agar', 'supaya', 'karena', 'kalau', 'jika', 'bila', 'saat', 'ketika',
+  // Inggris (umum di judul campuran)
+  'a', 'an', 'the', 'and', 'or', 'but', 'of', 'in', 'on', 'at', 'to', 'for', 'with', 'by'
+])
+
+/* Singkatan umum yang otomatis di-UPPERCASE walau user ketik lowercase.
+   Tambahkan sesuai kebutuhan tim/instansi. */
+const SINGKATAN_PAKSA = new Set([
+  // Perbankan & magang BSI
+  'bsi', 'atm', 'ktp', 'nim', 'pin', 'otp', 'npwp', 'cif', 'rek', 'kpr', 'umkm', 'kpi', 'roi',
+  'cs', 'crm', 'sdm', 'hrd',
+  // Teknologi umum
+  'it', 'api', 'ui', 'ux', 'url', 'pdf', 'gps', 'wifi', 'ip', 'id', 'hp', 'pc', 'ai', 'ml',
+  // Administrasi & legal
+  'pt', 'cv', 'ukm', 'siup', 'sk', 'surat',
+])
+
+export function toTitleCase(teks) {
+  if (!teks) return ''
+  const bersih = String(teks).trim().replace(/\s+/g, ' ')
+  if (!bersih) return ''
+  const kata = bersih.split(' ')
+
+  const hasil = kata.map(function (token, i) {
+    if (!token) return token
+
+    /* Pisahkan tanda baca depan & belakang dari huruf inti
+       supaya "bank," diproses sebagai "bank" + "," */
+    const match = token.match(/^([^a-zA-Z0-9]*)(.*?)([^a-zA-Z0-9]*)$/)
+    if (!match) return token
+    const depan = match[1] || ''
+    const inti = match[2] || ''
+    const belakang = match[3] || ''
+    if (!inti) return token
+
+    let intiBaru
+
+    /* 1. Singkatan ALL CAPS (2+ huruf): ATM, BSI, KTP → pertahankan */
+    if (/^[A-Z]{2,}$/.test(inti)) {
+      intiBaru = inti
     }
-    ukur()
-    window.addEventListener('resize', ukur)
-    /* ukur ulang saat banner berubah dari tersembunyi menjadi terlihat (misal pindah tab) */
-    let ro = null
-    if (refTiga.current && typeof ResizeObserver !== 'undefined') {
-      ro = new ResizeObserver(ukur)
-      ro.observe(refTiga.current)
+    /* 2. Mixed case disengaja: iPhone, mBanking, iOS → pertahankan.
+       Deteksi: ada kombinasi lowercase diikuti uppercase di dalam kata. */
+    else if (/[a-z][A-Z]/.test(inti)) {
+      intiBaru = inti
     }
-    return function () { window.removeEventListener('resize', ukur); if (ro) ro.disconnect() }
-  }, [terlewat.length])
-  /* masuk: wrapper dibiarkan terlipat satu frame lalu dibuka supaya transisi tinggi
-     berjalan dan konten di bawah bergeser mulus; keluar: wrapper merapat bersamaan
-     dengan isi yang memudar, komponen dilepas setelah keduanya selesai */
-  useEffect(function () {
-    if (harusHilang) return undefined
-    const r = requestAnimationFrame(function () { setBuka(true) })
-    return function () { cancelAnimationFrame(r) }
-  }, [harusHilang])
-  useEffect(function () {
-    if (!harusHilang) { setKeluar(false); setHilang(false); return undefined }
-    if (!terlewat.length) { setHilang(true); return undefined }
-    setBuka(false)
-    setKeluar(true)
-    const t = setTimeout(function () { setHilang(true) }, 400)
-    return function () { clearTimeout(t) }
-  }, [harusHilang])
-  if (hilang || (harusHilang && !terlewat.length)) return null
-  return (
-    <div className={'pengingat-wrap' + (buka ? ' pengingat-wrap-buka' : '')}>
-      <div className="pengingat-wrap-dalam">
-    <section className={'mt-6 rounded-[2rem] border border-amber-200 bg-amber-50 p-5 sm:p-6 ' + (keluar ? 'pengingat-keluar' : 'pengingat-masuk')}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex min-w-0 flex-1 items-start gap-3">
-          <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-800">
-            <SizedIcon name="clipboard" size={18} />
-          </span>
-          <div>
-            <h2 className="text-base font-black text-amber-800 sm:text-lg">
-              {konfigurasi.judul}
-            </h2>
-            <p className="mt-1 text-xs text-amber-800 sm:text-sm">
-              {konfigurasi.deskripsi}
-            </p>
-          </div>
-        </div>
-        <button type="button" onClick={function () { setTutup(true) }} title="Sembunyikan Pengingat" className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-amber-100 text-amber-800 hover:bg-amber-200">
-          <SizedIcon name="close" size={14} />
-        </button>
-      </div>
-      <div ref={refScroll} className={'mt-4 pengingat-scroll' + (lihatSemua ? ' pengingat-scroll-buka' : '')} style={{ maxHeight: lihatSemua ? capBuka : (tinggiTiga || undefined) }}>
-        <ul ref={refTiga} className="space-y-2">
-        {terlewat.slice(0, 3).map(function (t) {
-          return (
-            <li key={t} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-200 bg-white p-3">
-              <p className="text-sm font-semibold text-slate-800">
-          <span className="hidden sm:inline">{formatTanggal(t)}</span>
-          <span className="sm:hidden">{formatTanggalMobile(t)}</span>
-        </p>
-              <button type="button" onClick={function () { props.onIsi(t) }} className="rounded-xl bg-bsi-800 px-3.5 py-2 text-xs font-bold text-white hover:bg-bsi-900 sm:text-sm">
-                {konfigurasi.aksi}
-              </button>
-            </li>
-          )
-        })}
-      </ul>
-        {terlewat.length > 3 ? (
-              <ul className="pengingat-daftar-extra space-y-2 pt-2">
-                {terlewat.slice(3).map(function (t) {
-                  return (
-                    <li key={t} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-200 bg-white p-3">
-                      <p className="text-sm font-semibold text-slate-800">
-                        <span className="hidden sm:inline">{formatTanggal(t)}</span>
-                        <span className="sm:hidden">{formatTanggalMobile(t)}</span>
-                      </p>
-                      <button type="button" onClick={function () { props.onIsi(t) }} className="rounded-xl bg-bsi-800 px-3.5 py-2 text-xs font-bold text-white hover:bg-bsi-900 sm:text-sm">
-                        {konfigurasi.aksi}
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
-        ) : null}
-      </div>
-      {terlewat.length > 3 ? (
-        <button type="button" onClick={function () { if (!lihatSemua) { setLihatSemua(true); return } if (sedangTutup.current) return; sedangTutup.current = true; gulirKeAtasLalu(refScroll.current, function () { sedangTutup.current = false; setLihatSemua(false) }) }} className="mt-3 w-full rounded-xl border border-amber-300 bg-white px-4 py-2.5 text-xs font-bold text-amber-800 hover:bg-amber-100 sm:text-sm">
-          {lihatSemua ? 'Sembunyikan' : 'Lihat Semua (' + terlewat.length + ' tanggal)'}
-        </button>
-      ) : null}
-    </section>
-      </div>
-    </div>
-  )
-}
-````
+    /* 3. Whitelist singkatan: "bsi" → "BSI", "atm" → "ATM" */
+    else if (SINGKATAN_PAKSA.has(inti.toLowerCase())) {
+      intiBaru = inti.toUpperCase()
+    }
+    /* 4. Default: format Title Case dengan pengecualian kata sambung */
+    else {
+      const lower = inti.toLowerCase()
+      const pertama = i === 0
+      const terakhir = i === kata.length - 1
+      if (!pertama && !terakhir && KATA_KECIL.has(lower)) {
+        intiBaru = lower
+      } else {
+        intiBaru = lower.charAt(0).toUpperCase() + lower.slice(1)
+      }
+    }
 
-## File: src/components/Carousel.jsx
-````javascript
-import { useEffect, useRef, useState } from 'react'
-import { SizedIcon } from './icons.jsx'
-import { Lightbox, SmartFit, MediaDrive } from './ui.jsx'
+    return depan + intiBaru + belakang
+  })
 
-export default function Carousel(props) {
-  const slides = props.slides || []
-  const autoMs = props.autoMs || 4000
-  const [idx, setIdx] = useState(0)
-  const [paused, setPaused] = useState(false)
-  const [zoom, setZoom] = useState(null)
-  const trackRef = useRef(null)
-  const touchX = useRef(0)
-  const moved = useRef(false)
-
-  useEffect(function () {
-    if (slides.length < 2 || paused) return undefined
-    const t = setInterval(function () {
-      setIdx(function (i) { return (i + 1) % slides.length })
-    }, autoMs)
-    return function () { clearInterval(t) }
-  }, [slides.length, paused, autoMs])
-
-  useEffect(function () {
-    if (trackRef.current) trackRef.current.style.transform = 'translateX(-' + (idx * 100) + '%)'
-  }, [idx])
-
-  if (!slides.length) return null
-
-  if (slides.length === 1) {
-    const s = slides[0]
-    return (
-      <>
-        <div className="relative group rounded-2xl overflow-hidden aspect-video bg-slate-900">
-          {s.drive ? (
-            <MediaDrive driveId={s.drive} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} className="absolute inset-0 h-full w-full object-cover cursor-zoom-in" />
-          ) : (
-            <SmartFit src={s.src} full={s.full} type={s.type} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} />
-          )}
-          <button type="button" title="Perbesar Media" onClick={function () { setZoom(s) }}
-            className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
-            <SizedIcon name="expand" size={15} />
-          </button>
-        </div>
-        {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} driveId={zoom.drive || null} onClose={function () { setZoom(null) }} /> : null}
-      </>
-    )
-  }
-
-  return (
-    <>
-      <div
-        className="media-carousel group"
-        onMouseEnter={function () { setPaused(true) }}
-        onMouseLeave={function () { setPaused(false) }}
-        onTouchStart={function (e) { touchX.current = e.touches[0].clientX; moved.current = false }}
-        onTouchEnd={function (e) {
-          const dx = e.changedTouches[0].clientX - touchX.current
-          if (Math.abs(dx) > 40) {
-            moved.current = true
-            setIdx(function (i) { return (i + (dx < 0 ? 1 : -1) + slides.length) % slides.length })
-          }
-        }}
-      >
-        <div ref={trackRef} className="carousel-track">
-          {slides.map(function (s, i) {
-            return (
-              <div key={i} className="carousel-slide">
-                {s.drive ? (
-                  <MediaDrive driveId={s.drive} alt={s.title || 'Media'} onClick={function () { if (moved.current) { moved.current = false; return } setZoom(s) }} className="absolute inset-0 h-full w-full object-cover cursor-zoom-in" />
-                ) : (
-                <SmartFit
-                  src={s.src}
-                  full={s.full}
-                   type={s.type}
-                  alt={s.title || 'Media'}
-                  onClick={function () {
-                    if (moved.current) { moved.current = false; return }
-                    setZoom(s)
-                  }}
-                />
-                )}
-                <button type="button" title="Perbesar Media" onClick={function (e) { e.stopPropagation(); setZoom(s) }}
-                  className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
-                  <SizedIcon name="expand" size={15} />
-                </button>
-                {s.title ? (
-                  <span className="absolute bottom-2 left-2 z-10 px-2 py-1 rounded-lg bg-black/60 text-white text-xs max-w-[85%] truncate">
-                    {s.title}
-                  </span>
-                ) : null}
-              </div>
-            )
-          })}
-        </div>
-        <button
-          onClick={function () { setIdx(function (i) { return (i - 1 + slides.length) % slides.length }) }}
-          className="absolute left-2 top-0 bottom-0 my-auto z-10 h-8 w-8 rounded-full bg-black/40 text-white grid place-items-center opacity-100 xl:opacity-0 xl:group-hover:opacity-100 hover:bg-black/60"
-        >
-          &#8249;
-        </button>
-        <button
-          onClick={function () { setIdx(function (i) { return (i + 1) % slides.length }) }}
-          className="absolute right-2 top-0 bottom-0 my-auto z-10 h-8 w-8 rounded-full bg-black/40 text-white grid place-items-center opacity-100 xl:opacity-0 xl:group-hover:opacity-100 hover:bg-black/60"
-        >
-          &#8250;
-        </button>
-        <div className="absolute bottom-2 right-2 z-10 flex gap-1.5">
-          {slides.map(function (s, i) {
-            return (
-              <button
-                key={i}
-                onClick={function () { setIdx(i) }} aria-label={'Ke slide ' + (i + 1)}
-                className={'carousel-dot h-2 w-2 rounded-full transition-all ' + (i === idx ? 'bg-white' : 'bg-white/40')}
-              />
-            )
-          })}
-        </div>
-      </div>
-      {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} driveId={zoom.drive || null} onClose={function () { setZoom(null) }} /> : null}
-    </>
-  )
+  return hasil.join(' ')
 }
 ````
 
@@ -4717,6 +4522,489 @@ export function EyeToggle(props) {
       <line x1="2" y1="2" x2="22" y2="22" className="eye-slash" />
     </svg>
   )
+}
+````
+
+## File: vite.config.js
+````javascript
+import { defineConfig, loadEnv } from 'vite'
+import react from '@vitejs/plugin-react'
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { createClient } from '@supabase/supabase-js'
+import { LIMIT_PER_PROJECT, ptToday, daftarKredensial, getAccessToken } from './api/_lib/youtube.js'
+import { cekSesi, bacaBody } from './api/_lib/sesi.js'
+
+function pluginApiR2(env) {
+  const s3 = new S3Client({
+    region: 'auto',
+    endpoint: 'https://' + env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
+    credentials: {
+      accessKeyId: env.R2_ACCESS_KEY_ID,
+      secretAccessKey: env.R2_SECRET_ACCESS_KEY
+    }
+  })
+
+  // Bungkus middlewares agar bisa dipakai di dev dan preview
+  const setupMiddlewares = (server) => {
+    server.middlewares.use('/api/r2/presign', async function (req, res) {
+      if (req.method !== 'POST') {
+        res.statusCode = 405
+        res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
+        return
+      }
+      const ok = await cekSesi(env, req.headers.authorization)
+      if (!ok) {
+        res.statusCode = 401
+        res.end(JSON.stringify({ error: 'Sesi tidak valid' }))
+        return
+      }
+      const body = await bacaBody(req)
+      const ext = String(body.filename || 'bin').split('.').pop().toLowerCase()
+      const key = body.kind + '/' + new Date().getFullYear() + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + ext
+      const uploadUrl = await getSignedUrl(
+        s3,
+        new PutObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: key, ContentType: body.contentType }),
+        { expiresIn: 300 }
+      )
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({
+        uploadUrl: uploadUrl,
+        publicUrl: '/api/r2/file?key=' + key,
+        key: key
+      }))
+    })
+
+    server.middlewares.use('/api/r2/delete', async function (req, res) {
+      if (req.method !== 'POST') {
+        res.statusCode = 405
+        res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
+        return
+      }
+      const ok = await cekSesi(env, req.headers.authorization)
+      if (!ok) {
+        res.statusCode = 401
+        res.end(JSON.stringify({ error: 'Sesi tidak valid' }))
+        return
+      }
+      const body = await bacaBody(req)
+      await s3.send(new DeleteObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: body.key }))
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ ok: true }))
+    })
+    server.middlewares.use('/api/r2/file', async function (req, res) {
+      if (req.method !== 'GET') {
+        res.statusCode = 405
+        res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
+        return
+      }
+      const url = new URL(req.url, 'http://localhost')
+      const key = url.searchParams.get('key')
+      if (!key) {
+        res.statusCode = 400
+        res.end(JSON.stringify({ error: 'Key tidak ada' }))
+        return
+      }
+      const cmd = new GetObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: key })
+      if (url.searchParams.get('unduh') !== '1') {
+        const signed = await getSignedUrl(s3, cmd, { expiresIn: 300 })
+        res.statusCode = 302
+        res.setHeader('Location', signed)
+        res.setHeader('Cache-Control', 'public, max-age=60')
+        res.end()
+        return
+      }
+      try {
+        const obj = await s3.send(cmd)
+        res.statusCode = 200
+        res.setHeader('Content-Type', obj.ContentType || 'application/octet-stream')
+        if (obj.ContentLength) res.setHeader('Content-Length', String(obj.ContentLength))
+        res.setHeader('Cache-Control', 'public, max-age=3600')
+        obj.Body.pipe(res)
+      } catch (e) {
+        res.statusCode = 404
+        res.end(JSON.stringify({ error: 'Media tidak ditemukan' }))
+      }
+    })
+  }
+
+  return {
+    name: 'api-r2-dev',
+    configureServer: setupMiddlewares,
+    configurePreviewServer: setupMiddlewares
+  }
+}
+
+function pluginApiYoutube(env) {
+  const admin = createClient(env.VITE_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY)
+  function kirim(res, code, obj) {
+    res.statusCode = code
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify(obj))
+  }
+
+  // Bungkus middlewares agar bisa dipakai di dev dan preview
+  const setupMiddlewares = (server) => {
+    server.middlewares.use('/api/youtube/quota', async function (req, res) {
+      const today = ptToday()
+      const kredensial = daftarKredensial(env)
+      if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
+      let usedTotal = 0
+      const perProject = []
+      for (const kred of kredensial) {
+        const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
+        const used = hit.count || 0
+        usedTotal += used
+        perProject.push({ project: kred.n, used: used, remaining: Math.max(0, LIMIT_PER_PROJECT - used) })
+      }
+      const limit = kredensial.length * LIMIT_PER_PROJECT
+      res.setHeader('Cache-Control', 'no-store')
+      kirim(res, 200, { limit: limit, used: usedTotal, remaining: Math.max(0, limit - usedTotal), perProject: perProject, ptDate: today })
+    })
+
+    server.middlewares.use('/api/youtube/session', async function (req, res) {
+      if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
+      const user = await cekSesi(env, req.headers.authorization)
+      if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
+      const today = ptToday()
+      const kredensial = daftarKredensial(env)
+      if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
+      const body = await bacaBody(req)
+      if (!body.title) { kirim(res, 400, { error: 'Judul video wajib diisi' }); return }
+      let terakhir = ''
+      for (const kred of kredensial) {
+        const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
+        if ((hit.count || 0) >= LIMIT_PER_PROJECT) { terakhir = 'project ' + kred.n + ' sudah penuh'; continue }
+        let access
+        try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
+        const meta = {
+          snippet: { title: String(body.title).slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
+          status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
+        }
+        const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
+          body: JSON.stringify(meta)
+        })
+        if (!init.ok) { terakhir = 'project ' + kred.n + ' ditolak Google (status ' + init.status + ')'; continue }
+        const sessionUri = init.headers.get('location')
+        if (!sessionUri) { terakhir = 'project ' + kred.n + ' tanpa lokasi upload'; continue }
+        await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: user.id, project_id: kred.n })
+        kirim(res, 200, { sessionUri: sessionUri, project: kred.n })
+        return
+      }
+      kirim(res, 429, { error: 'Kuota harian semua project video sudah habis. Coba lagi besok atau gunakan link video eksternal.', detail: terakhir })
+    })
+
+    server.middlewares.use('/api/youtube/latest', async function (req, res) {
+      if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
+      const user = await cekSesi(env, req.headers.authorization)
+      if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
+      const kredensial = daftarKredensial(env)
+      if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
+      let terakhir = ''
+      for (const kred of kredensial) {
+        let access
+        try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
+        const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&order=date&maxResults=5', { headers: { Authorization: 'Bearer ' + access } })
+        if (!r.ok) { terakhir = 'project ' + kred.n + ' status ' + r.status; continue }
+        const j = await r.json()
+        const items = j.items || []
+        const batas = Date.now() - 15 * 60 * 1000
+        const cocok = items.find(function (it) {
+          const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
+          return isNaN(t) ? false : t >= batas
+        })
+        if (!cocok) { kirim(res, 404, { error: 'Video terbaru tidak ditemukan' }); return }
+        kirim(res, 200, { videoId: cocok.id && cocok.id.videoId, project: kred.n })
+        return
+      }
+      kirim(res, 502, { error: 'Gagal memeriksa video terbaru: ' + terakhir })
+    })
+  }
+
+  return {
+    name: 'api-youtube-dev',
+    configureServer: setupMiddlewares,
+    configurePreviewServer: setupMiddlewares
+  }
+}
+
+export default defineConfig(function ({ mode }) {
+  const env = loadEnv(mode, process.cwd(), '')
+  return {
+    plugins: [react(), pluginApiR2(env), pluginApiYoutube(env)],
+    
+    // Konfigurasi agar bisa diakses lewat Network / IP lokal
+    server: {
+      host: true
+    },
+    preview: {
+      host: true
+    },
+    
+    build: {
+      chunkSizeWarningLimit: 1000,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+            'vendor-supabase': ['@supabase/supabase-js'],
+            'vendor-aws': ['@aws-sdk/client-s3', '@aws-sdk/s3-request-presigner'],
+            'vendor-media': ['heic2any']
+          }
+        }
+      }
+    }
+  }
+})
+````
+
+## File: src/components/Carousel.jsx
+````javascript
+import { useEffect, useRef, useState } from 'react'
+import { SizedIcon } from './icons.jsx'
+import { Lightbox, SmartFit, MediaDrive } from './ui.jsx'
+
+export default function Carousel(props) {
+  const slides = props.slides || []
+  const autoMs = props.autoMs || 4000
+  const [idx, setIdx] = useState(0)
+  const [paused, setPaused] = useState(false)
+  const [zoom, setZoom] = useState(null)
+  const trackRef = useRef(null)
+  const touchX = useRef(0)
+  const moved = useRef(false)
+
+  useEffect(function () {
+    if (slides.length < 2 || paused) return undefined
+    const t = setInterval(function () {
+      setIdx(function (i) { return (i + 1) % slides.length })
+    }, autoMs)
+    return function () { clearInterval(t) }
+  }, [slides.length, paused, autoMs])
+
+  useEffect(function () {
+    if (trackRef.current) trackRef.current.style.transform = 'translateX(-' + (idx * 100) + '%)'
+  }, [idx])
+
+  if (!slides.length) return null
+
+  if (slides.length === 1) {
+    const s = slides[0]
+    return (
+      <>
+        <div className="relative group rounded-2xl overflow-hidden aspect-video bg-slate-900">
+          {s.drive ? (
+            <MediaDrive driveId={s.drive} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} className="absolute inset-0 h-full w-full object-cover cursor-zoom-in" />
+          ) : (
+            <SmartFit src={s.src} full={s.full} type={s.type} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} />
+          )}
+          <button type="button" title="Perbesar Media" onClick={function () { setZoom(s) }}
+            className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
+            <SizedIcon name="expand" size={15} />
+          </button>
+        </div>
+        {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} driveId={zoom.drive || null} onClose={function () { setZoom(null) }} /> : null}
+      </>
+    )
+  }
+
+  return (
+    <>
+      <div
+        className="media-carousel group"
+        onMouseEnter={function () { setPaused(true) }}
+        onMouseLeave={function () { setPaused(false) }}
+        onTouchStart={function (e) { touchX.current = e.touches[0].clientX; moved.current = false }}
+        onTouchEnd={function (e) {
+          const dx = e.changedTouches[0].clientX - touchX.current
+          if (Math.abs(dx) > 40) {
+            moved.current = true
+            setIdx(function (i) { return (i + (dx < 0 ? 1 : -1) + slides.length) % slides.length })
+          }
+        }}
+      >
+        <div ref={trackRef} className="carousel-track">
+          {slides.map(function (s, i) {
+            return (
+              <div key={i} className="carousel-slide">
+                {s.drive ? (
+                  <MediaDrive driveId={s.drive} alt={s.title || 'Media'} onClick={function () { if (moved.current) { moved.current = false; return } setZoom(s) }} className="absolute inset-0 h-full w-full object-cover cursor-zoom-in" />
+                ) : (
+                <SmartFit
+                  src={s.src}
+                  full={s.full}
+                   type={s.type}
+                  alt={s.title || 'Media'}
+                  onClick={function () {
+                    if (moved.current) { moved.current = false; return }
+                    setZoom(s)
+                  }}
+                />
+                )}
+                <button type="button" title="Perbesar Media" onClick={function (e) { e.stopPropagation(); setZoom(s) }}
+                  className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
+                  <SizedIcon name="expand" size={15} />
+                </button>
+                {s.title ? (
+                  <span className="absolute bottom-2 left-2 z-10 px-2 py-1 rounded-lg bg-black/60 text-white text-xs max-w-[85%] truncate">
+                    {s.title}
+                  </span>
+                ) : null}
+              </div>
+            )
+          })}
+        </div>
+        <button
+          onClick={function () { setIdx(function (i) { return (i - 1 + slides.length) % slides.length }) }}
+          className="absolute left-2 top-0 bottom-0 my-auto z-10 h-8 w-8 rounded-full bg-black/40 text-white grid place-items-center opacity-100 xl:opacity-0 xl:group-hover:opacity-100 hover:bg-black/60"
+        >
+          &#8249;
+        </button>
+        <button
+          onClick={function () { setIdx(function (i) { return (i + 1) % slides.length }) }}
+          className="absolute right-2 top-0 bottom-0 my-auto z-10 h-8 w-8 rounded-full bg-black/40 text-white grid place-items-center opacity-100 xl:opacity-0 xl:group-hover:opacity-100 hover:bg-black/60"
+        >
+          &#8250;
+        </button>
+        <div className="absolute bottom-2 right-2 z-10 flex gap-1.5">
+          {slides.map(function (s, i) {
+            return (
+              <button
+                key={i}
+                onClick={function () { setIdx(i) }} aria-label={'Ke slide ' + (i + 1)}
+                className={'carousel-dot h-2 w-2 rounded-full transition-all ' + (i === idx ? 'bg-white' : 'bg-white/40')}
+              />
+            )
+          })}
+        </div>
+      </div>
+      {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} driveId={zoom.drive || null} onClose={function () { setZoom(null) }} /> : null}
+    </>
+  )
+}
+````
+
+## File: src/components/FilterBar.jsx
+````javascript
+import { useEffect, useState } from 'react'
+import { ICONS } from './icons.jsx'
+import { CustomSelect, CustomDateInput } from './controls.jsx'
+
+export function FilterSelect(props) {
+  return (
+    <CustomSelect
+      icon={props.icon}
+      value={props.value}
+      onChange={props.onChange}
+      options={props.options}
+      className="min-w-[190px]"
+      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+    />
+  )
+}
+
+export function FilterDate(props) {
+  return (
+    <CustomDateInput
+      mode={props.mode || 'date'}
+      value={props.value}
+      onChange={props.onChange}
+      className="min-w-[170px]"
+      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+    />
+  )
+}
+
+export function TimeFilter(props) {
+  const f = props.filter
+  const set = props.set
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <div className="time-toggle">
+        <button type="button" className={f.timeMode === 'bulan' ? 'active' : ''}
+          onClick={function () { set(Object.assign({}, f, { timeMode: 'bulan', bulan: '', dari: '', sampai: '' })) }}>Bulan</button>
+        <button type="button" className={f.timeMode === 'rentang' ? 'active' : ''}
+          onClick={function () { set(Object.assign({}, f, { timeMode: 'rentang', bulan: '', dari: '', sampai: '' })) }}>Rentang Waktu</button>
+      </div>
+      {f.timeMode === 'bulan'
+        ? <div key="bulan" className="anim-ganti-bulan flex flex-wrap items-center gap-2">
+<FilterDate mode="month" value={f.bulan} onChange={function (v) { set(Object.assign({}, f, { bulan: v })) }} />
+</div>
+        : <div key="rentang" className="anim-ganti-rentang flex flex-wrap items-center gap-2">
+            <FilterDate value={f.dari} onChange={function (v) { set(Object.assign({}, f, { dari: v })) }} />
+            <span className="text-slate-600 text-sm">sampai</span>
+            <FilterDate value={f.sampai} onChange={function (v) { set(Object.assign({}, f, { sampai: v })) }} />
+          </div>}
+    </div>
+  )
+}
+
+export function FilterBar(props) {
+  const [settled, setSettled] = useState(false)
+  useEffect(function () {
+    if (props.open) {
+      const t = setTimeout(function () { setSettled(true) }, 400)
+      return function () { clearTimeout(t) }
+    }
+    setSettled(false)
+    return undefined
+  }, [props.open])
+  return (
+    <div className="bsi-panel relative z-40 rounded-3xl p-4 lg:p-5">
+      <div className="flex items-center justify-between gap-3">
+        <button onClick={props.onToggle}
+          className="xl:hidden flex items-center gap-2 px-4 py-2.5 rounded-2xl border border-slate-200 bg-slate-50 text-sm font-semibold text-slate-700 hover:bg-slate-100">
+          <span className="text-bsi-700">{ICONS.funnel}</span>
+          <span>Filter</span>
+          {props.activeCount > 0 ? (
+            <span className="inline-flex items-center justify-center h-6 min-w-6 px-2 rounded-full bg-bsi-800 text-white text-xs font-bold">{props.activeCount}</span>
+          ) : null}
+          <span className={'transition-transform duration-200 text-slate-600 ' + (props.open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
+        </button>
+        <div className="hidden xl:block text-sm text-slate-600">
+          {props.activeCount > 0
+            ? <span className="inline-flex items-center gap-2"><span className="text-bsi-700">{ICONS.funnel}</span><span><strong className="text-slate-900">{props.activeCount}</strong> filter aktif</span></span>
+            : <span className="inline-flex items-center gap-2"><span className="text-slate-600">{ICONS.funnel}</span><span>Belum ada filter aktif</span></span>}
+        </div>
+      </div>
+            <div className={'filter-wrap' + (props.open ? ' filter-wrap-buka' : '')}>
+        <div className={'filter-dalam' + (props.open && settled ? ' filter-dalam-santai' : '')}>
+          <div className="filter-isi flex flex-wrap items-center gap-3">
+            {props.children}
+            {props.activeCount > 0 ? (
+              <button onClick={props.onReset}
+                className="inline-flex items-center gap-2 rounded-2xl bg-red-50 border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100">
+                {ICONS.close}<span>Hapus Filter</span>
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function SortSelect(props) {
+  return (
+    <CustomSelect
+      icon={ICONS.sort}
+      value={props.value}
+      onChange={props.onChange}
+      options={[{ value: 'terbaru', label: 'Terbaru' }, { value: 'terlama', label: 'Terlama' }]}
+      className="min-w-[150px]"
+      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+    />
+  )
+}
+export function countActiveFilters(o) {
+  let c = 0
+  for (const k in o) {
+    if (k === 'timeMode') continue
+    if (o[k]) c++
+  }
+  return c
 }
 ````
 
@@ -5833,241 +6121,6 @@ export async function siapkanFotoProfil(file, maksSisi, kualitas) {
 }
 ````
 
-## File: vite.config.js
-````javascript
-import { defineConfig, loadEnv } from 'vite'
-import react from '@vitejs/plugin-react'
-import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
-import { createClient } from '@supabase/supabase-js'
-import { LIMIT_PER_PROJECT, ptToday, daftarKredensial, getAccessToken } from './api/_lib/youtube.js'
-import { cekSesi, bacaBody } from './api/_lib/sesi.js'
-
-function pluginApiR2(env) {
-  const s3 = new S3Client({
-    region: 'auto',
-    endpoint: 'https://' + env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
-    credentials: {
-      accessKeyId: env.R2_ACCESS_KEY_ID,
-      secretAccessKey: env.R2_SECRET_ACCESS_KEY
-    }
-  })
-
-  // Bungkus middlewares agar bisa dipakai di dev dan preview
-  const setupMiddlewares = (server) => {
-    server.middlewares.use('/api/r2/presign', async function (req, res) {
-      if (req.method !== 'POST') {
-        res.statusCode = 405
-        res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
-        return
-      }
-      const ok = await cekSesi(env, req.headers.authorization)
-      if (!ok) {
-        res.statusCode = 401
-        res.end(JSON.stringify({ error: 'Sesi tidak valid' }))
-        return
-      }
-      const body = await bacaBody(req)
-      const ext = String(body.filename || 'bin').split('.').pop().toLowerCase()
-      const key = body.kind + '/' + new Date().getFullYear() + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + ext
-      const uploadUrl = await getSignedUrl(
-        s3,
-        new PutObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: key, ContentType: body.contentType }),
-        { expiresIn: 300 }
-      )
-      res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({
-        uploadUrl: uploadUrl,
-        publicUrl: '/api/r2/file?key=' + key,
-        key: key
-      }))
-    })
-
-    server.middlewares.use('/api/r2/delete', async function (req, res) {
-      if (req.method !== 'POST') {
-        res.statusCode = 405
-        res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
-        return
-      }
-      const ok = await cekSesi(env, req.headers.authorization)
-      if (!ok) {
-        res.statusCode = 401
-        res.end(JSON.stringify({ error: 'Sesi tidak valid' }))
-        return
-      }
-      const body = await bacaBody(req)
-      await s3.send(new DeleteObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: body.key }))
-      res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({ ok: true }))
-    })
-    server.middlewares.use('/api/r2/file', async function (req, res) {
-      if (req.method !== 'GET') {
-        res.statusCode = 405
-        res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
-        return
-      }
-      const url = new URL(req.url, 'http://localhost')
-      const key = url.searchParams.get('key')
-      if (!key) {
-        res.statusCode = 400
-        res.end(JSON.stringify({ error: 'Key tidak ada' }))
-        return
-      }
-      const cmd = new GetObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: key })
-      if (url.searchParams.get('unduh') !== '1') {
-        const signed = await getSignedUrl(s3, cmd, { expiresIn: 300 })
-        res.statusCode = 302
-        res.setHeader('Location', signed)
-        res.setHeader('Cache-Control', 'public, max-age=60')
-        res.end()
-        return
-      }
-      try {
-        const obj = await s3.send(cmd)
-        res.statusCode = 200
-        res.setHeader('Content-Type', obj.ContentType || 'application/octet-stream')
-        if (obj.ContentLength) res.setHeader('Content-Length', String(obj.ContentLength))
-        res.setHeader('Cache-Control', 'public, max-age=3600')
-        obj.Body.pipe(res)
-      } catch (e) {
-        res.statusCode = 404
-        res.end(JSON.stringify({ error: 'Media tidak ditemukan' }))
-      }
-    })
-  }
-
-  return {
-    name: 'api-r2-dev',
-    configureServer: setupMiddlewares,
-    configurePreviewServer: setupMiddlewares
-  }
-}
-
-function pluginApiYoutube(env) {
-  const admin = createClient(env.VITE_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY)
-  function kirim(res, code, obj) {
-    res.statusCode = code
-    res.setHeader('Content-Type', 'application/json')
-    res.end(JSON.stringify(obj))
-  }
-
-  // Bungkus middlewares agar bisa dipakai di dev dan preview
-  const setupMiddlewares = (server) => {
-    server.middlewares.use('/api/youtube/quota', async function (req, res) {
-      const today = ptToday()
-      const kredensial = daftarKredensial(env)
-      if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
-      let usedTotal = 0
-      const perProject = []
-      for (const kred of kredensial) {
-        const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
-        const used = hit.count || 0
-        usedTotal += used
-        perProject.push({ project: kred.n, used: used, remaining: Math.max(0, LIMIT_PER_PROJECT - used) })
-      }
-      const limit = kredensial.length * LIMIT_PER_PROJECT
-      res.setHeader('Cache-Control', 'no-store')
-      kirim(res, 200, { limit: limit, used: usedTotal, remaining: Math.max(0, limit - usedTotal), perProject: perProject, ptDate: today })
-    })
-
-    server.middlewares.use('/api/youtube/session', async function (req, res) {
-      if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
-      const user = await cekSesi(env, req.headers.authorization)
-      if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
-      const today = ptToday()
-      const kredensial = daftarKredensial(env)
-      if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
-      const body = await bacaBody(req)
-      if (!body.title) { kirim(res, 400, { error: 'Judul video wajib diisi' }); return }
-      let terakhir = ''
-      for (const kred of kredensial) {
-        const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
-        if ((hit.count || 0) >= LIMIT_PER_PROJECT) { terakhir = 'project ' + kred.n + ' sudah penuh'; continue }
-        let access
-        try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
-        const meta = {
-          snippet: { title: String(body.title).slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
-          status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
-        }
-        const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
-          method: 'POST',
-          headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
-          body: JSON.stringify(meta)
-        })
-        if (!init.ok) { terakhir = 'project ' + kred.n + ' ditolak Google (status ' + init.status + ')'; continue }
-        const sessionUri = init.headers.get('location')
-        if (!sessionUri) { terakhir = 'project ' + kred.n + ' tanpa lokasi upload'; continue }
-        await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: user.id, project_id: kred.n })
-        kirim(res, 200, { sessionUri: sessionUri, project: kred.n })
-        return
-      }
-      kirim(res, 429, { error: 'Kuota harian semua project video sudah habis. Coba lagi besok atau gunakan link video eksternal.', detail: terakhir })
-    })
-
-    server.middlewares.use('/api/youtube/latest', async function (req, res) {
-      if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
-      const user = await cekSesi(env, req.headers.authorization)
-      if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
-      const kredensial = daftarKredensial(env)
-      if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
-      let terakhir = ''
-      for (const kred of kredensial) {
-        let access
-        try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
-        const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&order=date&maxResults=5', { headers: { Authorization: 'Bearer ' + access } })
-        if (!r.ok) { terakhir = 'project ' + kred.n + ' status ' + r.status; continue }
-        const j = await r.json()
-        const items = j.items || []
-        const batas = Date.now() - 15 * 60 * 1000
-        const cocok = items.find(function (it) {
-          const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
-          return isNaN(t) ? false : t >= batas
-        })
-        if (!cocok) { kirim(res, 404, { error: 'Video terbaru tidak ditemukan' }); return }
-        kirim(res, 200, { videoId: cocok.id && cocok.id.videoId, project: kred.n })
-        return
-      }
-      kirim(res, 502, { error: 'Gagal memeriksa video terbaru: ' + terakhir })
-    })
-  }
-
-  return {
-    name: 'api-youtube-dev',
-    configureServer: setupMiddlewares,
-    configurePreviewServer: setupMiddlewares
-  }
-}
-
-export default defineConfig(function ({ mode }) {
-  const env = loadEnv(mode, process.cwd(), '')
-  return {
-    plugins: [react(), pluginApiR2(env), pluginApiYoutube(env)],
-    
-    // Konfigurasi agar bisa diakses lewat Network / IP lokal
-    server: {
-      host: true
-    },
-    preview: {
-      host: true
-    },
-    
-    build: {
-      chunkSizeWarningLimit: 1000,
-      rollupOptions: {
-        output: {
-          manualChunks: {
-            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-            'vendor-supabase': ['@supabase/supabase-js'],
-            'vendor-aws': ['@aws-sdk/client-s3', '@aws-sdk/s3-request-presigner'],
-            'vendor-media': ['heic2any']
-          }
-        }
-      }
-    }
-  }
-})
-````
-
 ## File: src/components/controls.jsx
 ````javascript
 import { pesanTanggalTerlarang } from '../lib/format.js'
@@ -6360,128 +6413,6 @@ export function SumberVideo(props) {
 }
 ````
 
-## File: src/components/FilterBar.jsx
-````javascript
-import { useEffect, useState } from 'react'
-import { ICONS } from './icons.jsx'
-import { CustomSelect, CustomDateInput } from './controls.jsx'
-
-export function FilterSelect(props) {
-  return (
-    <CustomSelect
-      icon={props.icon}
-      value={props.value}
-      onChange={props.onChange}
-      options={props.options}
-      className="min-w-[190px]"
-      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
-    />
-  )
-}
-
-export function FilterDate(props) {
-  return (
-    <CustomDateInput
-      mode={props.mode || 'date'}
-      value={props.value}
-      onChange={props.onChange}
-      className="min-w-[170px]"
-      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
-    />
-  )
-}
-
-export function TimeFilter(props) {
-  const f = props.filter
-  const set = props.set
-  return (
-    <div className="flex flex-wrap items-center gap-3">
-      <div className="time-toggle">
-        <button type="button" className={f.timeMode === 'bulan' ? 'active' : ''}
-          onClick={function () { set(Object.assign({}, f, { timeMode: 'bulan', bulan: '', dari: '', sampai: '' })) }}>Bulan</button>
-        <button type="button" className={f.timeMode === 'rentang' ? 'active' : ''}
-          onClick={function () { set(Object.assign({}, f, { timeMode: 'rentang', bulan: '', dari: '', sampai: '' })) }}>Rentang Waktu</button>
-      </div>
-      {f.timeMode === 'bulan'
-        ? <div key="bulan" className="anim-ganti-bulan flex flex-wrap items-center gap-2">
-<FilterDate mode="month" value={f.bulan} onChange={function (v) { set(Object.assign({}, f, { bulan: v })) }} />
-</div>
-        : <div key="rentang" className="anim-ganti-rentang flex flex-wrap items-center gap-2">
-            <FilterDate value={f.dari} onChange={function (v) { set(Object.assign({}, f, { dari: v })) }} />
-            <span className="text-slate-600 text-sm">sampai</span>
-            <FilterDate value={f.sampai} onChange={function (v) { set(Object.assign({}, f, { sampai: v })) }} />
-          </div>}
-    </div>
-  )
-}
-
-export function FilterBar(props) {
-  const [settled, setSettled] = useState(false)
-  useEffect(function () {
-    if (props.open) {
-      const t = setTimeout(function () { setSettled(true) }, 400)
-      return function () { clearTimeout(t) }
-    }
-    setSettled(false)
-    return undefined
-  }, [props.open])
-  return (
-    <div className="bsi-panel relative z-40 rounded-3xl p-4 lg:p-5">
-      <div className="flex items-center justify-between gap-3">
-        <button onClick={props.onToggle}
-          className="xl:hidden flex items-center gap-2 px-4 py-2.5 rounded-2xl border border-slate-200 bg-slate-50 text-sm font-semibold text-slate-700 hover:bg-slate-100">
-          <span className="text-bsi-700">{ICONS.funnel}</span>
-          <span>Filter</span>
-          {props.activeCount > 0 ? (
-            <span className="inline-flex items-center justify-center h-6 min-w-6 px-2 rounded-full bg-bsi-800 text-white text-xs font-bold">{props.activeCount}</span>
-          ) : null}
-          <span className={'transition-transform duration-200 text-slate-600 ' + (props.open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
-        </button>
-        <div className="hidden xl:block text-sm text-slate-600">
-          {props.activeCount > 0
-            ? <span className="inline-flex items-center gap-2"><span className="text-bsi-700">{ICONS.funnel}</span><span><strong className="text-slate-900">{props.activeCount}</strong> filter aktif</span></span>
-            : <span className="inline-flex items-center gap-2"><span className="text-slate-600">{ICONS.funnel}</span><span>Belum ada filter aktif</span></span>}
-        </div>
-      </div>
-            <div className={'filter-wrap' + (props.open ? ' filter-wrap-buka' : '')}>
-        <div className={'filter-dalam' + (props.open && settled ? ' filter-dalam-santai' : '')}>
-          <div className="filter-isi flex flex-wrap items-center gap-3">
-            {props.children}
-            {props.activeCount > 0 ? (
-              <button onClick={props.onReset}
-                className="inline-flex items-center gap-2 rounded-2xl bg-red-50 border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100">
-                {ICONS.close}<span>Hapus Filter</span>
-              </button>
-            ) : null}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export function SortSelect(props) {
-  return (
-    <CustomSelect
-      icon={ICONS.sort}
-      value={props.value}
-      onChange={props.onChange}
-      options={[{ value: 'terbaru', label: 'Terbaru' }, { value: 'terlama', label: 'Terlama' }]}
-      className="min-w-[150px]"
-      buttonCls="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
-    />
-  )
-}
-export function countActiveFilters(o) {
-  let c = 0
-  for (const k in o) {
-    if (k === 'timeMode') continue
-    if (o[k]) c++
-  }
-  return c
-}
-````
-
 ## File: src/main.jsx
 ````javascript
 import React from 'react'
@@ -6706,370 +6637,352 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 })()
 ````
 
-## File: src/pages/QuickPage.jsx
+## File: src/components/PengingatBanner.jsx
 ````javascript
-import { useEffect, useRef, useState } from 'react'
-import { supabase } from '../lib/supabase.js'
-import { useAuth } from '../lib/auth.js'
-import { uploadMedia } from '../lib/upload.js'
-import { syncGaleriFromLogbook } from '../lib/logbook.js'
-import { urlPratinjau } from '../lib/konversi.js'
-import { todayInput, formatTanggal } from '../lib/format.js'
-import { KATEGORI } from '../lib/constants.js'
-import { inputCls, labelCls, btnPrimary, useToast, AutoTextArea, LabelProses, Avatar } from '../components/ui.jsx'
-import { CustomSelect } from '../components/controls.jsx'
-import { SizedIcon } from '../components/icons.jsx'
-import { useNavigate } from 'react-router-dom'
-import PengingatBanner from '../components/PengingatBanner.jsx'
-import { SkeletonQuick } from '../components/Skeleton.jsx'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { SizedIcon } from './icons.jsx'
+import { formatTanggal } from '../lib/format.js'
+import { MULAI_MAGANG } from '../lib/constants.js'
 
-const STATUS_HADIR = ['Masuk', 'Izin', 'Bolos']
+const HARI_PENDEK = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
+const BULAN_PENDEK = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agt', 'Sept', 'Okt', 'Nov', 'Des']
 
-export default function QuickPage() {
-  const { mahasiswa } = useAuth()
-  const toast = useToast()
-  const tanggal = todayInput()
+function formatTanggalMobile(s) {
+  if (!s) return ''
+  const d = new Date(s + 'T00:00:00')
+  if (Number.isNaN(d.getTime())) return s
+  return HARI_PENDEK[d.getDay()] + ', ' + d.getDate() + ' ' + BULAN_PENDEK[d.getMonth()] + ' ' + d.getFullYear()
+}
 
-  const [tab, setTab] = useState('logbook')
-  const [loading, setLoading] = useState(true)
-  const [todayLog, setTodayLog] = useState(null)
-  const [hadirHariIni, setHadirHariIni] = useState(null)
-  const [lastLogTanggal, setLastLogTanggal] = useState(null)
-  const [lastHadirTanggal, setLastHadirTanggal] = useState(null)
+function pad2(n) { return (n < 10 ? '0' : '') + n }
+function isoDari(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) }
 
-  const [kategori, setKategori] = useState('')
-  const [judulKegiatan, setJudulKegiatan] = useState('')
-  const [deskripsi, setDeskripsi] = useState('')
-  const [file, setFile] = useState(null)
-  const [preview, setPreview] = useState('')
-  const [showGal, setShowGal] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [info, setInfo] = useState('')
+/* ===== LOGIKA REMINDER LOGBOOK =====
+   Hanya hari yang berstatus "Masuk" yang perlu logbook.
+   Hari tanpa catatan hadir (akan jadi Bolos otomatis besoknya) atau
+   yang berstatus Izin/Bolos tidak perlu diingatkan.
 
-  const [status, setStatus] = useState('Masuk')
-  const [alasan, setAlasan] = useState('')
-  const navigate = useNavigate()
-  const [tanggalLogs, setTanggalLogs] = useState([])
-  const [hadirRows, setHadirRows] = useState([])
-
-  const cameraRef = useRef(null)
-  const galeriRef = useRef(null)
-
-  async function muatData(mhs, senyap) {
-    if (!senyap) setLoading(true)
-    const l = await supabase
-      .from('logbooks')
-      .select('*, logbook_items(*)')
-      .eq('mahasiswa_id', mhs.id)
-      .eq('tanggal', tanggal)
-      .order('created_at', { ascending: false })
-      .limit(1)
-    const log = (l.data || [])[0] || null
-    if (log) {
-      log.logbook_items = (log.logbook_items || []).sort(function (a, b) { return (a.urutan || 0) - (b.urutan || 0) })
-    }
-    const h = await supabase
-      .from('daftar_hadir')
-      .select('*')
-      .eq('mahasiswa_id', mhs.id)
-      .eq('tanggal', tanggal)
-      .limit(1)
-    const hadir = (h.data || [])[0] || null
-    const ll = await supabase
-      .from('logbooks')
-      .select('tanggal')
-      .eq('mahasiswa_id', mhs.id)
-      .order('tanggal', { ascending: false })
-      .limit(1)
-    const lh = await supabase
-      .from('daftar_hadir')
-      .select('tanggal')
-      .eq('mahasiswa_id', mhs.id)
-      .order('tanggal', { ascending: false })
-      .limit(1)
-    setTodayLog(log)
-    setHadirHariIni(hadir)
-    setLastLogTanggal(ll.data && ll.data[0] ? ll.data[0].tanggal : null)
-    setLastHadirTanggal(lh.data && lh.data[0] ? lh.data[0].tanggal : null)
-    if (hadir) {
-      setStatus(hadir.status)
-      setAlasan(hadir.alasan || '')
-    }
-        const pg = await supabase.from('logbooks').select('tanggal').eq('mahasiswa_id', mhs.id)
-    const ph = await supabase.from('daftar_hadir').select('tanggal, status').eq('mahasiswa_id', mhs.id)
-    setTanggalLogs((pg.data || []).map(function (x) { return x.tanggal }))
-    setHadirRows(ph.data || [])
-    if (!senyap) setLoading(false)
+   Batas loop = HARI INI (bukan kemarin), tapi hari ini hanya masuk
+   daftar kalau user sudah presensi "Masuk" hari ini. Jadi user yang
+   baru presensi masuk pagi langsung dapat reminder logbook hari itu. */
+export function hitungTanggalTerlewat(tanggalLogbook, hadir) {
+  const punyaLog = new Set(tanggalLogbook || [])
+  const hariMasuk = new Set()
+  ;(hadir || []).forEach(function (h) {
+    if (h.status === 'Masuk') hariMasuk.add(h.tanggal)
+  })
+  const hasil = []
+  const d = new Date(MULAI_MAGANG + 'T00:00:00')
+  const batas = new Date()
+  batas.setHours(0, 0, 0, 0)
+  while (d <= batas) {
+    const iso = isoDari(d)
+    const hari = d.getDay()
+    if (hari !== 0 && hari !== 6 && !punyaLog.has(iso) && hariMasuk.has(iso)) hasil.push(iso)
+    d.setDate(d.getDate() + 1)
   }
+  return hasil
+}
+
+/* ===== LOGIKA REMINDER HADIR =====
+   Muncul HANYA untuk HARI INI, mulai jam 07:00 sampai tengah malam.
+   Lewat tengah malam, hari ini otomatis jadi Bolos besoknya lewat autoIsiBolos(),
+   jadi tidak perlu diingatkan lagi (sudah di luar window). */
+export function hitungTanggalTerlewatHadir(hadir) {
+  const punyaHadir = new Set((hadir || []).map(function (h) { return h.tanggal }))
+  const now = new Date()
+  const hari = now.getDay()
+
+  /* Sabtu/Minggu bukan hari kerja */
+  if (hari === 0 || hari === 6) return []
+
+  /* Sebelum jam 7 pagi, user masih punya waktu; jangan ganggu */
+  if (now.getHours() < 7) return []
+
+  /* Sudah isi absen hari ini → tidak perlu reminder */
+  const hariIni = isoDari(now)
+  if (punyaHadir.has(hariIni)) return []
+
+  return [hariIni]
+}
+
+/* gulir-atas-dulu-v1: saat daftar tambahan ditutup, gulir internal dinaikkan
+   mulus ke puncak dulu; aksi penutup dipanggil setelah gulir selesai (atau
+   jatuh tempo) supaya tinggi banner baru menyusut sesudahnya */
+function gulirKeAtasLalu(el, selesai) {
+  if (!el || el.scrollTop <= 0) { selesai(); return }
+  const reduksi = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (reduksi) { el.scrollTop = 0; selesai(); return }
+  let done = false
+  const panggil = function () { if (done) return; done = true; selesai() }
+  el.addEventListener('scrollend', panggil, { once: true })
+  el.scrollTo({ top: 0, behavior: 'smooth' })
+  const mulai = Date.now()
+  const cek = function () {
+    if (done) return
+    if (el.scrollTop <= 0 || Date.now() - mulai > 700) { panggil(); return }
+    setTimeout(cek, 80)
+  }
+  setTimeout(cek, 80)
+}
+
+export default function PengingatBanner(props) {
+  const tipe = props.tipe || 'logbook'
+  const [tutup, setTutup] = useState(false)
+  const [lihatSemua, setLihatSemua] = useState(false)
+  const [buka, setBuka] = useState(false)
+  const [keluar, setKeluar] = useState(false)
+  const [hilang, setHilang] = useState(false)
+  const simpanRef = useRef(null)
+  const refScroll = useRef(null)
+  const sedangTutup = useRef(false)
+  const refTiga = useRef(null)
+  const [tinggiTiga, setTinggiTiga] = useState(0)
+  const [capBuka, setCapBuka] = useState(311)
+
+  /* ticker-minutes: re-render tiap 60 detik supaya reminder hadir otomatis
+     muncul saat masuk jam 07:00 tanpa user perlu refresh halaman. */
+  const [, setTick] = useState(0)
+  useEffect(function () {
+    const iv = setInterval(function () { setTick(function (t) { return t + 1 }) }, 60000)
+    return function () { clearInterval(iv) }
+  }, [])
+
+  const mentah = tipe === 'hadir'
+    ? hitungTanggalTerlewatHadir(props.hadir)
+    : hitungTanggalTerlewat(props.tanggalLogbook, props.hadir)
+  if (mentah.length && !tutup) simpanRef.current = mentah
+  const harusHilang = tutup || !mentah.length
+  /* saat menghilang, pakai salinan terakhir supaya isi banner tetap utuh selama animasi keluar */
+  const terlewat = mentah.length ? mentah : (simpanRef.current || [])
+
+  const konfigurasi = tipe === 'hadir'
+    ? {
+        judul: 'Kamu belum isi daftar hadir hari ini',
+        deskripsi: 'Isi sebelum tengah malam. Kalau lewat, hari ini akan otomatis tercatat Bolos.',
+        aksi: 'Isi Daftar Hadir'
+      }
+    : {
+        judul: terlewat.length + ' hari kerja belum punya logbook',
+        deskripsi: 'Hanya hari dengan status kehadiran Masuk yang perlu logbook — termasuk hari ini jika kamu sudah presensi masuk.',
+        aksi: 'Isi Logbook'
+      }
+
+  /* ukur tinggi 3 item pertama supaya tinggi lipatan presisi di semua lebar layar */
+  useLayoutEffect(function () {
+    function ukur() {
+      if (refTiga.current) setTinggiTiga(refTiga.current.offsetHeight)
+      setCapBuka(window.matchMedia('(max-width: 639px)').matches ? 293 : 311)
+    }
+    ukur()
+    window.addEventListener('resize', ukur)
+    let ro = null
+    if (refTiga.current && typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(ukur)
+      ro.observe(refTiga.current)
+    }
+    return function () { window.removeEventListener('resize', ukur); if (ro) ro.disconnect() }
+  }, [terlewat.length])
+
+  /* masuk: wrapper dibiarkan terlipat satu frame lalu dibuka supaya transisi tinggi
+     berjalan dan konten di bawah bergeser mulus; keluar: wrapper merapat bersamaan
+     dengan isi yang memudar, komponen dilepas setelah keduanya selesai */
+  useEffect(function () {
+    if (harusHilang) return undefined
+    const r = requestAnimationFrame(function () { setBuka(true) })
+    return function () { cancelAnimationFrame(r) }
+  }, [harusHilang])
 
   useEffect(function () {
-    if (mahasiswa) muatData(mahasiswa)
-  }, [mahasiswa])
+    if (!harusHilang) { setKeluar(false); setHilang(false); return undefined }
+    if (!terlewat.length) { setHilang(true); return undefined }
+    setBuka(false)
+    setKeluar(true)
+    const t = setTimeout(function () { setHilang(true) }, 400)
+    return function () { clearTimeout(t) }
+  }, [harusHilang])
 
-  async function pilihFile(e) {
-    const f = e.target.files[0]
-    e.target.value = ''
-    if (!f) return
-    if (preview && preview.indexOf('blob:') === 0) URL.revokeObjectURL(preview)
-    setFile(f)
-    setPreview(await urlPratinjau(f))
+  if (hilang || (harusHilang && !terlewat.length)) return null
+
+  return (
+    <div className={'pengingat-wrap' + (buka ? ' pengingat-wrap-buka' : '')}>
+      <div className="pengingat-wrap-dalam">
+        <section className={'mt-6 rounded-[2rem] border border-amber-200 bg-amber-50 p-5 sm:p-6 ' + (keluar ? ' pengingat-keluar' : ' pengingat-masuk')}>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex min-w-0 flex-1 items-start gap-3">
+              <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-800">
+                <SizedIcon name="clipboard" size={18} />
+              </span>
+              <div>
+                <h2 className="text-base font-black text-amber-800 sm:text-lg">
+                  {konfigurasi.judul}
+                </h2>
+                <p className="mt-1 text-xs text-amber-800 sm:text-sm">
+                  {konfigurasi.deskripsi}
+                </p>
+              </div>
+            </div>
+            <button type="button" onClick={function () { setTutup(true) }} title="Sembunyikan Pengingat" className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-amber-100 text-amber-800 hover:bg-amber-200">
+              <SizedIcon name="close" size={14} />
+            </button>
+          </div>
+
+          <div ref={refScroll} className={'mt-4 pengingat-scroll' + (lihatSemua ? ' pengingat-scroll-buka' : '')} style={{ maxHeight: lihatSemua ? capBuka : (tinggiTiga || undefined) }}>
+            <ul ref={refTiga} className="space-y-2">
+              {terlewat.slice(0, 3).map(function (t) {
+                return (
+                  <li key={t} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-200 bg-white p-3">
+                    <p className="text-sm font-semibold text-slate-800">
+                      <span className="hidden sm:inline">{formatTanggal(t)}</span>
+                      <span className="sm:hidden">{formatTanggalMobile(t)}</span>
+                    </p>
+                    <button type="button" onClick={function () { props.onIsi(t) }} className="rounded-xl bg-bsi-800 px-3.5 py-2 text-xs font-bold text-white hover:bg-bsi-900 sm:text-sm">
+                      {konfigurasi.aksi}
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+            {terlewat.length > 3 ? (
+              <ul className="pengingat-daftar-extra space-y-2 pt-2">
+                {terlewat.slice(3).map(function (t) {
+                  return (
+                    <li key={t} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-200 bg-white p-3">
+                      <p className="text-sm font-semibold text-slate-800">
+                        <span className="hidden sm:inline">{formatTanggal(t)}</span>
+                        <span className="sm:hidden">{formatTanggalMobile(t)}</span>
+                      </p>
+                      <button type="button" onClick={function () { props.onIsi(t) }} className="rounded-xl bg-bsi-800 px-3.5 py-2 text-xs font-bold text-white hover:bg-bsi-900 sm:text-sm">
+                        {konfigurasi.aksi}
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            ) : null}
+          </div>
+
+          {terlewat.length > 3 ? (
+            <button type="button" onClick={function () {
+              if (!lihatSemua) { setLihatSemua(true); return }
+              if (sedangTutup.current) return
+              sedangTutup.current = true
+              gulirKeAtasLalu(refScroll.current, function () {
+                sedangTutup.current = false
+                setLihatSemua(false)
+              })
+            }} className="mt-3 w-full rounded-xl border border-amber-300 bg-white px-4 py-2.5 text-xs font-bold text-amber-800 hover:bg-amber-100 sm:text-sm">
+              {lihatSemua ? 'Sembunyikan' : 'Lihat Semua (' + terlewat.length + ' tanggal)'}
+            </button>
+          ) : null}
+        </section>
+      </div>
+    </div>
+  )
+}
+````
+
+## File: src/pages/LoginPage.jsx
+````javascript
+import { useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { loginWithNim } from '../lib/auth.js'
+import { inputCls, labelCls, btnPrimary, LabelProses } from '../components/ui.jsx'
+import { EyeToggle, SizedIcon } from '../components/icons.jsx'
+
+function pesanErrorLogin(err) {
+  const pesan = String((err && err.message) || '')
+  const rendah = pesan.toLowerCase()
+  if (rendah.indexOf('invalid login credentials') !== -1) {
+    return 'NIM atau kode akses yang kamu masukkan tidak cocok dengan data kami. Periksa kembali penulisannya, pastikan tidak ada spasi berlebih, lalu coba lagi.'
   }
-
-  function hapusFile() {
-    if (preview && preview.indexOf('blob:') === 0) URL.revokeObjectURL(preview)
-    setFile(null)
-    setPreview('')
-    setShowGal(false)
+  if (rendah.indexOf('not confirmed') !== -1) {
+    return 'Akun untuk NIM ini belum diaktifkan. Hubungi admin tim magang untuk mengaktifkan akunmu terlebih dahulu.'
   }
+  if (rendah.indexOf('too many requests') !== -1 || rendah.indexOf('try again after') !== -1 || rendah.indexOf('rate limit') !== -1) {
+    return 'Terlalu banyak percobaan masuk dalam waktu singkat demi keamanan. Tunggu sekitar satu menit, lalu coba lagi.'
+  }
+  if (rendah.indexOf('fetch') !== -1 || rendah.indexOf('network') !== -1 || rendah.indexOf('failed to load') !== -1 || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+    return 'Tidak bisa terhubung ke server. Periksa koneksi internetmu, lalu coba lagi.'
+  }
+  if (rendah.indexOf('email') !== -1 && rendah.indexOf('format') !== -1) {
+    return 'Format NIM tidak terbaca. Masukkan NIM berupa angka tanpa spasi, contoh: 24070041.'
+  }
+  if (pesan) return 'Gagal masuk: ' + pesan + '. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
+  return 'Terjadi kesalahan tidak terduga saat masuk. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
+}
+export default function LoginPage() {
+  const navigate = useNavigate()
+  const [params] = useSearchParams()
+  const [nim, setNim] = useState('')
+  const [kode, setKode] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [lihatKode, setLihatKode] = useState(false)
 
-  async function submitLogbook(e) {
+  async function submit(e) {
     e.preventDefault()
-    if (!todayLog && !kategori) { toast.gagal('Pilih kategori terlebih dahulu.'); return }
-    if (!judulKegiatan.trim()) { toast.gagal('Judul kegiatan wajib diisi.'); return }
     setBusy(true)
+    setError('')
     try {
-      let mediaPath = null
-      let mediaThumb = null
-      if (file) {
-        const up = await uploadMedia(file, 'logbook', setInfo)
-        mediaPath = up.publicUrl
-        mediaThumb = up.thumbUrl || null
-      }
-      let logId = todayLog ? todayLog.id : null
-      if (!todayLog) {
-        const ins = await supabase.from('logbooks').insert({
-          mahasiswa_id: mahasiswa.id, tanggal: tanggal, unit: '', kategori: kategori,
-          judul: judulKegiatan.trim(), kendala: '', solusi: '', pembelajaran: '', status: 'publik'
-        }).select().single()
-        if (ins.error) throw new Error(ins.error.message)
-        logId = ins.data.id
-      }
-      const urutan = todayLog ? todayLog.logbook_items.reduce(function (m, it) { return Math.max(m, it.urutan || 0) }, 0) + 1 : 1
-      const insItem = await supabase.from('logbook_items').insert({
-        logbook_id: logId,
-        urutan: urutan,
-        judul: judulKegiatan.trim(),
-        deskripsi: deskripsi.trim(),
-        hasil: '',
-        media_path: mediaPath,
-        media_type: mediaPath ? 'foto' : null,
-        media_thumb: mediaThumb,
-        media_source: 'r2',
-        youtube_id: null,
-        drive_id: null,
-        show_in_gallery: showGal && !!mediaPath
-      }).select().single()
-      if (insItem.error) throw new Error(insItem.error.message)
-      if (todayLog && todayLog.status !== 'publik') {
-        await supabase.from('logbooks').update({ status: 'publik' }).eq('id', todayLog.id)
-      }
-      if (showGal && mediaPath) {
-        await syncGaleriFromLogbook(mahasiswa.id, [insItem.data], {
-          tanggal: tanggal,
-          kategori: todayLog ? todayLog.kategori : kategori
-        })
-      }
-      const pertama = !todayLog
-      setJudulKegiatan('')
-      setDeskripsi('')
-      hapusFile()
-      if (pertama) setKategori('')
-      await muatData(mahasiswa, true)
-      toast.sukses(pertama ? 'Logbook hari ini berhasil dibuat' : 'Kegiatan baru berhasil ditambahkan')
-    } catch (err) {
-      toast.gagal('Gagal menyimpan logbook: ' + err.message)
-    }
-    setInfo('')
+  await loginWithNim(nim, kode)
+  const next = params.get('next')
+  navigate(next && next.charAt(0) === '/' && next.indexOf('//') !== 0 ? next : '/dashboard')
+} catch (err) {
+  setError(pesanErrorLogin(err))
+}
     setBusy(false)
-  }
-
-  async function submitAbsen(e) {
-    e.preventDefault()
-    setBusy(true)
-    try {
-      const payload = {
-        mahasiswa_id: mahasiswa.id,
-        tanggal: tanggal,
-        status: status,
-        alasan: status === 'Masuk' ? '' : alasan.trim()
-      }
-      let res
-      if (hadirHariIni) {
-        res = await supabase.from('daftar_hadir').update(payload).eq('id', hadirHariIni.id)
-      } else {
-        res = await supabase.from('daftar_hadir').insert(payload)
-      }
-      if (res.error) throw new Error(res.error.message)
-      await muatData(mahasiswa, true)
-      toast.sukses(hadirHariIni ? 'Daftar hadir berhasil diperbarui' : 'Daftar hadir berhasil disimpan')
-    } catch (err) {
-      toast.gagal('Gagal menyimpan kehadiran: ' + err.message)
-    }
-    setBusy(false)
-  }
-
-  function infoTerakhir(tgl) {
-    if (!tgl) return { teks: 'belum pernah', lama: true }
-    const selisih = Math.round((new Date(tanggal + 'T00:00:00').getTime() - new Date(tgl + 'T00:00:00').getTime()) / 86400000)
-    if (selisih <= 0) return { teks: 'hari ini', lama: false }
-    if (selisih === 1) return { teks: 'kemarin', lama: false }
-    return { teks: selisih + ' hari yang lalu', lama: true }
-  }
-
-  if (loading) {
-    return <SkeletonQuick />
-  }
-
-  const infoLog = infoTerakhir(lastLogTanggal)
-  const infoHadir = infoTerakhir(lastHadirTanggal)
-
-  const tabCls = function (t) {
-    return 'flex-1 px-4 py-2.5 rounded-xl text-xs sm:rounded-2xl sm:py-3 sm:text-sm font-bold ' + (tab === t ? 'bg-bsi-800 text-white shadow-sm' : 'bsi-panel text-slate-600 hover:text-bsi-800')
   }
 
   return (
-    <div className="mx-auto w-full max-w-xl space-y-5">
-      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="avatar-kepala-dash avatar-kepala-cepat"><Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl" /></div>
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate text-xl font-black text-slate-900 sm:text-2xl">{mahasiswa.nama}</h1>
-            <p className="mt-1 truncate text-sm text-slate-600">{formatTanggal(tanggal)}</p>
+    <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr] items-start">
+      <div className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8 lg:p-10">
+        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black leading-tight text-slate-900">Masuk untuk Mengisi Logbook, Galeri, dan Daftar Hadir</h1>
+        <p className="mt-3 text-sm leading-relaxed text-slate-600 sm:mt-4 sm:text-base">Halaman ini khusus mahasiswa magang. Dosen pembimbing dan kaprodi dapat melihat halaman umum tanpa masuk.</p>
+      </div>
+      <div className="card-hover bsi-panel rounded-[2rem] p-5 sm:p-8 lg:p-10">
+        <h2 className="text-xl sm:text-2xl font-black text-slate-900">Masuk Dashboard</h2>
+        {error ? (
+          <div className="mt-3 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-red-100 text-red-600">
+              <SizedIcon name="close" size={12} />
+            </span>
+            <div className="min-w-0">
+              <p className="font-bold">Gagal Masuk</p>
+              <p className="mt-1 leading-relaxed">{error}</p>
+            </div>
           </div>
-        </div>
-        <div className="mt-4 flex gap-2">
-          <button type="button" onClick={function () { setTab('logbook') }} className={tabCls('logbook')}>Logbook</button>
-          <button type="button" onClick={function () { setTab('absen') }} className={tabCls('absen')}>Daftar Hadir</button>
-        </div>
-      </section>
-
-      <div className={tab === 'logbook' ? '' : 'hidden'} style={{ marginTop: 0 }}>
-        {!loading ? (
-          <PengingatBanner
-            tipe="logbook"
-            tanggalLogbook={tanggalLogs}
-            hadir={hadirRows}
-            onIsi={function (t) { navigate('/dashboard?isi=' + t) }}
-          />
         ) : null}
-      </div>
-      <div className={tab === 'absen' ? '' : 'hidden'} style={{ marginTop: 0 }}>
-        {!loading ? (
-          <PengingatBanner
-            tipe="hadir"
-            tanggalLogbook={tanggalLogs}
-            hadir={hadirRows}
-            onIsi={function (t) { navigate('/dashboard?isiHadir=' + t) }}
-          />
-        ) : null}
-      </div>
-      {tab === 'logbook' ? (
-        <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
-          <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoLog.lama ? 'text-amber-600' : 'text-slate-500')}>
-            <SizedIcon name="calendar" size={13} />
-            Terakhir mengisi logbook: {infoLog.teks}
-          </p>
-          {todayLog ? (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-              <p className="text-sm font-bold text-emerald-800">Logbook hari ini sudah ada</p>
-              <p className="mt-1 text-sm text-emerald-800">{todayLog.judul} • {todayLog.logbook_items.length} kegiatan</p>
-              <div className="mt-2 space-y-1">
-                {todayLog.logbook_items.map(function (it, i) {
-                  return <p key={it.id} className="truncate text-xs text-emerald-800">{i + 1}. {it.judul}</p>
-                })}
-              </div>
-              <p className="mt-2 text-xs text-emerald-800">Kegiatan baru ditambahkan di bawahnya tanpa menghapus kegiatan lama.</p>
-              {todayLog.status !== 'publik' ? <p className="mt-1 text-xs font-semibold text-emerald-800">Status masih draf — akan otomatis dipublikasikan.</p> : null}
-            </div>
-          ) : (
-            <div>
-              <label className={labelCls}>Kategori Utama <span className="text-red-500">*</span></label>
-              <div className="mt-1.5">
-                <CustomSelect placeholder="Pilih Kategori" value={kategori} onChange={setKategori} options={KATEGORI.map(function (k) { return { value: k, label: k } })} />
-              </div>
-            </div>
-          )}
-
-          <form onSubmit={submitLogbook} className="mt-5 space-y-4">
-            <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-xs font-bold text-bsi-800">{todayLog ? 'Kegiatan Baru (kegiatan ' + (todayLog.logbook_items.length + 1) + ')' : 'Kegiatan'}</p>
-              <input className={inputCls} value={judulKegiatan} onChange={function (e) { setJudulKegiatan(e.target.value) }} aria-label="Judul Kegiatan" placeholder="Judul kegiatan" />
-              <AutoTextArea className={inputCls} value={deskripsi} onChange={function (e) { setDeskripsi(e.target.value) }} aria-label="Deskripsi Kegiatan" placeholder="Deskripsi singkat kegiatan" />
-              {preview ? (
-                <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-900">
-                  <img src={preview} alt="Pratinjau" className="absolute inset-0 h-full w-full object-contain" />
-                  <button type="button" onClick={hapusFile} title="Hapus Gambar" className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-red-500 text-white hover:bg-red-600">
-                    <SizedIcon name="close" size={14} />
-                  </button>
-                </div>
-              ) : null}
-              <div className="grid grid-cols-2 gap-3">
-                <button type="button" onClick={function () { cameraRef.current.click() }} className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-3 py-3.5 text-sm font-semibold text-slate-700 hover:border-bsi-500 hover:bg-slate-100">
-                  <SizedIcon name="camera" size={18} /> Ambil Foto
-                </button>
-                <button type="button" onClick={function () { galeriRef.current.click() }} className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-3 py-3.5 text-sm font-semibold text-slate-700 hover:border-bsi-500 hover:bg-slate-100">
-                  <SizedIcon name="image" size={18} /> Dari Galeri
-                </button>
-              </div>
-              <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={pilihFile} />
-              <input ref={galeriRef} type="file" accept="image/*" className="hidden" onChange={pilihFile} />
-              {preview ? (
-                <label className="flex w-full cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 p-3">
-                  <input type="checkbox" checked={showGal} onChange={function (e) { setShowGal(e.target.checked) }} className="mt-0.5 h-4 w-4 rounded accent-bsi-800" />
-                  <span className="text-sm font-semibold text-slate-800">Tampilkan kegiatan ini di galeri</span>
-                </label>
-              ) : null}
-            </div>
-            <button type="submit" disabled={busy} className={btnPrimary}>
-              {busy ? <LabelProses teks={info || 'Menyimpan'} /> : 'Simpan'}
-            </button>
-          </form>
-        </section>
-      ) : null}
-
-      {tab === 'absen' ? (
-        <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
-          <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoHadir.lama ? 'text-amber-600' : 'text-slate-500')}>
-            <SizedIcon name="clipboard" size={13} />
-            Terakhir mengisi daftar hadir: {infoHadir.teks}
-          </p>
-          {hadirHariIni ? (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-              <p className="text-sm font-bold text-emerald-800">Kamu sudah mengisi daftar hadir hari ini ({hadirHariIni.status})</p>
-              <p className="mt-1 text-xs text-emerald-800">Form di bawah bisa dipakai untuk memperbarui status bila ada perubahan.</p>
-            </div>
-          ) : null}
-          <form onSubmit={submitAbsen} className={'space-y-4 ' + (hadirHariIni ? 'mt-5' : '')}>
-            <div>
-              <label className={labelCls}>Status Kehadiran <span className="text-red-500">*</span></label>
-              <div className="mt-1.5 flex gap-2">
-                {STATUS_HADIR.map(function (s) {
-                  const aktif = status === s
-                  const warna = aktif
-                    ? (s === 'Masuk' ? 'bg-emerald-500 text-white' : s === 'Izin' ? 'bg-amber-500 text-white' : 'bg-red-500 text-white')
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  return <button type="button" key={s} onClick={function () { setStatus(s) }} className={'flex-1 rounded-2xl px-3 py-3 text-sm font-bold ' + warna}>{s}</button>
-                })}
-              </div>
-            </div>
-            <div>
-              <label className={labelCls}>Alasan atau Keterangan</label>
-              <AutoTextArea
-                className={inputCls + (status === 'Masuk' ? ' cursor-not-allowed opacity-60' : '')}
-                value={alasan}
-                onChange={function (e) { setAlasan(e.target.value) }}
-                aria-label="Alasan atau Keterangan"
-                placeholder={status === 'Masuk' ? 'Status Masuk tidak memerlukan alasan' : 'Contoh: Keperluan keluarga, sakit.'}
-                disabled={status === 'Masuk'}
+        <form onSubmit={submit} className="mt-6 space-y-5">
+          <div>
+            <label className={labelCls}>NIM <span className="text-red-500">*</span></label>
+            <input className={inputCls} value={nim} onChange={function (e) { setNim(e.target.value) }} aria-label="NIM" placeholder="Contoh: 20260001" required />
+          </div>
+          <div>
+            <label className={labelCls}>Kode akses <span className="text-red-500">*</span></label>
+            <div className="relative mt-1.5">
+              <input
+                type={lihatKode ? 'text' : 'password'}
+                className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 pr-12 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+                value={kode}
+                onChange={function (e) { setKode(e.target.value) }}
+                aria-label="Kode Akses" placeholder="Masukkan kode akses"
+                required
               />
+              <button
+                type="button"
+                onClick={function () { setLihatKode(function (v) { return !v }) }}
+                title={lihatKode ? 'Sembunyikan Kode Akses' : 'Lihat Kode Akses'}
+                className="absolute right-2 top-0 bottom-0 my-auto grid h-9 w-9 place-items-center rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-600"
+              >
+                <EyeToggle open={lihatKode} size={18} />
+              </button>
             </div>
-            <button type="submit" disabled={busy} className={btnPrimary}>
-              {busy ? <LabelProses teks="Menyimpan" /> : 'Simpan'}
-            </button>
-          </form>
-        </section>
-      ) : null}
-    </div>
+          </div>
+          <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks="Memproses" /> : 'Masuk'}</button>
+        </form>
+      </div>
+    </section>
   )
 }
 ````
@@ -7337,6 +7250,374 @@ export default function LogbookPage() {
 }
 ````
 
+## File: src/pages/QuickPage.jsx
+````javascript
+import { useEffect, useRef, useState } from 'react'
+import { supabase } from '../lib/supabase.js'
+import { useAuth } from '../lib/auth.js'
+import { uploadMedia } from '../lib/upload.js'
+import { syncGaleriFromLogbook } from '../lib/logbook.js'
+import { urlPratinjau } from '../lib/konversi.js'
+import { todayInput, formatTanggal, toTitleCase } from '../lib/format.js'
+import { KATEGORI } from '../lib/constants.js'
+import { inputCls, labelCls, btnPrimary, useToast, AutoTextArea, LabelProses, Avatar } from '../components/ui.jsx'
+import { CustomSelect } from '../components/controls.jsx'
+import { SizedIcon } from '../components/icons.jsx'
+import { useNavigate } from 'react-router-dom'
+import PengingatBanner from '../components/PengingatBanner.jsx'
+import { SkeletonQuick } from '../components/Skeleton.jsx'
+
+const STATUS_HADIR = ['Masuk', 'Izin', 'Bolos']
+
+export default function QuickPage() {
+  const { mahasiswa } = useAuth()
+  const toast = useToast()
+  const tanggal = todayInput()
+
+  const [tab, setTab] = useState('logbook')
+  const [loading, setLoading] = useState(true)
+  const [todayLog, setTodayLog] = useState(null)
+  const [hadirHariIni, setHadirHariIni] = useState(null)
+  const [lastLogTanggal, setLastLogTanggal] = useState(null)
+  const [lastHadirTanggal, setLastHadirTanggal] = useState(null)
+
+  const [kategori, setKategori] = useState('')
+  const [judulKegiatan, setJudulKegiatan] = useState('')
+  const [deskripsi, setDeskripsi] = useState('')
+  const [file, setFile] = useState(null)
+  const [preview, setPreview] = useState('')
+  const [showGal, setShowGal] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [info, setInfo] = useState('')
+
+  const [status, setStatus] = useState('Masuk')
+  const [alasan, setAlasan] = useState('')
+  const navigate = useNavigate()
+  const [tanggalLogs, setTanggalLogs] = useState([])
+  const [hadirRows, setHadirRows] = useState([])
+
+  const cameraRef = useRef(null)
+  const galeriRef = useRef(null)
+
+  async function muatData(mhs, senyap) {
+    if (!senyap) setLoading(true)
+    const l = await supabase
+      .from('logbooks')
+      .select('*, logbook_items(*)')
+      .eq('mahasiswa_id', mhs.id)
+      .eq('tanggal', tanggal)
+      .order('created_at', { ascending: false })
+      .limit(1)
+    const log = (l.data || [])[0] || null
+    if (log) {
+      log.logbook_items = (log.logbook_items || []).sort(function (a, b) { return (a.urutan || 0) - (b.urutan || 0) })
+    }
+    const h = await supabase
+      .from('daftar_hadir')
+      .select('*')
+      .eq('mahasiswa_id', mhs.id)
+      .eq('tanggal', tanggal)
+      .limit(1)
+    const hadir = (h.data || [])[0] || null
+    const ll = await supabase
+      .from('logbooks')
+      .select('tanggal')
+      .eq('mahasiswa_id', mhs.id)
+      .order('tanggal', { ascending: false })
+      .limit(1)
+    const lh = await supabase
+      .from('daftar_hadir')
+      .select('tanggal')
+      .eq('mahasiswa_id', mhs.id)
+      .order('tanggal', { ascending: false })
+      .limit(1)
+    setTodayLog(log)
+    setHadirHariIni(hadir)
+    setLastLogTanggal(ll.data && ll.data[0] ? ll.data[0].tanggal : null)
+    setLastHadirTanggal(lh.data && lh.data[0] ? lh.data[0].tanggal : null)
+    if (hadir) {
+      setStatus(hadir.status)
+      setAlasan(hadir.alasan || '')
+    }
+        const pg = await supabase.from('logbooks').select('tanggal').eq('mahasiswa_id', mhs.id)
+    const ph = await supabase.from('daftar_hadir').select('tanggal, status').eq('mahasiswa_id', mhs.id)
+    setTanggalLogs((pg.data || []).map(function (x) { return x.tanggal }))
+    setHadirRows(ph.data || [])
+    if (!senyap) setLoading(false)
+  }
+
+  useEffect(function () {
+    if (mahasiswa) muatData(mahasiswa)
+  }, [mahasiswa])
+
+  async function pilihFile(e) {
+    const f = e.target.files[0]
+    e.target.value = ''
+    if (!f) return
+    if (preview && preview.indexOf('blob:') === 0) URL.revokeObjectURL(preview)
+    setFile(f)
+    setPreview(await urlPratinjau(f))
+  }
+
+  function hapusFile() {
+    if (preview && preview.indexOf('blob:') === 0) URL.revokeObjectURL(preview)
+    setFile(null)
+    setPreview('')
+    setShowGal(false)
+  }
+
+  async function submitLogbook(e) {
+    e.preventDefault()
+    if (!todayLog && !kategori) { toast.gagal('Pilih kategori terlebih dahulu.'); return }
+    if (!judulKegiatan.trim()) { toast.gagal('Judul kegiatan wajib diisi.'); return }
+    setBusy(true)
+    try {
+      let mediaPath = null
+      let mediaThumb = null
+      if (file) {
+        const up = await uploadMedia(file, 'logbook', setInfo)
+        mediaPath = up.publicUrl
+        mediaThumb = up.thumbUrl || null
+      }
+      let logId = todayLog ? todayLog.id : null
+      if (!todayLog) {
+        const ins = await supabase.from('logbooks').insert({
+  mahasiswa_id: mahasiswa.id, tanggal: tanggal, unit: '', kategori: kategori,
+  judul: toTitleCase(judulKegiatan), kendala: '', solusi: '', pembelajaran: '', status: 'publik'
+}).select().single()
+        if (ins.error) throw new Error(ins.error.message)
+        logId = ins.data.id
+      }
+      const urutan = todayLog ? todayLog.logbook_items.reduce(function (m, it) { return Math.max(m, it.urutan || 0) }, 0) + 1 : 1
+      const insItem = await supabase.from('logbook_items').insert({
+  logbook_id: logId,
+  urutan: urutan,
+  judul: toTitleCase(judulKegiatan),
+        deskripsi: deskripsi.trim(),
+        hasil: '',
+        media_path: mediaPath,
+        media_type: mediaPath ? 'foto' : null,
+        media_thumb: mediaThumb,
+        media_source: 'r2',
+        youtube_id: null,
+        drive_id: null,
+        show_in_gallery: showGal && !!mediaPath
+      }).select().single()
+      if (insItem.error) throw new Error(insItem.error.message)
+      if (todayLog && todayLog.status !== 'publik') {
+        await supabase.from('logbooks').update({ status: 'publik' }).eq('id', todayLog.id)
+      }
+      if (showGal && mediaPath) {
+        await syncGaleriFromLogbook(mahasiswa.id, [insItem.data], {
+          tanggal: tanggal,
+          kategori: todayLog ? todayLog.kategori : kategori
+        })
+      }
+      const pertama = !todayLog
+      setJudulKegiatan('')
+      setDeskripsi('')
+      hapusFile()
+      if (pertama) setKategori('')
+      await muatData(mahasiswa, true)
+      toast.sukses(pertama ? 'Logbook hari ini berhasil dibuat' : 'Kegiatan baru berhasil ditambahkan')
+    } catch (err) {
+      toast.gagal('Gagal menyimpan logbook: ' + err.message)
+    }
+    setInfo('')
+    setBusy(false)
+  }
+
+  async function submitAbsen(e) {
+    e.preventDefault()
+    setBusy(true)
+    try {
+      const payload = {
+        mahasiswa_id: mahasiswa.id,
+        tanggal: tanggal,
+        status: status,
+        alasan: status === 'Masuk' ? '' : alasan.trim()
+      }
+      let res
+      if (hadirHariIni) {
+        res = await supabase.from('daftar_hadir').update(payload).eq('id', hadirHariIni.id)
+      } else {
+        res = await supabase.from('daftar_hadir').insert(payload)
+      }
+      if (res.error) throw new Error(res.error.message)
+      await muatData(mahasiswa, true)
+      toast.sukses(hadirHariIni ? 'Daftar hadir berhasil diperbarui' : 'Daftar hadir berhasil disimpan')
+    } catch (err) {
+      toast.gagal('Gagal menyimpan kehadiran: ' + err.message)
+    }
+    setBusy(false)
+  }
+
+  function infoTerakhir(tgl) {
+    if (!tgl) return { teks: 'belum pernah', lama: true }
+    const selisih = Math.round((new Date(tanggal + 'T00:00:00').getTime() - new Date(tgl + 'T00:00:00').getTime()) / 86400000)
+    if (selisih <= 0) return { teks: 'hari ini', lama: false }
+    if (selisih === 1) return { teks: 'kemarin', lama: false }
+    return { teks: selisih + ' hari yang lalu', lama: true }
+  }
+
+  if (loading) {
+    return <SkeletonQuick />
+  }
+
+  const infoLog = infoTerakhir(lastLogTanggal)
+  const infoHadir = infoTerakhir(lastHadirTanggal)
+
+  const tabCls = function (t) {
+    return 'flex-1 px-4 py-2.5 rounded-xl text-xs sm:rounded-2xl sm:py-3 sm:text-sm font-bold ' + (tab === t ? 'bg-bsi-800 text-white shadow-sm' : 'bsi-panel text-slate-600 hover:text-bsi-800')
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-xl space-y-5">
+      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="avatar-kepala-dash avatar-kepala-cepat"><Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl" /></div>
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-xl font-black text-slate-900 sm:text-2xl">{mahasiswa.nama}</h1>
+            <p className="mt-1 truncate text-sm text-slate-600">{formatTanggal(tanggal)}</p>
+          </div>
+        </div>
+        <div className="mt-4 flex gap-2">
+          <button type="button" onClick={function () { setTab('logbook') }} className={tabCls('logbook')}>Logbook</button>
+          <button type="button" onClick={function () { setTab('absen') }} className={tabCls('absen')}>Daftar Hadir</button>
+        </div>
+      </section>
+
+      <div className={tab === 'logbook' ? '' : 'hidden'} style={{ marginTop: 0 }}>
+        {!loading ? (
+          <PengingatBanner
+            tipe="logbook"
+            tanggalLogbook={tanggalLogs}
+            hadir={hadirRows}
+            onIsi={function (t) { navigate('/dashboard?isi=' + t) }}
+          />
+        ) : null}
+      </div>
+      <div className={tab === 'absen' ? '' : 'hidden'} style={{ marginTop: 0 }}>
+        {!loading ? (
+          <PengingatBanner
+            tipe="hadir"
+            tanggalLogbook={tanggalLogs}
+            hadir={hadirRows}
+            onIsi={function (t) { navigate('/dashboard?isiHadir=' + t) }}
+          />
+        ) : null}
+      </div>
+      {tab === 'logbook' ? (
+        <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
+          <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoLog.lama ? 'text-amber-600' : 'text-slate-500')}>
+            <SizedIcon name="calendar" size={13} />
+            Terakhir mengisi logbook: {infoLog.teks}
+          </p>
+          {todayLog ? (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+              <p className="text-sm font-bold text-emerald-800">Logbook hari ini sudah ada</p>
+              <p className="mt-1 text-sm text-emerald-800">{todayLog.judul} • {todayLog.logbook_items.length} kegiatan</p>
+              <div className="mt-2 space-y-1">
+                {todayLog.logbook_items.map(function (it, i) {
+                  return <p key={it.id} className="truncate text-xs text-emerald-800">{i + 1}. {it.judul}</p>
+                })}
+              </div>
+              <p className="mt-2 text-xs text-emerald-800">Kegiatan baru ditambahkan di bawahnya tanpa menghapus kegiatan lama.</p>
+              {todayLog.status !== 'publik' ? <p className="mt-1 text-xs font-semibold text-emerald-800">Status masih draf — akan otomatis dipublikasikan.</p> : null}
+            </div>
+          ) : (
+            <div>
+              <label className={labelCls}>Kategori Utama <span className="text-red-500">*</span></label>
+              <div className="mt-1.5">
+                <CustomSelect placeholder="Pilih Kategori" value={kategori} onChange={setKategori} options={KATEGORI.map(function (k) { return { value: k, label: k } })} />
+              </div>
+            </div>
+          )}
+
+          <form onSubmit={submitLogbook} className="mt-5 space-y-4">
+            <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-bold text-bsi-800">{todayLog ? 'Kegiatan Baru (kegiatan ' + (todayLog.logbook_items.length + 1) + ')' : 'Kegiatan'}</p>
+              <input className={inputCls} value={judulKegiatan} onChange={function (e) { setJudulKegiatan(e.target.value) }} aria-label="Judul Kegiatan" placeholder="Judul kegiatan" />
+              <AutoTextArea className={inputCls} value={deskripsi} onChange={function (e) { setDeskripsi(e.target.value) }} aria-label="Deskripsi Kegiatan" placeholder="Deskripsi singkat kegiatan" />
+              {preview ? (
+                <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-900">
+                  <img src={preview} alt="Pratinjau" className="absolute inset-0 h-full w-full object-contain" />
+                  <button type="button" onClick={hapusFile} title="Hapus Gambar" className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-red-500 text-white hover:bg-red-600">
+                    <SizedIcon name="close" size={14} />
+                  </button>
+                </div>
+              ) : null}
+              <div className="grid grid-cols-2 gap-3">
+                <button type="button" onClick={function () { cameraRef.current.click() }} className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-3 py-3.5 text-sm font-semibold text-slate-700 hover:border-bsi-500 hover:bg-slate-100">
+                  <SizedIcon name="camera" size={18} /> Ambil Foto
+                </button>
+                <button type="button" onClick={function () { galeriRef.current.click() }} className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-3 py-3.5 text-sm font-semibold text-slate-700 hover:border-bsi-500 hover:bg-slate-100">
+                  <SizedIcon name="image" size={18} /> Dari Galeri
+                </button>
+              </div>
+              <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={pilihFile} />
+              <input ref={galeriRef} type="file" accept="image/*" className="hidden" onChange={pilihFile} />
+              {preview ? (
+                <label className="flex w-full cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 p-3">
+                  <input type="checkbox" checked={showGal} onChange={function (e) { setShowGal(e.target.checked) }} className="mt-0.5 h-4 w-4 rounded accent-bsi-800" />
+                  <span className="text-sm font-semibold text-slate-800">Tampilkan kegiatan ini di galeri</span>
+                </label>
+              ) : null}
+            </div>
+            <button type="submit" disabled={busy} className={btnPrimary}>
+              {busy ? <LabelProses teks={info || 'Menyimpan'} /> : 'Simpan'}
+            </button>
+          </form>
+        </section>
+      ) : null}
+
+      {tab === 'absen' ? (
+        <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
+          <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoHadir.lama ? 'text-amber-600' : 'text-slate-500')}>
+            <SizedIcon name="clipboard" size={13} />
+            Terakhir mengisi daftar hadir: {infoHadir.teks}
+          </p>
+          {hadirHariIni ? (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+              <p className="text-sm font-bold text-emerald-800">Kamu sudah mengisi daftar hadir hari ini ({hadirHariIni.status})</p>
+              <p className="mt-1 text-xs text-emerald-800">Form di bawah bisa dipakai untuk memperbarui status bila ada perubahan.</p>
+            </div>
+          ) : null}
+          <form onSubmit={submitAbsen} className={'space-y-4 ' + (hadirHariIni ? 'mt-5' : '')}>
+            <div>
+              <label className={labelCls}>Status Kehadiran <span className="text-red-500">*</span></label>
+              <div className="mt-1.5 flex gap-2">
+                {STATUS_HADIR.map(function (s) {
+                  const aktif = status === s
+                  const warna = aktif
+                    ? (s === 'Masuk' ? 'bg-emerald-500 text-white' : s === 'Izin' ? 'bg-amber-500 text-white' : 'bg-red-500 text-white')
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  return <button type="button" key={s} onClick={function () { setStatus(s) }} className={'flex-1 rounded-2xl px-3 py-3 text-sm font-bold ' + warna}>{s}</button>
+                })}
+              </div>
+            </div>
+            <div>
+              <label className={labelCls}>Alasan atau Keterangan</label>
+              <AutoTextArea
+                className={inputCls + (status === 'Masuk' ? ' cursor-not-allowed opacity-60' : '')}
+                value={alasan}
+                onChange={function (e) { setAlasan(e.target.value) }}
+                aria-label="Alasan atau Keterangan"
+                placeholder={status === 'Masuk' ? 'Status Masuk tidak memerlukan alasan' : 'Contoh: Keperluan keluarga, sakit.'}
+                disabled={status === 'Masuk'}
+              />
+            </div>
+            <button type="submit" disabled={busy} className={btnPrimary}>
+              {busy ? <LabelProses teks="Menyimpan" /> : 'Simpan'}
+            </button>
+          </form>
+        </section>
+      ) : null}
+    </div>
+  )
+}
+````
+
 ## File: src/App.jsx
 ````javascript
 import { SkeletonDashboard, SkeletonQuick } from './components/Skeleton.jsx'
@@ -7404,107 +7685,104 @@ export default function App() {
 }
 ````
 
-## File: src/pages/LoginPage.jsx
+## File: src/pages/GalleryPage.jsx
 ````javascript
-import { useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { loginWithNim } from '../lib/auth.js'
-import { inputCls, labelCls, btnPrimary, LabelProses } from '../components/ui.jsx'
-import { EyeToggle, SizedIcon } from '../components/icons.jsx'
+import { useEffect, useState } from 'react'
+import { supabase } from '../lib/supabase.js'
+import { useAuth } from '../lib/auth.js'
+import { EmptyState, Modal, Pagination } from '../components/ui.jsx'
+import { GalleryCard, GalleryDetail } from '../components/cards.jsx'
+import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
+import { ICONS } from '../components/icons.jsx'
+import { matchesDateFilters, urutkanTanggal } from '../lib/format.js'
+import { GALERI_KEGIATAN } from '../lib/constants.js'
+import { SkeletonGalleryCard } from '../components/Skeleton.jsx'
 
-function pesanErrorLogin(err) {
-  const pesan = String((err && err.message) || '')
-  const rendah = pesan.toLowerCase()
-  if (rendah.indexOf('invalid login credentials') !== -1) {
-    return 'NIM atau kode akses yang kamu masukkan tidak cocok dengan data kami. Periksa kembali penulisannya, pastikan tidak ada spasi berlebih, lalu coba lagi.'
-  }
-  if (rendah.indexOf('not confirmed') !== -1) {
-    return 'Akun untuk NIM ini belum diaktifkan. Hubungi admin tim magang untuk mengaktifkan akunmu terlebih dahulu.'
-  }
-  if (rendah.indexOf('too many requests') !== -1 || rendah.indexOf('try again after') !== -1 || rendah.indexOf('rate limit') !== -1) {
-    return 'Terlalu banyak percobaan masuk dalam waktu singkat demi keamanan. Tunggu sekitar satu menit, lalu coba lagi.'
-  }
-  if (rendah.indexOf('fetch') !== -1 || rendah.indexOf('network') !== -1 || rendah.indexOf('failed to load') !== -1 || (typeof navigator !== 'undefined' && !navigator.onLine)) {
-    return 'Tidak bisa terhubung ke server. Periksa koneksi internetmu, lalu coba lagi.'
-  }
-  if (rendah.indexOf('email') !== -1 && rendah.indexOf('format') !== -1) {
-    return 'Format NIM tidak terbaca. Masukkan NIM berupa angka tanpa spasi, contoh: 24070041.'
-  }
-  if (pesan) return 'Gagal masuk: ' + pesan + '. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
-  return 'Terjadi kesalahan tidak terduga saat masuk. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
-}
-export default function LoginPage() {
-  const navigate = useNavigate()
-  const [params] = useSearchParams()
-  const [nim, setNim] = useState('')
-  const [kode, setKode] = useState('')
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [lihatKode, setLihatKode] = useState(false)
+const INITIAL = { kegiatan: '', tipe: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
+const PER_PAGE = 12
 
-  async function submit(e) {
-    e.preventDefault()
-    setBusy(true)
-    setError('')
-    try {
-  await loginWithNim(nim, kode)
-  const next = params.get('next')
-  navigate(next && next.charAt(0) === '/' && next.indexOf('//') !== 0 ? next : '/dashboard')
-} catch (err) {
-  setError(pesanErrorLogin(err))
-}
-    setBusy(false)
+export default function GalleryPage() {
+  const { mahasiswa } = useAuth()
+  const [all, setAll] = useState([])
+  const [filter, setFilter] = useState(INITIAL)
+  const [sort, setSort] = useState('terbaru')
+  const [open, setOpen] = useState(false)
+  const [detail, setDetail] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
+
+  useEffect(function () {
+    async function load() {
+      const g = await supabase.from('galeri').select('*, mahasiswa(*)').order('tanggal', { ascending: false })
+      setAll(g.data || [])
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  useEffect(function () {
+    setPage(1)
+  }, [filter, sort])
+  function gantiHalaman(p) {
+    setPage(p)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
+  const items = all.filter(function (i) {
+    if (filter.kegiatan && (i.kegiatan || 'Lainnya') !== filter.kegiatan) return false
+    if (filter.tipe && i.media_type !== filter.tipe) return false
+    return matchesDateFilters(i.tanggal, filter)
+  })
+  const active = countActiveFilters(filter)
+  const sortedItems = urutkanTanggal(items, sort)
+  const totalData = sortedItems.length
+  const totalPages = Math.ceil(totalData / PER_PAGE)
+  const pageAman = Math.min(page, Math.max(1, totalPages))
+  const paginatedItems = sortedItems.slice((pageAman - 1) * PER_PAGE, pageAman * PER_PAGE)
 
   return (
-    <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr] items-start">
-      <div className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8 lg:p-10">
-        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black leading-tight text-slate-900">Masuk untuk Mengisi Logbook, Galeri, dan Daftar Hadir</h1>
-        <p className="mt-3 text-sm leading-relaxed text-slate-600 sm:mt-4 sm:text-base">Halaman ini khusus mahasiswa magang. Dosen pembimbing dan kaprodi dapat melihat halaman umum tanpa masuk.</p>
-      </div>
-      <div className="card-hover bsi-panel rounded-[2rem] p-5 sm:p-8 lg:p-10">
-        <h2 className="text-xl sm:text-2xl font-black text-slate-900">Masuk Dashboard</h2>
-        {error ? (
-          <div className="mt-3 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-red-100 text-red-600">
-              <SizedIcon name="close" size={12} />
-            </span>
-            <div className="min-w-0">
-              <p className="font-bold">Gagal Masuk</p>
-              <p className="mt-1 leading-relaxed">{error}</p>
-            </div>
-          </div>
-        ) : null}
-        <form onSubmit={submit} className="mt-6 space-y-5">
-          <div>
-            <label className={labelCls}>NIM <span className="text-red-500">*</span></label>
-            <input className={inputCls} value={nim} onChange={function (e) { setNim(e.target.value) }} aria-label="NIM" placeholder="Contoh: 20260001" required />
-          </div>
-          <div>
-            <label className={labelCls}>Kode akses <span className="text-red-500">*</span></label>
-            <div className="relative mt-1.5">
-              <input
-                type={lihatKode ? 'text' : 'password'}
-                className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 pr-12 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
-                value={kode}
-                onChange={function (e) { setKode(e.target.value) }}
-                aria-label="Kode Akses" placeholder="Masukkan kode akses"
-                required
-              />
-              <button
-                type="button"
-                onClick={function () { setLihatKode(function (v) { return !v }) }}
-                title={lihatKode ? 'Sembunyikan Kode Akses' : 'Lihat Kode Akses'}
-                className="absolute right-2 top-0 bottom-0 my-auto grid h-9 w-9 place-items-center rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-600"
-              >
-                <EyeToggle open={lihatKode} size={18} />
-              </button>
-            </div>
-          </div>
-          <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks="Memproses" /> : 'Masuk'}</button>
-        </form>
-      </div>
-    </section>
+    <div>
+      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8 lg:p-10">
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600 dark:text-gold-400">Galeri dokumentasi</p>
+        <h1 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Foto dan Video Kegiatan Magang</h1>
+        <p className="mt-2 text-sm text-slate-600 max-w-2xl sm:mt-3 sm:text-base">Setiap foto atau video mewakili satu kegiatan. Klik untuk melihat detail.</p>
+      </section>
+
+      <section className="mt-6">
+        <FilterBar open={open} onToggle={function () { setOpen(function (o) { return !o }) }} activeCount={active}
+          onReset={function () { setFilter(INITIAL) }}>
+          <FilterSelect icon={ICONS.tag} value={filter.kegiatan} onChange={function (v) { setFilter(Object.assign({}, filter, { kegiatan: v })) }}
+            options={[{ value: '', label: 'Semua Kegiatan' }].concat(GALERI_KEGIATAN.map(function (k) { return { value: k, label: k } }))} />
+          <FilterSelect icon={ICONS.image} value={filter.tipe} onChange={function (v) { setFilter(Object.assign({}, filter, { tipe: v })) }}
+            options={[{ value: '', label: 'Semua Media' }, { value: 'foto', label: 'Foto' }, { value: 'video', label: 'Video' }]} />
+          <TimeFilter filter={filter} set={setFilter} />
+          <SortSelect value={sort} onChange={setSort} />
+        </FilterBar>
+      </section>
+
+      <section className="grid-pusat mt-8">
+        {loading
+          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonGalleryCard /></div> })
+          : paginatedItems.map(function (i) {
+              return (
+                <div key={i.id} className="kolom-kartu">
+                  <GalleryCard item={i} isOwner={mahasiswa && mahasiswa.id === i.mahasiswa_id}
+                    onDetail={function () { setDetail(i) }} />
+                </div>
+              )
+            })}
+        {!loading && !items.length ? <div className="w-full"><EmptyState icon="camera" title="Belum Ada Media Galeri" desc="Media galeri yang diunggah mahasiswa akan tampil di sini." /></div> : null}
+      </section>
+      {!loading && totalData > 0 ? (
+        <div className="mt-6 text-center text-sm text-slate-600">
+          Total {totalData} media{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}
+        </div>
+      ) : null}
+      {!loading ? <Pagination totalItems={totalData} perPage={PER_PAGE} page={pageAman} onPageChange={gantiHalaman} /> : null}
+
+      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
+        {detail ? <GalleryDetail item={detail} /> : null}
+      </Modal>
+    </div>
   )
 }
 ````
@@ -7665,108 +7943,6 @@ export default function AttendancePage() {
 
       <Modal open={!!detail} onClose={function () { setDetail(null) }}>
         {detail ? <AttendanceDetail row={detail} /> : null}
-      </Modal>
-    </div>
-  )
-}
-````
-
-## File: src/pages/GalleryPage.jsx
-````javascript
-import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase.js'
-import { useAuth } from '../lib/auth.js'
-import { EmptyState, Modal, Pagination } from '../components/ui.jsx'
-import { GalleryCard, GalleryDetail } from '../components/cards.jsx'
-import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
-import { ICONS } from '../components/icons.jsx'
-import { matchesDateFilters, urutkanTanggal } from '../lib/format.js'
-import { GALERI_KEGIATAN } from '../lib/constants.js'
-import { SkeletonGalleryCard } from '../components/Skeleton.jsx'
-
-const INITIAL = { kegiatan: '', tipe: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
-const PER_PAGE = 12
-
-export default function GalleryPage() {
-  const { mahasiswa } = useAuth()
-  const [all, setAll] = useState([])
-  const [filter, setFilter] = useState(INITIAL)
-  const [sort, setSort] = useState('terbaru')
-  const [open, setOpen] = useState(false)
-  const [detail, setDetail] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [page, setPage] = useState(1)
-
-  useEffect(function () {
-    async function load() {
-      const g = await supabase.from('galeri').select('*, mahasiswa(*)').order('tanggal', { ascending: false })
-      setAll(g.data || [])
-      setLoading(false)
-    }
-    load()
-  }, [])
-
-  useEffect(function () {
-    setPage(1)
-  }, [filter, sort])
-  function gantiHalaman(p) {
-    setPage(p)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-  const items = all.filter(function (i) {
-    if (filter.kegiatan && (i.kegiatan || 'Lainnya') !== filter.kegiatan) return false
-    if (filter.tipe && i.media_type !== filter.tipe) return false
-    return matchesDateFilters(i.tanggal, filter)
-  })
-  const active = countActiveFilters(filter)
-  const sortedItems = urutkanTanggal(items, sort)
-  const totalData = sortedItems.length
-  const totalPages = Math.ceil(totalData / PER_PAGE)
-  const pageAman = Math.min(page, Math.max(1, totalPages))
-  const paginatedItems = sortedItems.slice((pageAman - 1) * PER_PAGE, pageAman * PER_PAGE)
-
-  return (
-    <div>
-      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8 lg:p-10">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600 dark:text-gold-400">Galeri dokumentasi</p>
-        <h1 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Foto dan Video Kegiatan Magang</h1>
-        <p className="mt-2 text-sm text-slate-600 max-w-2xl sm:mt-3 sm:text-base">Setiap foto atau video mewakili satu kegiatan. Klik untuk melihat detail.</p>
-      </section>
-
-      <section className="mt-6">
-        <FilterBar open={open} onToggle={function () { setOpen(function (o) { return !o }) }} activeCount={active}
-          onReset={function () { setFilter(INITIAL) }}>
-          <FilterSelect icon={ICONS.tag} value={filter.kegiatan} onChange={function (v) { setFilter(Object.assign({}, filter, { kegiatan: v })) }}
-            options={[{ value: '', label: 'Semua Kegiatan' }].concat(GALERI_KEGIATAN.map(function (k) { return { value: k, label: k } }))} />
-          <FilterSelect icon={ICONS.image} value={filter.tipe} onChange={function (v) { setFilter(Object.assign({}, filter, { tipe: v })) }}
-            options={[{ value: '', label: 'Semua Media' }, { value: 'foto', label: 'Foto' }, { value: 'video', label: 'Video' }]} />
-          <TimeFilter filter={filter} set={setFilter} />
-          <SortSelect value={sort} onChange={setSort} />
-        </FilterBar>
-      </section>
-
-      <section className="grid-pusat mt-8">
-        {loading
-          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonGalleryCard /></div> })
-          : paginatedItems.map(function (i) {
-              return (
-                <div key={i.id} className="kolom-kartu">
-                  <GalleryCard item={i} isOwner={mahasiswa && mahasiswa.id === i.mahasiswa_id}
-                    onDetail={function () { setDetail(i) }} />
-                </div>
-              )
-            })}
-        {!loading && !items.length ? <div className="w-full"><EmptyState icon="camera" title="Belum Ada Media Galeri" desc="Media galeri yang diunggah mahasiswa akan tampil di sini." /></div> : null}
-      </section>
-      {!loading && totalData > 0 ? (
-        <div className="mt-6 text-center text-sm text-slate-600">
-          Total {totalData} media{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}
-        </div>
-      ) : null}
-      {!loading ? <Pagination totalItems={totalData} perPage={PER_PAGE} page={pageAman} onPageChange={gantiHalaman} /> : null}
-
-      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
-        {detail ? <GalleryDetail item={detail} /> : null}
       </Modal>
     </div>
   )
@@ -8146,6 +8322,7 @@ function PersonChip(props) {
     </div>
   )
 }
+
 function ActionButtons(props) {
   return (
     <div className="flex flex-wrap gap-2">
@@ -8177,7 +8354,7 @@ export function LogbookCard(props) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-1.5">
           <CategoryBadge value={log.kategori} />
-          <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">{log.unit || 'Unit Belum Diisi'}</span>
+          {log.unit ? <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">{log.unit}</span> : null}
         </div>
         <StatusBadge status={log.status} />
       </div>
@@ -8207,7 +8384,7 @@ export function LogbookDetail(props) {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-2">
         <CategoryBadge value={log.kategori} />
-        <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">{log.unit || 'Unit Belum Diisi'}</span>
+        {log.unit ? <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">{log.unit}</span> : null}
         <StatusBadge status={log.status} />
       </div>
       <div>
@@ -8222,16 +8399,16 @@ export function LogbookDetail(props) {
               <div key={it.id} className={'relative pl-12 ' + (i < items.length - 1 ? 'pb-6' : 'pb-0')}>
                 <span className="absolute left-0 top-0 h-9 w-9 rounded-full bg-bsi-800 text-white grid place-items-center text-sm font-bold">{i + 1}</span>
                 {i < items.length - 1 ? <span className="absolute left-4 top-9 bottom-0 w-px bg-slate-200 dark:bg-slate-700" /> : null}
-                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                   {it.media_path ? (
-                      it.media_source === 'youtube' ? (
-                        <PemutarVideo key={it.youtube_id} youtubeId={it.youtube_id} title={it.judul} className="aspect-video w-full rounded-2xl mb-3" />
-                      ) : it.media_source === 'drive' ? (
-                        <div className="iframe-video-wrap mb-3"><iframe key={it.media_path} src={drivePreviewUrl(it.media_path)} title={it.judul} allow="autoplay; encrypted-media; fullscreen" allowFullScreen className="aspect-video w-full rounded-2xl border-0 bg-black" /></div>
-                      ) : (
-                        <ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3" />
-                      )
-                    ) : null}
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  {it.media_path ? (
+                    it.media_source === 'youtube' ? (
+                      <PemutarVideo key={it.youtube_id} youtubeId={it.youtube_id} title={it.judul} className="aspect-video w-full rounded-2xl mb-3" />
+                    ) : it.media_source === 'drive' ? (
+                      <div className="iframe-video-wrap mb-3"><iframe key={it.media_path} src={drivePreviewUrl(it.media_path)} title={it.judul} allow="autoplay; encrypted-media; fullscreen" allowFullScreen className="aspect-video w-full rounded-2xl border-0 bg-black" /></div>
+                    ) : (
+                      <ZoomableMedia src={it.media_thumb || it.media_path} full={it.media_path} type={it.media_type} title={it.judul} className="rounded-2xl overflow-hidden aspect-video bg-slate-900 mb-3" />
+                    )
+                  ) : null}
                   <p className="font-bold text-slate-900">
                     {it.judul}
                     {it.show_in_gallery && it.media_path ? <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gold-500/15 text-gold-600 dark:text-gold-400">Di Galeri</span> : null}
@@ -8266,12 +8443,12 @@ export function GalleryCard(props) {
     <article onClick={props.onDetail} className="clickable cursor-pointer bsi-panel rounded-3xl overflow-hidden flex flex-col h-full">
       <div className="relative aspect-video w-full overflow-hidden bg-slate-900">
         {item.media_source === 'youtube' ? (
-        <MediaYouTube src={item.media_path} alt={item.judul} />
-      ) : item.media_source === 'drive' ? (
-        <MediaDrive driveId={item.media_path} alt={item.judul} />
-      ) : (
-        <SmartFit src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} alt={item.judul} />
-      )}
+          <MediaYouTube src={item.media_path} alt={item.judul} />
+        ) : item.media_source === 'drive' ? (
+          <MediaDrive driveId={item.media_path} alt={item.judul} />
+        ) : (
+          <SmartFit src={item.media_thumb || item.media_path} full={item.media_path} type={item.media_type} alt={item.judul} />
+        )}
       </div>
       <div className="p-5 space-y-3 flex-1 flex flex-col">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -8374,8 +8551,9 @@ export function AttendanceDetail(props) {
 import { createPortal } from 'react-dom'
 import PemutarVideo from './PemutarVideo.jsx'
 import { drivePreviewUrl, driveDownloadUrl, driveThumbUrl } from '../lib/drive.js'
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { SizedIcon } from './icons.jsx'
+
 function useBodyScrollLock(active) {
   useEffect(function () {
     if (!active) return undefined
@@ -8386,7 +8564,6 @@ function useBodyScrollLock(active) {
     }
   }, [active])
 }
-
 
 export const inputCls = 'mt-1.5 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-bsi-500'
 export const labelCls = 'text-sm font-semibold text-slate-700'
@@ -8410,6 +8587,7 @@ export function StatCard(props) {
     </div>
   )
 }
+
 export function EmptyState(props) {
   return (
     <div className={cardCls + ' border-dashed p-10 text-center'}>
@@ -8562,7 +8740,6 @@ export function ConfirmModal(props) {
   )
 }
 
-
 export function MediaDrive(props) {
   const [gagal, setGagal] = useState(false)
   useEffect(function () {
@@ -8590,6 +8767,7 @@ export function MediaDrive(props) {
     />
   )
 }
+
 export function Lightbox(props) {
   useBodyScrollLock(true)
   const [busyUnduh, setBusyUnduh] = useState(false)
@@ -8705,6 +8883,7 @@ export function Lightbox(props) {
     </div>
   , document.body)
 }
+
 export function ZoomableMedia(props) {
   const [open, setOpen] = useState(false)
   const isVideo = props.type === 'video'
@@ -8715,7 +8894,7 @@ export function ZoomableMedia(props) {
         type={props.type}
         alt={props.title || 'Media'}
         full={props.full || props.src}
-         controls={isVideo}
+        controls={isVideo}
         onClick={isVideo ? null : function (e) { e.stopPropagation(); setOpen(true) }}
       />
       <button
@@ -8731,14 +8910,15 @@ export function ZoomableMedia(props) {
   )
 }
 
-
 export function SmartFit(props) {
   const [ratio, setRatio] = useState(null)
   const [near, setNear] = useState(false)
   const mediaRef = useRef(null)
   const isVideo = props.type === 'video'
+  /* Thumbnail YouTube punya komponen khusus (MediaYouTube) yang handle fallback
+     kualitas maxres -> mq -> hq dan selalu pakai object-cover. */
   if (!isVideo && String(props.src || '').indexOf('i.ytimg.com') !== -1) {
-    return <MediaYouTube src={props.src} alt={props.alt} onClick={props.onClick} className="absolute inset-0 h-full w-full object-cover" />
+    return <MediaYouTube src={props.src} alt={props.alt} onClick={props.onClick} className="absolute inset-0 h-full w-full" />
   }
   useEffect(function () {
     const el = mediaRef.current
@@ -8806,41 +8986,57 @@ export function SmartFit(props) {
   )
 }
 
+/* Thumbnail YouTube dengan fallback kualitas bertingkat.
+   Urutan: maxresdefault (1280x720, 16:9) -> mqdefault (320x180, 16:9) -> hqdefault (480x360, 4:3).
+   Selalu pakai object-cover supaya card terisi penuh tanpa ruang kosong.
+   Kalau video tidak punya maxres (video lama / resolusi rendah), otomatis turun ke kualitas berikutnya. */
 export function MediaYouTube(props) {
   const [status, setStatus] = useState('muat')
-  const [coba, setCoba] = useState(0)
-  useEffect(function () {
-    if (status !== 'tunggu') return undefined
-    const t = setTimeout(function () {
-      setCoba(function (c) { return c + 1 })
-      setStatus('muat')
-    }, 15000)
-    return function () { clearTimeout(t) }
-  }, [status])
-  if (status === 'tunggu' || status === 'habis') {
+  const [kualitas, setKualitas] = useState('max')
+
+  /* Ekstrak videoId dari URL thumbnail supaya kita bisa ganti kualitas
+     tanpa peduli URL awalnya pakai resolusi apa. */
+  function srcDenganKualitas() {
+    const m = String(props.src).match(/\/vi\/([A-Za-z0-9_-]+)\//)
+    if (!m) return props.src
+    const id = m[1]
+    const nama = kualitas === 'max' ? 'maxresdefault'
+                : kualitas === 'mq' ? 'mqdefault'
+                : 'hqdefault'
+    return 'https://i.ytimg.com/vi/' + id + '/' + nama + '.jpg'
+  }
+
+  function saatError() {
+    if (kualitas === 'max') setKualitas('mq')
+    else if (kualitas === 'mq') setKualitas('hq')
+    else setStatus('habis')
+  }
+
+  if (status === 'habis') {
     return (
       <div className={'grid place-items-center bg-slate-800 ' + (props.className || 'absolute inset-0 h-full w-full')}>
         <div className="flex flex-col items-center gap-2 text-slate-400">
           <SizedIcon name="video" size={26} />
-          <p className="px-2 text-center text-[11px] font-semibold">{status === 'habis' ? 'Pratinjau Video Belum Siap' : 'Menyiapkan Pratinjau Video'}</p>
+          <p className="px-2 text-center text-[11px] font-semibold">Pratinjau Video Belum Siap</p>
         </div>
       </div>
     )
   }
+
   return (
     <img
-      src={props.src + (coba > 0 ? (String(props.src).indexOf('?') === -1 ? '?' : '&') + 'r=' + coba : '')}
+      src={srcDenganKualitas()}
       alt={props.alt || 'Pratinjau video'}
       onClick={props.onClick || undefined}
-      onError={function () { setStatus(coba >= 3 ? 'habis' : 'tunggu') }}
-      onLoad={function () { setStatus('muat') }}
-      className={props.className || 'absolute inset-0 h-full w-full object-cover'}
+      onError={saatError}
+      loading="lazy"
+      decoding="async"
+      className={'absolute inset-0 h-full w-full object-cover' + (props.onClick ? ' cursor-zoom-in' : '')}
     />
   )
 }
 
 export function TitikAnim() {
-
   return (
     <span className="titik-anim" aria-hidden="true">
       <i></i>
@@ -8849,6 +9045,7 @@ export function TitikAnim() {
     </span>
   )
 }
+
 export function LabelProses(props) {
   const bersih = String(props.teks || '').replace(/\.{3}/g, '').replace(/\s+/g, ' ').trim()
   return (
@@ -8996,38 +9193,144 @@ export function Pagination(props) {
   )
 }
 
+/* ===== TOAST =====
+   - Maksimal 3 toast aktif.
+   - Toast paling lama otomatis main animasi keluar (fade + slide) sebelum dihapus.
+   - Ketika toast di atas dihapus, toast di bawahnya naik dengan halus
+     memakai teknik FLIP (First-Last-Invert-Play) via Web Animations API.
+   - Toast yang sedang animasi keluar tidak dihitung sebagai slot aktif. */
 const ToastContext = createContext(null)
- export function ToastProvider(props) {
+
+const DURASI_TOAST = 4000
+const DURASI_ANIMASI = 240   // >= durasi .toast-keluar di CSS (0.22s)
+const MAKS_TOAST = 3
+
+export function ToastProvider(props) {
   const [toasts, setToasts] = useState([])
+  const wadahRef = useRef(null)
+  const posisiLama = useRef(new Map())   // id -> top (px dari viewport)
+  const flipAnims = useRef(new Map())    // id -> Animation
+
+  /* Rekam posisi element toast saat ini SEBELUM state berubah,
+     supaya FLIP di useLayoutEffect bisa tahu dari mana toast harus berangkat. */
+  function simpanPosisi() {
+    if (!wadahRef.current) return
+    const map = new Map()
+    wadahRef.current.querySelectorAll('[data-toast-id]').forEach(function (el) {
+      map.set(el.dataset.toastId, el.getBoundingClientRect().top)
+    })
+    posisiLama.current = map
+  }
+
+  /* FLIP: setelah DOM commit, bandingkan posisi baru vs lama dan animasikan
+     pergeserannya. Hanya element yang posisinya berubah dan sudah pernah ada
+     di frame sebelumnya yang dianimasikan (toast baru dibiarkan main animasi masuk). */
+  useLayoutEffect(function () {
+    const wadah = wadahRef.current
+    if (!wadah) return
+    const lamaMap = posisiLama.current
+    const baruMap = new Map()
+
+    wadah.querySelectorAll('[data-toast-id]').forEach(function (el) {
+      const id = el.dataset.toastId
+      const rect = el.getBoundingClientRect()
+      baruMap.set(id, rect.top)
+      const topLama = lamaMap.get(id)
+      if (topLama === undefined) return
+      const dy = topLama - rect.top
+      if (Math.abs(dy) < 1) return
+
+      /* Batalkan animasi FLIP sebelumnya pada element yang sama
+         supaya spam trigger tidak menumpuk animasi. */
+      const prev = flipAnims.current.get(id)
+      if (prev) prev.cancel()
+
+      const anim = el.animate(
+        [
+          { transform: 'translateY(' + dy + 'px)' },
+          { transform: 'translateY(0)' }
+        ],
+        { duration: 300, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' }
+      )
+      flipAnims.current.set(id, anim)
+      anim.onfinish = function () { flipAnims.current.delete(id) }
+      anim.oncancel = function () { flipAnims.current.delete(id) }
+    })
+
+    posisiLama.current = baruMap
+  })
+
   function tutupToast(id) {
-    setToasts(function (prev) { return prev.map(function (t) { return t.id === id ? Object.assign({}, t, { tutup: true }) : t }) })
-    setTimeout(function () {
-      setToasts(function (prev) { return prev.filter(function (t) { return t.id !== id }) })
-    }, 240)
+    setToasts(function (prev) {
+      let sudahAda = false
+      const next = prev.map(function (t) {
+        if (t.id === id && !t.tutup) {
+          sudahAda = true
+          return Object.assign({}, t, { tutup: true })
+        }
+        return t
+      })
+      if (sudahAda) {
+        setTimeout(function () {
+          simpanPosisi()
+          setToasts(function (p) { return p.filter(function (t) { return t.id !== id }) })
+        }, DURASI_ANIMASI)
+      }
+      return next
+    })
   }
+
   function tambahToast(tipe, pesan) {
+    simpanPosisi()
     const id = Date.now() + Math.random()
-    setToasts(function (prev) { return prev.concat([{ id: id, tipe: tipe, pesan: pesan, tutup: false }]) })
-    setTimeout(function () { tutupToast(id) }, 4000)
+    const baru = { id: id, tipe: tipe, pesan: pesan, tutup: false }
+
+    setToasts(function (prev) {
+      const next = prev.concat([baru])
+      const aktif = next.filter(function (t) { return !t.tutup })
+      if (aktif.length > MAKS_TOAST) {
+        const jumlahBuang = aktif.length - MAKS_TOAST
+        const buangSet = new Set(aktif.slice(0, jumlahBuang).map(function (t) { return t.id }))
+        const nextMarked = next.map(function (t) {
+          return buangSet.has(t.id) ? Object.assign({}, t, { tutup: true }) : t
+        })
+        setTimeout(function () {
+          simpanPosisi()
+          setToasts(function (p) { return p.filter(function (t) { return !buangSet.has(t.id) }) })
+        }, DURASI_ANIMASI)
+        return nextMarked
+      }
+      return next
+    })
+
+    setTimeout(function () { tutupToast(id) }, DURASI_TOAST)
   }
+
   function toastSukses(pesan) { tambahToast('sukses', pesan) }
   function toastGagal(pesan) { tambahToast('gagal', pesan) }
+
   return (
     <ToastContext.Provider value={{ sukses: toastSukses, gagal: toastGagal }}>
       {props.children}
-      <div className="toast-wadah fixed z-[100] flex flex-col gap-2 pointer-events-none">
+      <div ref={wadahRef} className="toast-wadah fixed z-[100] flex flex-col gap-2 pointer-events-none">
         {toasts.map(function (t) {
           const sukses = t.tipe === 'sukses'
           return (
-            <div key={t.id} className={'toast-kartu pointer-events-auto flex items-center gap-3 ' + (sukses ? 'toast-sukses' : 'toast-gagal') + (t.tutup ? ' toast-keluar' : '')}>
-              <span className={'toast-ikon ' + (sukses ? 'toast-ikon-sukses' : 'toast-ikon-gagal')}>
-                <SizedIcon name={sukses ? 'check' : 'close'} size={15} />
-              </span>
-              <p className="toast-teks flex-1 text-sm font-semibold">{t.pesan}</p>
-              <button type="button" onClick={function () { tutupToast(t.id) }} title="Tutup Notifikasi"
-                className="toast-tutup grid h-7 w-7 shrink-0 place-items-center rounded-lg">
-                <SizedIcon name="close" size={13} />
-              </button>
+            <div
+              key={t.id}
+              data-toast-id={t.id}
+              className="toast-flip"
+            >
+              <div className={'toast-kartu pointer-events-auto flex items-center gap-3 ' + (sukses ? 'toast-sukses' : 'toast-gagal') + (t.tutup ? ' toast-keluar' : '')}>
+                <span className={'toast-ikon ' + (sukses ? 'toast-ikon-sukses' : 'toast-ikon-gagal')}>
+                  <SizedIcon name={sukses ? 'check' : 'close'} size={15} />
+                </span>
+                <p className="toast-teks flex-1 text-sm font-semibold">{t.pesan}</p>
+                <button type="button" onClick={function () { tutupToast(t.id) }} title="Tutup Notifikasi"
+                  className="toast-tutup grid h-7 w-7 shrink-0 place-items-center rounded-lg">
+                  <SizedIcon name="close" size={13} />
+                </button>
+              </div>
             </div>
           )
         })}
@@ -9035,9 +9338,10 @@ const ToastContext = createContext(null)
     </ToastContext.Provider>
   )
 }
+
 export function useToast() {
-   return useContext(ToastContext)
- }
+  return useContext(ToastContext)
+}
 
 export function SelubungPanel(props) {
   const [tampil, setTampil] = useState(props.open)
@@ -9309,9 +9613,8 @@ textarea {
   .kolom-kartu-rapat { width: calc(33.3333% - 0.66667rem); }
 }
 
-/* toast-modern-v1: kartu glass blur, ikon kotak berwarna lembut, posisi responsif, animasi masuk dan keluar */
 .toast-wadah {
-  top: 1rem;
+  top: calc(4rem + 1rem);
   left: 1rem;
   right: 1rem;
 }
@@ -9319,7 +9622,7 @@ textarea {
   .toast-wadah {
     left: auto;
     right: 1.25rem;
-    top: 1.25rem;
+    top: calc(4rem + 1.25rem);
     width: 100%;
     max-width: 24rem;
   }
@@ -10171,19 +10474,19 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../lib/auth.js'
 import { uploadMedia, deleteMedia } from '../lib/upload.js'
-import { syncGaleriFromLogbook } from '../lib/logbook.js'
+import { syncGaleriFromLogbook, autoIsiBolos } from '../lib/logbook.js'
 import { parseYouTubeId, ytThumb, fetchYouTubeQuota, unggahVideoYouTube } from '../lib/youtube.js'
 import { parseDriveId, driveThumbUrl, driveViewUrl } from '../lib/drive.js'
 import { uploadFotoProfil, updateFotoProfilMahasiswa, hapusFotoProfil } from '../lib/profil.js'
 import { urlPratinjau } from '../lib/konversi.js'
-import { todayInput, detectMediaType, matchesDateFilters, urutkanTanggal, batasTanggalPilihan, pesanTanggalTerlarang } from '../lib/format.js'
+import { todayInput, detectMediaType, matchesDateFilters, urutkanTanggal, batasTanggalPilihan, pesanTanggalTerlarang, toTitleCase } from '../lib/format.js'
 import { KATEGORI, UNIT, GALERI_KEGIATAN } from '../lib/constants.js'
 import { Avatar, LabelProses, EmptyState, Modal, ConfirmModal, inputCls, labelCls, btnPrimary, AutoTextArea, Pagination, useToast } from '../components/ui.jsx'
 import { LogbookCard, LogbookDetail, GalleryCard, GalleryDetail, AttendanceCard, AttendanceDetail } from '../components/cards.jsx'
 import { CustomSelect, CustomDateInput, FileInput, ToggleModeMedia, SumberVideo } from '../components/controls.jsx'
 import { SizedIcon, ICONS } from '../components/icons.jsx'
 import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
-import PengingatBanner from '../components/PengingatBanner.jsx'
+import PengingatBanner, { hitungTanggalTerlewat, hitungTanggalTerlewatHadir } from '../components/PengingatBanner.jsx'
 import QrPrintTab from '../components/QrPrintTab.jsx'
 
 function newItem() {
@@ -10272,82 +10575,82 @@ export default function DashboardPage() {
   const [konfirmasiEdit, setKonfirmasiEdit] = useState(null)
   const [dataSiap, setDataSiap] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
-   const [refleksiFokus, setRefleksiFokus] = useState('')
-   const refleksiRefs = useRef({})
-   const refleksiPrevRects = useRef(null)
-   const refleksiCardAnim = useRef(null)
-   const refleksiBlurTimer = useRef(null)
-   function rekamRefleksi() {
-     const map = {}
-     ;['kendala', 'solusi', 'pembelajaran', 'tombol'].forEach(function (k) {
-       const el = refleksiRefs.current[k]
-       if (el) map[k] = el.getBoundingClientRect()
-     })
-     if (refFormLog.current) map.kartu = refFormLog.current.getBoundingClientRect()
-     refleksiPrevRects.current = map
-   }
-   function fokusRefleksi(key) {
-     if (refleksiBlurTimer.current) { clearTimeout(refleksiBlurTimer.current); refleksiBlurTimer.current = null }
-     rekamRefleksi()
-     setRefleksiFokus(key)
-   }
-   function blurRefleksi() {
-     if (refleksiBlurTimer.current) clearTimeout(refleksiBlurTimer.current)
-     refleksiBlurTimer.current = setTimeout(function () {
-       refleksiBlurTimer.current = null
-       rekamRefleksi()
-       setRefleksiFokus('')
-     }, 0)
-   }
-   const refleksiExpand = {
-     kendala: refleksiFokus === 'kendala' || form.kendala.trim() !== '',
-     solusi: refleksiFokus === 'solusi' || form.solusi.trim() !== '',
-     pembelajaran: refleksiFokus === 'pembelajaran' || form.pembelajaran.trim() !== ''
-   }
-   const refleksiExpandKey = (refleksiExpand.kendala ? 'k' : '-') + (refleksiExpand.solusi ? 's' : '-') + (refleksiExpand.pembelajaran ? 'p' : '-')
-   useLayoutEffect(function () {
-     const prev = refleksiPrevRects.current
-     refleksiPrevRects.current = null
-     if (!prev) return
-     ;['kendala', 'solusi', 'pembelajaran', 'tombol'].forEach(function (k) {
-       const el = refleksiRefs.current[k]
-       const old = prev[k]
-       if (!el || !old || typeof el.animate !== 'function') return
-       if (typeof el.getAnimations === 'function') {
-         el.getAnimations().forEach(function (a) { a.cancel() })
-       }
-       const now = el.getBoundingClientRect()
-       const dx = old.left - now.left
-       const dy = old.top - now.top
-       const dw = old.width - now.width
-       if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(dw) < 1) return
-       el.animate([
-         { transform: 'translate(' + dx + 'px,' + dy + 'px)', width: old.width + 'px' },
-         { transform: 'translate(0,0)', width: now.width + 'px' }
-       ], { duration: 420, easing: 'cubic-bezier(0.4, 0, 0.2, 1)' })
-     })
-     const kartu = refFormLog.current
-     const oldKartu = prev.kartu
-     if (kartu && oldKartu && typeof kartu.animate === 'function') {
-              kartu.querySelectorAll('textarea').forEach(function (t) {
-                t.style.height = 'auto'
-                t.style.height = t.scrollHeight + 'px'
-              })
-       const nowKartu = kartu.getBoundingClientRect()
-       const dh = nowKartu.height - oldKartu.height
-       if (Math.abs(dh) >= 1) {
-         if (refleksiCardAnim.current) refleksiCardAnim.current.cancel()
-         kartu.style.overflow = 'hidden'
-         const anim = kartu.animate([
-           { height: oldKartu.height + 'px' },
-           { height: nowKartu.height + 'px' }
-         ], { duration: 420, easing: 'cubic-bezier(0.4, 0, 0.2, 1)' })
-         refleksiCardAnim.current = anim
-         anim.onfinish = function () { kartu.style.overflow = ''; refleksiCardAnim.current = null }
-         anim.oncancel = function () { kartu.style.overflow = ''; refleksiCardAnim.current = null }
-       }
-     }
-   }, [refleksiExpandKey])
+  const [refleksiFokus, setRefleksiFokus] = useState('')
+  const refleksiRefs = useRef({})
+  const refleksiPrevRects = useRef(null)
+  const refleksiCardAnim = useRef(null)
+  const refleksiBlurTimer = useRef(null)
+  function rekamRefleksi() {
+    const map = {}
+    ;['kendala', 'solusi', 'pembelajaran', 'tombol'].forEach(function (k) {
+      const el = refleksiRefs.current[k]
+      if (el) map[k] = el.getBoundingClientRect()
+    })
+    if (refFormLog.current) map.kartu = refFormLog.current.getBoundingClientRect()
+    refleksiPrevRects.current = map
+  }
+  function fokusRefleksi(key) {
+    if (refleksiBlurTimer.current) { clearTimeout(refleksiBlurTimer.current); refleksiBlurTimer.current = null }
+    rekamRefleksi()
+    setRefleksiFokus(key)
+  }
+  function blurRefleksi() {
+    if (refleksiBlurTimer.current) clearTimeout(refleksiBlurTimer.current)
+    refleksiBlurTimer.current = setTimeout(function () {
+      refleksiBlurTimer.current = null
+      rekamRefleksi()
+      setRefleksiFokus('')
+    }, 0)
+  }
+  const refleksiExpand = {
+    kendala: refleksiFokus === 'kendala' || form.kendala.trim() !== '',
+    solusi: refleksiFokus === 'solusi' || form.solusi.trim() !== '',
+    pembelajaran: refleksiFokus === 'pembelajaran' || form.pembelajaran.trim() !== ''
+  }
+  const refleksiExpandKey = (refleksiExpand.kendala ? 'k' : '-') + (refleksiExpand.solusi ? 's' : '-') + (refleksiExpand.pembelajaran ? 'p' : '-')
+  useLayoutEffect(function () {
+    const prev = refleksiPrevRects.current
+    refleksiPrevRects.current = null
+    if (!prev) return
+    ;['kendala', 'solusi', 'pembelajaran', 'tombol'].forEach(function (k) {
+      const el = refleksiRefs.current[k]
+      const old = prev[k]
+      if (!el || !old || typeof el.animate !== 'function') return
+      if (typeof el.getAnimations === 'function') {
+        el.getAnimations().forEach(function (a) { a.cancel() })
+      }
+      const now = el.getBoundingClientRect()
+      const dx = old.left - now.left
+      const dy = old.top - now.top
+      const dw = old.width - now.width
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(dw) < 1) return
+      el.animate([
+        { transform: 'translate(' + dx + 'px,' + dy + 'px)', width: old.width + 'px' },
+        { transform: 'translate(0,0)', width: now.width + 'px' }
+      ], { duration: 420, easing: 'cubic-bezier(0.4, 0, 0.2, 1)' })
+    })
+    const kartu = refFormLog.current
+    const oldKartu = prev.kartu
+    if (kartu && oldKartu && typeof kartu.animate === 'function') {
+      kartu.querySelectorAll('textarea').forEach(function (t) {
+        t.style.height = 'auto'
+        t.style.height = t.scrollHeight + 'px'
+      })
+      const nowKartu = kartu.getBoundingClientRect()
+      const dh = nowKartu.height - oldKartu.height
+      if (Math.abs(dh) >= 1) {
+        if (refleksiCardAnim.current) refleksiCardAnim.current.cancel()
+        kartu.style.overflow = 'hidden'
+        const anim = kartu.animate([
+          { height: oldKartu.height + 'px' },
+          { height: nowKartu.height + 'px' }
+        ], { duration: 420, easing: 'cubic-bezier(0.4, 0, 0.2, 1)' })
+        refleksiCardAnim.current = anim
+        anim.onfinish = function () { kartu.style.overflow = ''; refleksiCardAnim.current = null }
+        anim.oncancel = function () { kartu.style.overflow = ''; refleksiCardAnim.current = null }
+      }
+    }
+  }, [refleksiExpandKey])
   const [logFilter, setLogFilter] = useState(LOG_INITIAL)
   const [logFilterOpen, setLogFilterOpen] = useState(false)
   const [galFilter, setGalFilter] = useState(GAL_INITIAL)
@@ -10366,16 +10669,35 @@ export default function DashboardPage() {
   const refListHadir = useRef(null)
   const refNavTab = useRef(null)
 
+  /* ticker untuk badge tab: re-render tiap 60 detik supaya badge reminder
+     hadir otomatis muncul saat masuk jam 07:00 tanpa user perlu refresh. */
+  const [, setTickBadge] = useState(0)
+  useEffect(function () {
+    const iv = setInterval(function () { setTickBadge(function (t) { return t + 1 }) }, 60000)
+    return function () { clearInterval(iv) }
+  }, [])
+
   async function refresh() {
     if (!mahasiswa) return
     const l = await supabase.from('logbooks').select('*, mahasiswa(*), logbook_items(*)')
       .eq('mahasiswa_id', mahasiswa.id).order('tanggal', { ascending: false })
       .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
     const g = await supabase.from('galeri').select('*, mahasiswa(*)').eq('mahasiswa_id', mahasiswa.id).order('tanggal', { ascending: false })
-    const h = await supabase.from('daftar_hadir').select('*, mahasiswa(*)').eq('mahasiswa_id', mahasiswa.id).order('tanggal', { ascending: false })
+    let h = await supabase.from('daftar_hadir').select('*, mahasiswa(*)').eq('mahasiswa_id', mahasiswa.id).order('tanggal', { ascending: false })
+
+    /* Auto-Bolos: cek kemarin dan sebelumnya yang kosong, isi sebagai "Bolos" */
+    let hadirData = h.data || []
+    const tanggalAda = hadirData.map(function (x) { return x.tanggal })
+    const baru = await autoIsiBolos(mahasiswa.id, tanggalAda)
+    if (baru.length) {
+      /* Kalau ada yang baru di-Bolos, refetch supaya id + relasi mahasiswa lengkap */
+      h = await supabase.from('daftar_hadir').select('*, mahasiswa(*)').eq('mahasiswa_id', mahasiswa.id).order('tanggal', { ascending: false })
+      hadirData = h.data || []
+    }
+
     setLogs(l.data || [])
     setGaleri(g.data || [])
-    setHadir(h.data || [])
+    setHadir(hadirData)
     setDataSiap(true)
   }
 
@@ -10429,100 +10751,99 @@ export default function DashboardPage() {
     }
   }, [tab, dataSiap])
 
-   /* ===== proteksi-unsaved-v1: cegah kehilangan draf saat pindah tab/halaman, batal edit, atau tutup tab ===== */
-   const [unsavedModal, setUnsavedModal] = useState(null)
-   const navigate = useNavigate()
-   function isLogbookDirty() {
-     if (editLogId) return true
-     return !!(form.judul || form.kategori || form.unit || form.kendala || form.solusi || form.pembelajaran ||
-       items.some(function (it) { return it.judul || it.deskripsi || it.hasil || it.file }))
-   }
-   function isGaleriDirty() {
-     if (editGalId) return true
-     return !!(galForm.judul || galForm.deskripsi || galForm.kegiatan || galForm.file || galYtLink || galDriveLink)
-   }
-   function isHadirDirty() {
-     if (editHadirId) return true
-     return hadirForm.status !== 'Masuk' || !!hadirForm.alasan
-   }
-   function isAnyFormDirty() {
-     return isLogbookDirty() || isGaleriDirty() || isHadirDirty()
-   }
-   function ulangAnimHalaman() {
-     requestAnimationFrame(function () {
-       const el = document.querySelector('main.anim-page') || document.querySelector('.anim-page')
-       if (!el) return
-       el.style.animation = 'none'
-       void el.offsetWidth
-       el.style.animation = ''
-     })
-   }
-   function bukaModalUnsaved(judul, pesan, labelConfirm, aksi) {
-     setUnsavedModal({
-       title: judul,
-       message: pesan,
-       confirmLabel: labelConfirm,
-       onConfirm: function () { setUnsavedModal(null); aksi() },
-       onCancel: function () { setUnsavedModal(null) }
-     })
-   }
-   function cobaCancelEditLog() {
-     if (isLogbookDirty()) { bukaModalUnsaved('Buang Perubahan Logbook?', 'Perubahan pada logbook akan hilang dan tidak bisa dikembalikan. Yakin ingin membatalkan?', 'Buang', cancelEditLog); return }
-     cancelEditLog()
-   }
-   function cobaCancelEditGal() {
-     if (isGaleriDirty()) { bukaModalUnsaved('Buang Perubahan Galeri?', 'Perubahan pada media galeri akan hilang dan tidak bisa dikembalikan. Yakin ingin membatalkan?', 'Buang', cancelEditGal); return }
-     cancelEditGal()
-   }
-   function cobaCancelEditHadir() {
-     if (isHadirDirty()) { bukaModalUnsaved('Buang Perubahan Kehadiran?', 'Perubahan pada daftar hadir akan hilang dan tidak bisa dikembalikan. Yakin ingin membatalkan?', 'Buang', cancelEditHadir); return }
-     cancelEditHadir()
-   }
-   useEffect(function () {
-     function onBeforeUnload(e) {
-       if (!isAnyFormDirty()) return
-       e.preventDefault()
-       e.returnValue = ''
-     }
-     function onClickLink(e) {
-       if (!isAnyFormDirty()) return
-       const t = e.target
-       const a = t && t.closest ? t.closest('a[href]') : null
-       if (!a) return
-       const href = a.getAttribute('href') || ''
-       if (!href || href.indexOf('http') === 0 || href.indexOf('#') === 0 || a.target === '_blank') return
-       e.preventDefault()
-       e.mbsiDicegah = true
-       bukaModalUnsaved('Pindah Halaman?', 'Kamu punya perubahan yang belum disimpan. Yakin ingin meninggalkan halaman ini? Semua perubahan akan hilang.', 'Tinggalkan', function () { navigate(href); ulangAnimHalaman() })
-     }
-     window.addEventListener('beforeunload', onBeforeUnload)
-     document.addEventListener('click', onClickLink, true)
-     return function () {
-       window.removeEventListener('beforeunload', onBeforeUnload)
-       document.removeEventListener('click', onClickLink, true)
-     }
-   })
-   useEffect(function () {
-     if (!mahasiswa || !dataSiap) return
-     const t = searchParams.get('isi')
-     const tHadir = searchParams.get('isiHadir')
-     if (!t && !tHadir) return
-     setSearchParams({}, { replace: true })
-     if (t) {
-       const pesan = pesanTanggalTerlarang(t, batas.min, batas.max)
-       if (pesan) { toast.gagal(pesan) } else { isiLogbookTanggal(t, true) }
-     }
-     if (tHadir) {
-       const pesanHadir = pesanTanggalTerlarang(tHadir, batas.min, batas.max)
-       if (pesanHadir) { toast.gagal(pesanHadir) } else { isiHadirTanggal(tHadir, true) }
-     }
-   }, [mahasiswa, dataSiap])
+  /* ===== proteksi-unsaved-v1: cegah kehilangan draf saat pindah tab/halaman, batal edit, atau tutup tab ===== */
+  const [unsavedModal, setUnsavedModal] = useState(null)
+  const navigate = useNavigate()
+  function isLogbookDirty() {
+    if (editLogId) return true
+    return !!(form.judul || form.kategori || form.unit || form.kendala || form.solusi || form.pembelajaran ||
+      items.some(function (it) { return it.judul || it.deskripsi || it.hasil || it.file }))
+  }
+  function isGaleriDirty() {
+    if (editGalId) return true
+    return !!(galForm.judul || galForm.deskripsi || galForm.kegiatan || galForm.file || galYtLink || galDriveLink)
+  }
+  function isHadirDirty() {
+    if (editHadirId) return true
+    return hadirForm.status !== 'Masuk' || !!hadirForm.alasan
+  }
+  function isAnyFormDirty() {
+    return isLogbookDirty() || isGaleriDirty() || isHadirDirty()
+  }
+  function ulangAnimHalaman() {
+    requestAnimationFrame(function () {
+      const el = document.querySelector('main.anim-page') || document.querySelector('.anim-page')
+      if (!el) return
+      el.style.animation = 'none'
+      void el.offsetWidth
+      el.style.animation = ''
+    })
+  }
+  function bukaModalUnsaved(judul, pesan, labelConfirm, aksi) {
+    setUnsavedModal({
+      title: judul,
+      message: pesan,
+      confirmLabel: labelConfirm,
+      onConfirm: function () { setUnsavedModal(null); aksi() },
+      onCancel: function () { setUnsavedModal(null) }
+    })
+  }
+  function cobaCancelEditLog() {
+    if (isLogbookDirty()) { bukaModalUnsaved('Buang Perubahan Logbook?', 'Perubahan pada logbook akan hilang dan tidak bisa dikembalikan. Yakin ingin membatalkan?', 'Buang', cancelEditLog); return }
+    cancelEditLog()
+  }
+  function cobaCancelEditGal() {
+    if (isGaleriDirty()) { bukaModalUnsaved('Buang Perubahan Galeri?', 'Perubahan pada media galeri akan hilang dan tidak bisa dikembalikan. Yakin ingin membatalkan?', 'Buang', cancelEditGal); return }
+    cancelEditGal()
+  }
+  function cobaCancelEditHadir() {
+    if (isHadirDirty()) { bukaModalUnsaved('Buang Perubahan Kehadiran?', 'Perubahan pada daftar hadir akan hilang dan tidak bisa dikembalikan. Yakin ingin membatalkan?', 'Buang', cancelEditHadir); return }
+    cancelEditHadir()
+  }
+  useEffect(function () {
+    function onBeforeUnload(e) {
+      if (!isAnyFormDirty()) return
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    function onClickLink(e) {
+      if (!isAnyFormDirty()) return
+      const t = e.target
+      const a = t && t.closest ? t.closest('a[href]') : null
+      if (!a) return
+      const href = a.getAttribute('href') || ''
+      if (!href || href.indexOf('http') === 0 || href.indexOf('#') === 0 || a.target === '_blank') return
+      e.preventDefault()
+      e.mbsiDicegah = true
+      bukaModalUnsaved('Pindah Halaman?', 'Kamu punya perubahan yang belum disimpan. Yakin ingin meninggalkan halaman ini? Semua perubahan akan hilang.', 'Tinggalkan', function () { navigate(href); ulangAnimHalaman() })
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    document.addEventListener('click', onClickLink, true)
+    return function () {
+      window.removeEventListener('beforeunload', onBeforeUnload)
+      document.removeEventListener('click', onClickLink, true)
+    }
+  })
+  useEffect(function () {
+    if (!mahasiswa || !dataSiap) return
+    const t = searchParams.get('isi')
+    const tHadir = searchParams.get('isiHadir')
+    if (!t && !tHadir) return
+    setSearchParams({}, { replace: true })
+    if (t) {
+      const pesan = pesanTanggalTerlarang(t, batas.min, batas.max)
+      if (pesan) { toast.gagal(pesan) } else { isiLogbookTanggal(t, true) }
+    }
+    if (tHadir) {
+      const pesanHadir = pesanTanggalTerlarang(tHadir, batas.min, batas.max)
+      if (pesanHadir) { toast.gagal(pesanHadir) } else { isiHadirTanggal(tHadir, true) }
+    }
+  }, [mahasiswa, dataSiap])
 
   if (loading || !mahasiswa) {
     return <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:py-8"><SkeletonDashboard /></div>
   }
 
-  
   function patchItem(i, patch) {
     setItems(function (prev) {
       return prev.map(function (it, idx) { return idx === i ? Object.assign({}, it, patch) : it })
@@ -10574,14 +10895,14 @@ export default function DashboardPage() {
       const totalUpload = items.reduce(function (n, x) { return n + (x.judul.trim() && x.file ? 1 : 0) }, 0)
       let nomorUpload = 0
       if (totalUpload > 1) setInfoProses('Mengunggah ' + totalUpload + ' file media sekaligus')
-      
+
       for (let i = 0; i < items.length; i++) {
         const it = items[i]
         if (!it.judul.trim()) continue
         let mediaPath = null, mediaType = null, mediaThumb = null
         let mediaSource = it.oldSource || 'r2'
         let youtubeId = it.oldYtId || null
-        
+
         if (it.mode === 'video' && it.ytLink && !it.file) {
           const id = parseYouTubeId(it.ytLink)
           if (!id) { toast.gagal('Link video tidak valid pada kegiatan ' + (i + 1) + '.'); setBusy(false); return }
@@ -10605,7 +10926,7 @@ export default function DashboardPage() {
         } else if (it.oldPath) {
           mediaPath = it.oldPath; mediaType = detectMediaType(it.oldPath); mediaThumb = it.oldThumb || null; mediaSource = 'r2'; youtubeId = null
         }
-        
+
         let driveIdLog = null
         if (it.mode === 'video' && it.driveLink) {
           driveIdLog = parseDriveId(it.driveLink)
@@ -10613,10 +10934,10 @@ export default function DashboardPage() {
         }
         clean.push({ judul: it.judul.trim(), deskripsi: it.deskripsi.trim(), hasil: it.hasil.trim(), media_path: mediaPath, media_type: mediaType, media_thumb: mediaThumb, media_source: mediaSource, youtube_id: youtubeId, drive_id: driveIdLog, show_in_gallery: it.show && !!mediaPath })
       }
-      
+
       setInfoProses('')
       if (!clean.length) { toast.gagal('Tambahkan minimal satu kegiatan dengan judul.'); setBusy(false); return }
-      
+
       let logId = editLogId
       let oldUrls = []
       if (editLogId) {
@@ -10628,24 +10949,24 @@ export default function DashboardPage() {
           if (it.media_thumb) oldUrls.push(it.media_thumb)
         })
         await supabase.from('logbooks').update({
-          tanggal: form.tanggal, unit: form.unit, kategori: form.kategori, judul: form.judul,
+          tanggal: form.tanggal, unit: form.unit, kategori: form.kategori, judul: toTitleCase(form.judul),
           kendala: form.kendala, solusi: form.solusi, pembelajaran: form.pembelajaran, status: form.status
         }).eq('id', editLogId)
         await supabase.from('logbook_items').delete().eq('logbook_id', editLogId)
       } else {
         const ins = await supabase.from('logbooks').insert({
-          mahasiswa_id: mahasiswa.id, tanggal: form.tanggal, unit: form.unit, kategori: form.kategori, judul: form.judul,
+          mahasiswa_id: mahasiswa.id, tanggal: form.tanggal, unit: form.unit, kategori: form.kategori, judul: toTitleCase(form.judul),
           kendala: form.kendala, solusi: form.solusi, pembelajaran: form.pembelajaran, status: form.status
         }).select().single()
         logId = ins.data.id
       }
-      
+
       const rows = clean.map(function (c, idx) {
         return { logbook_id: logId, urutan: idx + 1, judul: c.judul, deskripsi: c.deskripsi, hasil: c.hasil, media_path: c.media_path, media_type: c.media_type, media_thumb: c.media_thumb, media_source: c.media_source, youtube_id: c.youtube_id, drive_id: c.drive_id, show_in_gallery: c.show_in_gallery }
       })
       const insItems = await supabase.from('logbook_items').insert(rows).select()
       await syncGaleriFromLogbook(mahasiswa.id, insItems.data || [], { tanggal: form.tanggal, kategori: form.kategori })
-      
+
       const newUrls = []
       clean.forEach(function (c) {
         if (c.media_source === 'youtube') return
@@ -10653,7 +10974,7 @@ export default function DashboardPage() {
         if (c.media_thumb) newUrls.push(c.media_thumb)
       })
       for (const u of oldUrls) { if (newUrls.indexOf(u) === -1) await hapusMediaR2(u) }
-      
+
       setEditLogId(null)
       setForm({ tanggal: todayInput(), unit: '', kategori: '', judul: '', kendala: '', solusi: '', pembelajaran: '', status: 'draft' })
       setItems([newItem()])
@@ -10668,22 +10989,15 @@ export default function DashboardPage() {
   }
 
   function gulirKeFormTunda(ref, ms) {
-
-
     /* tunggu animasi masuk (halaman + banner pengingat) selesai supaya posisi form final */
-
-
     setTimeout(function () { gulirKeForm(ref) }, ms || 450)
-
-
   }
-
 
   function gulirKeForm(ref) {
     requestAnimationFrame(function () { if (ref && ref.current) ref.current.scrollIntoView({ behavior: 'smooth', block: 'start' }) })
   }
 
-    function startEditLog(log) {
+  function startEditLog(log) {
     if (isLogbookDirty()) {
       setKonfirmasiEdit({
         judul: 'Ganti Draf Logbook?',
@@ -10715,7 +11029,7 @@ export default function DashboardPage() {
     setItems([newItem()])
   }
 
-    function startEditGal(g) {
+  function startEditGal(g) {
     if (isGaleriDirty()) {
       setKonfirmasiEdit({
         judul: 'Ganti Draf Galeri?',
@@ -10745,7 +11059,7 @@ export default function DashboardPage() {
     setGalOldYt(null)
   }
 
-    function startEditHadir(h) {
+  function startEditHadir(h) {
     if (isHadirDirty()) {
       setKonfirmasiEdit({
         judul: 'Ganti Draf Daftar Hadir?',
@@ -10767,44 +11081,44 @@ export default function DashboardPage() {
     setEditHadirId(null)
     setHadirForm({ tanggal: todayInput(), status: 'Masuk', alasan: '' })
   }
-   function terapkanIsiTanggal(t, tunda) {
-     cancelEditLog()
-     setForm(function (f) { return Object.assign({}, f, { tanggal: t }) })
-     setTab('logbook')
-     if (tunda) gulirKeFormTunda(refFormLog, 450)
-     else gulirKeForm(refFormLog)
-   }
-   function isiLogbookTanggal(t, tunda) {
-     if (isLogbookDirty()) {
-       setKonfirmasiEdit({
-         judul: 'Ganti Draf Logbook?',
-         pesan: 'Isian form logbook yang belum disimpan akan hilang dan diganti dengan tanggal terlewat yang kamu pilih.',
-         aksi: function () { terapkanIsiTanggal(t, tunda) }
-       })
-       return
-     }
-     terapkanIsiTanggal(t, tunda)
-   }
 
+  function terapkanIsiTanggal(t, tunda) {
+    cancelEditLog()
+    setForm(function (f) { return Object.assign({}, f, { tanggal: t }) })
+    setTab('logbook')
+    if (tunda) gulirKeFormTunda(refFormLog, 450)
+    else gulirKeForm(refFormLog)
+  }
+  function isiLogbookTanggal(t, tunda) {
+    if (isLogbookDirty()) {
+      setKonfirmasiEdit({
+        judul: 'Ganti Draf Logbook?',
+        pesan: 'Isian form logbook yang belum disimpan akan hilang dan diganti dengan tanggal terlewat yang kamu pilih.',
+        aksi: function () { terapkanIsiTanggal(t, tunda) }
+      })
+      return
+    }
+    terapkanIsiTanggal(t, tunda)
+  }
 
   function terapkanIsiHadirTanggal(t, tunda) {
-  cancelEditHadir()
-  setHadirForm(function (f) { return Object.assign({}, f, { tanggal: t }) })
-  setTab('absen')
-  if (tunda) gulirKeFormTunda(refFormHadir, 450)
-  else gulirKeForm(refFormHadir)
-}
-function isiHadirTanggal(t, tunda) {
-  if (isHadirDirty()) {
-    setKonfirmasiEdit({
-      judul: 'Ganti Draf Daftar Hadir?',
-      pesan: 'Isian form daftar hadir yang belum disimpan akan hilang dan diganti dengan tanggal terlewat yang kamu pilih.',
-      aksi: function () { terapkanIsiHadirTanggal(t, tunda) }
-    })
-    return
+    cancelEditHadir()
+    setHadirForm(function (f) { return Object.assign({}, f, { tanggal: t }) })
+    setTab('absen')
+    if (tunda) gulirKeFormTunda(refFormHadir, 450)
+    else gulirKeForm(refFormHadir)
   }
-  terapkanIsiHadirTanggal(t, tunda)
-}
+  function isiHadirTanggal(t, tunda) {
+    if (isHadirDirty()) {
+      setKonfirmasiEdit({
+        judul: 'Ganti Draf Daftar Hadir?',
+        pesan: 'Isian form daftar hadir yang belum disimpan akan hilang dan diganti dengan tanggal terlewat yang kamu pilih.',
+        aksi: function () { terapkanIsiHadirTanggal(t, tunda) }
+      })
+      return
+    }
+    terapkanIsiHadirTanggal(t, tunda)
+  }
 
   function deleteLog(log) { setPendingDelete({ type: 'log', data: log }) }
 
@@ -10818,7 +11132,7 @@ function isiHadirTanggal(t, tunda) {
       let mediaPath = '', mediaType = '', mediaThumb = null
       let mediaSource = galOldYt ? 'youtube' : 'r2'
       let youtubeId = galOldYt || null
-      
+
       if (galMode === 'video' && galYtLink && !galForm.file) {
         const id = parseYouTubeId(galYtLink)
         if (!id) { toast.gagal('Link video tidak valid.'); setBusy(false); return }
@@ -10836,21 +11150,21 @@ function isiHadirTanggal(t, tunda) {
       } else if (galForm.oldPath) {
         mediaPath = galForm.oldPath; mediaType = detectMediaType(galForm.oldPath); mediaThumb = galForm.oldThumb || null; mediaSource = 'r2'; youtubeId = null
       }
-      
+
       if (!mediaPath) { toast.gagal('Galeri wajib memiliki media. Pilih file foto atau video terlebih dahulu.'); setBusy(false); return }
-      
+
       let driveIdGal = null
       if (galMode === 'video' && galDriveLink) {
         driveIdGal = parseDriveId(galDriveLink)
         if (!driveIdGal) { toast.gagal('Link Google Drive tidak valid.'); setBusy(false); return }
       }
-      
+
       const payload = {
-        mahasiswa_id: mahasiswa.id, judul: galForm.judul || ('Dokumentasi ' + galForm.tanggal), deskripsi: galForm.deskripsi,
+        mahasiswa_id: mahasiswa.id, judul: toTitleCase(galForm.judul) || ('Dokumentasi ' + galForm.tanggal), deskripsi: galForm.deskripsi,
         tanggal: galForm.tanggal, kegiatan: galForm.kegiatan || 'Lainnya', media_path: mediaPath, media_type: mediaType,
         media_thumb: mediaThumb, media_source: mediaSource, youtube_id: youtubeId, drive_id: driveIdGal
       }
-      
+
       let oldGalUrls = []
       if (editGalId) {
         const existing = galeri.find(function (g) { return g.id === editGalId })
@@ -10862,7 +11176,7 @@ function isiHadirTanggal(t, tunda) {
         await supabase.from('galeri').insert(payload)
       }
       for (const u of oldGalUrls) await hapusMediaR2(u)
-      
+
       setEditGalId(null)
       setGalForm({ judul: '', deskripsi: '', tanggal: todayInput(), kegiatan: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false })
       setGalMode('foto')
@@ -10960,55 +11274,55 @@ function isiHadirTanggal(t, tunda) {
     return { title: 'Hapus Catatan Hadir?', message: 'Catatan kehadiran tanggal ' + pendingDelete.data.tanggal + ' dengan status ' + pendingDelete.data.status + ' akan dihapus permanen.' }
   }
 
-async function executeDelete() {
-  if (!pendingDelete || deleteBusy) return
-  const target = pendingDelete
-  if (target.type === 'media-item') { setPendingDelete(null); removeItemFile(target.data); return }
-  if (target.type === 'media-gal') { setPendingDelete(null); setGalForm(function (g) { return Object.assign({}, g, { file: null, preview: '', oldPath: '' }) }); return }
-  if (target.type === 'kegiatan') {
-    setPendingDelete(null)
-    const buang = items[target.data]
-    const pratinjau = buang && buang.preview ? String(buang.preview) : ''
-    if (pratinjau.indexOf('blob:') === 0) URL.revokeObjectURL(pratinjau)
-    setItems(function (p) { return p.filter(function (x, idx) { return idx !== target.data }) })
-    toast.sukses('Kegiatan ' + (target.data + 1) + ' dihapus')
-    return
-  }
-  setDeleteBusy(true)
-  try {
-    if (target.type === 'log') {
-      const urls = []
-      ;(target.data.logbook_items || []).forEach(function (it) {
-        if (it.media_source === 'youtube') return
-        if (it.media_path) urls.push(it.media_path)
-        if (it.media_thumb) urls.push(it.media_thumb)
-      })
-      const res = await supabase.from('logbooks').delete().eq('id', target.data.id)
-      if (res.error) throw new Error(res.error.message)
-      await Promise.all(urls.map(function (u) { return hapusMediaR2(u) }))
-    } else if (target.type === 'gal') {
-      const urls = target.data.logbook_item_id || target.data.media_source === 'youtube' ? [] : [target.data.media_path, target.data.media_thumb].filter(Boolean)
-      const res = await supabase.from('galeri').delete().eq('id', target.data.id)
-      if (res.error) throw new Error(res.error.message)
-      if (target.data.logbook_item_id) {
-        const upd = await supabase.from('logbook_items').update({ show_in_gallery: false }).eq('id', target.data.logbook_item_id)
-        if (upd.error) throw new Error(upd.error.message)
-      }
-      await Promise.all(urls.map(function (u) { return hapusMediaR2(u) }))
-    } else if (target.type === 'hadir') {
-      const res = await supabase.from('daftar_hadir').delete().eq('id', target.data.id)
-      if (res.error) throw new Error(res.error.message)
+  async function executeDelete() {
+    if (!pendingDelete || deleteBusy) return
+    const target = pendingDelete
+    if (target.type === 'media-item') { setPendingDelete(null); removeItemFile(target.data); return }
+    if (target.type === 'media-gal') { setPendingDelete(null); setGalForm(function (g) { return Object.assign({}, g, { file: null, preview: '', oldPath: '' }) }); return }
+    if (target.type === 'kegiatan') {
+      setPendingDelete(null)
+      const buang = items[target.data]
+      const pratinjau = buang && buang.preview ? String(buang.preview) : ''
+      if (pratinjau.indexOf('blob:') === 0) URL.revokeObjectURL(pratinjau)
+      setItems(function (p) { return p.filter(function (x, idx) { return idx !== target.data }) })
+      toast.sukses('Kegiatan ' + (target.data + 1) + ' dihapus')
+      return
     }
-    await refresh()
-    toast.sukses('Data berhasil dihapus')
-  } catch (err) {
-    toast.gagal('Gagal menghapus data: ' + (err && err.message ? err.message : 'kesalahan tidak diketahui'))
-    await refresh()
-  } finally {
-    setDeleteBusy(false)
-    setPendingDelete(null)
+    setDeleteBusy(true)
+    try {
+      if (target.type === 'log') {
+        const urls = []
+        ;(target.data.logbook_items || []).forEach(function (it) {
+          if (it.media_source === 'youtube') return
+          if (it.media_path) urls.push(it.media_path)
+          if (it.media_thumb) urls.push(it.media_thumb)
+        })
+        const res = await supabase.from('logbooks').delete().eq('id', target.data.id)
+        if (res.error) throw new Error(res.error.message)
+        await Promise.all(urls.map(function (u) { return hapusMediaR2(u) }))
+      } else if (target.type === 'gal') {
+        const urls = target.data.logbook_item_id || target.data.media_source === 'youtube' ? [] : [target.data.media_path, target.data.media_thumb].filter(Boolean)
+        const res = await supabase.from('galeri').delete().eq('id', target.data.id)
+        if (res.error) throw new Error(res.error.message)
+        if (target.data.logbook_item_id) {
+          const upd = await supabase.from('logbook_items').update({ show_in_gallery: false }).eq('id', target.data.logbook_item_id)
+          if (upd.error) throw new Error(upd.error.message)
+        }
+        await Promise.all(urls.map(function (u) { return hapusMediaR2(u) }))
+      } else if (target.type === 'hadir') {
+        const res = await supabase.from('daftar_hadir').delete().eq('id', target.data.id)
+        if (res.error) throw new Error(res.error.message)
+      }
+      await refresh()
+      toast.sukses('Data berhasil dihapus')
+    } catch (err) {
+      toast.gagal('Gagal menghapus data: ' + (err && err.message ? err.message : 'kesalahan tidak diketahui'))
+      await refresh()
+    } finally {
+      setDeleteBusy(false)
+      setPendingDelete(null)
+    }
   }
-}
 
   const filteredLogs = logs.filter(function (l) {
     if (logFilter.kategori && l.kategori !== logFilter.kategori) return false
@@ -11033,6 +11347,21 @@ async function executeDelete() {
   const sortedHadir = urutkanTanggal(filteredHadir, sort)
   const hadirFilterActive = countActiveFilters(hadirFilter)
 
+  /* Jumlah reminder yang tersisa untuk ditampilkan di badge tab dashboard.
+     Dihitung pakai fungsi yang sama dengan PengingatBanner supaya konsisten. */
+  const jumlahReminderLogbook = dataSiap
+    ? hitungTanggalTerlewat(logs.map(function (l) { return l.tanggal }), hadir).length
+    : 0
+  const jumlahReminderHadir = dataSiap
+    ? hitungTanggalTerlewatHadir(hadir).length
+    : 0
+
+  function badgeUntuk(tabId) {
+    if (tabId === 'logbook') return jumlahReminderLogbook
+    if (tabId === 'absen') return jumlahReminderHadir
+    return 0
+  }
+
   const logTotal = filteredLogs.length
   const logTotalPages = Math.max(1, Math.ceil(logTotal / PER_PAGE_DASH))
   const logPageAman = Math.min(logPage, logTotalPages)
@@ -11053,25 +11382,25 @@ async function executeDelete() {
   function gantiHalamanHadir(p) { setHadirPage(p); if (refListHadir.current) refListHadir.current.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
 
   const editGalDerived = editGalId ? ((galeri.find(function (g) { return g.id === editGalId }) || {}).logbook_item_id || null) : null
-  
-     function gantiTab(tabBaru) {
-     if (tabBaru === tab) return
-     if (isAnyFormDirty()) {
-       bukaModalUnsaved('Pindah Tab?', 'Kamu punya perubahan yang belum disimpan. Yakin ingin pindah tab? Semua perubahan akan hilang.', 'Pindah', function () {
-         cancelEditLog()
-         cancelEditGal()
-         cancelEditHadir()
-         setTab(tabBaru)
-       })
-       return
-     }
-     cancelEditLog()
-     cancelEditGal()
-     cancelEditHadir()
-     setTab(tabBaru)
-   }
 
-    return (
+  function gantiTab(tabBaru) {
+    if (tabBaru === tab) return
+    if (isAnyFormDirty()) {
+      bukaModalUnsaved('Pindah Tab?', 'Kamu punya perubahan yang belum disimpan. Yakin ingin pindah tab? Semua perubahan akan hilang.', 'Pindah', function () {
+        cancelEditLog()
+        cancelEditGal()
+        cancelEditHadir()
+        setTab(tabBaru)
+      })
+      return
+    }
+    cancelEditLog()
+    cancelEditGal()
+    cancelEditHadir()
+    setTab(tabBaru)
+  }
+
+  return (
     <div>
       <section className="card-hover bsi-panel rounded-[2rem] p-5 sm:p-8 lg:p-10">
         <div className="flex flex-col gap-5 sm:gap-6">
@@ -11102,12 +11431,13 @@ async function executeDelete() {
             >
             {TAB_DASHBOARD.map(function (t) {
               const aktif = tab === t.id
+              const jumlah = badgeUntuk(t.id)
               return (
                 <button
                   key={t.id}
                   type="button"
                   onClick={function () { gantiTab(t.id) }}
-                  aria-label={t.label}
+                  aria-label={jumlah > 0 ? t.label + ' (' + jumlah + ' pengingat)' : t.label}
                   aria-current={aktif ? 'page' : undefined}
                   className={
                     'shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap ' +
@@ -11120,6 +11450,17 @@ async function executeDelete() {
                   <span className="tab-icon shrink-0"><SizedIcon name={t.icon} size={15} /></span>
                   <span className="hidden sm:inline">{t.label}</span>
                   <span className="sm:hidden">{t.mobile}</span>
+                  {jumlah > 0 ? (
+                    <span
+                      title={jumlah + ' pengingat menunggu'}
+                      className={
+                        'shrink-0 grid place-items-center min-w-[18px] h-[18px] rounded-full text-[10px] font-black leading-none px-1 ' +
+                        (aktif ? 'bg-white text-bsi-800' : 'bg-amber-500 text-white')
+                      }
+                    >
+                      {jumlah > 99 ? '99+' : jumlah}
+                    </span>
+                  ) : null}
                 </button>
               )
             })}
@@ -11240,7 +11581,7 @@ async function executeDelete() {
                       <input className={inputCls} value={it.judul} onChange={function (e) { patchItem(i, { judul: e.target.value }) }} aria-label="Judul Kegiatan" placeholder="Judul kegiatan" />
                       <AutoTextArea className={inputCls} value={it.deskripsi} onChange={function (e) { patchItem(i, { deskripsi: e.target.value }) }} aria-label="Deskripsi Kegiatan" placeholder="Deskripsi singkat kegiatan" />
                       <input className={inputCls} value={it.hasil} onChange={function (e) { patchItem(i, { hasil: e.target.value }) }} aria-label="Hasil kegiatan" placeholder="Hasil (opsional)" />
-                      
+
                       {it.previewLoading ? (
                         <div className="rounded-2xl border border-slate-200 bg-slate-100 aspect-video grid place-items-center">
                           <div className="flex flex-col items-center gap-3">
@@ -11249,7 +11590,7 @@ async function executeDelete() {
                           </div>
                         </div>
                       ) : null}
-                      
+
                       {it.preview ? (
                         <div className="relative rounded-2xl overflow-hidden aspect-video bg-slate-900">
                           {it.file && it.file.type.indexOf('video') === 0
@@ -11260,9 +11601,9 @@ async function executeDelete() {
                           </button>
                         </div>
                       ) : null}
-                      
+
                       <ToggleModeMedia value={it.mode} onChange={function (m) { patchItem(i, { mode: m }) }} />
-                      
+
                       {it.mode === 'video' ? (
                         <SumberVideo
                           inputCls={inputCls}
@@ -11279,7 +11620,7 @@ async function executeDelete() {
                       ) : (
                         <FileInput accept="image/*" fileName={it.file ? it.file.name : ''} label="Klik untuk Pilih Foto" hint="Foto JPG, PNG, atau HEIC otomatis dikonversi ke WebP." onChange={function (e) { onItemFile(i, e.target.files[0]) }} />
                       )}
-                      
+
                       <label className={'flex items-start gap-3 rounded-2xl border p-3 cursor-pointer w-full ' + (it.preview ? (it.show ? 'border-gold-500 bg-gold-500/5' : 'border-slate-200') : 'border-slate-200 bg-slate-50 opacity-50 cursor-not-allowed')}>
                         <input type="checkbox" disabled={!it.preview} checked={it.show} onChange={function (e) { patchItem(i, { show: e.target.checked }) }} className="mt-0.5 h-4 w-4 rounded accent-bsi-800" />
                         <span className="text-sm font-semibold text-slate-800">Tampilkan Kegiatan Ini di Galeri</span>
@@ -11370,7 +11711,7 @@ async function executeDelete() {
                   )}
                 </div>
               </div>
-              
+
               {galForm.previewLoading ? (
                 <div className="rounded-2xl border border-slate-200 bg-slate-100 aspect-video grid place-items-center">
                   <div className="flex flex-col items-center gap-3">
@@ -11379,7 +11720,7 @@ async function executeDelete() {
                   </div>
                 </div>
               ) : null}
-              
+
               {galForm.preview ? (
                 <div className="relative rounded-2xl overflow-hidden aspect-video bg-slate-900">
                   {galForm.file && galForm.file.type.indexOf('video') === 0
@@ -11390,7 +11731,7 @@ async function executeDelete() {
                   </button>
                 </div>
               ) : null}
-              
+
               <div className="grid gap-4 sm:grid-cols-2">
                 <div><label className={labelCls}>Judul (Opsional)</label><input className={inputCls} value={galForm.judul} onChange={function (e) { setGalForm(Object.assign({}, galForm, { judul: e.target.value })) }} aria-label="Judul Media" placeholder="Kosongkan untuk judul otomatis" /></div>
                 <div>
@@ -11479,45 +11820,45 @@ async function executeDelete() {
           </div>
         </section>
       ) : null}
-       {tab === 'qr' ? <QrPrintTab /> : null}
-
+      {tab === 'qr' ? <QrPrintTab /> : null}
 
       <Modal open={!!detail} onClose={function () { setDetail(null) }}>
         {detail && detail.type === 'log' ? <LogbookDetail log={detail.data} /> : null}
         {detail && detail.type === 'gal' ? <GalleryDetail item={detail.data} /> : null}
         {detail && detail.type === 'hadir' ? <AttendanceDetail row={detail.data} /> : null}
       </Modal>
-      
-<ConfirmModal
-  open={!!pendingDelete}
-  title={pendingDelete && confirmInfo() ? confirmInfo().title : ''}
-  message={pendingDelete && confirmInfo() ? confirmInfo().message : ''}
-  busy={deleteBusy}
-  busyLabel="Menghapus"
-  onCancel={function () { if (!deleteBusy) setPendingDelete(null) }}
-  onConfirm={executeDelete}
-/>
 
-        <ConfirmModal
-          open={!!konfirmasiEdit}
-          title={konfirmasiEdit ? konfirmasiEdit.judul : ''}
-          message={konfirmasiEdit ? konfirmasiEdit.pesan : ''}
-          confirmLabel="Ganti"
-          icon="trash"
-          tone="bahaya"
-          onCancel={function () { setKonfirmasiEdit(null) }}
-          onConfirm={function () { const aksi = konfirmasiEdit ? konfirmasiEdit.aksi : null; setKonfirmasiEdit(null); if (aksi) aksi() }}
-        />
-       <ConfirmModal
-         open={!!unsavedModal}
-         title={unsavedModal ? unsavedModal.title : ''}
-         message={unsavedModal ? unsavedModal.message : ''}
-         confirmLabel={unsavedModal ? unsavedModal.confirmLabel : 'Konfirmasi'}
-         icon="trash"
-         tone="bahaya"
-         onCancel={unsavedModal ? unsavedModal.onCancel : function () { setUnsavedModal(null) }}
-         onConfirm={unsavedModal ? unsavedModal.onConfirm : function () { setUnsavedModal(null) }}
-       />
+      <ConfirmModal
+        open={!!pendingDelete}
+        title={pendingDelete && confirmInfo() ? confirmInfo().title : ''}
+        message={pendingDelete && confirmInfo() ? confirmInfo().message : ''}
+        busy={deleteBusy}
+        busyLabel="Menghapus"
+        onCancel={function () { if (!deleteBusy) setPendingDelete(null) }}
+        onConfirm={executeDelete}
+      />
+
+      <ConfirmModal
+        open={!!konfirmasiEdit}
+        title={konfirmasiEdit ? konfirmasiEdit.judul : ''}
+        message={konfirmasiEdit ? konfirmasiEdit.pesan : ''}
+        confirmLabel="Ganti"
+        icon="trash"
+        tone="bahaya"
+        onCancel={function () { setKonfirmasiEdit(null) }}
+        onConfirm={function () { const aksi = konfirmasiEdit ? konfirmasiEdit.aksi : null; setKonfirmasiEdit(null); if (aksi) aksi() }}
+      />
+
+      <ConfirmModal
+        open={!!unsavedModal}
+        title={unsavedModal ? unsavedModal.title : ''}
+        message={unsavedModal ? unsavedModal.message : ''}
+        confirmLabel={unsavedModal ? unsavedModal.confirmLabel : 'Konfirmasi'}
+        icon="trash"
+        tone="bahaya"
+        onCancel={unsavedModal ? unsavedModal.onCancel : function () { setUnsavedModal(null) }}
+        onConfirm={unsavedModal ? unsavedModal.onConfirm : function () { setUnsavedModal(null) }}
+      />
     </div>
   )
 }

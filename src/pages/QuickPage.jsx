@@ -12,6 +12,7 @@ import { SizedIcon } from '../components/icons.jsx'
 import { useNavigate } from 'react-router-dom'
 import PengingatBanner from '../components/PengingatBanner.jsx'
 import { SkeletonQuick } from '../components/Skeleton.jsx'
+import { bantuTulisLogbook } from '../lib/ai.js'
 
 const STATUS_HADIR = ['Masuk', 'Izin', 'Bolos']
 
@@ -40,6 +41,9 @@ export default function QuickPage() {
   const [alasan, setAlasan] = useState('')
   const navigate = useNavigate()
   const [tanggalLogs, setTanggalLogs] = useState([])
+  const [aiDraft, setAiDraft] = useState('')
+  const [aiBusy, setAiBusy] = useState(false)
+  const [aiOpen, setAiOpen] = useState(false)
   const [hadirRows, setHadirRows] = useState([])
 
   const cameraRef = useRef(null)
@@ -110,6 +114,26 @@ export default function QuickPage() {
     setFile(null)
     setPreview('')
     setShowGal(false)
+  }
+
+  async function handleAiTulis() {
+    if (!aiDraft.trim() || aiBusy) return
+    setAiBusy(true)
+    try {
+      const hasil = await bantuTulisLogbook(aiDraft, KATEGORI, [])
+      if (hasil.kategori && !todayLog && !kategori) setKategori(hasil.kategori)
+      if (hasil.items && hasil.items.length) {
+        setJudulKegiatan(hasil.items[0].judul || hasil.judul || '')
+        setDeskripsi(hasil.items[0].deskripsi || '')
+      } else if (hasil.judul) {
+        setJudulKegiatan(hasil.judul)
+      }
+      toast.sukses('AI selesai. Periksa dulu sebelum simpan.')
+      setAiOpen(false)
+    } catch (err) {
+      toast.gagal('AI gagal: ' + err.message)
+    }
+    setAiBusy(false)
   }
 
   async function submitLogbook(e) {
@@ -279,8 +303,91 @@ export default function QuickPage() {
               </div>
             </div>
           )}
+<form onSubmit={submitLogbook} className="mt-5 space-y-4">
 
-          <form onSubmit={submitLogbook} className="mt-5 space-y-4">
+          <div className="rounded-2xl border border-bsi-200 bg-gradient-to-br from-bsi-50 to-white p-4">
+
+            <div className="flex items-start gap-3">
+
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-bsi-800 text-white text-lg">&#10024;</span>
+
+              <div className="min-w-0 flex-1">
+
+                <p className="text-sm font-bold text-slate-900">Tulis Cepat dengan AI</p>
+
+                <p className="mt-0.5 text-xs text-slate-600">Ceritakan kegiatanmu sekilas, biar AI yang rapikan.</p>
+
+              </div>
+
+              <button type="button" onClick={function () { setAiOpen(function (v) { return !v }) }}
+
+                className="shrink-0 text-xs font-bold text-bsi-800 hover:text-bsi-900">
+
+                {aiOpen ? 'Tutup' : 'Buka'}
+
+              </button>
+
+            </div>
+
+            {aiOpen ? (
+
+              <div className="mt-3 space-y-3">
+
+                <AutoTextArea
+
+                  className={inputCls}
+
+                  value={aiDraft}
+
+                  onChange={function (e) { setAiDraft(e.target.value) }}
+
+                  placeholder="Contoh: hari ini bantu input data nasabah, ada kendala sistem eror, belajar cara verifikasi berkas"
+
+                  rows={3}
+
+                />
+
+                <div className="flex flex-wrap gap-2">
+
+                  <button
+
+                    type="button"
+
+                    disabled={aiBusy || !aiDraft.trim()}
+
+                    onClick={handleAiTulis}
+
+                    className="rounded-xl bg-bsi-800 px-4 py-2.5 text-xs font-bold text-white hover:bg-bsi-900 disabled:opacity-50"
+
+                  >
+
+                    {aiBusy ? <LabelProses teks="AI menulis" /> : '✨ Rapikan dengan AI'}
+
+                  </button>
+
+                  <button
+
+                    type="button"
+
+                    disabled={aiBusy || !aiDraft}
+
+                    onClick={function () { setAiDraft('') }}
+
+                    className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+
+                  >
+
+                    Bersihkan
+
+                  </button>
+
+                </div>
+
+              </div>
+
+            ) : null}
+
+          </div>
             <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-bold text-bsi-800">{todayLog ? 'Kegiatan Baru (kegiatan ' + (todayLog.logbook_items.length + 1) + ')' : 'Kegiatan'}</p>
               <input className={inputCls} value={judulKegiatan} onChange={function (e) { setJudulKegiatan(e.target.value) }} aria-label="Judul Kegiatan" placeholder="Judul kegiatan" />
