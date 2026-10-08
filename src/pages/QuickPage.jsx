@@ -305,88 +305,47 @@ export default function QuickPage() {
           )}
 <form onSubmit={submitLogbook} className="mt-5 space-y-4">
 
-          <div className="rounded-2xl border border-bsi-200 bg-gradient-to-br from-bsi-50 to-white p-4">
-
-            <div className="flex items-start gap-3">
-
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-bsi-800 text-white text-lg">&#10024;</span>
-
+          <div className={'catatan-cepat-kartu rounded-2xl border border-slate-200 overflow-hidden' + (aiOpen ? ' catatan-cepat-kartu-buka' : '')}>
+            <button
+              type="button"
+              onClick={function () { setAiOpen(function (v) { return !v }) }}
+              className="catatan-cepat-header flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50"
+            >
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-bsi-50 text-bsi-800">
+                <SizedIcon name="pencil" size={15} />
+              </span>
               <div className="min-w-0 flex-1">
-
-                <p className="text-sm font-bold text-slate-900">Tulis Cepat dengan AI</p>
-
-                <p className="mt-0.5 text-xs text-slate-600">Ceritakan kegiatanmu sekilas, biar AI yang rapikan.</p>
-
+                <p className="text-sm font-semibold text-slate-800">Catatan cepat</p>
+                <p className="mt-0.5 text-xs text-slate-500">Tulis sekilas, nanti dirapikan jadi logbook</p>
               </div>
-
-              <button type="button" onClick={function () { setAiOpen(function (v) { return !v }) }}
-
-                className="shrink-0 text-xs font-bold text-bsi-800 hover:text-bsi-900">
-
-                {aiOpen ? 'Tutup' : 'Buka'}
-
-              </button>
-
-            </div>
-
-            {aiOpen ? (
-
-              <div className="mt-3 space-y-3">
-
-                <AutoTextArea
-
-                  className={inputCls}
-
-                  value={aiDraft}
-
-                  onChange={function (e) { setAiDraft(e.target.value) }}
-
-                  placeholder="Contoh: hari ini bantu input data nasabah, ada kendala sistem eror, belajar cara verifikasi berkas"
-
-                  rows={3}
-
-                />
-
-                <div className="flex flex-wrap gap-2">
-
-                  <button
-
-                    type="button"
-
-                    disabled={aiBusy || !aiDraft.trim()}
-
-                    onClick={handleAiTulis}
-
-                    className="rounded-xl bg-bsi-800 px-4 py-2.5 text-xs font-bold text-white hover:bg-bsi-900 disabled:opacity-50"
-
-                  >
-
-                    {aiBusy ? <LabelProses teks="AI menulis" /> : '✨ Rapikan dengan AI'}
-
-                  </button>
-
-                  <button
-
-                    type="button"
-
-                    disabled={aiBusy || !aiDraft}
-
-                    onClick={function () { setAiDraft('') }}
-
-                    className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-
-                  >
-
-                    Bersihkan
-
-                  </button>
-
+              <span className="catatan-cepat-chevron shrink-0 text-slate-500">
+                <SizedIcon name="chevron" size={16} />
+              </span>
+            </button>
+            <div className={'catatan-cepat-wrap' + (aiOpen ? ' catatan-cepat-buka' : '')}>
+              <div className="catatan-cepat-dalam">
+                <div className="catatan-cepat-isi border-t border-slate-100 px-4 py-4 space-y-3">
+                  <textarea
+                    className={inputCls + ' resize-none'}
+                    value={aiDraft}
+                    onChange={function (e) { setAiDraft(e.target.value) }}
+                    placeholder="Contoh: bantu CS input data nasabah, sempat ada error sistem, terus belajar verifikasi berkas"
+                    rows={3}
+                  />
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs text-slate-500">Hasilnya bisa kamu edit dulu sebelum simpan.</p>
+                    <button
+                      type="button"
+                      disabled={aiBusy || !aiDraft.trim()}
+                      onClick={handleAiTulis}
+                      className="shrink-0 rounded-xl bg-bsi-800 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-bsi-900 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {aiBusy ? <LabelProses teks="Merapikan" /> : 'Rapikan'}
+                    </button>
+                  </div>
                 </div>
-
               </div>
-
-            ) : null}
-
+            </div>
           </div>
             <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-bold text-bsi-800">{todayLog ? 'Kegiatan Baru (kegiatan ' + (todayLog.logbook_items.length + 1) + ')' : 'Kegiatan'}</p>

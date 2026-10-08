@@ -1103,3 +1103,62 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
     font-size: 0.875rem !important;
   }
 }
+
+/* catatan-cepat: accordion panel catatan cepat (AI).
+   Pola sama dengan filter-wrap / menu-mobile / unggah-foto: tinggi wrapper
+   dianimasikan lewat grid-template-rows sehingga konten di bawahnya bergeser
+   mulus tanpa perlu ukur tinggi manual. Isi panel muncul dengan fade + slide
+   halus, chevron berputar dengan easing yang sama supaya terasa satu gerakan. */
+.catatan-cepat-kartu .catatan-cepat-chevron {
+  transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.catatan-cepat-kartu-buka .catatan-cepat-chevron {
+  transform: rotate(180deg);
+}
+
+.catatan-cepat-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.36s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.catatan-cepat-buka { grid-template-rows: 1fr; }
+
+.catatan-cepat-dalam {
+  overflow: hidden;
+  min-height: 0;
+  visibility: hidden;
+  transition: visibility 0.36s;
+}
+.catatan-cepat-buka .catatan-cepat-dalam { visibility: visible; }
+
+.catatan-cepat-isi {
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity 0.2s ease, transform 0.24s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.catatan-cepat-buka .catatan-cepat-isi {
+  opacity: 1;
+  transform: none;
+  transition: opacity 0.3s ease 0.06s, transform 0.34s cubic-bezier(0.32, 0.72, 0, 1) 0.04s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .catatan-cepat-chevron,
+  .catatan-cepat-wrap,
+  .catatan-cepat-dalam,
+  .catatan-cepat-isi { transition-duration: 0.01ms !important; }
+}
+
+/* catatan-cepat-header: isolate header dari reflow panel.
+   Tinggi panel "Catatan cepat" berubah setiap frame saat animasi
+   grid-template-rows berjalan. Tanpa isolasi, teks & icon di header
+   ikut sub-pixel shift karena browser menghitung ulang layout border
+   parent-nya. Promote ke GPU layer membuat header dirender di layer
+   sendiri sehingga tidak terpengaruh reflow sekitar. */
+.catatan-cepat-header {
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  position: relative;
+  z-index: 1;
+}
