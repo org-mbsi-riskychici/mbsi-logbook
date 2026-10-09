@@ -36,8 +36,14 @@ The content is organized as follows:
 ````
 api/
   _lib/
+    ai-provider.js
+    gemini.js
+    groq.js
+    openrouter.js
     sesi.js
     youtube.js
+  ai/
+    tulis.js
   r2/
     delete.js
     file.js
@@ -65,6 +71,7 @@ src/
     Skeleton.jsx
     ui.jsx
   lib/
+    ai.js
     auth.js
     constants.js
     drive.js
@@ -242,17 +249,6 @@ create policy "hadir_delete_self" on public.daftar_hadir for delete using (
 );
 ````
 
-## File: .env.example
-````
-VITE_SUPABASE_URL=
-VITE_SUPABASE_ANON_KEY=
-R2_ACCOUNT_ID=
-R2_ACCESS_KEY_ID=
-R2_SECRET_ACCESS_KEY=
-R2_BUCKET_NAME=mbsi-media
-R2_PUBLIC_BASE_URL=
-````
-
 ## File: postcss.config.js
 ````javascript
 export default {
@@ -267,6 +263,441 @@ export default {
 ````json
 {
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}
+````
+
+## File: api/_lib/ai-provider.js
+````javascript
+import { susunLogbookDenganGemini } from './gemini.js'
+import { susunLogbookDenganOpenRouter } from './openrouter.js'
+import { susunLogbookDenganGroq } from './groq.js'
+
+export function providerAktif(env) {
+  return (env.AI_PROVIDER || 'groq').toLowerCase()
+}
+
+export async function susunLogbookAi(env, opts) {
+  const provider = providerAktif(env)
+  if (provider === 'groq') return susunLogbookDenganGroq(env, opts)
+  if (provider === 'openrouter') return susunLogbookDenganOpenRouter(env, opts)
+  if (provider === 'gemini') return susunLogbookDenganGemini(env, opts)
+  throw new Error('AI_PROVIDER tidak dikenal: ' + provider + '. Gunakan "groq", "openrouter", atau "gemini".')
+}
+````
+
+## File: api/_lib/gemini.js
+````javascript
+const BASE = 'https://generativelanguage.googleapis.com/v1beta/models'
+const DEFAULT_MODEL = 'gemini-2.0-flash'
+
+export function modelGemini(env) {
+  return env.GEMINI_MODEL || DEFAULT_MODEL
+}
+
+export async function panggilGemini(env, opsi) {
+  const key = env.GEMINI_API_KEY
+  if (!key) throw new Error('GEMINI_API_KEY belum dikonfigurasi di environment')
+  const url = BASE + '/' + modelGemini(env) + ':generateContent?key=' + key
+  const body = {
+    contents: [{ parts: [{ text: opsi.prompt }] }],
+    generationConfig: {
+      temperature: opsi.temperature == null ? 0.7 : opsi.temperature
+    }
+  }
+  if (opsi.schema) {
+    body.generationConfig.responseMimeType = 'application/json'
+    body.generationConfig.responseSchema = opsi.schema
+  }
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  })
+  const teks = await r.text()
+  if (!r.ok) {
+    let pesan = 'Gemini API gagal (status ' + r.status + ')'
+    try {
+      const j = JSON.parse(teks)
+      if (j && j.error && j.error.message) pesan = j.error.message
+    } catch (e) {}
+    throw new Error(pesan)
+  }
+  const data = JSON.parse(teks)
+  const kand = data && data.candidates && data.candidates[0]
+  const parts = kand && kand.content && kand.content.parts
+  if (!parts || !parts.length) throw new Error('Gemini tidak mengembalikan jawaban')
+  const out = parts.map(function (p) { return p.text || '' }).join('').trim()
+  if (!out) throw new Error('Gemini mengembalikan jawaban kosong')
+  return out
+}
+
+export function parseJsonDariTeks(teks) {
+  try { return JSON.parse(teks) } catch (e) {}
+  const m = String(teks).match(/\{[\s\S]*\}/)
+  if (!m) return null
+  try { return JSON.parse(m[0]) } catch (e) { return null }
+}
+
+function bangunPrompt(draft, kategoriList, unitList) {
+  return [
+    'Kamu asisten logbook magang Bank Syariah Indonesia (BSI).',
+    '',
+    'Tugas: dari catatan kasar mahasiswa, susun logbook harian yang rapi dan profesional dalam Bahasa Indonesia.',
+    '',
+    'Aturan:',
+    '- "judul": ringkasan hari itu, maksimal 12 kata, tanpa titik di akhir.',
+    '- "kategori": pilih SATU persis dari daftar ini: ' + kategoriList.join(', ') + '.',
+    '- "unit": pilih SATU persis dari daftar berikut, atau "" kalau tidak jelas: ' + unitList.join(', ') + '.',
+    '- "items": array 1 sampai 5 kegiatan. Tiap kegiatan punya "judul" (maks 10 kata) dan "deskripsi" (1-2 kalimat singkat).',
+    '- "kendala", "solusi", "pembelajaran": isi hanya jika tercantum di catatan. Kalau tidak ada, isi string kosong "".',
+    '- Jangan mengarang detail yang tidak ada di catatan.',
+    '- Nada profesional, ringkas, tidak berlebihan.',
+    '',
+    'Catatan kasar mahasiswa:',
+    '"""',
+    draft.trim(),
+    '"""'
+  ].join('\n')
+}
+
+const SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    judul: { type: 'STRING' },
+    kategori: { type: 'STRING' },
+    unit: { type: 'STRING' },
+    kendala: { type: 'STRING' },
+    solusi: { type: 'STRING' },
+    pembelajaran: { type: 'STRING' },
+    items: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          judul: { type: 'STRING' },
+          deskripsi: { type: 'STRING' }
+        },
+        required: ['judul', 'deskripsi']
+      }
+    }
+  },
+  required: ['judul', 'kategori', 'items']
+}
+
+function potong(s, n) { return String(s || '').slice(0, n) }
+
+export async function susunLogbookDenganGemini(env, opts) {
+  const draft = String(opts.draft || '').trim()
+  if (!draft) throw new Error('Catatan kosong')
+  if (draft.length > 2000) throw new Error('Catatan terlalu panjang (maks 2000 karakter)')
+  const kat = (opts.kategoriList && opts.kategoriList.length) ? opts.kategoriList : []
+  const unit = (opts.unitList && opts.unitList.length) ? opts.unitList : []
+
+  const raw = await panggilGemini(env, {
+    prompt: bangunPrompt(draft, kat, unit),
+    schema: SCHEMA,
+    temperature: 0.7
+  })
+  const hasil = parseJsonDariTeks(raw)
+  if (!hasil) throw new Error('AI tidak menghasilkan JSON valid')
+
+  return {
+    judul: potong(hasil.judul, 200),
+    kategori: kat.indexOf(hasil.kategori) !== -1 ? hasil.kategori : '',
+    unit: unit.indexOf(hasil.unit) !== -1 ? hasil.unit : '',
+    kendala: potong(hasil.kendala, 800),
+    solusi: potong(hasil.solusi, 800),
+    pembelajaran: potong(hasil.pembelajaran, 800),
+    items: Array.isArray(hasil.items)
+      ? hasil.items.slice(0, 5).map(function (it) {
+          return { judul: potong(it.judul, 200), deskripsi: potong(it.deskripsi, 800) }
+        }).filter(function (it) { return it.judul })
+      : []
+  }
+}
+````
+
+## File: api/_lib/groq.js
+````javascript
+const BASE = 'https://api.groq.com/openai/v1/chat/completions'
+const DEFAULT_MODEL = 'qwen/qwen3.8-27b'
+
+export function modelGroq(env) {
+  return env.GROQ_MODEL || DEFAULT_MODEL
+}
+
+export async function panggilGroq(env, opsi) {
+  const key = env.GROQ_API_KEY
+  if (!key) throw new Error('GROQ_API_KEY belum dikonfigurasi di environment')
+
+  const body = {
+    model: modelGroq(env),
+    messages: [{ role: 'user', content: opsi.prompt }],
+    temperature: opsi.temperature == null ? 0.6 : opsi.temperature,
+    max_completion_tokens: opsi.maxTokens || 2048,
+    reasoning_effort: opsi.reasoningEffort || 'none',
+    response_format: { type: 'json_object' }
+  }
+
+  const r = await fetch(BASE, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer ' + key
+    },
+    body: JSON.stringify(body)
+  })
+
+  const teks = await r.text()
+  if (!r.ok) {
+    let detail = ''
+    try {
+      const j = JSON.parse(teks)
+      if (j && j.error && j.error.message) detail = j.error.message
+    } catch (e) {}
+    if (r.status === 401) throw new Error('API key Groq tidak valid. Periksa GROQ_API_KEY di .env.local')
+    if (r.status === 404) throw new Error('Model "' + modelGroq(env) + '" tidak ditemukan di Groq. Cek https://console.groq.com/docs/models')
+    if (r.status === 429) {
+      if (/per day|daily|RPD/i.test(detail)) throw new Error('Kuota harian Groq habis (1.000 request/hari untuk Qwen 3.8 27B). Reset tengah malam UTC.')
+      if (/per minute|TPM|RPM/i.test(detail)) throw new Error('Rate limit Groq: terlalu banyak request per menit. Tunggu 10-20 detik lalu coba lagi.')
+      throw new Error('Groq rate limit: ' + (detail || 'coba lagi sebentar lagi'))
+    }
+    throw new Error('Groq gagal (status ' + r.status + '): ' + (detail || teks.slice(0, 200)))
+  }
+
+  const data = JSON.parse(teks)
+  const pilihan = data && data.choices && data.choices[0]
+  const out = pilihan && pilihan.message && pilihan.message.content
+  if (!out) throw new Error('Groq tidak mengembalikan jawaban')
+  return String(out).trim()
+}
+
+export function parseJsonDariTeks(teks) {
+  try { return JSON.parse(teks) } catch (e) {}
+  const m = String(teks).match(/\{[\s\S]*\}/)
+  if (!m) return null
+  try { return JSON.parse(m[0]) } catch (e) { return null }
+}
+
+function bangunPrompt(draft, kategoriList, unitList) {
+  return [
+    'Kamu asisten yang bantu nulis logbook magang di Bank Syariah Indonesia (BSI).',
+    '',
+    'Tugas: ubah catatan kasar jadi logbook harian yang enak dibaca.',
+    '',
+    '════ GAYA BAHASA (WAJIB DIIKUTI) ════',
+    '1. Sudut pandang ORANG PERTAMA (diri sendiri).',
+    '   - Pakai "saya" sesekali, atau tanpa subjek.',
+    '   - DILARANG menyebut "mahasiswa", "peserta magang", "praktikan", nama orang, atau "penulis".',
+    '',
+    '2. Bahasa natural & mengalir, seperti ngobrol sama teman kantor.',
+    '   - Hindari kata kaku: "mengonsumsi", "melaksanakan", "melakukan", "adapun", "yakni", "sebagaimana", "tersebut".',
+    '   - Ganti jadi kata sehari-hari:',
+    '       "mengonsumsi makanan" → "makan"',
+    '       "melaksanakan tugas" → "kerjain"',
+    '       "melakukan input" → "input"',
+    '       "memberikan pelayanan" → "layani"',
+    '       "mempelajari cara" → "belajar cara"',
+    '       "melakukan kegiatan" → (hapus aja, langsung ke aksinya)',
+    '',
+    '3. Tetap sopan & profesional, tapi tidak birokratis.',
+    '   - Boleh santai. Jangan lebay, jangan alay.',
+    '   - Hindari tanda seru berlebihan, emoji, atau bahasa gaul yang berlebihan.',
+    '',
+    '════ CONTOH (IKUTI GAYA INI) ════',
+    'Draft: "makan gorengan siang bareng temen kantor"',
+    '→ judul: "Istirahat siang bareng rekan kantor"',
+    '→ items[0]: { "judul": "Makan bareng rekan kantor", "deskripsi": "Ngemil gorengan bareng teman kantor pas jam istirahat siang." }',
+    '',
+    'Draft: "bantu CS input data nasabah, sistem sempat error"',
+    '→ judul: "Bantu Input Data Nasabah dan Tangani Kendala Sistem"',
+    '→ items[0]: { "judul": "Bantu input data nasabah", "deskripsi": "Dampingi CS masukin data nasabah baru ke sistem." }',
+    '→ kendala: "Sistem sempat error pas lagi input data."',
+    '',
+    'Draft: "belajar cara verifikasi KTP dan NPWP"',
+    '→ judul: "Belajar Verifikasi Berkas Nasabah"',
+    '→ items[0]: { "judul": "Belajar verifikasi KTP dan NPWP", "deskripsi": "Pelajari cara cek keaslian berkas KTP dan NPWP nasabah." }',
+    '→ pembelajaran: "Jadi paham cara cek keaslian berkas nasabah."',
+    '',
+    '════ FORMAT OUTPUT ════',
+    'WAJIB balas dengan JSON murni tanpa teks pembuka/penutup. Struktur:',
+    '{',
+    '  "judul": "string",',
+    '  "kategori": "string",',
+    '  "unit": "string",',
+    '  "kendala": "string",',
+    '  "solusi": "string",',
+    '  "pembelajaran": "string",',
+    '  "items": [{ "judul": "string", "deskripsi": "string" }]',
+    '}',
+    '',
+    'Aturan field:',
+    '- "judul": ringkasan hari itu, maks 12 kata, tanpa titik di akhir. POV orang pertama (bisa tanpa subjek).',
+    '- "kategori": pilih SATU persis dari: ' + kategoriList.join(', ') + '.',
+    '- "unit": pilih SATU persis dari: ' + unitList.join(', ') + ', atau "" kalau tidak jelas.',
+    '- "items": 1-5 kegiatan. Tiap item: "judul" (maks 10 kata) + "deskripsi" (1-2 kalimat, POV orang pertama).',
+    '- "kendala", "solusi", "pembelajaran": POV orang pertama. Isi kalau ada di catatan, kalau tidak isi "".',
+    '- Jangan mengarang detail yang tidak ada di catatan.',
+    '',
+    'Catatan kasar:',
+    '"""',
+    draft.trim(),
+    '"""'
+  ].join('\n')
+}
+
+function potong(s, n) { return String(s || '').slice(0, n) }
+
+export async function susunLogbookDenganGroq(env, opts) {
+  const draft = String(opts.draft || '').trim()
+  if (!draft) throw new Error('Catatan kosong')
+  if (draft.length > 2000) throw new Error('Catatan terlalu panjang (maks 2000 karakter)')
+  const kat = (opts.kategoriList && opts.kategoriList.length) ? opts.kategoriList : []
+  const unit = (opts.unitList && opts.unitList.length) ? opts.unitList : []
+
+  const raw = await panggilGroq(env, {
+    prompt: bangunPrompt(draft, kat, unit),
+    temperature: 0.6,
+    maxTokens: 2048,
+    reasoningEffort: 'none'
+  })
+  const hasil = parseJsonDariTeks(raw)
+  if (!hasil) throw new Error('AI tidak menghasilkan JSON valid')
+
+  return {
+    judul: potong(hasil.judul, 200),
+    kategori: kat.indexOf(hasil.kategori) !== -1 ? hasil.kategori : '',
+    unit: unit.indexOf(hasil.unit) !== -1 ? hasil.unit : '',
+    kendala: potong(hasil.kendala, 800),
+    solusi: potong(hasil.solusi, 800),
+    pembelajaran: potong(hasil.pembelajaran, 800),
+    items: Array.isArray(hasil.items)
+      ? hasil.items.slice(0, 5).map(function (it) {
+          return { judul: potong(it.judul, 200), deskripsi: potong(it.deskripsi, 800) }
+        }).filter(function (it) { return it.judul })
+      : []
+  }
+}
+````
+
+## File: api/_lib/openrouter.js
+````javascript
+const BASE = 'https://openrouter.ai/api/v1/chat/completions'
+const DEFAULT_MODEL = 'meta-llama/llama-3.3-70b-instruct:free'
+
+export function modelOpenRouter(env) {
+  return env.OPENROUTER_MODEL || DEFAULT_MODEL
+}
+
+export async function panggilOpenRouter(env, opsi) {
+  const key = env.OPENROUTER_API_KEY
+  if (!key) throw new Error('OPENROUTER_API_KEY belum dikonfigurasi di environment')
+
+  const body = {
+    model: modelOpenRouter(env),
+    messages: [{ role: 'user', content: opsi.prompt }],
+    temperature: opsi.temperature == null ? 0.7 : opsi.temperature
+  }
+
+  const r = await fetch(BASE, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer ' + key,
+      'HTTP-Referer': 'https://mbsi-logbook.vercel.app',
+      'X-Title': 'Portal Logbook Magang BSI'
+    },
+    body: JSON.stringify(body)
+  })
+
+  const teks = await r.text()
+  if (!r.ok) {
+    let pesan = 'OpenRouter API gagal (status ' + r.status + ')'
+    try {
+      const j = JSON.parse(teks)
+      if (j && j.error && j.error.message) pesan = j.error.message
+    } catch (e) {}
+    if (r.status === 429) pesan = 'Kuota harian OpenRouter habis. Coba lagi besok, atau top-up $10 untuk naikkan limit ke 1.000 request/hari.'
+    if (r.status === 401) pesan = 'API key OpenRouter tidak valid. Periksa kembali OPENROUTER_API_KEY di .env.local'
+    throw new Error(pesan)
+  }
+
+  const data = JSON.parse(teks)
+  const pilihan = data && data.choices && data.choices[0]
+  const out = pilihan && pilihan.message && pilihan.message.content
+  if (!out) throw new Error('OpenRouter tidak mengembalikan jawaban')
+  return String(out).trim()
+}
+
+export function parseJsonDariTeks(teks) {
+  try { return JSON.parse(teks) } catch (e) {}
+  const m = String(teks).match(/\{[\s\S]*\}/)
+  if (!m) return null
+  try { return JSON.parse(m[0]) } catch (e) { return null }
+}
+
+function bangunPrompt(draft, kategoriList, unitList) {
+  return [
+    'Kamu asisten logbook magang Bank Syariah Indonesia (BSI).',
+    '',
+    'Tugas: dari catatan kasar mahasiswa, susun logbook harian yang rapi dan profesional dalam Bahasa Indonesia.',
+    '',
+    'WAJIB balas dengan JSON murni tanpa teks pembuka atau penutup. Struktur JSON:',
+    '{',
+    '  "judul": "string",',
+    '  "kategori": "string",',
+    '  "unit": "string",',
+    '  "kendala": "string",',
+    '  "solusi": "string",',
+    '  "pembelajaran": "string",',
+    '  "items": [{ "judul": "string", "deskripsi": "string" }]',
+    '}',
+    '',
+    'Aturan:',
+    '- "judul": ringkasan hari itu, maksimal 12 kata, tanpa titik di akhir.',
+    '- "kategori": pilih SATU persis dari daftar ini: ' + kategoriList.join(', ') + '.',
+    '- "unit": pilih SATU persis dari daftar berikut, atau "" kalau tidak jelas: ' + unitList.join(', ') + '.',
+    '- "items": array 1 sampai 5 kegiatan. Tiap kegiatan punya "judul" (maks 10 kata) dan "deskripsi" (1-2 kalimat singkat).',
+    '- "kendala", "solusi", "pembelajaran": isi hanya jika tercantum di catatan. Kalau tidak ada, isi string kosong "".',
+    '- Jangan mengarang detail yang tidak ada di catatan.',
+    '- Nada profesional, ringkas, tidak berlebihan.',
+    '',
+    'Catatan kasar mahasiswa:',
+    '"""',
+    draft.trim(),
+    '"""'
+  ].join('\n')
+}
+
+function potong(s, n) { return String(s || '').slice(0, n) }
+
+export async function susunLogbookDenganOpenRouter(env, opts) {
+  const draft = String(opts.draft || '').trim()
+  if (!draft) throw new Error('Catatan kosong')
+  if (draft.length > 2000) throw new Error('Catatan terlalu panjang (maks 2000 karakter)')
+  const kat = (opts.kategoriList && opts.kategoriList.length) ? opts.kategoriList : []
+  const unit = (opts.unitList && opts.unitList.length) ? opts.unitList : []
+
+  const raw = await panggilOpenRouter(env, {
+    prompt: bangunPrompt(draft, kat, unit),
+    temperature: 0.7
+  })
+  const hasil = parseJsonDariTeks(raw)
+  if (!hasil) throw new Error('AI tidak menghasilkan JSON valid')
+
+  return {
+    judul: potong(hasil.judul, 200),
+    kategori: kat.indexOf(hasil.kategori) !== -1 ? hasil.kategori : '',
+    unit: unit.indexOf(hasil.unit) !== -1 ? hasil.unit : '',
+    kendala: potong(hasil.kendala, 800),
+    solusi: potong(hasil.solusi, 800),
+    pembelajaran: potong(hasil.pembelajaran, 800),
+    items: Array.isArray(hasil.items)
+      ? hasil.items.slice(0, 5).map(function (it) {
+          return { judul: potong(it.judul, 200), deskripsi: potong(it.deskripsi, 800) }
+        }).filter(function (it) { return it.judul })
+      : []
+  }
 }
 ````
 
@@ -338,6 +769,34 @@ export async function getAccessToken(kred) {
   const j = await r.json()
   cacheToken[kred.n] = { token: j.access_token, expire: now + (j.expires_in || 3600) * 1000 }
   return j.access_token
+}
+````
+
+## File: api/ai/tulis.js
+````javascript
+import { cekSesi } from '../_lib/sesi.js'
+import { susunLogbookAi } from '../_lib/ai-provider.js'
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const user = await cekSesi(process.env, req.headers.authorization)
+  if (!user) return res.status(401).json({ error: 'Sesi tidak valid' })
+
+  const { draft, kategori, unit } = req.body || {}
+  if (!draft || !String(draft).trim()) {
+    return res.status(400).json({ error: 'Tuliskan dulu catatan kasar kegiatanmu.' })
+  }
+
+  try {
+    const hasil = await susunLogbookAi(process.env, {
+      draft: draft,
+      kategoriList: Array.isArray(kategori) ? kategori : [],
+      unitList: Array.isArray(unit) ? unit : []
+    })
+    return res.status(200).json(hasil)
+  } catch (err) {
+    return res.status(500).json({ error: err.message || 'Gagal memanggil AI' })
+  }
 }
 ````
 
@@ -479,6 +938,29 @@ Allow: /
 
 User-agent: PerplexityBot
 Allow: /
+````
+
+## File: src/lib/ai.js
+````javascript
+import { supabase } from './supabase.js'
+
+async function ambilToken() {
+  const { data } = await supabase.auth.getSession()
+  return data.session ? data.session.access_token : ''
+}
+
+export async function bantuTulisLogbook(draft, kategoriList, unitList) {
+  const token = await ambilToken()
+  if (!token) throw new Error('Sesi login tidak terbaca. Masuk ulang dulu.')
+  const r = await fetch('/api/ai/tulis', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ draft: draft, kategori: kategoriList, unit: unitList })
+  })
+  const j = await r.json().catch(function () { return {} })
+  if (!r.ok) throw new Error(j.error || 'Gagal memanggil AI')
+  return j
+}
 ````
 
 ## File: src/lib/constants.js
@@ -3532,6 +4014,19 @@ export function driveViewUrl(id) {
 }
 ````
 
+## File: .env.example
+````
+VITE_SUPABASE_URL=
+VITE_SUPABASE_ANON_KEY=
+R2_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET_NAME=mbsi-media
+R2_PUBLIC_BASE_URL=
+GEMINI_API_KEY=
+GEMINI_MODEL=
+````
+
 ## File: .gitignore
 ````
 node_modules
@@ -3541,39 +4036,6 @@ dist
 *.log
 .env.youtube-*
 repomix-output.md
-````
-
-## File: package.json
-````json
-{
-  "name": "mbsi-logbook",
-  "private": true,
-  "version": "1.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite --host",
-    "build": "vite build",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "@aws-sdk/client-s3": "^3.600.0",
-    "@aws-sdk/s3-request-presigner": "^3.600.0",
-    "@supabase/supabase-js": "^2.45.0",
-    "heic2any": "^0.0.4",
-    "html2canvas": "^1.4.1",
-    "qrcode.react": "^4.2.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-router-dom": "^6.26.0"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.1",
-    "autoprefixer": "^10.4.19",
-    "postcss": "^8.4.38",
-    "tailwindcss": "^3.4.10",
-    "vite": "^5.4.0"
-  }
-}
 ````
 
 ## File: api/youtube/latest.js
@@ -3951,6 +4413,279 @@ export async function deleteMedia(key) {
 }
 ````
 
+## File: package.json
+````json
+{
+  "name": "mbsi-logbook",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview",
+    "apply-ai": "node apply-ai.cjs"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.600.0",
+    "@aws-sdk/s3-request-presigner": "^3.600.0",
+    "@supabase/supabase-js": "^2.45.0",
+    "heic2any": "^0.0.4",
+    "html2canvas": "^1.4.1",
+    "qrcode.react": "^4.2.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.10",
+    "vite": "^5.4.0"
+  }
+}
+````
+
+## File: src/components/icons.jsx
+````javascript
+function svg(inner, size) {
+  const s = size || 16
+  return (
+    <svg
+      width={s}
+      height={s}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {inner}
+    </svg>
+  )
+}
+
+const paths = {
+  funnel: <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />,
+  user: (
+    <>
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </>
+  ),
+  tag: (
+    <>
+      <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+      <line x1="7" y1="7" x2="7.01" y2="7" />
+    </>
+  ),
+  calendar: (
+    <>
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+    </>
+  ),
+  image: (
+    <>
+      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <polyline points="21 15 16 10 5 21" />
+    </>
+  ),
+  close: (
+    <>
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </>
+  ),
+  check: (
+    <>
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+      <polyline points="22 4 12 14.01 9 11.01" />
+    </>
+  ),
+  chevron: <polyline points="6 9 12 15 18 9" />,
+  list: (
+    <>
+      <line x1="8" y1="6" x2="21" y2="6" />
+      <line x1="8" y1="12" x2="21" y2="12" />
+      <line x1="8" y1="18" x2="21" y2="18" />
+      <line x1="3" y1="6" x2="3.01" y2="6" />
+      <line x1="3" y1="12" x2="3.01" y2="12" />
+      <line x1="3" y1="18" x2="3.01" y2="18" />
+    </>
+  ),
+  link: (
+    <>
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+    </>
+  ),
+  sun: (
+    <>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2" />
+      <path d="M12 20v2" />
+      <path d="m4.93 4.93 1.41 1.41" />
+      <path d="m17.66 17.66 1.41 1.41" />
+      <path d="M2 12h2" />
+      <path d="M20 12h2" />
+      <path d="m6.34 17.66-1.41 1.41" />
+      <path d="m19.07 4.93-1.41 1.41" />
+    </>
+  ),
+  moon: <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />,
+  file: (
+    <>
+      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+      <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+      <path d="M10 9H8" />
+      <path d="M16 13H8" />
+      <path d="M16 17H8" />
+    </>
+  ),
+  camera: (
+    <>
+      <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
+      <circle cx="12" cy="13" r="3" />
+    </>
+  ),
+  clipboard: (
+    <>
+      <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+      <path d="M9 12h6" />
+      <path d="M9 16h6" />
+    </>
+  ),
+  trash: (
+    <>
+      <path d="M3 6h18" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <line x1="10" y1="11" x2="10" y2="17" />
+      <line x1="14" y1="11" x2="14" y2="17" />
+    </>
+  ),
+  eye: (
+    <>
+      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" />
+    </>
+  ),
+  eyeOff: (
+    <>
+      <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+      <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+      <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+      <line x1="2" y1="2" x2="22" y2="22" />
+    </>
+  ),
+  expand: (
+    <>
+      <path d="M15 3h6v6" />
+      <path d="M9 21H3v-6" />
+      <path d="M21 3l-7 7" />
+      <path d="M3 21l7-7" />
+    </>
+  ),
+  youtube: (
+    <>
+      <path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z" />
+      <polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02" />
+    </>
+  ),
+  download: (
+    <>
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="3" x2="12" y2="15" />
+    </>
+  ),
+  sort: (
+    <>
+      <path d="M3 6h13" />
+      <path d="M3 12h9" />
+      <path d="M3 18h5" />
+      <path d="M17 6v12" />
+      <path d="m14 15 3 3 3-3" />
+    </>
+  ),
+  qrcode: (
+    <>
+      {/* 3 finder pattern (kotak sudut) */}
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="5" y="5" width="3" height="3" fill="currentColor" stroke="none" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="16" y="5" width="3" height="3" fill="currentColor" stroke="none" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+      <rect x="5" y="16" width="3" height="3" fill="currentColor" stroke="none" />
+      {/* pixel data (diagonal, biar terbaca sebagai QR) */}
+      <rect x="14" y="14" width="3" height="3" fill="currentColor" stroke="none" />
+      <rect x="18" y="18" width="3" height="3" fill="currentColor" stroke="none" />
+    </>
+  ),
+  pencil: (
+    <>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+    </>
+  ),
+  menu: (
+    <>
+      <line x1="3" y1="6" x2="21" y2="6" />
+      <line x1="3" y1="12" x2="21" y2="12" />
+      <line x1="3" y1="18" x2="21" y2="18" />
+    </>
+  )
+}
+
+export const ICONS = {
+  funnel: svg(paths.funnel),
+  user: svg(paths.user),
+  tag: svg(paths.tag),
+  calendar: svg(paths.calendar),
+  image: svg(paths.image),
+  close: svg(paths.close),
+  check: svg(paths.check),
+  chevron: svg(paths.chevron),
+  list: svg(paths.list),
+  link: svg(paths.link)
+}
+
+export function SizedIcon(props) {
+  const inner = paths[props.name]
+  if (!inner) return null
+  return svg(inner, props.size || 16)
+}
+
+export function EyeToggle(props) {
+  return (
+    <svg
+      width={props.size || 18}
+      height={props.size || 18}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={'eye-icon ' + (props.open ? 'terbuka' : '')}
+    >
+      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" className="eye-pupil" />
+      <line x1="2" y1="2" x2="22" y2="22" className="eye-slash" />
+    </svg>
+  )
+}
+````
+
 ## File: src/lib/youtube.js
 ````javascript
 import { supabase } from './supabase.js'
@@ -4284,480 +5019,6 @@ export function toTitleCase(teks) {
 
   return hasil.join(' ')
 }
-````
-
-## File: src/components/icons.jsx
-````javascript
-function svg(inner, size) {
-  const s = size || 16
-  return (
-    <svg
-      width={s}
-      height={s}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      {inner}
-    </svg>
-  )
-}
-
-const paths = {
-  funnel: <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />,
-  user: (
-    <>
-      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-      <circle cx="12" cy="7" r="4" />
-    </>
-  ),
-  tag: (
-    <>
-      <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
-      <line x1="7" y1="7" x2="7.01" y2="7" />
-    </>
-  ),
-  calendar: (
-    <>
-      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-      <line x1="16" y1="2" x2="16" y2="6" />
-      <line x1="8" y1="2" x2="8" y2="6" />
-      <line x1="3" y1="10" x2="21" y2="10" />
-    </>
-  ),
-  image: (
-    <>
-      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-      <circle cx="8.5" cy="8.5" r="1.5" />
-      <polyline points="21 15 16 10 5 21" />
-    </>
-  ),
-  close: (
-    <>
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
-    </>
-  ),
-  check: (
-    <>
-      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-      <polyline points="22 4 12 14.01 9 11.01" />
-    </>
-  ),
-  chevron: <polyline points="6 9 12 15 18 9" />,
-  list: (
-    <>
-      <line x1="8" y1="6" x2="21" y2="6" />
-      <line x1="8" y1="12" x2="21" y2="12" />
-      <line x1="8" y1="18" x2="21" y2="18" />
-      <line x1="3" y1="6" x2="3.01" y2="6" />
-      <line x1="3" y1="12" x2="3.01" y2="12" />
-      <line x1="3" y1="18" x2="3.01" y2="18" />
-    </>
-  ),
-  link: (
-    <>
-      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-    </>
-  ),
-  sun: (
-    <>
-      <circle cx="12" cy="12" r="4" />
-      <path d="M12 2v2" />
-      <path d="M12 20v2" />
-      <path d="m4.93 4.93 1.41 1.41" />
-      <path d="m17.66 17.66 1.41 1.41" />
-      <path d="M2 12h2" />
-      <path d="M20 12h2" />
-      <path d="m6.34 17.66-1.41 1.41" />
-      <path d="m19.07 4.93-1.41 1.41" />
-    </>
-  ),
-  moon: <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />,
-  file: (
-    <>
-      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
-      <path d="M14 2v4a2 2 0 0 0 2 2h4" />
-      <path d="M10 9H8" />
-      <path d="M16 13H8" />
-      <path d="M16 17H8" />
-    </>
-  ),
-  camera: (
-    <>
-      <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
-      <circle cx="12" cy="13" r="3" />
-    </>
-  ),
-  clipboard: (
-    <>
-      <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
-      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-      <path d="M9 12h6" />
-      <path d="M9 16h6" />
-    </>
-  ),
-  trash: (
-    <>
-      <path d="M3 6h18" />
-      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
-      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-      <line x1="10" y1="11" x2="10" y2="17" />
-      <line x1="14" y1="11" x2="14" y2="17" />
-    </>
-  ),
-  eye: (
-    <>
-      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
-      <circle cx="12" cy="12" r="3" />
-    </>
-  ),
-  eyeOff: (
-    <>
-      <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
-      <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
-      <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
-      <line x1="2" y1="2" x2="22" y2="22" />
-    </>
-  ),
-  expand: (
-    <>
-      <path d="M15 3h6v6" />
-      <path d="M9 21H3v-6" />
-      <path d="M21 3l-7 7" />
-      <path d="M3 21l7-7" />
-    </>
-  ),
-  youtube: (
-    <>
-      <path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z" />
-      <polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02" />
-    </>
-  ),
-  download: (
-    <>
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-      <polyline points="7 10 12 15 17 10" />
-      <line x1="12" y1="3" x2="12" y2="15" />
-    </>
-  ),
-  sort: (
-    <>
-      <path d="M3 6h13" />
-      <path d="M3 12h9" />
-      <path d="M3 18h5" />
-      <path d="M17 6v12" />
-      <path d="m14 15 3 3 3-3" />
-    </>
-  ),
-  qrcode: (
-    <>
-      {/* 3 finder pattern (kotak sudut) */}
-      <rect x="3" y="3" width="7" height="7" rx="1" />
-      <rect x="5" y="5" width="3" height="3" fill="currentColor" stroke="none" />
-      <rect x="14" y="3" width="7" height="7" rx="1" />
-      <rect x="16" y="5" width="3" height="3" fill="currentColor" stroke="none" />
-      <rect x="3" y="14" width="7" height="7" rx="1" />
-      <rect x="5" y="16" width="3" height="3" fill="currentColor" stroke="none" />
-      {/* pixel data (diagonal, biar terbaca sebagai QR) */}
-      <rect x="14" y="14" width="3" height="3" fill="currentColor" stroke="none" />
-      <rect x="18" y="18" width="3" height="3" fill="currentColor" stroke="none" />
-    </>
-  ),
-  pencil: (
-    <>
-      <path d="M12 20h9" />
-      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-    </>
-  ),
-  menu: (
-    <>
-      <line x1="3" y1="6" x2="21" y2="6" />
-      <line x1="3" y1="12" x2="21" y2="12" />
-      <line x1="3" y1="18" x2="21" y2="18" />
-    </>
-  )
-}
-
-export const ICONS = {
-  funnel: svg(paths.funnel),
-  user: svg(paths.user),
-  tag: svg(paths.tag),
-  calendar: svg(paths.calendar),
-  image: svg(paths.image),
-  close: svg(paths.close),
-  check: svg(paths.check),
-  chevron: svg(paths.chevron),
-  list: svg(paths.list),
-  link: svg(paths.link)
-}
-
-export function SizedIcon(props) {
-  const inner = paths[props.name]
-  if (!inner) return null
-  return svg(inner, props.size || 16)
-}
-
-export function EyeToggle(props) {
-  return (
-    <svg
-      width={props.size || 18}
-      height={props.size || 18}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      className={'eye-icon ' + (props.open ? 'terbuka' : '')}
-    >
-      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
-      <circle cx="12" cy="12" r="3" className="eye-pupil" />
-      <line x1="2" y1="2" x2="22" y2="22" className="eye-slash" />
-    </svg>
-  )
-}
-````
-
-## File: vite.config.js
-````javascript
-import { defineConfig, loadEnv } from 'vite'
-import react from '@vitejs/plugin-react'
-import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
-import { createClient } from '@supabase/supabase-js'
-import { LIMIT_PER_PROJECT, ptToday, daftarKredensial, getAccessToken } from './api/_lib/youtube.js'
-import { cekSesi, bacaBody } from './api/_lib/sesi.js'
-
-function pluginApiR2(env) {
-  const s3 = new S3Client({
-    region: 'auto',
-    endpoint: 'https://' + env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
-    credentials: {
-      accessKeyId: env.R2_ACCESS_KEY_ID,
-      secretAccessKey: env.R2_SECRET_ACCESS_KEY
-    }
-  })
-
-  // Bungkus middlewares agar bisa dipakai di dev dan preview
-  const setupMiddlewares = (server) => {
-    server.middlewares.use('/api/r2/presign', async function (req, res) {
-      if (req.method !== 'POST') {
-        res.statusCode = 405
-        res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
-        return
-      }
-      const ok = await cekSesi(env, req.headers.authorization)
-      if (!ok) {
-        res.statusCode = 401
-        res.end(JSON.stringify({ error: 'Sesi tidak valid' }))
-        return
-      }
-      const body = await bacaBody(req)
-      const ext = String(body.filename || 'bin').split('.').pop().toLowerCase()
-      const key = body.kind + '/' + new Date().getFullYear() + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + ext
-      const uploadUrl = await getSignedUrl(
-        s3,
-        new PutObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: key, ContentType: body.contentType }),
-        { expiresIn: 300 }
-      )
-      res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({
-        uploadUrl: uploadUrl,
-        publicUrl: '/api/r2/file?key=' + key,
-        key: key
-      }))
-    })
-
-    server.middlewares.use('/api/r2/delete', async function (req, res) {
-      if (req.method !== 'POST') {
-        res.statusCode = 405
-        res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
-        return
-      }
-      const ok = await cekSesi(env, req.headers.authorization)
-      if (!ok) {
-        res.statusCode = 401
-        res.end(JSON.stringify({ error: 'Sesi tidak valid' }))
-        return
-      }
-      const body = await bacaBody(req)
-      await s3.send(new DeleteObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: body.key }))
-      res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({ ok: true }))
-    })
-    server.middlewares.use('/api/r2/file', async function (req, res) {
-      if (req.method !== 'GET') {
-        res.statusCode = 405
-        res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
-        return
-      }
-      const url = new URL(req.url, 'http://localhost')
-      const key = url.searchParams.get('key')
-      if (!key) {
-        res.statusCode = 400
-        res.end(JSON.stringify({ error: 'Key tidak ada' }))
-        return
-      }
-      const cmd = new GetObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: key })
-      if (url.searchParams.get('unduh') !== '1') {
-        const signed = await getSignedUrl(s3, cmd, { expiresIn: 300 })
-        res.statusCode = 302
-        res.setHeader('Location', signed)
-        res.setHeader('Cache-Control', 'public, max-age=60')
-        res.end()
-        return
-      }
-      try {
-        const obj = await s3.send(cmd)
-        res.statusCode = 200
-        res.setHeader('Content-Type', obj.ContentType || 'application/octet-stream')
-        if (obj.ContentLength) res.setHeader('Content-Length', String(obj.ContentLength))
-        res.setHeader('Cache-Control', 'public, max-age=3600')
-        obj.Body.pipe(res)
-      } catch (e) {
-        res.statusCode = 404
-        res.end(JSON.stringify({ error: 'Media tidak ditemukan' }))
-      }
-    })
-  }
-
-  return {
-    name: 'api-r2-dev',
-    configureServer: setupMiddlewares,
-    configurePreviewServer: setupMiddlewares
-  }
-}
-
-function pluginApiYoutube(env) {
-  const admin = createClient(env.VITE_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY)
-  function kirim(res, code, obj) {
-    res.statusCode = code
-    res.setHeader('Content-Type', 'application/json')
-    res.end(JSON.stringify(obj))
-  }
-
-  // Bungkus middlewares agar bisa dipakai di dev dan preview
-  const setupMiddlewares = (server) => {
-    server.middlewares.use('/api/youtube/quota', async function (req, res) {
-      const today = ptToday()
-      const kredensial = daftarKredensial(env)
-      if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
-      let usedTotal = 0
-      const perProject = []
-      for (const kred of kredensial) {
-        const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
-        const used = hit.count || 0
-        usedTotal += used
-        perProject.push({ project: kred.n, used: used, remaining: Math.max(0, LIMIT_PER_PROJECT - used) })
-      }
-      const limit = kredensial.length * LIMIT_PER_PROJECT
-      res.setHeader('Cache-Control', 'no-store')
-      kirim(res, 200, { limit: limit, used: usedTotal, remaining: Math.max(0, limit - usedTotal), perProject: perProject, ptDate: today })
-    })
-
-    server.middlewares.use('/api/youtube/session', async function (req, res) {
-      if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
-      const user = await cekSesi(env, req.headers.authorization)
-      if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
-      const today = ptToday()
-      const kredensial = daftarKredensial(env)
-      if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
-      const body = await bacaBody(req)
-      if (!body.title) { kirim(res, 400, { error: 'Judul video wajib diisi' }); return }
-      let terakhir = ''
-      for (const kred of kredensial) {
-        const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
-        if ((hit.count || 0) >= LIMIT_PER_PROJECT) { terakhir = 'project ' + kred.n + ' sudah penuh'; continue }
-        let access
-        try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
-        const meta = {
-          snippet: { title: String(body.title).slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
-          status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
-        }
-        const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
-          method: 'POST',
-          headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
-          body: JSON.stringify(meta)
-        })
-        if (!init.ok) { terakhir = 'project ' + kred.n + ' ditolak Google (status ' + init.status + ')'; continue }
-        const sessionUri = init.headers.get('location')
-        if (!sessionUri) { terakhir = 'project ' + kred.n + ' tanpa lokasi upload'; continue }
-        await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: user.id, project_id: kred.n })
-        kirim(res, 200, { sessionUri: sessionUri, project: kred.n })
-        return
-      }
-      kirim(res, 429, { error: 'Kuota harian semua project video sudah habis. Coba lagi besok atau gunakan link video eksternal.', detail: terakhir })
-    })
-
-    server.middlewares.use('/api/youtube/latest', async function (req, res) {
-      if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
-      const user = await cekSesi(env, req.headers.authorization)
-      if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
-      const kredensial = daftarKredensial(env)
-      if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
-      let terakhir = ''
-      for (const kred of kredensial) {
-        let access
-        try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
-        const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&order=date&maxResults=5', { headers: { Authorization: 'Bearer ' + access } })
-        if (!r.ok) { terakhir = 'project ' + kred.n + ' status ' + r.status; continue }
-        const j = await r.json()
-        const items = j.items || []
-        const batas = Date.now() - 15 * 60 * 1000
-        const cocok = items.find(function (it) {
-          const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
-          return isNaN(t) ? false : t >= batas
-        })
-        if (!cocok) { kirim(res, 404, { error: 'Video terbaru tidak ditemukan' }); return }
-        kirim(res, 200, { videoId: cocok.id && cocok.id.videoId, project: kred.n })
-        return
-      }
-      kirim(res, 502, { error: 'Gagal memeriksa video terbaru: ' + terakhir })
-    })
-  }
-
-  return {
-    name: 'api-youtube-dev',
-    configureServer: setupMiddlewares,
-    configurePreviewServer: setupMiddlewares
-  }
-}
-
-export default defineConfig(function ({ mode }) {
-  const env = loadEnv(mode, process.cwd(), '')
-  return {
-    plugins: [react(), pluginApiR2(env), pluginApiYoutube(env)],
-    
-    // Konfigurasi agar bisa diakses lewat Network / IP lokal
-    server: {
-      host: true
-    },
-    preview: {
-      host: true
-    },
-    
-    build: {
-      chunkSizeWarningLimit: 1000,
-      rollupOptions: {
-        output: {
-          manualChunks: {
-            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-            'vendor-supabase': ['@supabase/supabase-js'],
-            'vendor-aws': ['@aws-sdk/client-s3', '@aws-sdk/s3-request-presigner'],
-            'vendor-media': ['heic2any']
-          }
-        }
-      }
-    }
-  }
-})
 ````
 
 ## File: src/components/Carousel.jsx
@@ -6121,6 +6382,312 @@ export async function siapkanFotoProfil(file, maksSisi, kualitas) {
 }
 ````
 
+## File: vite.config.js
+````javascript
+import { defineConfig, loadEnv } from 'vite'
+import react from '@vitejs/plugin-react'
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { createClient } from '@supabase/supabase-js'
+import { LIMIT_PER_PROJECT, ptToday, daftarKredensial, getAccessToken } from './api/_lib/youtube.js'
+import { cekSesi, bacaBody } from './api/_lib/sesi.js'
+import { susunLogbookAi } from './api/_lib/ai-provider.js'
+
+function pluginApiR2(env) {
+  const s3 = new S3Client({
+    region: 'auto',
+    endpoint: 'https://' + env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
+    credentials: {
+      accessKeyId: env.R2_ACCESS_KEY_ID,
+      secretAccessKey: env.R2_SECRET_ACCESS_KEY
+    }
+  })
+
+  const setupMiddlewares = (server) => {
+    server.middlewares.use('/api/r2/presign', async function (req, res) {
+      if (req.method !== 'POST') {
+        res.statusCode = 405
+        res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
+        return
+      }
+      const ok = await cekSesi(env, req.headers.authorization)
+      if (!ok) {
+        res.statusCode = 401
+        res.end(JSON.stringify({ error: 'Sesi tidak valid' }))
+        return
+      }
+      const body = await bacaBody(req)
+      const ext = String(body.filename || 'bin').split('.').pop().toLowerCase()
+      const key = body.kind + '/' + new Date().getFullYear() + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + ext
+      const uploadUrl = await getSignedUrl(
+        s3,
+        new PutObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: key, ContentType: body.contentType }),
+        { expiresIn: 300 }
+      )
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({
+        uploadUrl: uploadUrl,
+        publicUrl: '/api/r2/file?key=' + key,
+        key: key
+      }))
+    })
+
+    server.middlewares.use('/api/r2/delete', async function (req, res) {
+      if (req.method !== 'POST') {
+        res.statusCode = 405
+        res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
+        return
+      }
+      const ok = await cekSesi(env, req.headers.authorization)
+      if (!ok) {
+        res.statusCode = 401
+        res.end(JSON.stringify({ error: 'Sesi tidak valid' }))
+        return
+      }
+      const body = await bacaBody(req)
+      await s3.send(new DeleteObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: body.key }))
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ ok: true }))
+    })
+
+    server.middlewares.use('/api/r2/file', async function (req, res) {
+      if (req.method !== 'GET') {
+        res.statusCode = 405
+        res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
+        return
+      }
+      const url = new URL(req.url, 'http://localhost')
+      const key = url.searchParams.get('key')
+      if (!key) {
+        res.statusCode = 400
+        res.end(JSON.stringify({ error: 'Key tidak ada' }))
+        return
+      }
+      const cmd = new GetObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: key })
+      if (url.searchParams.get('unduh') !== '1') {
+        const signed = await getSignedUrl(s3, cmd, { expiresIn: 300 })
+        res.statusCode = 302
+        res.setHeader('Location', signed)
+        res.setHeader('Cache-Control', 'public, max-age=60')
+        res.end()
+        return
+      }
+      try {
+        const obj = await s3.send(cmd)
+        res.statusCode = 200
+        res.setHeader('Content-Type', obj.ContentType || 'application/octet-stream')
+        if (obj.ContentLength) res.setHeader('Content-Length', String(obj.ContentLength))
+        res.setHeader('Cache-Control', 'public, max-age=3600')
+        obj.Body.pipe(res)
+      } catch (e) {
+        res.statusCode = 404
+        res.end(JSON.stringify({ error: 'Media tidak ditemukan' }))
+      }
+    })
+  }
+
+  return {
+    name: 'api-r2-dev',
+    configureServer: setupMiddlewares,
+    configurePreviewServer: setupMiddlewares
+  }
+}
+
+function pluginApiYoutube(env) {
+  const admin = createClient(env.VITE_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY)
+  function kirim(res, code, obj) {
+    res.statusCode = code
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify(obj))
+  }
+
+  const setupMiddlewares = (server) => {
+    server.middlewares.use('/api/youtube/quota', async function (req, res) {
+      const today = ptToday()
+      const kredensial = daftarKredensial(env)
+      if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
+      let usedTotal = 0
+      const perProject = []
+      for (const kred of kredensial) {
+        const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
+        const used = hit.count || 0
+        usedTotal += used
+        perProject.push({ project: kred.n, used: used, remaining: Math.max(0, LIMIT_PER_PROJECT - used) })
+      }
+      const limit = kredensial.length * LIMIT_PER_PROJECT
+      res.setHeader('Cache-Control', 'no-store')
+      kirim(res, 200, { limit: limit, used: usedTotal, remaining: Math.max(0, limit - usedTotal), perProject: perProject, ptDate: today })
+    })
+
+    server.middlewares.use('/api/youtube/session', async function (req, res) {
+      if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
+      const user = await cekSesi(env, req.headers.authorization)
+      if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
+      const today = ptToday()
+      const kredensial = daftarKredensial(env)
+      if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
+      const body = await bacaBody(req)
+      if (!body.title) { kirim(res, 400, { error: 'Judul video wajib diisi' }); return }
+      let terakhir = ''
+      for (const kred of kredensial) {
+        const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
+        if ((hit.count || 0) >= LIMIT_PER_PROJECT) { terakhir = 'project ' + kred.n + ' sudah penuh'; continue }
+        let access
+        try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
+        const meta = {
+          snippet: { title: String(body.title).slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
+          status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
+        }
+        const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
+          body: JSON.stringify(meta)
+        })
+        if (!init.ok) { terakhir = 'project ' + kred.n + ' ditolak Google (status ' + init.status + ')'; continue }
+        const sessionUri = init.headers.get('location')
+        if (!sessionUri) { terakhir = 'project ' + kred.n + ' tanpa lokasi upload'; continue }
+        await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: user.id, project_id: kred.n })
+        kirim(res, 200, { sessionUri: sessionUri, project: kred.n })
+        return
+      }
+      kirim(res, 429, { error: 'Kuota harian semua project video sudah habis. Coba lagi besok atau gunakan link video eksternal.', detail: terakhir })
+    })
+
+    server.middlewares.use('/api/youtube/latest', async function (req, res) {
+      if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
+      const user = await cekSesi(env, req.headers.authorization)
+      if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
+      const kredensial = daftarKredensial(env)
+      if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
+      let terakhir = ''
+      for (const kred of kredensial) {
+        let access
+        try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
+        const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&order=date&maxResults=5', { headers: { Authorization: 'Bearer ' + access } })
+        if (!r.ok) { terakhir = 'project ' + kred.n + ' status ' + r.status; continue }
+        const j = await r.json()
+        const items = j.items || []
+        const batas = Date.now() - 15 * 60 * 1000
+        const cocok = items.find(function (it) {
+          const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
+          return isNaN(t) ? false : t >= batas
+        })
+        if (!cocok) { kirim(res, 404, { error: 'Video terbaru tidak ditemukan' }); return }
+        kirim(res, 200, { videoId: cocok.id && cocok.id.videoId, project: kred.n })
+        return
+      }
+      kirim(res, 502, { error: 'Gagal memeriksa video terbaru: ' + terakhir })
+    })
+  }
+
+  return {
+    name: 'api-youtube-dev',
+    configureServer: setupMiddlewares,
+    configurePreviewServer: setupMiddlewares
+  }
+}
+
+function pluginApiAi(env) {
+  function kirim(res, code, obj) {
+    res.statusCode = code
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify(obj))
+  }
+  const setupMiddlewares = (server) => {
+    server.middlewares.use('/api/ai/tulis', async function (req, res) {
+      // ====== DEBUG MULAI ======
+      console.log('\n[AI DEBUG] ============== REQUEST MASUK ==============')
+      console.log('[AI DEBUG] method:', req.method)
+      console.log('[AI DEBUG] url:', req.url)
+      const authHeader = req.headers.authorization || ''
+      console.log('[AI DEBUG] authorization ada?', !!authHeader)
+      console.log('[AI DEBUG] authorization preview:', authHeader ? authHeader.slice(0, 40) + '...' : '(kosong)')
+      console.log('[AI DEBUG] token length:', authHeader.replace('Bearer ', '').length)
+      console.log('[AI DEBUG] VITE_SUPABASE_URL:', env.VITE_SUPABASE_URL || '(kosong)')
+      console.log('[AI DEBUG] VITE_SUPABASE_ANON_KEY ada?', !!env.VITE_SUPABASE_ANON_KEY)
+      // ====== DEBUG END ======
+
+      if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
+
+      const user = await cekSesi(env, authHeader)
+
+      // ====== DEBUG MULAI ======
+      console.log('[AI DEBUG] hasil cekSesi:', user ? ('USER OK → ' + user.email + ' (id: ' + user.id + ')') : 'NULL / INVALID')
+      console.log('[AI DEBUG] ============================================\n')
+      // ====== DEBUG END ======
+
+      if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
+      const body = await bacaBody(req)
+      const draft = body.draft
+      if (!draft || !String(draft).trim()) {
+        kirim(res, 400, { error: 'Tuliskan dulu catatan kasar kegiatanmu.' })
+        return
+      }
+      try {
+        const hasil = await susunLogbookAi(env, {
+          draft: draft,
+          kategoriList: Array.isArray(body.kategori) ? body.kategori : [],
+          unitList: Array.isArray(body.unit) ? body.unit : []
+        })
+        kirim(res, 200, hasil)
+      } catch (err) {
+        console.log('[AI DEBUG] error dari Gemini:', err.message)
+        kirim(res, 500, { error: err.message || 'Gagal memanggil AI' })
+      }
+    })
+  }
+  return {
+    name: 'api-ai-dev',
+    configureServer: setupMiddlewares,
+    configurePreviewServer: setupMiddlewares
+  }
+}
+
+export default defineConfig(function ({ mode }) {
+  const env = loadEnv(mode, process.cwd(), '')
+
+  // ====== DEBUG ENV ======
+  console.log('\n[ENV DEBUG] ===== CEK ENV SAAT STARTUP =====')
+  console.log('[ENV DEBUG] mode:', mode)
+  console.log('[ENV DEBUG] GEMINI_API_KEY:', env.GEMINI_API_KEY ? ('ADA (' + env.GEMINI_API_KEY.slice(0, 10) + '...), panjang: ' + env.GEMINI_API_KEY.length) : 'TIDAK ADA')
+  console.log('[ENV DEBUG] GEMINI_MODEL:', env.GEMINI_MODEL || 'TIDAK ADA')
+  console.log('[ENV DEBUG] VITE_SUPABASE_URL:', env.VITE_SUPABASE_URL || 'TIDAK ADA')
+  console.log('[ENV DEBUG] VITE_SUPABASE_ANON_KEY:', env.VITE_SUPABASE_ANON_KEY ? ('ADA (panjang: ' + env.VITE_SUPABASE_ANON_KEY.length + ')') : 'TIDAK ADA')
+  console.log('[ENV DEBUG] AI_PROVIDER:', env.AI_PROVIDER || '(default: gemini)')
+console.log('[ENV DEBUG] OPENROUTER_API_KEY:', env.OPENROUTER_API_KEY ? ('ADA (' + env.OPENROUTER_API_KEY.slice(0, 12) + '...), panjang: ' + env.OPENROUTER_API_KEY.length) : 'TIDAK ADA')
+console.log('[ENV DEBUG] OPENROUTER_MODEL:', env.OPENROUTER_MODEL || '(default: llama-3.3-70b)')
+console.log('[ENV DEBUG] GROQ_API_KEY:', env.GROQ_API_KEY ? ('ADA (' + env.GROQ_API_KEY.slice(0, 10) + '...), panjang: ' + env.GROQ_API_KEY.length) : 'TIDAK ADA')
+console.log('[ENV DEBUG] GROQ_MODEL:', env.GROQ_MODEL || '(default: qwen/qwen3.8-27b)')
+  console.log('[ENV DEBUG] =======================================\n')
+  // ====== DEBUG END ======
+
+  return {
+    plugins: [react(), pluginApiR2(env), pluginApiYoutube(env), pluginApiAi(env)],
+
+    server: {
+      host: true
+    },
+    preview: {
+      host: true
+    },
+
+    build: {
+      chunkSizeWarningLimit: 1000,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+            'vendor-supabase': ['@supabase/supabase-js'],
+            'vendor-aws': ['@aws-sdk/client-s3', '@aws-sdk/s3-request-presigner'],
+            'vendor-media': ['heic2any']
+          }
+        }
+      }
+    }
+  }
+})
+````
+
 ## File: src/components/controls.jsx
 ````javascript
 import { pesanTanggalTerlarang } from '../lib/format.js'
@@ -7250,374 +7817,6 @@ export default function LogbookPage() {
 }
 ````
 
-## File: src/pages/QuickPage.jsx
-````javascript
-import { useEffect, useRef, useState } from 'react'
-import { supabase } from '../lib/supabase.js'
-import { useAuth } from '../lib/auth.js'
-import { uploadMedia } from '../lib/upload.js'
-import { syncGaleriFromLogbook } from '../lib/logbook.js'
-import { urlPratinjau } from '../lib/konversi.js'
-import { todayInput, formatTanggal, toTitleCase } from '../lib/format.js'
-import { KATEGORI } from '../lib/constants.js'
-import { inputCls, labelCls, btnPrimary, useToast, AutoTextArea, LabelProses, Avatar } from '../components/ui.jsx'
-import { CustomSelect } from '../components/controls.jsx'
-import { SizedIcon } from '../components/icons.jsx'
-import { useNavigate } from 'react-router-dom'
-import PengingatBanner from '../components/PengingatBanner.jsx'
-import { SkeletonQuick } from '../components/Skeleton.jsx'
-
-const STATUS_HADIR = ['Masuk', 'Izin', 'Bolos']
-
-export default function QuickPage() {
-  const { mahasiswa } = useAuth()
-  const toast = useToast()
-  const tanggal = todayInput()
-
-  const [tab, setTab] = useState('logbook')
-  const [loading, setLoading] = useState(true)
-  const [todayLog, setTodayLog] = useState(null)
-  const [hadirHariIni, setHadirHariIni] = useState(null)
-  const [lastLogTanggal, setLastLogTanggal] = useState(null)
-  const [lastHadirTanggal, setLastHadirTanggal] = useState(null)
-
-  const [kategori, setKategori] = useState('')
-  const [judulKegiatan, setJudulKegiatan] = useState('')
-  const [deskripsi, setDeskripsi] = useState('')
-  const [file, setFile] = useState(null)
-  const [preview, setPreview] = useState('')
-  const [showGal, setShowGal] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [info, setInfo] = useState('')
-
-  const [status, setStatus] = useState('Masuk')
-  const [alasan, setAlasan] = useState('')
-  const navigate = useNavigate()
-  const [tanggalLogs, setTanggalLogs] = useState([])
-  const [hadirRows, setHadirRows] = useState([])
-
-  const cameraRef = useRef(null)
-  const galeriRef = useRef(null)
-
-  async function muatData(mhs, senyap) {
-    if (!senyap) setLoading(true)
-    const l = await supabase
-      .from('logbooks')
-      .select('*, logbook_items(*)')
-      .eq('mahasiswa_id', mhs.id)
-      .eq('tanggal', tanggal)
-      .order('created_at', { ascending: false })
-      .limit(1)
-    const log = (l.data || [])[0] || null
-    if (log) {
-      log.logbook_items = (log.logbook_items || []).sort(function (a, b) { return (a.urutan || 0) - (b.urutan || 0) })
-    }
-    const h = await supabase
-      .from('daftar_hadir')
-      .select('*')
-      .eq('mahasiswa_id', mhs.id)
-      .eq('tanggal', tanggal)
-      .limit(1)
-    const hadir = (h.data || [])[0] || null
-    const ll = await supabase
-      .from('logbooks')
-      .select('tanggal')
-      .eq('mahasiswa_id', mhs.id)
-      .order('tanggal', { ascending: false })
-      .limit(1)
-    const lh = await supabase
-      .from('daftar_hadir')
-      .select('tanggal')
-      .eq('mahasiswa_id', mhs.id)
-      .order('tanggal', { ascending: false })
-      .limit(1)
-    setTodayLog(log)
-    setHadirHariIni(hadir)
-    setLastLogTanggal(ll.data && ll.data[0] ? ll.data[0].tanggal : null)
-    setLastHadirTanggal(lh.data && lh.data[0] ? lh.data[0].tanggal : null)
-    if (hadir) {
-      setStatus(hadir.status)
-      setAlasan(hadir.alasan || '')
-    }
-        const pg = await supabase.from('logbooks').select('tanggal').eq('mahasiswa_id', mhs.id)
-    const ph = await supabase.from('daftar_hadir').select('tanggal, status').eq('mahasiswa_id', mhs.id)
-    setTanggalLogs((pg.data || []).map(function (x) { return x.tanggal }))
-    setHadirRows(ph.data || [])
-    if (!senyap) setLoading(false)
-  }
-
-  useEffect(function () {
-    if (mahasiswa) muatData(mahasiswa)
-  }, [mahasiswa])
-
-  async function pilihFile(e) {
-    const f = e.target.files[0]
-    e.target.value = ''
-    if (!f) return
-    if (preview && preview.indexOf('blob:') === 0) URL.revokeObjectURL(preview)
-    setFile(f)
-    setPreview(await urlPratinjau(f))
-  }
-
-  function hapusFile() {
-    if (preview && preview.indexOf('blob:') === 0) URL.revokeObjectURL(preview)
-    setFile(null)
-    setPreview('')
-    setShowGal(false)
-  }
-
-  async function submitLogbook(e) {
-    e.preventDefault()
-    if (!todayLog && !kategori) { toast.gagal('Pilih kategori terlebih dahulu.'); return }
-    if (!judulKegiatan.trim()) { toast.gagal('Judul kegiatan wajib diisi.'); return }
-    setBusy(true)
-    try {
-      let mediaPath = null
-      let mediaThumb = null
-      if (file) {
-        const up = await uploadMedia(file, 'logbook', setInfo)
-        mediaPath = up.publicUrl
-        mediaThumb = up.thumbUrl || null
-      }
-      let logId = todayLog ? todayLog.id : null
-      if (!todayLog) {
-        const ins = await supabase.from('logbooks').insert({
-  mahasiswa_id: mahasiswa.id, tanggal: tanggal, unit: '', kategori: kategori,
-  judul: toTitleCase(judulKegiatan), kendala: '', solusi: '', pembelajaran: '', status: 'publik'
-}).select().single()
-        if (ins.error) throw new Error(ins.error.message)
-        logId = ins.data.id
-      }
-      const urutan = todayLog ? todayLog.logbook_items.reduce(function (m, it) { return Math.max(m, it.urutan || 0) }, 0) + 1 : 1
-      const insItem = await supabase.from('logbook_items').insert({
-  logbook_id: logId,
-  urutan: urutan,
-  judul: toTitleCase(judulKegiatan),
-        deskripsi: deskripsi.trim(),
-        hasil: '',
-        media_path: mediaPath,
-        media_type: mediaPath ? 'foto' : null,
-        media_thumb: mediaThumb,
-        media_source: 'r2',
-        youtube_id: null,
-        drive_id: null,
-        show_in_gallery: showGal && !!mediaPath
-      }).select().single()
-      if (insItem.error) throw new Error(insItem.error.message)
-      if (todayLog && todayLog.status !== 'publik') {
-        await supabase.from('logbooks').update({ status: 'publik' }).eq('id', todayLog.id)
-      }
-      if (showGal && mediaPath) {
-        await syncGaleriFromLogbook(mahasiswa.id, [insItem.data], {
-          tanggal: tanggal,
-          kategori: todayLog ? todayLog.kategori : kategori
-        })
-      }
-      const pertama = !todayLog
-      setJudulKegiatan('')
-      setDeskripsi('')
-      hapusFile()
-      if (pertama) setKategori('')
-      await muatData(mahasiswa, true)
-      toast.sukses(pertama ? 'Logbook hari ini berhasil dibuat' : 'Kegiatan baru berhasil ditambahkan')
-    } catch (err) {
-      toast.gagal('Gagal menyimpan logbook: ' + err.message)
-    }
-    setInfo('')
-    setBusy(false)
-  }
-
-  async function submitAbsen(e) {
-    e.preventDefault()
-    setBusy(true)
-    try {
-      const payload = {
-        mahasiswa_id: mahasiswa.id,
-        tanggal: tanggal,
-        status: status,
-        alasan: status === 'Masuk' ? '' : alasan.trim()
-      }
-      let res
-      if (hadirHariIni) {
-        res = await supabase.from('daftar_hadir').update(payload).eq('id', hadirHariIni.id)
-      } else {
-        res = await supabase.from('daftar_hadir').insert(payload)
-      }
-      if (res.error) throw new Error(res.error.message)
-      await muatData(mahasiswa, true)
-      toast.sukses(hadirHariIni ? 'Daftar hadir berhasil diperbarui' : 'Daftar hadir berhasil disimpan')
-    } catch (err) {
-      toast.gagal('Gagal menyimpan kehadiran: ' + err.message)
-    }
-    setBusy(false)
-  }
-
-  function infoTerakhir(tgl) {
-    if (!tgl) return { teks: 'belum pernah', lama: true }
-    const selisih = Math.round((new Date(tanggal + 'T00:00:00').getTime() - new Date(tgl + 'T00:00:00').getTime()) / 86400000)
-    if (selisih <= 0) return { teks: 'hari ini', lama: false }
-    if (selisih === 1) return { teks: 'kemarin', lama: false }
-    return { teks: selisih + ' hari yang lalu', lama: true }
-  }
-
-  if (loading) {
-    return <SkeletonQuick />
-  }
-
-  const infoLog = infoTerakhir(lastLogTanggal)
-  const infoHadir = infoTerakhir(lastHadirTanggal)
-
-  const tabCls = function (t) {
-    return 'flex-1 px-4 py-2.5 rounded-xl text-xs sm:rounded-2xl sm:py-3 sm:text-sm font-bold ' + (tab === t ? 'bg-bsi-800 text-white shadow-sm' : 'bsi-panel text-slate-600 hover:text-bsi-800')
-  }
-
-  return (
-    <div className="mx-auto w-full max-w-xl space-y-5">
-      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="avatar-kepala-dash avatar-kepala-cepat"><Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl" /></div>
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate text-xl font-black text-slate-900 sm:text-2xl">{mahasiswa.nama}</h1>
-            <p className="mt-1 truncate text-sm text-slate-600">{formatTanggal(tanggal)}</p>
-          </div>
-        </div>
-        <div className="mt-4 flex gap-2">
-          <button type="button" onClick={function () { setTab('logbook') }} className={tabCls('logbook')}>Logbook</button>
-          <button type="button" onClick={function () { setTab('absen') }} className={tabCls('absen')}>Daftar Hadir</button>
-        </div>
-      </section>
-
-      <div className={tab === 'logbook' ? '' : 'hidden'} style={{ marginTop: 0 }}>
-        {!loading ? (
-          <PengingatBanner
-            tipe="logbook"
-            tanggalLogbook={tanggalLogs}
-            hadir={hadirRows}
-            onIsi={function (t) { navigate('/dashboard?isi=' + t) }}
-          />
-        ) : null}
-      </div>
-      <div className={tab === 'absen' ? '' : 'hidden'} style={{ marginTop: 0 }}>
-        {!loading ? (
-          <PengingatBanner
-            tipe="hadir"
-            tanggalLogbook={tanggalLogs}
-            hadir={hadirRows}
-            onIsi={function (t) { navigate('/dashboard?isiHadir=' + t) }}
-          />
-        ) : null}
-      </div>
-      {tab === 'logbook' ? (
-        <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
-          <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoLog.lama ? 'text-amber-600' : 'text-slate-500')}>
-            <SizedIcon name="calendar" size={13} />
-            Terakhir mengisi logbook: {infoLog.teks}
-          </p>
-          {todayLog ? (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-              <p className="text-sm font-bold text-emerald-800">Logbook hari ini sudah ada</p>
-              <p className="mt-1 text-sm text-emerald-800">{todayLog.judul} • {todayLog.logbook_items.length} kegiatan</p>
-              <div className="mt-2 space-y-1">
-                {todayLog.logbook_items.map(function (it, i) {
-                  return <p key={it.id} className="truncate text-xs text-emerald-800">{i + 1}. {it.judul}</p>
-                })}
-              </div>
-              <p className="mt-2 text-xs text-emerald-800">Kegiatan baru ditambahkan di bawahnya tanpa menghapus kegiatan lama.</p>
-              {todayLog.status !== 'publik' ? <p className="mt-1 text-xs font-semibold text-emerald-800">Status masih draf — akan otomatis dipublikasikan.</p> : null}
-            </div>
-          ) : (
-            <div>
-              <label className={labelCls}>Kategori Utama <span className="text-red-500">*</span></label>
-              <div className="mt-1.5">
-                <CustomSelect placeholder="Pilih Kategori" value={kategori} onChange={setKategori} options={KATEGORI.map(function (k) { return { value: k, label: k } })} />
-              </div>
-            </div>
-          )}
-
-          <form onSubmit={submitLogbook} className="mt-5 space-y-4">
-            <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-xs font-bold text-bsi-800">{todayLog ? 'Kegiatan Baru (kegiatan ' + (todayLog.logbook_items.length + 1) + ')' : 'Kegiatan'}</p>
-              <input className={inputCls} value={judulKegiatan} onChange={function (e) { setJudulKegiatan(e.target.value) }} aria-label="Judul Kegiatan" placeholder="Judul kegiatan" />
-              <AutoTextArea className={inputCls} value={deskripsi} onChange={function (e) { setDeskripsi(e.target.value) }} aria-label="Deskripsi Kegiatan" placeholder="Deskripsi singkat kegiatan" />
-              {preview ? (
-                <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-900">
-                  <img src={preview} alt="Pratinjau" className="absolute inset-0 h-full w-full object-contain" />
-                  <button type="button" onClick={hapusFile} title="Hapus Gambar" className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-red-500 text-white hover:bg-red-600">
-                    <SizedIcon name="close" size={14} />
-                  </button>
-                </div>
-              ) : null}
-              <div className="grid grid-cols-2 gap-3">
-                <button type="button" onClick={function () { cameraRef.current.click() }} className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-3 py-3.5 text-sm font-semibold text-slate-700 hover:border-bsi-500 hover:bg-slate-100">
-                  <SizedIcon name="camera" size={18} /> Ambil Foto
-                </button>
-                <button type="button" onClick={function () { galeriRef.current.click() }} className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-3 py-3.5 text-sm font-semibold text-slate-700 hover:border-bsi-500 hover:bg-slate-100">
-                  <SizedIcon name="image" size={18} /> Dari Galeri
-                </button>
-              </div>
-              <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={pilihFile} />
-              <input ref={galeriRef} type="file" accept="image/*" className="hidden" onChange={pilihFile} />
-              {preview ? (
-                <label className="flex w-full cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 p-3">
-                  <input type="checkbox" checked={showGal} onChange={function (e) { setShowGal(e.target.checked) }} className="mt-0.5 h-4 w-4 rounded accent-bsi-800" />
-                  <span className="text-sm font-semibold text-slate-800">Tampilkan kegiatan ini di galeri</span>
-                </label>
-              ) : null}
-            </div>
-            <button type="submit" disabled={busy} className={btnPrimary}>
-              {busy ? <LabelProses teks={info || 'Menyimpan'} /> : 'Simpan'}
-            </button>
-          </form>
-        </section>
-      ) : null}
-
-      {tab === 'absen' ? (
-        <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
-          <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoHadir.lama ? 'text-amber-600' : 'text-slate-500')}>
-            <SizedIcon name="clipboard" size={13} />
-            Terakhir mengisi daftar hadir: {infoHadir.teks}
-          </p>
-          {hadirHariIni ? (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-              <p className="text-sm font-bold text-emerald-800">Kamu sudah mengisi daftar hadir hari ini ({hadirHariIni.status})</p>
-              <p className="mt-1 text-xs text-emerald-800">Form di bawah bisa dipakai untuk memperbarui status bila ada perubahan.</p>
-            </div>
-          ) : null}
-          <form onSubmit={submitAbsen} className={'space-y-4 ' + (hadirHariIni ? 'mt-5' : '')}>
-            <div>
-              <label className={labelCls}>Status Kehadiran <span className="text-red-500">*</span></label>
-              <div className="mt-1.5 flex gap-2">
-                {STATUS_HADIR.map(function (s) {
-                  const aktif = status === s
-                  const warna = aktif
-                    ? (s === 'Masuk' ? 'bg-emerald-500 text-white' : s === 'Izin' ? 'bg-amber-500 text-white' : 'bg-red-500 text-white')
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  return <button type="button" key={s} onClick={function () { setStatus(s) }} className={'flex-1 rounded-2xl px-3 py-3 text-sm font-bold ' + warna}>{s}</button>
-                })}
-              </div>
-            </div>
-            <div>
-              <label className={labelCls}>Alasan atau Keterangan</label>
-              <AutoTextArea
-                className={inputCls + (status === 'Masuk' ? ' cursor-not-allowed opacity-60' : '')}
-                value={alasan}
-                onChange={function (e) { setAlasan(e.target.value) }}
-                aria-label="Alasan atau Keterangan"
-                placeholder={status === 'Masuk' ? 'Status Masuk tidak memerlukan alasan' : 'Contoh: Keperluan keluarga, sakit.'}
-                disabled={status === 'Masuk'}
-              />
-            </div>
-            <button type="submit" disabled={busy} className={btnPrimary}>
-              {busy ? <LabelProses teks="Menyimpan" /> : 'Simpan'}
-            </button>
-          </form>
-        </section>
-      ) : null}
-    </div>
-  )
-}
-````
-
 ## File: src/App.jsx
 ````javascript
 import { SkeletonDashboard, SkeletonQuick } from './components/Skeleton.jsx'
@@ -7949,6 +8148,440 @@ export default function AttendancePage() {
 }
 ````
 
+## File: src/pages/QuickPage.jsx
+````javascript
+import { useEffect, useRef, useState } from 'react'
+import { supabase } from '../lib/supabase.js'
+import { useAuth } from '../lib/auth.js'
+import { uploadMedia } from '../lib/upload.js'
+import { syncGaleriFromLogbook } from '../lib/logbook.js'
+import { urlPratinjau } from '../lib/konversi.js'
+import { todayInput, formatTanggal, toTitleCase } from '../lib/format.js'
+import { KATEGORI } from '../lib/constants.js'
+import { inputCls, labelCls, btnPrimary, useToast, AutoTextArea, LabelProses, Avatar } from '../components/ui.jsx'
+import { CustomSelect } from '../components/controls.jsx'
+import { SizedIcon } from '../components/icons.jsx'
+import { useNavigate } from 'react-router-dom'
+import PengingatBanner from '../components/PengingatBanner.jsx'
+import { SkeletonQuick } from '../components/Skeleton.jsx'
+import { bantuTulisLogbook } from '../lib/ai.js'
+
+const STATUS_HADIR = ['Masuk', 'Izin', 'Bolos']
+
+export default function QuickPage() {
+  const { mahasiswa } = useAuth()
+  const toast = useToast()
+  const tanggal = todayInput()
+
+  const [tab, setTab] = useState('logbook')
+  const [loading, setLoading] = useState(true)
+  const [todayLog, setTodayLog] = useState(null)
+  const [hadirHariIni, setHadirHariIni] = useState(null)
+  const [lastLogTanggal, setLastLogTanggal] = useState(null)
+  const [lastHadirTanggal, setLastHadirTanggal] = useState(null)
+
+  const [kategori, setKategori] = useState('')
+  const [judulKegiatan, setJudulKegiatan] = useState('')
+  const [deskripsi, setDeskripsi] = useState('')
+  const [file, setFile] = useState(null)
+  const [preview, setPreview] = useState('')
+  const [showGal, setShowGal] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [info, setInfo] = useState('')
+
+  const [status, setStatus] = useState('Masuk')
+  const [alasan, setAlasan] = useState('')
+  const navigate = useNavigate()
+  const [tanggalLogs, setTanggalLogs] = useState([])
+  const [aiDraft, setAiDraft] = useState('')
+  const [aiBusy, setAiBusy] = useState(false)
+  const [aiOpen, setAiOpen] = useState(false)
+  const [hadirRows, setHadirRows] = useState([])
+
+  const cameraRef = useRef(null)
+  const galeriRef = useRef(null)
+
+  async function muatData(mhs, senyap) {
+    if (!senyap) setLoading(true)
+    const l = await supabase
+      .from('logbooks')
+      .select('*, logbook_items(*)')
+      .eq('mahasiswa_id', mhs.id)
+      .eq('tanggal', tanggal)
+      .order('created_at', { ascending: false })
+      .limit(1)
+    const log = (l.data || [])[0] || null
+    if (log) {
+      log.logbook_items = (log.logbook_items || []).sort(function (a, b) { return (a.urutan || 0) - (b.urutan || 0) })
+    }
+    const h = await supabase
+      .from('daftar_hadir')
+      .select('*')
+      .eq('mahasiswa_id', mhs.id)
+      .eq('tanggal', tanggal)
+      .limit(1)
+    const hadir = (h.data || [])[0] || null
+    const ll = await supabase
+      .from('logbooks')
+      .select('tanggal')
+      .eq('mahasiswa_id', mhs.id)
+      .order('tanggal', { ascending: false })
+      .limit(1)
+    const lh = await supabase
+      .from('daftar_hadir')
+      .select('tanggal')
+      .eq('mahasiswa_id', mhs.id)
+      .order('tanggal', { ascending: false })
+      .limit(1)
+    setTodayLog(log)
+    setHadirHariIni(hadir)
+    setLastLogTanggal(ll.data && ll.data[0] ? ll.data[0].tanggal : null)
+    setLastHadirTanggal(lh.data && lh.data[0] ? lh.data[0].tanggal : null)
+    if (hadir) {
+      setStatus(hadir.status)
+      setAlasan(hadir.alasan || '')
+    }
+        const pg = await supabase.from('logbooks').select('tanggal').eq('mahasiswa_id', mhs.id)
+    const ph = await supabase.from('daftar_hadir').select('tanggal, status').eq('mahasiswa_id', mhs.id)
+    setTanggalLogs((pg.data || []).map(function (x) { return x.tanggal }))
+    setHadirRows(ph.data || [])
+    if (!senyap) setLoading(false)
+  }
+
+  useEffect(function () {
+    if (mahasiswa) muatData(mahasiswa)
+  }, [mahasiswa])
+
+  async function pilihFile(e) {
+    const f = e.target.files[0]
+    e.target.value = ''
+    if (!f) return
+    if (preview && preview.indexOf('blob:') === 0) URL.revokeObjectURL(preview)
+    setFile(f)
+    setPreview(await urlPratinjau(f))
+  }
+
+  function hapusFile() {
+    if (preview && preview.indexOf('blob:') === 0) URL.revokeObjectURL(preview)
+    setFile(null)
+    setPreview('')
+    setShowGal(false)
+  }
+
+  async function handleAiTulis() {
+    if (!aiDraft.trim() || aiBusy) return
+    setAiBusy(true)
+    try {
+      const hasil = await bantuTulisLogbook(aiDraft, KATEGORI, [])
+      if (hasil.kategori && !todayLog && !kategori) setKategori(hasil.kategori)
+      if (hasil.items && hasil.items.length) {
+        setJudulKegiatan(hasil.items[0].judul || hasil.judul || '')
+        setDeskripsi(hasil.items[0].deskripsi || '')
+      } else if (hasil.judul) {
+        setJudulKegiatan(hasil.judul)
+      }
+      toast.sukses('AI selesai. Periksa dulu sebelum simpan.')
+      setAiOpen(false)
+    } catch (err) {
+      toast.gagal('AI gagal: ' + err.message)
+    }
+    setAiBusy(false)
+  }
+
+  async function submitLogbook(e) {
+    e.preventDefault()
+    if (!todayLog && !kategori) { toast.gagal('Pilih kategori terlebih dahulu.'); return }
+    if (!judulKegiatan.trim()) { toast.gagal('Judul kegiatan wajib diisi.'); return }
+    setBusy(true)
+    try {
+      let mediaPath = null
+      let mediaThumb = null
+      if (file) {
+        const up = await uploadMedia(file, 'logbook', setInfo)
+        mediaPath = up.publicUrl
+        mediaThumb = up.thumbUrl || null
+      }
+      let logId = todayLog ? todayLog.id : null
+      if (!todayLog) {
+        const ins = await supabase.from('logbooks').insert({
+  mahasiswa_id: mahasiswa.id, tanggal: tanggal, unit: '', kategori: kategori,
+  judul: toTitleCase(judulKegiatan), kendala: '', solusi: '', pembelajaran: '', status: 'publik'
+}).select().single()
+        if (ins.error) throw new Error(ins.error.message)
+        logId = ins.data.id
+      }
+      const urutan = todayLog ? todayLog.logbook_items.reduce(function (m, it) { return Math.max(m, it.urutan || 0) }, 0) + 1 : 1
+      const insItem = await supabase.from('logbook_items').insert({
+  logbook_id: logId,
+  urutan: urutan,
+  judul: toTitleCase(judulKegiatan),
+        deskripsi: deskripsi.trim(),
+        hasil: '',
+        media_path: mediaPath,
+        media_type: mediaPath ? 'foto' : null,
+        media_thumb: mediaThumb,
+        media_source: 'r2',
+        youtube_id: null,
+        drive_id: null,
+        show_in_gallery: showGal && !!mediaPath
+      }).select().single()
+      if (insItem.error) throw new Error(insItem.error.message)
+      if (todayLog && todayLog.status !== 'publik') {
+        await supabase.from('logbooks').update({ status: 'publik' }).eq('id', todayLog.id)
+      }
+      if (showGal && mediaPath) {
+        await syncGaleriFromLogbook(mahasiswa.id, [insItem.data], {
+          tanggal: tanggal,
+          kategori: todayLog ? todayLog.kategori : kategori
+        })
+      }
+      const pertama = !todayLog
+      setJudulKegiatan('')
+      setDeskripsi('')
+      hapusFile()
+      if (pertama) setKategori('')
+      await muatData(mahasiswa, true)
+      toast.sukses(pertama ? 'Logbook hari ini berhasil dibuat' : 'Kegiatan baru berhasil ditambahkan')
+    } catch (err) {
+      toast.gagal('Gagal menyimpan logbook: ' + err.message)
+    }
+    setInfo('')
+    setBusy(false)
+  }
+
+  async function submitAbsen(e) {
+    e.preventDefault()
+    setBusy(true)
+    try {
+      const payload = {
+        mahasiswa_id: mahasiswa.id,
+        tanggal: tanggal,
+        status: status,
+        alasan: status === 'Masuk' ? '' : alasan.trim()
+      }
+      let res
+      if (hadirHariIni) {
+        res = await supabase.from('daftar_hadir').update(payload).eq('id', hadirHariIni.id)
+      } else {
+        res = await supabase.from('daftar_hadir').insert(payload)
+      }
+      if (res.error) throw new Error(res.error.message)
+      await muatData(mahasiswa, true)
+      toast.sukses(hadirHariIni ? 'Daftar hadir berhasil diperbarui' : 'Daftar hadir berhasil disimpan')
+    } catch (err) {
+      toast.gagal('Gagal menyimpan kehadiran: ' + err.message)
+    }
+    setBusy(false)
+  }
+
+  function infoTerakhir(tgl) {
+    if (!tgl) return { teks: 'belum pernah', lama: true }
+    const selisih = Math.round((new Date(tanggal + 'T00:00:00').getTime() - new Date(tgl + 'T00:00:00').getTime()) / 86400000)
+    if (selisih <= 0) return { teks: 'hari ini', lama: false }
+    if (selisih === 1) return { teks: 'kemarin', lama: false }
+    return { teks: selisih + ' hari yang lalu', lama: true }
+  }
+
+  if (loading) {
+    return <SkeletonQuick />
+  }
+
+  const infoLog = infoTerakhir(lastLogTanggal)
+  const infoHadir = infoTerakhir(lastHadirTanggal)
+
+  const tabCls = function (t) {
+    return 'flex-1 px-4 py-2.5 rounded-xl text-xs sm:rounded-2xl sm:py-3 sm:text-sm font-bold ' + (tab === t ? 'bg-bsi-800 text-white shadow-sm' : 'bsi-panel text-slate-600 hover:text-bsi-800')
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-xl space-y-5">
+      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="avatar-kepala-dash avatar-kepala-cepat"><Avatar src={mahasiswa.foto_profil || null} nama={mahasiswa.nama} size="xl" /></div>
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-xl font-black text-slate-900 sm:text-2xl">{mahasiswa.nama}</h1>
+            <p className="mt-1 truncate text-sm text-slate-600">{formatTanggal(tanggal)}</p>
+          </div>
+        </div>
+        <div className="mt-4 flex gap-2">
+          <button type="button" onClick={function () { setTab('logbook') }} className={tabCls('logbook')}>Logbook</button>
+          <button type="button" onClick={function () { setTab('absen') }} className={tabCls('absen')}>Daftar Hadir</button>
+        </div>
+      </section>
+
+      <div className={tab === 'logbook' ? '' : 'hidden'} style={{ marginTop: 0 }}>
+        {!loading ? (
+          <PengingatBanner
+            tipe="logbook"
+            tanggalLogbook={tanggalLogs}
+            hadir={hadirRows}
+            onIsi={function (t) { navigate('/dashboard?isi=' + t) }}
+          />
+        ) : null}
+      </div>
+      <div className={tab === 'absen' ? '' : 'hidden'} style={{ marginTop: 0 }}>
+        {!loading ? (
+          <PengingatBanner
+            tipe="hadir"
+            tanggalLogbook={tanggalLogs}
+            hadir={hadirRows}
+            onIsi={function (t) { navigate('/dashboard?isiHadir=' + t) }}
+          />
+        ) : null}
+      </div>
+      {tab === 'logbook' ? (
+        <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
+          <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoLog.lama ? 'text-amber-600' : 'text-slate-500')}>
+            <SizedIcon name="calendar" size={13} />
+            Terakhir mengisi logbook: {infoLog.teks}
+          </p>
+          {todayLog ? (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+              <p className="text-sm font-bold text-emerald-800">Logbook hari ini sudah ada</p>
+              <p className="mt-1 text-sm text-emerald-800">{todayLog.judul} • {todayLog.logbook_items.length} kegiatan</p>
+              <div className="mt-2 space-y-1">
+                {todayLog.logbook_items.map(function (it, i) {
+                  return <p key={it.id} className="truncate text-xs text-emerald-800">{i + 1}. {it.judul}</p>
+                })}
+              </div>
+              <p className="mt-2 text-xs text-emerald-800">Kegiatan baru ditambahkan di bawahnya tanpa menghapus kegiatan lama.</p>
+              {todayLog.status !== 'publik' ? <p className="mt-1 text-xs font-semibold text-emerald-800">Status masih draf — akan otomatis dipublikasikan.</p> : null}
+            </div>
+          ) : (
+            <div>
+              <label className={labelCls}>Kategori Utama <span className="text-red-500">*</span></label>
+              <div className="mt-1.5">
+                <CustomSelect placeholder="Pilih Kategori" value={kategori} onChange={setKategori} options={KATEGORI.map(function (k) { return { value: k, label: k } })} />
+              </div>
+            </div>
+          )}
+<form onSubmit={submitLogbook} className="mt-5 space-y-4">
+
+          <div className={'catatan-cepat-kartu rounded-2xl border border-slate-200 overflow-hidden' + (aiOpen ? ' catatan-cepat-kartu-buka' : '')}>
+            <button
+              type="button"
+              onClick={function () { setAiOpen(function (v) { return !v }) }}
+              className="catatan-cepat-header flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50"
+            >
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-bsi-50 text-bsi-800">
+                <SizedIcon name="pencil" size={15} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-slate-800">Catatan cepat</p>
+                <p className="mt-0.5 text-xs text-slate-500">Tulis sekilas, nanti dirapikan jadi logbook</p>
+              </div>
+              <span className="catatan-cepat-chevron shrink-0 text-slate-500">
+                <SizedIcon name="chevron" size={16} />
+              </span>
+            </button>
+            <div className={'catatan-cepat-wrap' + (aiOpen ? ' catatan-cepat-buka' : '')}>
+              <div className="catatan-cepat-dalam">
+                <div className="catatan-cepat-isi border-t border-slate-100 px-4 py-4 space-y-3">
+                  <textarea
+                    className={inputCls + ' resize-none'}
+                    value={aiDraft}
+                    onChange={function (e) { setAiDraft(e.target.value) }}
+                    placeholder="Contoh: bantu CS input data nasabah, sempat ada error sistem, terus belajar verifikasi berkas"
+                    rows={3}
+                  />
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs text-slate-500">Hasilnya bisa kamu edit dulu sebelum simpan.</p>
+                    <button
+                      type="button"
+                      disabled={aiBusy || !aiDraft.trim()}
+                      onClick={handleAiTulis}
+                      className="shrink-0 rounded-xl bg-bsi-800 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-bsi-900 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {aiBusy ? <LabelProses teks="Merapikan" /> : 'Rapikan'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+            <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-bold text-bsi-800">{todayLog ? 'Kegiatan Baru (kegiatan ' + (todayLog.logbook_items.length + 1) + ')' : 'Kegiatan'}</p>
+              <input className={inputCls} value={judulKegiatan} onChange={function (e) { setJudulKegiatan(e.target.value) }} aria-label="Judul Kegiatan" placeholder="Judul kegiatan" />
+              <AutoTextArea className={inputCls} value={deskripsi} onChange={function (e) { setDeskripsi(e.target.value) }} aria-label="Deskripsi Kegiatan" placeholder="Deskripsi singkat kegiatan" />
+              {preview ? (
+                <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-900">
+                  <img src={preview} alt="Pratinjau" className="absolute inset-0 h-full w-full object-contain" />
+                  <button type="button" onClick={hapusFile} title="Hapus Gambar" className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-red-500 text-white hover:bg-red-600">
+                    <SizedIcon name="close" size={14} />
+                  </button>
+                </div>
+              ) : null}
+              <div className="grid grid-cols-2 gap-3">
+                <button type="button" onClick={function () { cameraRef.current.click() }} className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-3 py-3.5 text-sm font-semibold text-slate-700 hover:border-bsi-500 hover:bg-slate-100">
+                  <SizedIcon name="camera" size={18} /> Ambil Foto
+                </button>
+                <button type="button" onClick={function () { galeriRef.current.click() }} className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-3 py-3.5 text-sm font-semibold text-slate-700 hover:border-bsi-500 hover:bg-slate-100">
+                  <SizedIcon name="image" size={18} /> Dari Galeri
+                </button>
+              </div>
+              <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={pilihFile} />
+              <input ref={galeriRef} type="file" accept="image/*" className="hidden" onChange={pilihFile} />
+              {preview ? (
+                <label className="flex w-full cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 p-3">
+                  <input type="checkbox" checked={showGal} onChange={function (e) { setShowGal(e.target.checked) }} className="mt-0.5 h-4 w-4 rounded accent-bsi-800" />
+                  <span className="text-sm font-semibold text-slate-800">Tampilkan kegiatan ini di galeri</span>
+                </label>
+              ) : null}
+            </div>
+            <button type="submit" disabled={busy} className={btnPrimary}>
+              {busy ? <LabelProses teks={info || 'Menyimpan'} /> : 'Simpan'}
+            </button>
+          </form>
+        </section>
+      ) : null}
+
+      {tab === 'absen' ? (
+        <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
+          <p className={'mb-4 flex items-center gap-1.5 text-xs font-semibold ' + (infoHadir.lama ? 'text-amber-600' : 'text-slate-500')}>
+            <SizedIcon name="clipboard" size={13} />
+            Terakhir mengisi daftar hadir: {infoHadir.teks}
+          </p>
+          {hadirHariIni ? (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+              <p className="text-sm font-bold text-emerald-800">Kamu sudah mengisi daftar hadir hari ini ({hadirHariIni.status})</p>
+              <p className="mt-1 text-xs text-emerald-800">Form di bawah bisa dipakai untuk memperbarui status bila ada perubahan.</p>
+            </div>
+          ) : null}
+          <form onSubmit={submitAbsen} className={'space-y-4 ' + (hadirHariIni ? 'mt-5' : '')}>
+            <div>
+              <label className={labelCls}>Status Kehadiran <span className="text-red-500">*</span></label>
+              <div className="mt-1.5 flex gap-2">
+                {STATUS_HADIR.map(function (s) {
+                  const aktif = status === s
+                  const warna = aktif
+                    ? (s === 'Masuk' ? 'bg-emerald-500 text-white' : s === 'Izin' ? 'bg-amber-500 text-white' : 'bg-red-500 text-white')
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  return <button type="button" key={s} onClick={function () { setStatus(s) }} className={'flex-1 rounded-2xl px-3 py-3 text-sm font-bold ' + warna}>{s}</button>
+                })}
+              </div>
+            </div>
+            <div>
+              <label className={labelCls}>Alasan atau Keterangan</label>
+              <AutoTextArea
+                className={inputCls + (status === 'Masuk' ? ' cursor-not-allowed opacity-60' : '')}
+                value={alasan}
+                onChange={function (e) { setAlasan(e.target.value) }}
+                aria-label="Alasan atau Keterangan"
+                placeholder={status === 'Masuk' ? 'Status Masuk tidak memerlukan alasan' : 'Contoh: Keperluan keluarga, sakit.'}
+                disabled={status === 'Masuk'}
+              />
+            </div>
+            <button type="submit" disabled={busy} className={btnPrimary}>
+              {busy ? <LabelProses teks="Menyimpan" /> : 'Simpan'}
+            </button>
+          </form>
+        </section>
+      ) : null}
+    </div>
+  )
+}
+````
+
 ## File: src/pages/HomePage.jsx
 ````javascript
 import { urutkanTanggal } from '../lib/format.js'
@@ -8121,179 +8754,6 @@ export default function HomePage() {
       <Modal open={!!detail} onClose={function () { setDetail(null) }}>
         {detail ? <LogbookDetail log={detail} /> : null}
       </Modal>
-    </div>
-  )
-}
-````
-
-## File: src/components/Layout.jsx
-````javascript
-import { Outlet, Link, NavLink, useNavigate, useLocation } from 'react-router-dom'
-import { useTheme } from '../lib/theme.jsx'
-import { useAuth, logoutMahasiswa } from '../lib/auth.js'
-import { SizedIcon } from './icons.jsx'
-import { ConfirmModal } from './ui.jsx'
-import { useEffect, useRef, useState } from 'react'
-
-const LINKS = [
-  { to: '/', label: 'Beranda' },
-  { to: '/logbook', label: 'Logbook' },
-  { to: '/galeri', label: 'Galeri' },
-  { to: '/absen', label: 'Daftar Hadir' },
-  { to: '/dospem', label: 'Tim & Dospem' }
-]
-
-function MenuMobile(props) {
-  return (
-    <div ref={props.menuRef} className={'menu-mobile-wrap xl:hidden' + (props.open ? ' menu-mobile-buka' : '')}>
-      <div className="menu-mobile-dalam">
-        <div className="menu-mobile-isi border-t border-slate-200 px-4 py-4 space-y-2">
-          {props.children}
-        </div>
-      </div>
-    </div>
-  )
-}
-export default function Layout() {
-  const theme = useTheme()
-  const { mahasiswa } = useAuth()
-  const [open, setOpen] = useState(false)
-  const [konfirmasiKeluar, setKonfirmasiKeluar] = useState(false)
-  const refMenu = useRef(null)
-  const refBtnHamburger = useRef(null)
-  const navigate = useNavigate()
-  const location = useLocation()
-  const isAreaIntern = location.pathname.indexOf('/dashboard') === 0 ||
-    location.pathname.indexOf('/qr') === 0
-
-  /* menu-auto-close-v1: tutup menu mobile saat user berinteraksi di luar
-     area menu atau tombol hamburger. Escape juga menutup menu. */
-  useEffect(function () {
-    if (!open) return undefined
-    function onDocPointer(e) {
-      const t = e.target
-      if (!t || !t.nodeType) return
-      if (refMenu.current && refMenu.current.contains(t)) return
-      if (refBtnHamburger.current && refBtnHamburger.current.contains(t)) return
-      if (t.closest && t.closest('.theme-toggle-btn')) return
-      setOpen(false)
-    }
-    function onKeyDown(e) {
-      if (e.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('pointerdown', onDocPointer, true)
-    document.addEventListener('keydown', onKeyDown)
-    return function () {
-      document.removeEventListener('pointerdown', onDocPointer, true)
-      document.removeEventListener('keydown', onKeyDown)
-    }
-  }, [open])
-
-  /* safety net: tutup menu saat rute berubah (misal back/forward browser) */
-  useEffect(function () {
-    setOpen(false)
-  }, [location.pathname])
-  function mintaKeluar(e) {
-    e.preventDefault()
-    setOpen(false)
-    setKonfirmasiKeluar(true)
-  }
-  async function benarKeluar() {
-    setKonfirmasiKeluar(false)
-    await logoutMahasiswa()
-    navigate('/')
-  }
-
-  const linkCls = function (active) {
-    return 'px-3 py-2 rounded-xl text-sm font-semibold ' + (active ? 'bg-[rgba(39,192,109,.12)] text-[#177c48] dark:bg-[rgba(39,192,109,.18)] dark:text-[#86ecb0]' : 'text-[#5f6f64] hover:bg-[rgba(15,42,29,.06)] dark:text-[#9db4a6] dark:hover:bg-[rgba(234,244,238,.07)]')
-  }
-
-  const themeBtn = function (extra) {
-    return (
-      <button onClick={theme.toggle} className={'theme-toggle-btn rounded-xl border border-slate-300 grid place-items-center hover:bg-slate-100 text-slate-700 ' + (extra || 'h-10 w-10')} title="Ganti Tema">
-        <SizedIcon name={theme.dark ? 'sun' : 'moon'} size={18} />
-      </button>
-    )
-  }
-
-  return (
-    <div className="flex flex-col min-h-screen">
-      <header className="sticky top-0 z-50 bg-[rgba(255,255,255,.65)] backdrop-blur-[14px] border-b border-slate-200 dark:bg-[rgba(16,42,29,.6)]">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="h-16 flex items-center justify-between gap-4">
-            <Link to="/" className="flex items-center gap-3">
-<div className="h-10 w-10 rounded-2xl grid place-items-center shadow-md" style={{ background: '#16623c' }}>
-  <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path d="M4 7V17C4 18.1 4.9 19 6 19H18C19.1 19 20 18.1 20 17V7" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-    <path d="M4 7L12 12L20 7" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-    <path d="M12 12V19" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-  </svg>
-</div>
-              <div>
-                <p className="font-bold leading-none text-slate-900">Portal Magang</p>
-                <p className="text-xs text-slate-600 mt-1">Bank Syariah Indonesia</p>
-              </div>
-            </Link>
-            <nav className="hidden xl:flex items-center gap-1">
-              {LINKS.map(function (l) {
-                return <NavLink key={l.to} to={l.to} end={l.to === '/'} className={function (s) { return linkCls(s.isActive) }}>{l.label}</NavLink>
-              })}
-            </nav>
-            <div className="hidden xl:flex items-center gap-3">
-              {themeBtn()}
-              {mahasiswa ? (
-                <>
-                  <Link to="/dashboard" className="px-4 py-2 rounded-xl bg-bsi-800 text-white text-sm font-semibold hover:bg-bsi-900">Dashboard</Link>
-                  {isAreaIntern ? (
-                    <button type="button" onClick={mintaKeluar} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-100">Keluar</button>
-                  ) : null}
-                </>
-              ) : (
-                <Link to="/login" className="px-4 py-2 rounded-xl bg-bsi-800 text-white text-sm font-semibold hover:bg-bsi-900">Masuk</Link>
-              )}
-            </div>
-            <div className="flex xl:hidden items-center gap-2">
-              {themeBtn()}
-              <button ref={refBtnHamburger} onClick={function () { setOpen(function (o) { return !o }) }} aria-label="Buka Menu" aria-expanded={open} title="Buka Menu" className="h-10 w-10 rounded-xl border border-slate-300 grid place-items-center text-slate-700 hover:bg-slate-100"><SizedIcon name="menu" size={20} /></button>
-            </div>
-          </div>
-        </div>
-        <MenuMobile open={open} menuRef={refMenu}>
-            {LINKS.map(function (l) {
-              return <NavLink key={l.to} to={l.to} end={l.to === '/'} onClick={function () { setOpen(false) }} className={function (s) { return 'flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm ' + (s.isActive ? 'bg-[rgba(39,192,109,.12)] text-[#177c48] font-bold dark:bg-[rgba(39,192,109,.18)] dark:text-[#86ecb0]' : 'font-semibold text-[#5f6f64] hover:bg-[rgba(15,42,29,.06)] dark:text-[#9db4a6] dark:hover:bg-[rgba(234,244,238,.07)]') }}>{function (s) { return <>{s.isActive ? <span className="h-2 w-2 shrink-0 rounded-full bg-current" /> : null}<span className="truncate">{l.label}</span></> }}</NavLink>
-            })}
-            {mahasiswa ? (
-              <>
-                <NavLink to="/dashboard" onClick={function () { setOpen(false) }} className={function (s) { return 'flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm font-semibold bg-bsi-800 text-white ' + (s.isActive ? 'ring-2 ring-gold-400' : '') }}>{function (s) { return <>{s.isActive ? <span className="h-2 w-2 shrink-0 rounded-full bg-gold-400" /> : null}<span className="truncate">Dashboard</span></> }}</NavLink>
-                {isAreaIntern ? (
-                  <button type="button" onClick={mintaKeluar} className="block w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700">Keluar</button>
-                ) : null}
-              </>
-            ) : (
-              <Link to="/login" onClick={function () { setOpen(false) }} className="block px-4 py-3 rounded-xl bg-bsi-800 text-white text-sm font-semibold">Masuk</Link>
-            )}
-        </MenuMobile>
-      </header>
-
-      <main className="anim-page max-w-7xl mx-auto px-4 py-8 lg:py-10 flex-1 w-full">
-        <Outlet />
-      </main>
-
-      <footer className="footer-ramping border-t border-slate-200 bg-white">
-<div className="mx-auto max-w-7xl px-4 py-4 text-center">
-<p className="text-xs text-slate-600">© 2026 Tim Magang BSI</p>
-</div>
-</footer>
-<ConfirmModal
-  open={konfirmasiKeluar}
-  title="Keluar dari Akun?"
-  message="Sesi login kamu akan berakhir dan area intern tidak bisa diakses sampai kamu masuk lagi. Data yang sudah disimpan tetap aman."
-  confirmLabel="Keluar"
-  icon="user"
-  tone="netral"
-  onCancel={function () { setKonfirmasiKeluar(false) }}
-  onConfirm={benarKeluar}
-/>
     </div>
   )
 }
@@ -8541,6 +9001,179 @@ export function AttendanceDetail(props) {
         <p className="mt-1 text-sm text-slate-700">{row.alasan || 'Tidak ada alasan.'}</p>
       </div>
       <div className="detail-footer border-t border-slate-100 pt-4"><PersonChip mahasiswa={row.mahasiswa} /></div>
+    </div>
+  )
+}
+````
+
+## File: src/components/Layout.jsx
+````javascript
+import { Outlet, Link, NavLink, useNavigate, useLocation } from 'react-router-dom'
+import { useTheme } from '../lib/theme.jsx'
+import { useAuth, logoutMahasiswa } from '../lib/auth.js'
+import { SizedIcon } from './icons.jsx'
+import { ConfirmModal } from './ui.jsx'
+import { useEffect, useRef, useState } from 'react'
+
+const LINKS = [
+  { to: '/', label: 'Beranda' },
+  { to: '/logbook', label: 'Logbook' },
+  { to: '/galeri', label: 'Galeri' },
+  { to: '/absen', label: 'Daftar Hadir' },
+  { to: '/dospem', label: 'Tim & Dospem' }
+]
+
+function MenuMobile(props) {
+  return (
+    <div ref={props.menuRef} className={'menu-mobile-wrap xl:hidden' + (props.open ? ' menu-mobile-buka' : '')}>
+      <div className="menu-mobile-dalam">
+        <div className="menu-mobile-isi border-t border-slate-200 px-4 py-4 space-y-2">
+          {props.children}
+        </div>
+      </div>
+    </div>
+  )
+}
+export default function Layout() {
+  const theme = useTheme()
+  const { mahasiswa } = useAuth()
+  const [open, setOpen] = useState(false)
+  const [konfirmasiKeluar, setKonfirmasiKeluar] = useState(false)
+  const refMenu = useRef(null)
+  const refBtnHamburger = useRef(null)
+  const navigate = useNavigate()
+  const location = useLocation()
+  const isAreaIntern = location.pathname.indexOf('/dashboard') === 0 ||
+    location.pathname.indexOf('/qr') === 0
+
+  /* menu-auto-close-v1: tutup menu mobile saat user berinteraksi di luar
+     area menu atau tombol hamburger. Escape juga menutup menu. */
+  useEffect(function () {
+    if (!open) return undefined
+    function onDocPointer(e) {
+      const t = e.target
+      if (!t || !t.nodeType) return
+      if (refMenu.current && refMenu.current.contains(t)) return
+      if (refBtnHamburger.current && refBtnHamburger.current.contains(t)) return
+      if (t.closest && t.closest('.theme-toggle-btn')) return
+      setOpen(false)
+    }
+    function onKeyDown(e) {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('pointerdown', onDocPointer, true)
+    document.addEventListener('keydown', onKeyDown)
+    return function () {
+      document.removeEventListener('pointerdown', onDocPointer, true)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [open])
+
+  /* safety net: tutup menu saat rute berubah (misal back/forward browser) */
+  useEffect(function () {
+    setOpen(false)
+  }, [location.pathname])
+  function mintaKeluar(e) {
+    e.preventDefault()
+    setOpen(false)
+    setKonfirmasiKeluar(true)
+  }
+  async function benarKeluar() {
+    setKonfirmasiKeluar(false)
+    await logoutMahasiswa()
+    navigate('/')
+  }
+
+  const linkCls = function (active) {
+    return 'px-3 py-2 rounded-xl text-sm font-semibold ' + (active ? 'bg-[rgba(39,192,109,.12)] text-[#177c48] dark:bg-[rgba(39,192,109,.18)] dark:text-[#86ecb0]' : 'text-[#5f6f64] hover:bg-[rgba(15,42,29,.06)] dark:text-[#9db4a6] dark:hover:bg-[rgba(234,244,238,.07)]')
+  }
+
+  const themeBtn = function (extra) {
+    return (
+      <button onClick={theme.toggle} className={'theme-toggle-btn rounded-xl border border-slate-300 grid place-items-center hover:bg-slate-100 text-slate-700 ' + (extra || 'h-10 w-10')} title="Ganti Tema">
+        <SizedIcon name={theme.dark ? 'sun' : 'moon'} size={18} />
+      </button>
+    )
+  }
+
+  return (
+    <div className="flex flex-col min-h-screen">
+      <header className="sticky top-0 z-50 bg-[rgba(255,255,255,.65)] backdrop-blur-[14px] border-b border-slate-200 dark:bg-[rgba(16,42,29,.6)]">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="h-16 flex items-center justify-between gap-4">
+            <Link to="/" className="flex items-center gap-3">
+<div className="h-10 w-10 rounded-2xl grid place-items-center shadow-md" style={{ background: '#16623c' }}>
+  <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M4 7V17C4 18.1 4.9 19 6 19H18C19.1 19 20 18.1 20 17V7" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M4 7L12 12L20 7" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M12 12V19" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+</div>
+              <div>
+                <p className="font-bold leading-none text-slate-900">Portal Magang</p>
+                <p className="text-xs text-slate-600 mt-1">Bank Syariah Indonesia</p>
+              </div>
+            </Link>
+            <nav className="hidden xl:flex items-center gap-1">
+              {LINKS.map(function (l) {
+                return <NavLink key={l.to} to={l.to} end={l.to === '/'} className={function (s) { return linkCls(s.isActive) }}>{l.label}</NavLink>
+              })}
+            </nav>
+            <div className="hidden xl:flex items-center gap-3">
+              {themeBtn()}
+              {mahasiswa ? (
+                <>
+                  <Link to="/dashboard" className="px-4 py-2 rounded-xl bg-bsi-800 text-white text-sm font-semibold hover:bg-bsi-900">Dashboard</Link>
+                  {isAreaIntern ? (
+                    <button type="button" onClick={mintaKeluar} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-100">Keluar</button>
+                  ) : null}
+                </>
+              ) : (
+                <Link to="/login" className="px-4 py-2 rounded-xl bg-bsi-800 text-white text-sm font-semibold hover:bg-bsi-900">Masuk</Link>
+              )}
+            </div>
+            <div className="flex xl:hidden items-center gap-2">
+              {themeBtn()}
+              <button ref={refBtnHamburger} onClick={function () { setOpen(function (o) { return !o }) }} aria-label="Buka Menu" aria-expanded={open} title="Buka Menu" className="h-10 w-10 rounded-xl border border-slate-300 grid place-items-center text-slate-700 hover:bg-slate-100"><SizedIcon name="menu" size={20} /></button>
+            </div>
+          </div>
+        </div>
+        <MenuMobile open={open} menuRef={refMenu}>
+            {LINKS.map(function (l) {
+              return <NavLink key={l.to} to={l.to} end={l.to === '/'} onClick={function () { setOpen(false) }} className={function (s) { return 'flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm ' + (s.isActive ? 'bg-[rgba(39,192,109,.12)] text-[#177c48] font-bold dark:bg-[rgba(39,192,109,.18)] dark:text-[#86ecb0]' : 'font-semibold text-[#5f6f64] hover:bg-[rgba(15,42,29,.06)] dark:text-[#9db4a6] dark:hover:bg-[rgba(234,244,238,.07)]') }}>{function (s) { return <>{s.isActive ? <span className="h-2 w-2 shrink-0 rounded-full bg-current" /> : null}<span className="truncate">{l.label}</span></> }}</NavLink>
+            })}
+            {mahasiswa ? (
+              <>
+                <NavLink to="/dashboard" onClick={function () { setOpen(false) }} className={function (s) { return 'flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm font-semibold bg-bsi-800 text-white ' + (s.isActive ? 'ring-2 ring-gold-400' : '') }}>{function (s) { return <>{s.isActive ? <span className="h-2 w-2 shrink-0 rounded-full bg-gold-400" /> : null}<span className="truncate">Dashboard</span></> }}</NavLink>
+                {isAreaIntern ? (
+                  <button type="button" onClick={mintaKeluar} className="block w-full px-4 py-3 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700">Keluar</button>
+                ) : null}
+              </>
+            ) : (
+              <Link to="/login" onClick={function () { setOpen(false) }} className="block px-4 py-3 rounded-xl bg-bsi-800 text-white text-sm font-semibold">Masuk</Link>
+            )}
+        </MenuMobile>
+      </header>
+
+      <main className="anim-page max-w-7xl mx-auto px-4 py-8 lg:py-10 flex-1 w-full">
+        <Outlet />
+      </main>
+
+      <footer className="footer-ramping border-t border-slate-200 bg-white">
+<div className="mx-auto max-w-7xl px-4 py-4 text-center">
+<p className="text-xs text-slate-600">© 2026 Tim Magang BSI</p>
+</div>
+</footer>
+<ConfirmModal
+  open={konfirmasiKeluar}
+  title="Keluar dari Akun?"
+  message="Sesi login kamu akan berakhir dan area intern tidak bisa diakses sampai kamu masuk lagi. Data yang sudah disimpan tetap aman."
+  confirmLabel="Keluar"
+  icon="user"
+  tone="netral"
+  onCancel={function () { setKonfirmasiKeluar(false) }}
+  onConfirm={benarKeluar}
+/>
     </div>
   )
 }
@@ -10464,6 +11097,65 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
     font-size: 0.875rem !important;
   }
 }
+
+/* catatan-cepat: accordion panel catatan cepat (AI).
+   Pola sama dengan filter-wrap / menu-mobile / unggah-foto: tinggi wrapper
+   dianimasikan lewat grid-template-rows sehingga konten di bawahnya bergeser
+   mulus tanpa perlu ukur tinggi manual. Isi panel muncul dengan fade + slide
+   halus, chevron berputar dengan easing yang sama supaya terasa satu gerakan. */
+.catatan-cepat-kartu .catatan-cepat-chevron {
+  transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.catatan-cepat-kartu-buka .catatan-cepat-chevron {
+  transform: rotate(180deg);
+}
+
+.catatan-cepat-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.36s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.catatan-cepat-buka { grid-template-rows: 1fr; }
+
+.catatan-cepat-dalam {
+  overflow: hidden;
+  min-height: 0;
+  visibility: hidden;
+  transition: visibility 0.36s;
+}
+.catatan-cepat-buka .catatan-cepat-dalam { visibility: visible; }
+
+.catatan-cepat-isi {
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity 0.2s ease, transform 0.24s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.catatan-cepat-buka .catatan-cepat-isi {
+  opacity: 1;
+  transform: none;
+  transition: opacity 0.3s ease 0.06s, transform 0.34s cubic-bezier(0.32, 0.72, 0, 1) 0.04s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .catatan-cepat-chevron,
+  .catatan-cepat-wrap,
+  .catatan-cepat-dalam,
+  .catatan-cepat-isi { transition-duration: 0.01ms !important; }
+}
+
+/* catatan-cepat-header: isolate header dari reflow panel.
+   Tinggi panel "Catatan cepat" berubah setiap frame saat animasi
+   grid-template-rows berjalan. Tanpa isolasi, teks & icon di header
+   ikut sub-pixel shift karena browser menghitung ulang layout border
+   parent-nya. Promote ke GPU layer membuat header dirender di layer
+   sendiri sehingga tidak terpengaruh reflow sekitar. */
+.catatan-cepat-header {
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  position: relative;
+  z-index: 1;
+}
 ````
 
 ## File: src/pages/DashboardPage.jsx
@@ -10488,6 +11180,7 @@ import { SizedIcon, ICONS } from '../components/icons.jsx'
 import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
 import PengingatBanner, { hitungTanggalTerlewat, hitungTanggalTerlewatHadir } from '../components/PengingatBanner.jsx'
 import QrPrintTab from '../components/QrPrintTab.jsx'
+import { bantuTulisLogbook } from '../lib/ai.js'
 
 function newItem() {
   return { key: Math.random().toString(36).slice(2), judul: '', deskripsi: '', hasil: '', file: null, preview: '', oldPath: '', oldThumb: '', previewLoading: false, show: false, mode: 'foto', ytLink: '', oldYtId: null, oldSource: 'r2', driveLink: '' }
@@ -10753,6 +11446,9 @@ export default function DashboardPage() {
 
   /* ===== proteksi-unsaved-v1: cegah kehilangan draf saat pindah tab/halaman, batal edit, atau tutup tab ===== */
   const [unsavedModal, setUnsavedModal] = useState(null)
+  const [aiDraft, setAiDraft] = useState('')
+  const [aiBusy, setAiBusy] = useState(false)
+  const [aiOpen, setAiOpen] = useState(false)
   const navigate = useNavigate()
   function isLogbookDirty() {
     if (editLogId) return true
@@ -10882,6 +11578,48 @@ export default function DashboardPage() {
     } catch (err) {
       console.error('Gagal hapus media R2:', key, err.message)
     }
+  }
+
+  async function handleAiTulis() {
+    if (!aiDraft.trim() || aiBusy) return
+    setAiBusy(true)
+    try {
+      const hasil = await bantuTulisLogbook(aiDraft, KATEGORI, UNIT)
+      const adaIsiItems = items.some(function (it) {
+        return it.judul || it.deskripsi || it.hasil || it.file
+      })
+      const terapkan = function () {
+        setForm(function (f) {
+          return Object.assign({}, f, {
+            judul: hasil.judul || f.judul,
+            kategori: hasil.kategori || f.kategori,
+            unit: hasil.unit || f.unit,
+            kendala: hasil.kendala || f.kendala,
+            solusi: hasil.solusi || f.solusi,
+            pembelajaran: hasil.pembelajaran || f.pembelajaran
+          })
+        })
+        if (hasil.items && hasil.items.length) {
+          setItems(hasil.items.map(function (it) {
+            return Object.assign(newItem(), { judul: it.judul, deskripsi: it.deskripsi })
+          }))
+        }
+        toast.sukses('AI selesai menulis. Periksa dulu sebelum simpan.')
+        setAiOpen(false)
+      }
+      if (adaIsiItems && hasil.items && hasil.items.length) {
+        setKonfirmasiEdit({
+          judul: 'Ganti Kegiatan yang Sudah Diisi?',
+          pesan: 'AI menghasilkan ' + hasil.items.length + ' kegiatan baru. Kegiatan yang sudah kamu isi akan diganti. Lanjutkan?',
+          aksi: terapkan
+        })
+      } else {
+        terapkan()
+      }
+    } catch (err) {
+      toast.gagal('AI gagal: ' + err.message)
+    }
+    setAiBusy(false)
   }
 
   async function submitLogbook(e) {
@@ -11542,7 +12280,49 @@ export default function DashboardPage() {
           <div ref={refFormLog} className={'card-hover scroll-mt-24 bsi-panel rounded-[2rem] p-8 min-w-0 ' + (editLogId ? 'ring-2 ring-gold-500' : '')}>
             <ModeIndicator edit={!!editLogId} onCancel={cobaCancelEditLog} />
             <h2 className="mt-3 text-xl sm:text-2xl font-black text-slate-900">{editLogId ? 'Ubah Logbook Harian' : 'Tambah Logbook Harian'}</h2>
-            <form onSubmit={submitLogbook} className="mt-6 space-y-4">
+<form onSubmit={submitLogbook} className="mt-6 space-y-4">
+            <div className={'catatan-cepat-kartu rounded-2xl border border-slate-200 overflow-hidden' + (aiOpen ? ' catatan-cepat-kartu-buka' : '')}>
+              <button
+                type="button"
+                onClick={function () { setAiOpen(function (v) { return !v }) }}
+                className="catatan-cepat-header flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50"
+              >
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-bsi-50 text-bsi-800">
+                  <SizedIcon name="pencil" size={15} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-slate-800">Catatan cepat</p>
+                  <p className="mt-0.5 text-xs text-slate-500">Tulis sekilas, nanti dirapikan jadi logbook</p>
+                </div>
+                <span className="catatan-cepat-chevron shrink-0 text-slate-500">
+                  <SizedIcon name="chevron" size={16} />
+                </span>
+              </button>
+              <div className={'catatan-cepat-wrap' + (aiOpen ? ' catatan-cepat-buka' : '')}>
+                <div className="catatan-cepat-dalam">
+                  <div className="catatan-cepat-isi border-t border-slate-100 px-4 py-4 space-y-3">
+                    <textarea
+                      className={inputCls + ' resize-none'}
+                      value={aiDraft}
+                      onChange={function (e) { setAiDraft(e.target.value) }}
+                      placeholder="Contoh: bantu CS input data nasabah, sempat ada error sistem, terus belajar verifikasi berkas"
+                      rows={3}
+                    />
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs text-slate-500">Hasilnya bisa kamu edit dulu sebelum simpan.</p>
+                      <button
+                        type="button"
+                        disabled={aiBusy || !aiDraft.trim()}
+                        onClick={handleAiTulis}
+                        className="shrink-0 rounded-xl bg-bsi-800 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-bsi-900 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        {aiBusy ? <LabelProses teks="Merapikan" /> : 'Rapikan'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label className={labelCls}>Tanggal <span className="text-red-500">*</span></label>
