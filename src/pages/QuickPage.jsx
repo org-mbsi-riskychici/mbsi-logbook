@@ -309,7 +309,7 @@ export default function QuickPage() {
             <button
               type="button"
               onClick={function () { setAiOpen(function (v) { return !v }) }}
-              className="catatan-cepat-header flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50"
+              className="catatan-cepat-header flex w-full items-center gap-3 px-4 py-3 text-left"
             >
               <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-bsi-50 text-bsi-800">
                 <SizedIcon name="pencil" size={15} />
