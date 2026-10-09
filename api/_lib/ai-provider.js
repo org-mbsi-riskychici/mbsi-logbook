@@ -1,15 +1,9 @@
-import { susunLogbookDenganGemini } from './gemini.js'
-import { susunLogbookDenganOpenRouter } from './openrouter.js'
 import { susunLogbookDenganGroq } from './groq.js'
 
-export function providerAktif(env) {
-  return (env.AI_PROVIDER || 'groq').toLowerCase()
-}
-
+/* Titik masuk tunggal untuk semua fitur AI di aplikasi.
+   Saat ini memakai Groq (Qwen 3.8 27B) sebagai provider tunggal.
+   Kalau nanti mau tambah provider lain, cukup tambahkan cabang
+   di sini tanpa mengubah tulis.js atau vite.config.js. */
 export async function susunLogbookAi(env, opts) {
-  const provider = providerAktif(env)
-  if (provider === 'groq') return susunLogbookDenganGroq(env, opts)
-  if (provider === 'openrouter') return susunLogbookDenganOpenRouter(env, opts)
-  if (provider === 'gemini') return susunLogbookDenganGemini(env, opts)
-  throw new Error('AI_PROVIDER tidak dikenal: ' + provider + '. Gunakan "groq", "openrouter", atau "gemini".')
+  return susunLogbookDenganGroq(env, opts)
 }

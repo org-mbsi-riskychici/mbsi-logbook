@@ -101,13 +101,10 @@ supabase/
 .env.example
 .gitignore
 index.html
-mvp-qr.html
 package.json
 postcss.config.js
 README.md
 tailwind.config.js
-tess.html
-tess2.html
 vercel.json
 vite.config.js
 ````
@@ -1032,6 +1029,113 @@ export async function hapusFotoProfil(mahasiswaId, fotoUrl) {
 }
 ````
 
+## File: src/lib/upload.js
+````javascript
+import { supabase } from './supabase.js'
+import { iniVideo, ekstensiFile, siapkanFoto } from './konversi.js'
+
+const MAKS_FOTO = 15 * 1024 * 1024
+const MAKS_VIDEO = 50 * 1024 * 1024
+
+async function getToken() {
+  const { data } = await supabase.auth.getSession()
+  return data.session ? data.session.access_token : ''
+}
+
+function namaDasar(nama) {
+  return String(nama || 'media').replace(/\.[^.]+$/, '')
+}
+
+function kirimDenganProgres(uploadUrl, blob, contentType, onProgres) {
+  return new Promise(function (resolve, reject) {
+    const xhr = new XMLHttpRequest()
+    xhr.open('PUT', uploadUrl)
+    xhr.setRequestHeader('Content-Type', contentType)
+    if (onProgres) {
+      xhr.upload.onprogress = function (e) {
+        if (e.lengthComputable) onProgres(e.loaded / e.total)
+      }
+    }
+    xhr.onload = function () {
+      if (xhr.status >= 200 && xhr.status < 300) resolve()
+      else reject(new Error('Gagal upload file ke R2 (status ' + xhr.status + ')'))
+    }
+    xhr.onerror = function () { reject(new Error('Gagal jaringan saat upload ke R2')) }
+    xhr.send(blob)
+  })
+}
+
+async function mintaIzin(token, filename, contentType, kind) {
+  const res = await fetch('/api/r2/presign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ filename: filename, contentType: contentType, kind: kind })
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error('Gagal membuat izin upload (status ' + res.status + '): ' + text)
+  }
+  return res.json()
+}
+
+export async function uploadMedia(file, kind, onInfo) {
+  const video = iniVideo(file)
+  if (video && file.size > MAKS_VIDEO) {
+    throw new Error('Video melebihi 50 MB. Potong dulu durasinya supaya upload cepat dan kuota aman.')
+  }
+  if (!video && file.size > MAKS_FOTO) {
+    throw new Error('Foto melebihi 15 MB. Pilih file dengan ukuran lebih kecil.')
+  }
+  let fullBlob = file
+  let fullType = file.type
+  let thumbBlob = null
+  if (!video) {
+    try {
+      const hasil = await siapkanFoto(file, onInfo)
+      fullBlob = hasil.fullBlob
+      fullType = hasil.fullType
+      thumbBlob = hasil.thumbBlob
+    } catch (e) {
+      throw new Error('Foto format .' + ekstensiFile(file) + ' tidak bisa diproses browser. Ubah dulu ke JPG atau PNG. Di iPhone: Settings, Camera, Formats, pilih Most Compatible.')
+    }
+  }
+  if (onInfo) onInfo('')
+  const token = await getToken()
+  const extFull = fullType === 'image/webp' ? 'webp' : (fullType === 'image/jpeg' ? 'jpg' : ekstensiFile(file))
+  const infoFull = await mintaIzin(token, namaDasar(file.name) + '.' + extFull, fullType, kind)
+  await kirimDenganProgres(infoFull.uploadUrl, fullBlob, fullType, function (p) {
+    if (onInfo) onInfo('Mengunggah ' + Math.round(p * 100) + '%')
+  })
+  let thumbUrl = null
+  if (thumbBlob) {
+    try {
+      const namaThumb = namaDasar(infoFull.key.split('/').pop()) + '.webp'
+      const infoThumb = await mintaIzin(token, namaThumb, 'image/webp', 'thumb/' + kind)
+      await kirimDenganProgres(infoThumb.uploadUrl, thumbBlob, 'image/webp', null)
+      thumbUrl = infoThumb.publicUrl
+    } catch (e) {
+      thumbUrl = null
+    }
+  }
+  console.log('[UPLOAD] File penuh: ' + infoFull.key + ' | Thumbnail: ' + (thumbUrl || 'tidak dibuat'))
+  return { path: infoFull.key, publicUrl: infoFull.publicUrl, thumbUrl: thumbUrl }
+}
+
+export async function deleteMedia(key) {
+  const token = await getToken()
+  const res = await fetch('/api/r2/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ key: key })
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error('Gagal hapus media di R2 (status ' + res.status + '): ' + text)
+  }
+  return res.json()
+}
+````
+
 ## File: supabase/migrasi-drive-download.sql
 ````sql
 -- Migrasi fitur download Google Drive
@@ -1040,285 +1144,6 @@ export async function hapusFotoProfil(mahasiswaId, fotoUrl) {
 
 alter table public.logbook_items add column if not exists drive_id text;
 alter table public.galeri add column if not exists drive_id text;
-````
-
-## File: mvp-qr.html
-````html
-<!DOCTYPE html>
-<html lang="id">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Cetak QR Code - Portal Logbook Magang BSI</title>
-  
-  <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            bsi: {
-              50: '#f4fbf6', 100: '#dff0e4', 200: '#bfe3cc', 300: '#86ecb0',
-              400: '#4ed58f', 500: '#27c06d', 600: '#1a9e57', 700: '#177c48',
-              800: '#16623c', 900: '#135033'
-            },
-            gold: { 400: '#fbbf24', 500: '#f59e0b', 600: '#d97706' }
-          }
-        }
-      }
-    }
-  </script>
-
-  <!-- Font Plus Jakarta Sans -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
-  
-  <!-- Library QR Code Generator -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
-
-  <!-- Library HTML to Canvas (Untuk Unduh Seluruh Kartu ke PNG) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-
-  <style>
-    body {
-      font-family: 'Plus Jakarta Sans', sans-serif;
-    }
-
-    #qrcode svg {
-      width: 200px;
-      height: 200px;
-      display: block;
-      margin: 0 auto;
-    }
-    
-    /* Utility styling khusus saat print */
-    @media print {
-      @page {
-        size: A4 portrait;
-        margin: 1.5cm;
-      }
-      
-      /* Memaksa browser mencetak background warna & aksen persis seperti di layar */
-      *, *::before, *::after {
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
-      }
-
-      html, body {
-        background: white !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        width: 100% !important;
-        display: flex !important;
-        justify-content: center !important;
-        align-items: flex-start !important;
-      }
-
-      .no-print {
-        display: none !important;
-      }
-
-      /* Mengatur lebar kartu presisi 430px agar rasio lebar vs tinggi pas */
-      #posterCard,
-      main#posterCard.print-card {
-        width: 430px !important;
-        max-width: 430px !important;
-        min-width: 430px !important;
-        margin: 1cm auto !important;
-        box-shadow: none !important;
-        border: 1px solid #cbd5e1 !important;
-        border-radius: 2.5rem !important;
-        background: white !important;
-        break-inside: avoid !important;
-        page-break-inside: avoid !important;
-        box-sizing: border-box !important;
-      }
-
-      .logo-glow {
-        display: none !important;
-      }
-    }
-  </style>
-</head>
-<body class="bg-slate-100 min-h-screen text-slate-800 flex flex-col items-center justify-center p-4 sm:p-8">
-
-  <!-- Floating Action Bar (Hanya Tampil di Layar Monitor) -->
-  <div class="no-print w-full max-w-md mb-6 bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between gap-3">
-    <a href="/qr" class="flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-600 hover:text-bsi-800 transition">
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-      </svg>
-      Kembali
-    </a>
-    
-    <div class="flex gap-2">
-      <!-- Tombol Unduh Seluruh Kartu PNG -->
-      <button id="btnDownloadPng" onclick="downloadCardPNG()" class="px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs sm:text-sm font-bold text-slate-700 flex items-center gap-1.5 transition">
-        <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-        </svg>
-        <span>Unduh PNG</span>
-      </button>
-
-      <!-- Tombol Cetak PDF / Standee -->
-      <button onclick="window.print()" class="px-4 py-2 rounded-xl bg-bsi-800 hover:bg-bsi-900 text-white text-xs sm:text-sm font-bold flex items-center gap-2 shadow-sm transition">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-        </svg>
-        Cetak
-      </button>
-    </div>
-  </div>
-
-  <!-- Kartu Poster / Standee Siap Cetak (Bodi Kartu Putih Solid) -->
-  <main id="posterCard" class="print-card w-full max-w-md bg-white rounded-[2.5rem] p-8 shadow-xl border border-slate-200 flex flex-col items-center text-center relative overflow-hidden">
-    
-    <!-- Accent Top Bar -->
-    <div class="absolute top-0 inset-x-0 h-2 bg-bsi-800"></div>
-
-    <!-- Header Branding BSI -->
-    <div class="flex flex-col items-center gap-3 mt-4">
-      <!-- Logo Badge -->
-      <div class="relative">
-        <div class="relative h-16 w-16 rounded-2xl bg-bsi-800 text-white grid place-items-center shadow-md overflow-hidden">
-          
-          <!-- Ikon SVG: Dokumen/Logbook dengan Aksen Centang -->
-          <svg class="w-9 h-9 relative z-10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M4 7V17C4 18.1046 4.89543 19 6 19H18C19.1046 19 20 18.1046 20 17V7" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M4 7L12 12L20 7" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M12 12V19" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </div>
-      </div>
-
-      <!-- Tipografi Brand -->
-      <div class="flex flex-col items-center">
-        <h1 class="text-2xl font-black tracking-tight text-slate-900 uppercase flex items-center gap-2">
-          <span class="text-bsi-800">GANK</span>
-          <span class="text-slate-700">SKUYY</span>
-        </h1>
-        <p class="text-[11px] font-bold text-slate-500 tracking-[0.2em] uppercase mt-1.5">
-          Portal Presensi & Logbook
-        </p>
-      </div>
-    </div>
-
-    <hr class="w-full border-slate-100 my-6" />
-
-    <!-- Teks Instruksi -->
-    <div class="space-y-1">
-      <p class="text-xs font-bold text-bsi-800 uppercase tracking-widest">
-        Scan QR Code di Bawah Ini
-      </p>
-      <p class="text-xs text-slate-500">
-        Untuk mengisi Logbook harian &amp; Presensi magang
-      </p>
-    </div>
-
-    <!-- Container Gambar QR Code Inline SVG -->
-    <div class="my-6 p-4 bg-slate-50 border-2 border-dashed border-bsi-300 rounded-3xl relative">
-      <div id="qrcode" class="flex justify-center items-center"></div>
-    </div>
-
-    <!-- URL Manual -->
-    <div class="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-2xl flex flex-col items-center justify-center">
-      <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Akses Tautan Manual</p>
-      <p id="targetUrlText" class="text-xs font-mono font-bold text-slate-700 break-all leading-normal mt-1 px-1">
-        Loading URL...
-      </p>
-    </div>
-  </main>
-
-  <script>
-    // =========================================================================
-    // KONFIGURASI UTAMA URL TUJUAN QR CODE
-    // =========================================================================
-    const CUSTOM_URL = "https://mbsi.riskychici.web.id/qr"; 
-
-    const targetUrl = (CUSTOM_URL && CUSTOM_URL.trim() !== "") 
-      ? CUSTOM_URL.trim() 
-      : (window.location.origin + '/qr');
-
-    document.getElementById('targetUrlText').innerText = targetUrl;
-
-    // Generate Inline SVG QR Code
-    const typeNumber = 0;
-    const errorCorrectionLevel = 'H';
-    const qr = qrcode(typeNumber, errorCorrectionLevel);
-    qr.addData(targetUrl);
-    qr.make();
-
-    const count = qr.getModuleCount();
-    const size = 200;
-    const cellSize = size / count;
-
-    let svgPath = '';
-    for (let row = 0; row < count; row++) {
-      for (let col = 0; col < count; col++) {
-        if (qr.isDark(row, col)) {
-          svgPath += `M${col * cellSize},${row * cellSize}h${cellSize}v${cellSize}h-${cellSize}z `;
-        }
-      }
-    }
-
-    const svgElementStr = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">
-      <rect width="${size}" height="${size}" fill="#ffffff" />
-      <path d="${svgPath}" fill="#16623c" />
-    </svg>`;
-
-    const qrContainer = document.getElementById("qrcode");
-    qrContainer.innerHTML = svgElementStr;
-
-    // =========================================================================
-    // FUNGSI UNDUH SELURUH KARTU KE PNG (KARTU PUTIH, AREA LUAR TRANSPARAN)
-    // =========================================================================
-    async function downloadCardPNG() {
-      const cardElement = document.getElementById('posterCard');
-      const btnBtn = document.getElementById('btnDownloadPng');
-      
-      if (!cardElement) return;
-
-      const originalText = btnBtn.innerHTML;
-      btnBtn.innerHTML = `<span class="animate-pulse">Mengunduh...</span>`;
-      btnBtn.disabled = true;
-
-      try {
-        const canvas = await html2canvas(cardElement, {
-          scale: 3,
-          useCORS: true,
-          backgroundColor: null, // Kanvas luar tetap transparan (mengikuti sudut rounded)
-          logging: false,
-          onclone: (clonedDoc) => {
-            const urlText = clonedDoc.getElementById('targetUrlText');
-            if (urlText) {
-              urlText.style.lineHeight = '1.5';
-              urlText.style.paddingTop = '2px';
-              urlText.style.paddingBottom = '2px';
-            }
-          }
-        });
-
-        const imageDataUrl = canvas.toDataURL('image/png', 1.0);
-        
-        const link = document.createElement('a');
-        link.href = imageDataUrl;
-        link.download = 'Standee-Presensi-Magang-GANK-SKUYY.png';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      } catch (error) {
-        console.error('Gagal mengunduh kartu sebagai PNG:', error);
-        alert('Gagal membuat gambar PNG. Silakan coba lagi.');
-      } finally {
-        btnBtn.innerHTML = originalText;
-        btnBtn.disabled = false;
-      }
-    }
-  </script>
-</body>
-</html>
 ````
 
 ## File: README.md
@@ -1522,2324 +1347,6 @@ export default {
 }
 ````
 
-## File: tess.html
-````html
-<!DOCTYPE html>
-<html lang="en" class="h-full select-none">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Web OS - Interactive Portfolio</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        os: {
-                            glass: 'rgba(18, 24, 38, 0.65)',
-                            glassLight: 'rgba(255, 255, 255, 0.75)',
-                            border: 'rgba(255, 255, 255, 0.12)',
-                            accent: '#6366f1'
-                        }
-                    },
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
-                        mono: ['Fira Code', 'Courier New', 'monospace']
-                    }
-                }
-            }
-        }
-    </script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap');
-        
-        body {
-            font-family: 'Inter', sans-serif;
-            overflow: hidden;
-            background-color: #0f172a;
-        }
-
-        .glass-panel {
-            background: rgba(15, 23, 42, 0.7);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
-        }
-
-        .glass-menu {
-            background: rgba(15, 23, 42, 0.85);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .dock-item {
-            transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
-        }
-        .dock-item:hover {
-            transform: translateY(-10px) scale(1.2);
-            margin: 0 8px;
-        }
-
-        /* Custom Scrollbars */
-        ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
-        }
-        ::-webkit-scrollbar-track {
-            background: rgba(0, 0, 0, 0.1);
-        }
-        ::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 999px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: rgba(255, 255, 255, 0.4);
-        }
-
-        /* Wallpaper Canvas */
-        #bg-canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 0;
-        }
-
-        /* Spinning Vinyl Effect */
-        @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-        }
-        .animate-spin-slow {
-            animation: spin 8s linear infinite;
-        }
-        .paused {
-            animation-play-state: paused;
-        }
-
-        /* Audio Waveform Bar Animation */
-        @keyframes waveform {
-            0%, 100% { height: 4px; }
-            50% { height: 24px; }
-        }
-        .wave-bar {
-            animation: waveform 1s infinite ease-in-out;
-        }
-    </style>
-</head>
-<body class="h-screen w-screen overflow-hidden text-slate-100 flex flex-col justify-between relative bg-slate-900">
-
-    <canvas id="bg-canvas"></canvas>
-
-    <header class="h-8 glass-menu w-full px-4 flex items-center justify-between text-xs z-50 select-none font-medium text-slate-200">
-        <div class="flex items-center space-x-4">
-            <div class="flex items-center space-x-1 font-bold text-indigo-400 cursor-pointer hover:text-indigo-300" onclick="openApp('about')">
-                <i data-lucide="terminal" class="w-4 h-4 inline"></i>
-                <span id="active-app-title">RiskyOS</span>
-            </div>
-            <nav class="hidden md:flex space-x-3 text-slate-300">
-                <button onclick="openApp('about')" class="hover:text-white transition">About</button>
-                <button onclick="openApp('projects')" class="hover:text-white transition">Projects</button>
-                <button onclick="openApp('terminal')" class="hover:text-white transition">Terminal</button>
-                <button onclick="openApp('contact')" class="hover:text-white transition">Contact</button>
-            </nav>
-        </div>
-
-        <div class="flex items-center space-x-4">
-            <div class="hidden sm:flex items-center space-x-2 bg-slate-800/50 px-2 py-0.5 rounded-full border border-slate-700/50">
-                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span class="text-[10px] text-slate-300">Available for Hire</span>
-            </div>
-            <div class="flex items-center space-x-3 text-slate-300">
-                <i data-lucide="wifi" class="w-3.5 h-3.5 text-emerald-400" title="Connected"></i>
-                <button onclick="toggleAudioSynth()" id="synth-sound-btn" class="hover:text-white transition" title="Toggle Sound FX">
-                    <i data-lucide="volume-2" class="w-3.5 h-3.5"></i>
-                </button>
-                <button onclick="openApp('settings')" class="hover:text-white transition" title="Settings">
-                    <i data-lucide="sliders" class="w-3.5 h-3.5"></i>
-                </button>
-                <span id="clock" class="font-mono text-slate-200">12:00 PM</span>
-            </div>
-        </div>
-    </header>
-
-    <main id="desktop" class="flex-1 relative overflow-hidden p-6 z-10 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4 auto-rows-max">
-        <!-- Desktop Shortcuts -->
-        <div onclick="openApp('about')" class="desktop-shortcut group flex flex-col items-center justify-center p-3 rounded-2xl cursor-pointer hover:bg-white/10 transition duration-200 text-center">
-            <div class="w-14 h-14 bg-gradient-to-tr from-indigo-500 to-purple-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
-                <i data-lucide="user" class="w-7 h-7 text-white"></i>
-            </div>
-            <span class="mt-2 text-xs font-medium drop-shadow text-white">About Me</span>
-        </div>
-
-        <div onclick="openApp('projects')" class="desktop-shortcut group flex flex-col items-center justify-center p-3 rounded-2xl cursor-pointer hover:bg-white/10 transition duration-200 text-center">
-            <div class="w-14 h-14 bg-gradient-to-tr from-blue-500 to-cyan-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
-                <i data-lucide="folder-git-2" class="w-7 h-7 text-white"></i>
-            </div>
-            <span class="mt-2 text-xs font-medium drop-shadow text-white">Projects</span>
-        </div>
-
-        <div onclick="openApp('player')" class="desktop-shortcut group flex flex-col items-center justify-center p-3 rounded-2xl cursor-pointer hover:bg-white/10 transition duration-200 text-center">
-            <div class="w-14 h-14 bg-gradient-to-tr from-rose-500 to-amber-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
-                <i data-lucide="music" class="w-7 h-7 text-white"></i>
-            </div>
-            <span class="mt-2 text-xs font-medium drop-shadow text-white">Music Studio</span>
-        </div>
-
-        <div onclick="openApp('terminal')" class="desktop-shortcut group flex flex-col items-center justify-center p-3 rounded-2xl cursor-pointer hover:bg-white/10 transition duration-200 text-center">
-            <div class="w-14 h-14 bg-slate-800 border border-slate-700 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
-                <i data-lucide="terminal" class="w-7 h-7 text-emerald-400"></i>
-            </div>
-            <span class="mt-2 text-xs font-medium drop-shadow text-white">Terminal CLI</span>
-        </div>
-
-        <div onclick="openApp('contact')" class="desktop-shortcut group flex flex-col items-center justify-center p-3 rounded-2xl cursor-pointer hover:bg-white/10 transition duration-200 text-center">
-            <div class="w-14 h-14 bg-gradient-to-tr from-emerald-500 to-teal-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
-                <i data-lucide="mail" class="w-7 h-7 text-white"></i>
-            </div>
-            <span class="mt-2 text-xs font-medium drop-shadow text-white">Mail Client</span>
-        </div>
-
-        <div onclick="openApp('settings')" class="desktop-shortcut group flex flex-col items-center justify-center p-3 rounded-2xl cursor-pointer hover:bg-white/10 transition duration-200 text-center">
-            <div class="w-14 h-14 bg-gradient-to-tr from-slate-600 to-slate-800 border border-slate-500/30 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
-                <i data-lucide="settings" class="w-7 h-7 text-white"></i>
-            </div>
-            <span class="mt-2 text-xs font-medium drop-shadow text-white">Settings</span>
-        </div>
-    </main>
-
-    <div id="window-container" class="absolute inset-0 pointer-events-none z-20 top-8 bottom-16">
-        
-        <!-- App Window 1: About Me -->
-        <div id="win-about" class="app-window absolute hidden pointer-events-auto rounded-2xl glass-panel flex flex-col overflow-hidden w-[92vw] sm:w-[680px] h-[500px]" style="top: 8%; left: 10%;">
-            <div class="window-header h-11 bg-slate-900/60 border-b border-white/10 px-4 flex items-center justify-between cursor-move">
-                <div class="flex items-center space-x-2">
-                    <button onclick="closeApp('about')" class="w-3 h-3 rounded-full bg-rose-500 hover:opacity-80 transition"></button>
-                    <button onclick="minimizeApp('about')" class="w-3 h-3 rounded-full bg-amber-500 hover:opacity-80 transition"></button>
-                    <button onclick="maximizeApp('about')" class="w-3 h-3 rounded-full bg-emerald-500 hover:opacity-80 transition"></button>
-                    <span class="ml-2 text-xs font-semibold text-slate-300">About Me - Developer Profile</span>
-                </div>
-                <i data-lucide="user" class="w-4 h-4 text-slate-400"></i>
-            </div>
-            <div class="window-body flex-1 overflow-y-auto p-6 space-y-6">
-                <div class="flex flex-col sm:flex-row items-center gap-6 bg-slate-800/40 p-5 rounded-2xl border border-white/5">
-                    <div class="relative">
-                        <div class="w-24 h-24 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-3xl font-bold text-white shadow-xl">
-                            R
-                        </div>
-                        <span class="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-500 border-2 border-slate-900 rounded-full"></span>
-                    </div>
-                    <div class="text-center sm:text-left flex-1">
-                        <h2 class="text-2xl font-bold text-white">Risky Architect</h2>
-                        <p class="text-indigo-400 text-sm font-medium">Full-Stack Web Architect & Creative Audio Producer</p>
-                        <p class="text-slate-400 text-xs mt-2 leading-relaxed">
-                            Crafting high-performance web applications with intuitive UX, sleek operating system interfaces, and custom digital soundscapes.
-                        </p>
-                        <div class="mt-3 flex flex-wrap justify-center sm:justify-start gap-2">
-                            <span class="px-2.5 py-1 rounded-full text-[11px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">React & Next.js</span>
-                            <span class="px-2.5 py-1 rounded-full text-[11px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">Tailwind & UI/UX</span>
-                            <span class="px-2.5 py-1 rounded-full text-[11px] bg-purple-500/20 text-purple-300 border border-purple-500/30">Node.js & Python</span>
-                            <span class="px-2.5 py-1 rounded-full text-[11px] bg-amber-500/20 text-amber-300 border border-amber-500/30">Audio Synth & DSP</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div>
-                    <h3 class="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">
-                        <i data-lucide="cpu" class="w-4 h-4 text-indigo-400"></i> Tech Stack & Core Competencies
-                    </h3>
-                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                        <div class="p-3 bg-slate-800/30 rounded-xl border border-white/5 hover:border-indigo-500/40 transition">
-                            <div class="text-xs font-semibold text-slate-200">Frontend Engine</div>
-                            <div class="text-[11px] text-slate-400 mt-1">React, Vite, TypeScript, Tailwind CSS, Three.js</div>
-                        </div>
-                        <div class="p-3 bg-slate-800/30 rounded-xl border border-white/5 hover:border-indigo-500/40 transition">
-                            <div class="text-xs font-semibold text-slate-200">Backend & Cloud</div>
-                            <div class="text-[11px] text-slate-400 mt-1">Node.js, Express, Python, Supabase, Cloudflare</div>
-                        </div>
-                        <div class="p-3 bg-slate-800/30 rounded-xl border border-white/5 hover:border-indigo-500/40 transition">
-                            <div class="text-xs font-semibold text-slate-200">Audio & Creative</div>
-                            <div class="text-[11px] text-slate-400 mt-1">Web Audio API, FL Studio, Sound Design, DSP</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- App Window 2: File Explorer / Projects -->
-        <div id="win-projects" class="app-window absolute hidden pointer-events-auto rounded-2xl glass-panel flex flex-col overflow-hidden w-[92vw] sm:w-[760px] h-[520px]" style="top: 10%; left: 15%;">
-            <div class="window-header h-11 bg-slate-900/60 border-b border-white/10 px-4 flex items-center justify-between cursor-move">
-                <div class="flex items-center space-x-2">
-                    <button onclick="closeApp('projects')" class="w-3 h-3 rounded-full bg-rose-500 hover:opacity-80 transition"></button>
-                    <button onclick="minimizeApp('projects')" class="w-3 h-3 rounded-full bg-amber-500 hover:opacity-80 transition"></button>
-                    <button onclick="maximizeApp('projects')" class="w-3 h-3 rounded-full bg-emerald-500 hover:opacity-80 transition"></button>
-                    <span class="ml-2 text-xs font-semibold text-slate-300">File Explorer - Showcase & Projects</span>
-                </div>
-                <i data-lucide="folder" class="w-4 h-4 text-cyan-400"></i>
-            </div>
-            <div class="window-body flex-1 flex overflow-hidden">
-                <!-- Sidebar -->
-                <div class="w-44 bg-slate-900/50 border-r border-white/5 p-3 hidden sm:block">
-                    <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 px-2">Categories</div>
-                    <ul class="space-y-1 text-xs">
-                        <li>
-                            <button onclick="filterProjects('all')" class="w-full text-left px-2.5 py-1.5 rounded-lg bg-indigo-600/30 text-indigo-200 font-medium flex items-center gap-2">
-                                <i data-lucide="layers" class="w-3.5 h-3.5"></i> All Items
-                            </button>
-                        </li>
-                        <li>
-                            <button onclick="filterProjects('web')" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white/5 text-slate-300 flex items-center gap-2 transition">
-                                <i data-lucide="globe" class="w-3.5 h-3.5"></i> Web Apps
-                            </button>
-                        </li>
-                        <li>
-                            <button onclick="filterProjects('audio')" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white/5 text-slate-300 flex items-center gap-2 transition">
-                                <i data-lucide="music-2" class="w-3.5 h-3.5"></i> Audio & Synth
-                            </button>
-                        </li>
-                    </ul>
-                </div>
-                <!-- Main Grid -->
-                <div class="flex-1 overflow-y-auto p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <!-- Project 1 -->
-                    <div class="project-card bg-slate-800/40 rounded-xl p-4 border border-white/10 hover:border-indigo-500/50 transition flex flex-col justify-between" data-category="web">
-                        <div>
-                            <div class="h-32 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 flex items-center justify-center mb-3 relative overflow-hidden">
-                                <i data-lucide="layout-grid" class="w-12 h-12 text-white/40"></i>
-                                <span class="absolute top-2 right-2 bg-slate-900/80 text-emerald-400 text-[10px] px-2 py-0.5 rounded-full font-mono border border-emerald-500/30">Live App</span>
-                            </div>
-                            <h4 class="font-bold text-slate-100 text-sm">Interactive Web OS Shell</h4>
-                            <p class="text-xs text-slate-400 mt-1">A browser-based virtual operating system with window management, apps, audio synthesis, and terminal CLI.</p>
-                        </div>
-                        <div class="mt-4 flex items-center justify-between">
-                            <span class="text-[10px] text-indigo-300 font-mono">React · Tailwind · AudioAPI</span>
-                            <button onclick="openNotification('Web OS Shell', 'You are currently inside this operating system! Feel free to explore.')" class="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md text-xs font-medium transition">
-                                Launch
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Project 2 -->
-                    <div class="project-card bg-slate-800/40 rounded-xl p-4 border border-white/10 hover:border-indigo-500/50 transition flex flex-col justify-between" data-category="web">
-                        <div>
-                            <div class="h-32 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 flex items-center justify-center mb-3 relative overflow-hidden">
-                                <i data-lucide="sparkles" class="w-12 h-12 text-white/40"></i>
-                                <span class="absolute top-2 right-2 bg-slate-900/80 text-indigo-400 text-[10px] px-2 py-0.5 rounded-full font-mono border border-indigo-500/30">SaaS Platform</span>
-                            </div>
-                            <h4 class="font-bold text-slate-100 text-sm">AI Content Studio</h4>
-                            <p class="text-xs text-slate-400 mt-1">Real-time content generation engine with dark mode UI, automated analytics, and web export features.</p>
-                        </div>
-                        <div class="mt-4 flex items-center justify-between">
-                            <span class="text-[10px] text-purple-300 font-mono">Next.js · Tailwind · OpenAI</span>
-                            <button onclick="openNotification('AI Content Studio', 'Opening demo view preview mode.')" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-white rounded-md text-xs font-medium transition">
-                                Demo
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Project 3 -->
-                    <div class="project-card bg-slate-800/40 rounded-xl p-4 border border-white/10 hover:border-indigo-500/50 transition flex flex-col justify-between" data-category="audio">
-                        <div>
-                            <div class="h-32 rounded-lg bg-gradient-to-r from-amber-600 to-rose-600 flex items-center justify-center mb-3 relative overflow-hidden">
-                                <i data-lucide="disc" class="w-12 h-12 text-white/40"></i>
-                                <span class="absolute top-2 right-2 bg-slate-900/80 text-amber-400 text-[10px] px-2 py-0.5 rounded-full font-mono border border-amber-500/30">Synthesizer</span>
-                            </div>
-                            <h4 class="font-bold text-slate-100 text-sm">WebAudio Chiptune Engine</h4>
-                            <p class="text-xs text-slate-400 mt-1">Synthesizer engine built completely using native Web Audio API oscillators without external MP3 dependencies.</p>
-                        </div>
-                        <div class="mt-4 flex items-center justify-between">
-                            <span class="text-[10px] text-amber-300 font-mono">JavaScript · WebAudio API</span>
-                            <button onclick="openApp('player')" class="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded-md text-xs font-medium transition">
-                                Listen
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- App Window 3: Music Player -->
-        <div id="win-player" class="app-window absolute hidden pointer-events-auto rounded-2xl glass-panel flex flex-col overflow-hidden w-[92vw] sm:w-[420px] h-[510px]" style="top: 12%; left: 25%;">
-            <div class="window-header h-11 bg-slate-900/60 border-b border-white/10 px-4 flex items-center justify-between cursor-move">
-                <div class="flex items-center space-x-2">
-                    <button onclick="closeApp('player')" class="w-3 h-3 rounded-full bg-rose-500 hover:opacity-80 transition"></button>
-                    <button onclick="minimizeApp('player')" class="w-3 h-3 rounded-full bg-amber-500 hover:opacity-80 transition"></button>
-                    <button onclick="maximizeApp('player')" class="w-3 h-3 rounded-full bg-emerald-500 hover:opacity-80 transition"></button>
-                    <span class="ml-2 text-xs font-semibold text-slate-300">SynthSound Studio</span>
-                </div>
-                <i data-lucide="disc" class="w-4 h-4 text-rose-400"></i>
-            </div>
-            <div class="window-body flex-1 p-6 flex flex-col items-center justify-between bg-gradient-to-b from-slate-900/40 to-slate-950/80">
-                <!-- Vinyl Disc Display -->
-                <div class="relative group my-2">
-                    <div id="vinyl-disc" class="w-40 h-40 rounded-full bg-slate-950 border-4 border-slate-800 shadow-2xl flex items-center justify-center relative overflow-hidden animate-spin-slow paused">
-                        <!-- Disc Grooves -->
-                        <div class="absolute inset-2 rounded-full border border-slate-800/60"></div>
-                        <div class="absolute inset-5 rounded-full border border-slate-800/40"></div>
-                        <div class="absolute inset-9 rounded-full border border-slate-800/30"></div>
-                        <!-- Center Label -->
-                        <div class="w-14 h-14 rounded-full bg-gradient-to-br from-indigo-500 to-rose-500 flex items-center justify-center border-2 border-slate-900">
-                            <div class="w-3 h-3 rounded-full bg-slate-900"></div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Track Info -->
-                <div class="text-center w-full">
-                    <h3 id="track-title" class="text-base font-bold text-white">Synthesized Cyber Lounge</h3>
-                    <p id="track-artist" class="text-xs text-indigo-400 mt-0.5">Risky Audio Engine · Synthwave</p>
-                </div>
-
-                <!-- Animated Waveform Visualizer simulation -->
-                <div class="flex items-end justify-center space-x-1.5 h-8 my-2">
-                    <div class="w-1 bg-indigo-500/80 rounded-full wave-bar" style="animation-delay: 0.1s"></div>
-                    <div class="w-1 bg-indigo-500/80 rounded-full wave-bar" style="animation-delay: 0.3s"></div>
-                    <div class="w-1 bg-purple-500/80 rounded-full wave-bar" style="animation-delay: 0.2s"></div>
-                    <div class="w-1 bg-rose-500/80 rounded-full wave-bar" style="animation-delay: 0.5s"></div>
-                    <div class="w-1 bg-indigo-500/80 rounded-full wave-bar" style="animation-delay: 0.4s"></div>
-                </div>
-
-                <!-- Controls -->
-                <div class="w-full space-y-3">
-                    <div class="flex items-center justify-between text-xs text-slate-400 font-mono">
-                        <span id="audio-time">0:00</span>
-                        <input id="audio-progress" type="range" min="0" max="100" value="0" class="w-full mx-3 accent-indigo-500 bg-slate-800 h-1 rounded-lg cursor-pointer">
-                        <span>1:30</span>
-                    </div>
-
-                    <div class="flex items-center justify-center space-x-6">
-                        <button onclick="prevTrack()" class="text-slate-400 hover:text-white transition"><i data-lucide="skip-back" class="w-5 h-5"></i></button>
-                        <button onclick="togglePlayTrack()" id="play-btn" class="w-12 h-12 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center shadow-lg transition transform active:scale-95">
-                            <i data-lucide="play" class="w-6 h-6 fill-white"></i>
-                        </button>
-                        <button onclick="nextTrack()" class="text-slate-400 hover:text-white transition"><i data-lucide="skip-forward" class="w-5 h-5"></i></button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- App Window 4: Terminal CLI -->
-        <div id="win-terminal" class="app-window absolute hidden pointer-events-auto rounded-2xl glass-panel flex flex-col overflow-hidden w-[92vw] sm:w-[650px] h-[440px]" style="top: 15%; left: 20%;">
-            <div class="window-header h-11 bg-slate-950/80 border-b border-white/10 px-4 flex items-center justify-between cursor-move">
-                <div class="flex items-center space-x-2">
-                    <button onclick="closeApp('terminal')" class="w-3 h-3 rounded-full bg-rose-500 hover:opacity-80 transition"></button>
-                    <button onclick="minimizeApp('terminal')" class="w-3 h-3 rounded-full bg-amber-500 hover:opacity-80 transition"></button>
-                    <button onclick="maximizeApp('terminal')" class="w-3 h-3 rounded-full bg-emerald-500 hover:opacity-80 transition"></button>
-                    <span class="ml-2 text-xs font-mono font-semibold text-emerald-400">guest@risky-os:~ (zsh)</span>
-                </div>
-                <i data-lucide="terminal" class="w-4 h-4 text-emerald-400"></i>
-            </div>
-            <div id="terminal-body" class="window-body flex-1 bg-slate-950 p-4 font-mono text-xs overflow-y-auto text-emerald-400 leading-relaxed space-y-2">
-                <div>RiskyOS Terminal [Version 2.4.0-release]</div>
-                <div class="text-slate-400">Type <span class="text-amber-400">'help'</span> to list available CLI commands.</div>
-                <div id="terminal-output"></div>
-                <div class="flex items-center text-emerald-400 mt-2">
-                    <span class="text-indigo-400">guest@risky-os</span>:<span class="text-cyan-400">~</span>$&nbsp;
-                    <input id="terminal-input" type="text" class="flex-1 bg-transparent outline-none border-none text-emerald-300 font-mono" autofocus>
-                </div>
-            </div>
-        </div>
-
-        <!-- App Window 5: Contact Mail App -->
-        <div id="win-contact" class="app-window absolute hidden pointer-events-auto rounded-2xl glass-panel flex flex-col overflow-hidden w-[92vw] sm:w-[580px] h-[480px]" style="top: 14%; left: 22%;">
-            <div class="window-header h-11 bg-slate-900/60 border-b border-white/10 px-4 flex items-center justify-between cursor-move">
-                <div class="flex items-center space-x-2">
-                    <button onclick="closeApp('contact')" class="w-3 h-3 rounded-full bg-rose-500 hover:opacity-80 transition"></button>
-                    <button onclick="minimizeApp('contact')" class="w-3 h-3 rounded-full bg-amber-500 hover:opacity-80 transition"></button>
-                    <button onclick="maximizeApp('contact')" class="w-3 h-3 rounded-full bg-emerald-500 hover:opacity-80 transition"></button>
-                    <span class="ml-2 text-xs font-semibold text-slate-300">Mail Client - Contact</span>
-                </div>
-                <i data-lucide="mail" class="w-4 h-4 text-teal-400"></i>
-            </div>
-            <div class="window-body flex-1 p-6 overflow-y-auto space-y-4">
-                <div>
-                    <label class="block text-xs font-medium text-slate-300 mb-1">Your Name / Organization</label>
-                    <input id="contact-name" type="text" placeholder="e.g. Alex Vance" class="w-full bg-slate-800/60 border border-white/10 rounded-lg p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500">
-                </div>
-                <div>
-                    <label class="block text-xs font-medium text-slate-300 mb-1">Subject</label>
-                    <input id="contact-subject" type="text" placeholder="Project Collaboration / Inquiry" class="w-full bg-slate-800/60 border border-white/10 rounded-lg p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500">
-                </div>
-                <div>
-                    <label class="block text-xs font-medium text-slate-300 mb-1">Message</label>
-                    <textarea id="contact-message" rows="4" placeholder="Write your message here..." class="w-full bg-slate-800/60 border border-white/10 rounded-lg p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 resize-none"></textarea>
-                </div>
-                <button onclick="sendMailMock()" class="w-full py-2.5 bg-gradient-to-r from-indigo-600 to-teal-500 hover:from-indigo-500 hover:to-teal-400 text-white font-medium rounded-lg text-xs shadow-md transition">
-                    Send Message
-                </button>
-            </div>
-        </div>
-
-        <!-- App Window 6: System Settings -->
-        <div id="win-settings" class="app-window absolute hidden pointer-events-auto rounded-2xl glass-panel flex flex-col overflow-hidden w-[92vw] sm:w-[500px] h-[420px]" style="top: 16%; left: 28%;">
-            <div class="window-header h-11 bg-slate-900/60 border-b border-white/10 px-4 flex items-center justify-between cursor-move">
-                <div class="flex items-center space-x-2">
-                    <button onclick="closeApp('settings')" class="w-3 h-3 rounded-full bg-rose-500 hover:opacity-80 transition"></button>
-                    <button onclick="minimizeApp('settings')" class="w-3 h-3 rounded-full bg-amber-500 hover:opacity-80 transition"></button>
-                    <button onclick="maximizeApp('settings')" class="w-3 h-3 rounded-full bg-emerald-500 hover:opacity-80 transition"></button>
-                    <span class="ml-2 text-xs font-semibold text-slate-300">System Control Center</span>
-                </div>
-                <i data-lucide="settings" class="w-4 h-4 text-slate-400"></i>
-            </div>
-            <div class="window-body flex-1 p-6 overflow-y-auto space-y-6">
-                <div>
-                    <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider mb-3">Wallpaper Styles</h3>
-                    <div class="grid grid-cols-3 gap-3">
-                        <button onclick="changeWallpaper('cyber')" class="h-16 rounded-xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 border-2 border-indigo-500 flex items-center justify-center text-xs text-indigo-300 font-medium">Cyber Night</button>
-                        <button onclick="changeWallpaper('sunset')" class="h-16 rounded-xl bg-gradient-to-br from-purple-900 via-rose-950 to-amber-950 border border-white/10 flex items-center justify-center text-xs text-rose-300 font-medium">Neon Sunset</button>
-                        <button onclick="changeWallpaper('matrix')" class="h-16 rounded-xl bg-gradient-to-br from-slate-950 via-emerald-950 to-slate-950 border border-white/10 flex items-center justify-center text-xs text-emerald-300 font-medium">Matrix Grid</button>
-                    </div>
-                </div>
-
-                <div>
-                    <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider mb-3">Sound & Audio Synthesis</h3>
-                    <div class="flex items-center justify-between p-3 bg-slate-800/40 rounded-xl border border-white/5">
-                        <span class="text-xs text-slate-300">Web Audio Keyboard & Click Sounds</span>
-                        <input type="checkbox" id="sound-toggle" checked onclick="toggleAudioSynth()" class="accent-indigo-500 cursor-pointer">
-                    </div>
-                </div>
-            </div>
-        </div>
-
-    </div>
-
-    <footer class="h-16 glass-menu w-max mx-auto mb-3 px-4 rounded-2xl flex items-center space-x-3 z-50 border border-white/15 shadow-2xl">
-        <div onclick="openApp('about')" class="dock-item relative group cursor-pointer p-2 rounded-xl hover:bg-white/10">
-            <div class="w-10 h-10 bg-gradient-to-tr from-indigo-500 to-purple-500 rounded-xl flex items-center justify-center shadow">
-                <i data-lucide="user" class="w-5 h-5 text-white"></i>
-            </div>
-            <span class="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-900 text-slate-200 text-[10px] px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap">About</span>
-        </div>
-
-        <div onclick="openApp('projects')" class="dock-item relative group cursor-pointer p-2 rounded-xl hover:bg-white/10">
-            <div class="w-10 h-10 bg-gradient-to-tr from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center shadow">
-                <i data-lucide="folder-git-2" class="w-5 h-5 text-white"></i>
-            </div>
-            <span class="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-900 text-slate-200 text-[10px] px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap">Projects</span>
-        </div>
-
-        <div onclick="openApp('player')" class="dock-item relative group cursor-pointer p-2 rounded-xl hover:bg-white/10">
-            <div class="w-10 h-10 bg-gradient-to-tr from-rose-500 to-amber-500 rounded-xl flex items-center justify-center shadow">
-                <i data-lucide="music" class="w-5 h-5 text-white"></i>
-            </div>
-            <span class="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-900 text-slate-200 text-[10px] px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap">Music Player</span>
-        </div>
-
-        <div onclick="openApp('terminal')" class="dock-item relative group cursor-pointer p-2 rounded-xl hover:bg-white/10">
-            <div class="w-10 h-10 bg-slate-800 border border-slate-700 rounded-xl flex items-center justify-center shadow">
-                <i data-lucide="terminal" class="w-5 h-5 text-emerald-400"></i>
-            </div>
-            <span class="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-900 text-slate-200 text-[10px] px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap">Terminal</span>
-        </div>
-
-        <div onclick="openApp('contact')" class="dock-item relative group cursor-pointer p-2 rounded-xl hover:bg-white/10">
-            <div class="w-10 h-10 bg-gradient-to-tr from-emerald-500 to-teal-500 rounded-xl flex items-center justify-center shadow">
-                <i data-lucide="mail" class="w-5 h-5 text-white"></i>
-            </div>
-            <span class="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-900 text-slate-200 text-[10px] px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap">Contact</span>
-        </div>
-
-        <div onclick="openApp('settings')" class="dock-item relative group cursor-pointer p-2 rounded-xl hover:bg-white/10">
-            <div class="w-10 h-10 bg-gradient-to-tr from-slate-600 to-slate-800 rounded-xl flex items-center justify-center shadow border border-slate-500/30">
-                <i data-lucide="settings" class="w-5 h-5 text-white"></i>
-            </div>
-            <span class="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-900 text-slate-200 text-[10px] px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap">Settings</span>
-        </div>
-    </footer>
-
-    <!-- Notification Toast Container -->
-    <div id="toast-container" class="fixed bottom-20 right-6 z-50 flex flex-col space-y-2 pointer-events-none"></div>
-
-    <script>
-        // --- Initialize Icons ---
-        lucide.createIcons();
-
-        // --- Global State ---
-        let highestZIndex = 100;
-        let soundEnabled = true;
-        let audioCtx = null;
-        let currentTheme = 'cyber';
-
-        // --- System Clock ---
-        function updateClock() {
-            const now = new Date();
-            let hours = now.getHours();
-            const minutes = now.getMinutes().toString().padStart(2, '0');
-            const ampm = hours >= 12 ? 'PM' : 'AM';
-            hours = hours % 12 || 12;
-            document.getElementById('clock').textContent = `${hours}:${minutes} ${ampm}`;
-        }
-        setInterval(updateClock, 1000);
-        updateClock();
-
-        // --- Window Management Logic ---
-        function openApp(id) {
-            playBeepSound(440, 0.05);
-            const win = document.getElementById(`win-${id}`);
-            if (!win) return;
-
-            win.classList.remove('hidden');
-            bringToFront(win);
-
-            // Update Top Bar active app name
-            const appTitles = {
-                about: 'About Me',
-                projects: 'File Explorer',
-                player: 'SynthSound Player',
-                terminal: 'Terminal CLI',
-                contact: 'Mail Client',
-                settings: 'System Settings'
-            };
-            document.getElementById('active-app-title').textContent = appTitles[id] || 'RiskyOS';
-        }
-
-        function closeApp(id) {
-            playBeepSound(300, 0.05);
-            const win = document.getElementById(`win-${id}`);
-            if (win) win.classList.add('hidden');
-        }
-
-        function minimizeApp(id) {
-            closeApp(id);
-        }
-
-        function maximizeApp(id) {
-            const win = document.getElementById(`win-${id}`);
-            if (!win) return;
-            if (win.style.width === '100vw') {
-                win.style.width = '';
-                win.style.height = '';
-                win.style.top = '10%';
-                win.style.left = '15%';
-            } else {
-                win.style.width = '100vw';
-                win.style.height = 'calc(100vh - 80px)';
-                win.style.top = '32px';
-                win.style.left = '0';
-            }
-        }
-
-        function bringToFront(win) {
-            highestZIndex++;
-            win.style.zIndex = highestZIndex;
-        }
-
-        // Setup Draggable Windows
-        document.querySelectorAll('.app-window').forEach(win => {
-            win.addEventListener('mousedown', () => bringToFront(win));
-            
-            const header = win.querySelector('.window-header');
-            let isDragging = false;
-            let offsetX, offsetY;
-
-            header.addEventListener('mousedown', (e) => {
-                isDragging = true;
-                offsetX = e.clientX - win.offsetLeft;
-                offsetY = e.clientY - win.offsetTop;
-            });
-
-            window.addEventListener('mousemove', (e) => {
-                if (!isDragging) return;
-                win.style.left = `${e.clientX - offsetX}px`;
-                win.style.top = `${e.clientY - offsetY}px`;
-            });
-
-            window.addEventListener('mouseup', () => {
-                isDragging = false;
-            });
-        });
-
-        // --- Web Audio API Synth Generator ---
-        function initAudioContext() {
-            if (!audioCtx) {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            }
-        }
-
-        function playBeepSound(freq = 440, duration = 0.1) {
-            if (!soundEnabled) return;
-            try {
-                initAudioContext();
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-                gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
-                osc.connect(gain);
-                gain.connect(audioCtx.destination);
-                osc.start();
-                osc.stop(audioCtx.currentTime + duration);
-            } catch (e) {
-                console.log("Audio waiting for user gesture.");
-            }
-        }
-
-        function toggleAudioSynth() {
-            soundEnabled = !soundEnabled;
-            openNotification('Audio Synth', `Sound FX ${soundEnabled ? 'Enabled' : 'Disabled'}`);
-        }
-
-        // --- Music Player Synth Loop ---
-        let isPlayingTrack = false;
-        let synthInterval = null;
-
-        function togglePlayTrack() {
-            initAudioContext();
-            isPlayingTrack = !isPlayingTrack;
-            const disc = document.getElementById('vinyl-disc');
-            const btn = document.getElementById('play-btn');
-
-            if (isPlayingTrack) {
-                disc.classList.remove('paused');
-                btn.innerHTML = `<i data-lucide="pause" class="w-6 h-6 fill-white"></i>`;
-                lucide.createIcons();
-                startSynthTune();
-            } else {
-                disc.classList.add('paused');
-                btn.innerHTML = `<i data-lucide="play" class="w-6 h-6 fill-white"></i>`;
-                lucide.createIcons();
-                clearInterval(synthInterval);
-            }
-        }
-
-        function startSynthTune() {
-            const notes = [261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88];
-            let step = 0;
-            synthInterval = setInterval(() => {
-                if (!isPlayingTrack) return;
-                const freq = notes[step % notes.length];
-                playBeepSound(freq, 0.2);
-                step++;
-                document.getElementById('audio-progress').value = (step * 2) % 100;
-            }, 300);
-        }
-
-        function prevTrack() { openNotification('Music Player', 'Playing Previous Synthesized Track'); }
-        function nextTrack() { openNotification('Music Player', 'Playing Next Synthesized Track'); }
-
-        // --- Terminal Logic ---
-        const terminalInput = document.getElementById('terminal-input');
-        const terminalOutput = document.getElementById('terminal-output');
-
-        if (terminalInput) {
-            terminalInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    const cmd = terminalInput.value.trim().toLowerCase();
-                    terminalInput.value = '';
-                    
-                    const line = document.createElement('div');
-                    line.innerHTML = `<span class="text-indigo-400">guest@risky-os</span>:<span class="text-cyan-400">~</span>$&nbsp;${cmd}`;
-                    terminalOutput.appendChild(line);
-
-                    let response = '';
-                    switch(cmd) {
-                        case 'help':
-                            response = 'Available Commands: about, projects, skills, contact, clear, date, theme';
-                            break;
-                        case 'about':
-                            response = 'Risky Architect - Full Stack Web Developer & Creative Audio Producer.';
-                            break;
-                        case 'skills':
-                            response = 'Core Stack: React, Next.js, Node.js, Python, Tailwind, WebAudio API';
-                            break;
-                        case 'projects':
-                            response = 'Type openApp("projects") or click Projects icon on Desktop!';
-                            break;
-                        case 'contact':
-                            response = 'Email: risky.dev@example.com | GitHub: github.com/risky-dev';
-                            break;
-                        case 'date':
-                            response = new Date().toString();
-                            break;
-                        case 'clear':
-                            terminalOutput.innerHTML = '';
-                            return;
-                        default:
-                            response = `Command not found: ${cmd}. Type 'help' for options.`;
-                    }
-
-                    const resDiv = document.createElement('div');
-                    resDiv.className = 'text-slate-400 mb-2';
-                    resDiv.textContent = response;
-                    terminalOutput.appendChild(resDiv);
-
-                    // Auto scroll
-                    document.getElementById('terminal-body').scrollTop = document.getElementById('terminal-body').scrollHeight;
-                }
-            });
-        }
-
-        // --- Notification Toast System ---
-        function openNotification(title, message) {
-            const container = document.getElementById('toast-container');
-            const toast = document.createElement('div');
-            toast.className = 'glass-panel p-3.5 rounded-xl border border-white/10 text-xs shadow-2xl flex items-center space-x-3 pointer-events-auto transform translate-y-2 transition duration-300';
-            toast.innerHTML = `
-                <div class="w-8 h-8 rounded-lg bg-indigo-600/30 text-indigo-400 flex items-center justify-center">
-                    <i data-lucide="bell" class="w-4 h-4"></i>
-                </div>
-                <div>
-                    <div class="font-bold text-white">${title}</div>
-                    <div class="text-slate-400 text-[11px]">${message}</div>
-                </div>
-            `;
-            container.appendChild(toast);
-            lucide.createIcons();
-
-            setTimeout(() => {
-                toast.remove();
-            }, 3500);
-        }
-
-        function sendMailMock() {
-            openNotification('Mail Client', 'Message sent successfully! Thank you for reaching out.');
-            document.getElementById('contact-name').value = '';
-            document.getElementById('contact-subject').value = '';
-            document.getElementById('contact-message').value = '';
-        }
-
-        function filterProjects(cat) {
-            document.querySelectorAll('.project-card').forEach(card => {
-                if (cat === 'all' || card.dataset.category === cat) {
-                    card.style.display = 'flex';
-                } else {
-                    card.style.display = 'none';
-                }
-            });
-        }
-
-        // --- Canvas Dynamic Background Wallpaper ---
-        const canvas = document.getElementById('bg-canvas');
-        const ctx = canvas.getContext('2d');
-
-        function resizeCanvas() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-        }
-        window.addEventListener('resize', resizeCanvas);
-        resizeCanvas();
-
-        const particles = Array.from({ length: 45 }, () => ({
-            x: Math.random() * canvas.width,
-            y: Math.random() * canvas.height,
-            radius: Math.random() * 2 + 1,
-            vx: (Math.random() - 0.5) * 0.4,
-            vy: (Math.random() - 0.5) * 0.4,
-            alpha: Math.random() * 0.5 + 0.2
-        }));
-
-        function drawBackground() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            // Gradient themes
-            let grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-            if (currentTheme === 'cyber') {
-                grad.addColorStop(0, '#090d16');
-                grad.addColorStop(0.5, '#111827');
-                grad.addColorStop(1, '#050811');
-            } else if (currentTheme === 'sunset') {
-                grad.addColorStop(0, '#1e112a');
-                grad.addColorStop(0.5, '#2a1220');
-                grad.addColorStop(1, '#0f0913');
-            } else {
-                grad.addColorStop(0, '#02120a');
-                grad.addColorStop(0.5, '#051f12');
-                grad.addColorStop(1, '#010a05');
-            }
-            ctx.fillStyle = grad;
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            // Draw floating particles
-            particles.forEach(p => {
-                p.x += p.vx;
-                p.y += p.vy;
-
-                if (p.x < 0) p.x = canvas.width;
-                if (p.x > canvas.width) p.x = 0;
-                if (p.y < 0) p.y = canvas.height;
-                if (p.y > canvas.height) p.y = 0;
-
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-                ctx.fillStyle = currentTheme === 'matrix' ? `rgba(16, 185, 129, ${p.alpha})` : `rgba(99, 102, 241, ${p.alpha})`;
-                ctx.fill();
-            });
-
-            requestAnimationFrame(drawBackground);
-        }
-
-        function changeWallpaper(theme) {
-            currentTheme = theme;
-            openNotification('Theme Updated', `Wallpaper changed to ${theme.toUpperCase()}`);
-        }
-
-        // Start Ambient Particle Loop
-        drawBackground();
-
-        // Open About app by default
-        window.addEventListener('load', () => {
-            openApp('about');
-        });
-    </script>
-</body>
-</html>
-````
-
-## File: tess2.html
-````html
-<!DOCTYPE html>
-<html lang="id">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AryOS — Portfolio</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>
-:root {
-  --accent: #8b5cf6;
-  --accent-2: #6366f1;
-  --accent-3: #ec4899;
-  --text: #f5f5f7;
-  --text-2: #a1a1aa;
-  --text-3: #71717a;
-  --glass: rgba(30, 30, 40, 0.55);
-  --glass-2: rgba(40, 40, 55, 0.7);
-  --stroke: rgba(255, 255, 255, 0.08);
-  --stroke-2: rgba(255, 255, 255, 0.14);
-  --menu-h: 32px;
-  --dock-h: 72px;
-  --shadow-window: 0 40px 100px -20px rgba(0,0,0,0.7), 0 20px 40px -20px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06) inset, 0 1px 0 0 rgba(255,255,255,0.08) inset;
-  --shadow-window-focus: 0 50px 120px -20px rgba(0,0,0,0.85), 0 25px 50px -20px rgba(99, 102, 241, 0.3), 0 0 0 1px rgba(139, 92, 246, 0.35) inset, 0 1px 0 0 rgba(255,255,255,0.12) inset;
-}
-
-* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-
-html, body {
-  height: 100%;
-  overflow: hidden;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  color: var(--text);
-  background: #000;
-  user-select: none;
-  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
-  -webkit-font-smoothing: antialiased;
-}
-
-/* ============= BOOT ============= */
-#boot {
-  position: fixed; inset: 0; z-index: 10000;
-  background: #050509;
-  display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-}
-#boot.hide { opacity: 0; pointer-events: none; }
-.boot-glow {
-  position: absolute; width: 600px; height: 600px;
-  background: radial-gradient(circle, rgba(139,92,246,0.25), transparent 60%);
-  animation: pulseGlow 3s ease-in-out infinite;
-  pointer-events: none;
-}
-@keyframes pulseGlow {
-  0%, 100% { transform: scale(1); opacity: 0.6; }
-  50% { transform: scale(1.15); opacity: 1; }
-}
-.boot-mark {
-  width: 88px; height: 88px; border-radius: 24px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2) 50%, var(--accent-3));
-  display: flex; align-items: center; justify-content: center;
-  font-size: 2.4rem; font-weight: 700; color: #fff;
-  box-shadow: 0 20px 60px -10px rgba(139,92,246,0.6), inset 0 1px 0 rgba(255,255,255,0.3);
-  margin-bottom: 24px;
-  animation: bootMark 1.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-  position: relative; z-index: 1;
-}
-@keyframes bootMark {
-  0% { opacity: 0; transform: scale(0.5) translateY(20px); }
-  100% { opacity: 1; transform: scale(1) translateY(0); }
-}
-.boot-name {
-  font-size: 1.5rem; font-weight: 600; letter-spacing: -0.02em;
-  color: #fff; position: relative; z-index: 1;
-  animation: bootFade 0.8s ease 0.3s backwards;
-}
-.boot-sub {
-  font-size: 0.75rem; color: var(--text-3); margin-top: 6px;
-  letter-spacing: 0.2em; text-transform: uppercase; font-weight: 500;
-  position: relative; z-index: 1;
-  animation: bootFade 0.8s ease 0.5s backwards;
-}
-@keyframes bootFade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-.boot-bar {
-  width: 200px; height: 3px; background: rgba(255,255,255,0.08);
-  border-radius: 3px; margin-top: 48px; overflow: hidden;
-  position: relative; z-index: 1;
-}
-.boot-bar-fill {
-  height: 100%; width: 0%;
-  background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--accent-3));
-  border-radius: 3px;
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 0 12px rgba(139,92,246,0.6);
-}
-
-/* ============= DESKTOP ============= */
-#desktop {
-  position: fixed; inset: 0;
-  background:
-    radial-gradient(ellipse 80% 60% at 20% 10%, rgba(139,92,246,0.35), transparent 60%),
-    radial-gradient(ellipse 70% 60% at 80% 30%, rgba(236,72,153,0.25), transparent 60%),
-    radial-gradient(ellipse 90% 70% at 50% 100%, rgba(99,102,241,0.3), transparent 60%),
-    linear-gradient(180deg, #0a0a12 0%, #0f0b1f 100%);
-  transition: background 0.6s ease;
-  overflow: hidden;
-}
-#desktop::after {
-  content: '';
-  position: absolute; inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
-  opacity: 0.04; pointer-events: none; mix-blend-mode: overlay;
-}
-
-/* ============= TOP MENU BAR ============= */
-#menubar {
-  position: fixed; top: 0; left: 0; right: 0;
-  height: var(--menu-h);
-  background: rgba(10, 10, 20, 0.4);
-  backdrop-filter: blur(30px) saturate(180%);
-  -webkit-backdrop-filter: blur(30px) saturate(180%);
-  border-bottom: 1px solid rgba(255,255,255,0.06);
-  display: flex; align-items: center;
-  padding: 0 16px; gap: 20px;
-  font-size: 0.78rem; font-weight: 500;
-  z-index: 500;
-  color: rgba(255,255,255,0.9);
-}
-.mb-item {
-  padding: 3px 8px; border-radius: 6px;
-  cursor: default; transition: background 0.15s;
-  display: flex; align-items: center; gap: 6px;
-}
-.mb-item:hover { background: rgba(255,255,255,0.08); }
-.mb-item.strong { font-weight: 600; }
-.mb-spacer { flex: 1; }
-.mb-logo {
-  width: 16px; height: 16px; border-radius: 5px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.3);
-}
-.mb-dot {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: #22c55e; box-shadow: 0 0 8px #22c55e;
-}
-
-/* ============= DESKTOP WIDGETS ============= */
-#widgets {
-  position: absolute;
-  top: calc(var(--menu-h) + 24px);
-  right: 24px;
-  display: flex; flex-direction: column; gap: 16px;
-  z-index: 10;
-}
-.widget {
-  width: 260px; padding: 20px;
-  background: var(--glass);
-  backdrop-filter: blur(30px) saturate(180%);
-  -webkit-backdrop-filter: blur(30px) saturate(180%);
-  border: 1px solid var(--stroke);
-  border-radius: 20px;
-  box-shadow: 0 20px 40px -10px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.08);
-}
-.widget-clock .time {
-  font-size: 2.6rem; font-weight: 300; letter-spacing: -0.04em;
-  line-height: 1; font-variant-numeric: tabular-nums;
-  background: linear-gradient(180deg, #fff, #a1a1aa);
-  -webkit-background-clip: text; background-clip: text;
-  color: transparent;
-}
-.widget-clock .date {
-  font-size: 0.78rem; color: var(--text-2); margin-top: 6px;
-  font-weight: 500;
-}
-.widget-greet .hi {
-  font-size: 0.72rem; color: var(--text-3); text-transform: uppercase;
-  letter-spacing: 0.15em; font-weight: 600;
-}
-.widget-greet .name {
-  font-size: 1.15rem; font-weight: 600; margin-top: 4px;
-  letter-spacing: -0.02em;
-}
-.widget-greet .role {
-  font-size: 0.78rem; color: var(--text-2); margin-top: 2px;
-}
-
-/* ============= DOCK ============= */
-#dock-wrap {
-  position: fixed;
-  bottom: 12px; left: 0; right: 0;
-  display: flex; justify-content: center;
-  z-index: 400;
-  pointer-events: none;
-}
-#dock {
-  pointer-events: auto;
-  display: flex; align-items: flex-end; gap: 6px;
-  padding: 8px;
-  background: rgba(25, 25, 35, 0.5);
-  backdrop-filter: blur(40px) saturate(180%);
-  -webkit-backdrop-filter: blur(40px) saturate(180%);
-  border: 1px solid var(--stroke-2);
-  border-radius: 22px;
-  box-shadow:
-    0 20px 50px -10px rgba(0,0,0,0.6),
-    0 0 0 1px rgba(255,255,255,0.04) inset,
-    0 1px 0 0 rgba(255,255,255,0.1) inset;
-}
-.dock-item {
-  position: relative;
-  width: 52px; height: 52px;
-  border-radius: 14px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 1.5rem;
-  cursor: pointer;
-  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.2s;
-  background: linear-gradient(145deg, rgba(255,255,255,0.1), rgba(255,255,255,0.02));
-  border: 1px solid rgba(255,255,255,0.08);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.15), 0 4px 12px rgba(0,0,0,0.2);
-}
-.dock-item:hover {
-  transform: translateY(-10px) scale(1.18);
-  filter: brightness(1.15);
-}
-.dock-item .tooltip {
-  position: absolute; bottom: calc(100% + 12px); left: 50%;
-  transform: translateX(-50%) translateY(4px);
-  padding: 5px 10px; border-radius: 8px;
-  background: rgba(20, 20, 30, 0.95);
-  backdrop-filter: blur(20px);
-  border: 1px solid var(--stroke-2);
-  font-size: 0.7rem; font-weight: 500; color: #fff;
-  white-space: nowrap; pointer-events: none;
-  opacity: 0; transition: all 0.2s ease;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-}
-.dock-item:hover .tooltip {
-  opacity: 1; transform: translateX(-50%) translateY(0);
-}
-.dock-running::after {
-  content: '';
-  position: absolute; bottom: -6px; left: 50%;
-  transform: translateX(-50%);
-  width: 4px; height: 4px; border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 8px var(--accent);
-}
-.dock-sep {
-  width: 1px; height: 40px;
-  background: rgba(255,255,255,0.1);
-  margin: 0 4px;
-  align-self: center;
-}
-
-/* Icon gradients per app */
-.icon-about    { background: linear-gradient(145deg, #6366f1, #8b5cf6); }
-.icon-projects { background: linear-gradient(145deg, #f59e0b, #ef4444); }
-.icon-terminal { background: linear-gradient(145deg, #1e293b, #0f172a); }
-.icon-mail     { background: linear-gradient(145deg, #06b6d4, #3b82f6); }
-.icon-settings { background: linear-gradient(145deg, #64748b, #334155); }
-.dock-item[class*="icon-"] {
-  color: #fff;
-  border: 1px solid rgba(255,255,255,0.15);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.25), 0 4px 12px rgba(0,0,0,0.3);
-}
-
-/* ============= WINDOWS ============= */
-#windows-container { position: absolute; inset: 0; pointer-events: none; }
-.window {
-  position: absolute;
-  background: var(--glass);
-  backdrop-filter: blur(40px) saturate(180%);
-  -webkit-backdrop-filter: blur(40px) saturate(180%);
-  border: 1px solid var(--stroke);
-  border-radius: 14px;
-  box-shadow: var(--shadow-window);
-  display: flex; flex-direction: column;
-  overflow: hidden;
-  pointer-events: auto;
-  min-width: 300px; min-height: 180px;
-  animation: winOpen 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-@keyframes winOpen {
-  from { opacity: 0; transform: scale(0.9) translateY(12px); }
-  to   { opacity: 1; transform: scale(1) translateY(0); }
-}
-.window.closing {
-  animation: winClose 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
-}
-@keyframes winClose {
-  to { opacity: 0; transform: scale(0.92); }
-}
-.window.focused {
-  box-shadow: var(--shadow-window-focus);
-  border-color: rgba(139, 92, 246, 0.25);
-}
-.window.minimized-anim {
-  animation: winMin 0.3s cubic-bezier(0.4, 0, 0.6, 1) forwards;
-}
-@keyframes winMin {
-  to { opacity: 0; transform: scale(0.6) translateY(200px); }
-}
-.window.maximized { border-radius: 0; }
-
-/* Titlebar */
-.win-titlebar {
-  height: 44px; flex-shrink: 0;
-  display: flex; align-items: center;
-  padding: 0 14px;
-  background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0));
-  border-bottom: 1px solid rgba(255,255,255,0.05);
-  cursor: grab;
-  gap: 10px;
-}
-.win-titlebar:active { cursor: grabbing; }
-.traffic {
-  display: flex; gap: 8px;
-  align-items: center;
-}
-.traffic-btn {
-  width: 12px; height: 12px;
-  border-radius: 50%;
-  border: none; padding: 0;
-  cursor: pointer;
-  position: relative;
-  transition: filter 0.15s;
-  background: rgba(255,255,255,0.15);
-}
-.traffic-btn.close    { background: #ff5f57; }
-.traffic-btn.minimize { background: #febc2e; }
-.traffic-btn.maximize { background: #28c840; }
-.traffic-btn:hover { filter: brightness(1.15); }
-.traffic:hover .traffic-btn::after {
-  content: '';
-  position: absolute; inset: 0;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 8px; color: rgba(0,0,0,0.55); font-weight: 700;
-}
-.traffic:hover .traffic-btn.close::after    { content: '✕'; }
-.traffic:hover .traffic-btn.minimize::after { content: '−'; }
-.traffic:hover .traffic-btn.maximize::after { content: '+'; }
-
-.win-title {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 0.82rem; font-weight: 600;
-  flex: 1; justify-content: center;
-  color: rgba(255,255,255,0.85);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  letter-spacing: -0.01em;
-  margin-right: 50px; /* balance traffic lights */
-}
-.win-title .emoji { font-size: 0.95rem; }
-
-.win-body {
-  flex: 1; overflow: auto;
-  padding: 24px;
-  font-size: 0.88rem; line-height: 1.65;
-  user-select: text;
-  color: rgba(255,255,255,0.88);
-}
-.win-body::-webkit-scrollbar { width: 10px; }
-.win-body::-webkit-scrollbar-track { background: transparent; }
-.win-body::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,0.1); border-radius: 5px;
-  border: 3px solid transparent; background-clip: padding-box;
-}
-.win-body::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); background-clip: padding-box; border: 3px solid transparent; }
-
-.win-resize {
-  position: absolute; right: 0; bottom: 0;
-  width: 14px; height: 14px;
-  cursor: nwse-resize; z-index: 5;
-}
-
-/* ============= SPOTLIGHT ============= */
-#spotlight {
-  position: fixed; inset: 0;
-  background: rgba(0,0,0,0.35);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  z-index: 900;
-  display: flex; justify-content: center;
-  padding-top: 15vh;
-  opacity: 0; pointer-events: none;
-  transition: opacity 0.2s;
-}
-#spotlight.open { opacity: 1; pointer-events: auto; }
-.spot-panel {
-  width: 560px; max-width: calc(100vw - 32px);
-  max-height: 460px;
-  background: rgba(28, 28, 40, 0.85);
-  backdrop-filter: blur(40px) saturate(180%);
-  -webkit-backdrop-filter: blur(40px) saturate(180%);
-  border: 1px solid var(--stroke-2);
-  border-radius: 18px;
-  box-shadow: 0 40px 100px -20px rgba(0,0,0,0.8);
-  overflow: hidden;
-  transform: scale(0.96) translateY(-8px);
-  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-#spotlight.open .spot-panel { transform: scale(1) translateY(0); }
-.spot-input-wrap {
-  display: flex; align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--stroke);
-  gap: 12px;
-}
-.spot-icon { font-size: 1.3rem; color: var(--text-3); }
-.spot-input {
-  flex: 1; background: transparent; border: none; outline: none;
-  color: var(--text); font: inherit; font-size: 1.05rem; font-weight: 500;
-  letter-spacing: -0.01em;
-}
-.spot-input::placeholder { color: var(--text-3); }
-.spot-results { max-height: 380px; overflow-y: auto; padding: 8px; }
-.spot-item {
-  padding: 10px 14px; border-radius: 10px;
-  display: flex; align-items: center; gap: 12px;
-  cursor: pointer; transition: background 0.12s;
-}
-.spot-item:hover, .spot-item.active { background: rgba(139, 92, 246, 0.2); }
-.spot-item .ico {
-  width: 34px; height: 34px; border-radius: 9px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 1.1rem; flex-shrink: 0;
-}
-.spot-item .info { flex: 1; }
-.spot-item .name { font-size: 0.88rem; font-weight: 500; }
-.spot-item .sub { font-size: 0.72rem; color: var(--text-3); }
-.spot-item .kbd {
-  font-size: 0.68rem; color: var(--text-3);
-  padding: 2px 6px; border-radius: 4px;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid var(--stroke);
-}
-.spot-empty { padding: 40px 20px; text-align: center; color: var(--text-3); font-size: 0.85rem; }
-
-/* ============= CONTEXT MENU ============= */
-#context-menu {
-  position: absolute; z-index: 800;
-  background: rgba(28, 28, 40, 0.9);
-  backdrop-filter: blur(40px) saturate(180%);
-  -webkit-backdrop-filter: blur(40px) saturate(180%);
-  border: 1px solid var(--stroke-2);
-  border-radius: 12px;
-  padding: 6px; min-width: 200px;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.7);
-  opacity: 0; pointer-events: none;
-  transform: scale(0.95); transform-origin: top left;
-  transition: all 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-#context-menu.open { opacity: 1; pointer-events: auto; transform: scale(1); }
-.ctx-item {
-  padding: 8px 12px; border-radius: 8px;
-  display: flex; align-items: center; gap: 10px;
-  font-size: 0.82rem; cursor: pointer;
-  color: rgba(255,255,255,0.85);
-  transition: background 0.1s;
-}
-.ctx-item:hover { background: rgba(139, 92, 246, 0.25); }
-.ctx-item .kbd {
-  margin-left: auto; font-size: 0.68rem;
-  color: var(--text-3);
-}
-.ctx-sep { height: 1px; background: var(--stroke); margin: 4px 8px; }
-
-/* ============= APP CONTENT ============= */
-.about-hero { display: flex; gap: 18px; align-items: center; margin-bottom: 24px; }
-.about-avatar {
-  width: 76px; height: 76px; border-radius: 22px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2) 60%, var(--accent-3));
-  display: flex; align-items: center; justify-content: center;
-  font-size: 2rem; flex-shrink: 0;
-  box-shadow: inset 0 2px 0 rgba(255,255,255,0.25), 0 10px 30px -5px rgba(139,92,246,0.5);
-}
-.about-name { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.02em; }
-.about-role { color: var(--accent); font-size: 0.85rem; font-weight: 500; margin-top: 2px; }
-.section-title {
-  font-size: 0.68rem; text-transform: uppercase;
-  letter-spacing: 0.15em; color: var(--text-3);
-  font-weight: 700;
-  margin: 22px 0 10px;
-}
-.skill-tags { display: flex; flex-wrap: wrap; gap: 6px; }
-.skill-tag {
-  padding: 5px 11px; border-radius: 8px;
-  background: rgba(139, 92, 246, 0.12);
-  border: 1px solid rgba(139, 92, 246, 0.25);
-  color: #c4b5fd; font-size: 0.74rem; font-weight: 500;
-}
-
-/* File Explorer */
-.explorer { display: flex; height: 100%; margin: -24px; }
-.explorer-side {
-  width: 190px; flex-shrink: 0;
-  background: rgba(0,0,0,0.15);
-  border-right: 1px solid var(--stroke);
-  padding: 14px 8px; overflow-y: auto;
-}
-.side-item {
-  padding: 8px 12px; border-radius: 8px;
-  font-size: 0.82rem; cursor: pointer;
-  display: flex; align-items: center; gap: 9px;
-  color: var(--text-2); transition: all 0.12s;
-  margin-bottom: 2px;
-}
-.side-item:hover { background: rgba(255,255,255,0.05); color: var(--text); }
-.side-item.active {
-  background: linear-gradient(135deg, rgba(139,92,246,0.25), rgba(99,102,241,0.2));
-  color: #fff;
-  border: 1px solid rgba(139,92,246,0.3);
-}
-.explorer-main { flex: 1; padding: 20px; overflow-y: auto; }
-.explorer-path {
-  font-size: 0.72rem; color: var(--text-3);
-  margin-bottom: 16px; padding-bottom: 10px;
-  border-bottom: 1px solid var(--stroke);
-  font-weight: 500;
-}
-.project-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
-.project-card {
-  padding: 16px; border-radius: 12px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid var(--stroke);
-  cursor: pointer; transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-.project-card:hover {
-  background: rgba(139, 92, 246, 0.1);
-  border-color: rgba(139, 92, 246, 0.4);
-  transform: translateY(-3px);
-  box-shadow: 0 12px 30px -10px rgba(139,92,246,0.3);
-}
-.project-card .emoji { font-size: 1.8rem; margin-bottom: 10px; }
-.project-card .title { font-weight: 600; font-size: 0.85rem; margin-bottom: 4px; }
-.project-card .desc { font-size: 0.72rem; color: var(--text-2); line-height: 1.45; }
-
-/* Terminal */
-.terminal {
-  font-family: 'JetBrains Mono', Menlo, Monaco, Consolas, monospace;
-  font-size: 0.82rem; line-height: 1.7;
-  background: rgba(0,0,0,0.35);
-  padding: 20px;
-  margin: -24px; height: calc(100% + 48px);
-  overflow-y: auto;
-  letter-spacing: -0.01em;
-}
-.term-line { white-space: pre-wrap; word-wrap: break-word; }
-.term-prompt { color: #a78bfa; font-weight: 600; }
-.term-path { color: #60a5fa; }
-.term-out { color: rgba(255,255,255,0.65); }
-.term-err { color: #f87171; }
-.term-input-line { display: flex; align-items: center; }
-.term-input {
-  flex: 1; background: transparent; border: none;
-  color: var(--text); font: inherit;
-  outline: none; margin-left: 10px;
-  caret-color: var(--accent);
-}
-
-/* Mail */
-.mail-form { display: flex; flex-direction: column; gap: 14px; }
-.mail-field label {
-  display: block; font-size: 0.7rem;
-  text-transform: uppercase; letter-spacing: 0.1em;
-  color: var(--text-3); margin-bottom: 6px; font-weight: 600;
-}
-.mail-field input, .mail-field textarea {
-  width: 100%; padding: 11px 14px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid var(--stroke); border-radius: 10px;
-  color: var(--text); font: inherit; font-size: 0.85rem;
-  outline: none; resize: vertical;
-  transition: all 0.15s;
-}
-.mail-field input:focus, .mail-field textarea:focus {
-  border-color: var(--accent);
-  background: rgba(139, 92, 246, 0.06);
-  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.15);
-}
-.btn-primary {
-  padding: 12px 22px; border: none;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  color: #fff; border-radius: 10px;
-  cursor: pointer; font-weight: 600; font-size: 0.85rem;
-  transition: transform 0.15s, box-shadow 0.2s, filter 0.15s;
-  box-shadow: 0 8px 24px -8px rgba(139, 92, 246, 0.6), inset 0 1px 0 rgba(255,255,255,0.2);
-}
-.btn-primary:hover {
-  transform: translateY(-1px);
-  filter: brightness(1.1);
-  box-shadow: 0 12px 30px -8px rgba(139, 92, 246, 0.8), inset 0 1px 0 rgba(255,255,255,0.2);
-}
-.socials { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
-.social-chip {
-  padding: 8px 14px; border-radius: 10px;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid var(--stroke);
-  color: var(--text); text-decoration: none;
-  font-size: 0.78rem; font-weight: 500;
-  transition: all 0.15s;
-  cursor: pointer;
-  display: flex; align-items: center; gap: 6px;
-}
-.social-chip:hover {
-  background: rgba(139, 92, 246, 0.18);
-  border-color: rgba(139, 92, 246, 0.4);
-  transform: translateY(-1px);
-}
-
-/* Settings */
-.wallpaper-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-.wallpaper-item {
-  aspect-ratio: 16/10; border-radius: 12px;
-  cursor: pointer;
-  border: 2px solid transparent;
-  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-  position: relative;
-}
-.wallpaper-item:hover { transform: scale(1.04); }
-.wallpaper-item.active {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.2), 0 10px 25px -5px rgba(139,92,246,0.4);
-}
-.wallpaper-item.active::after {
-  content: '✓'; position: absolute; bottom: 8px; right: 8px;
-  width: 22px; height: 22px; border-radius: 50%;
-  background: var(--accent); color: #fff;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 0.75rem; font-weight: 700;
-}
-
-/* ============= MOBILE ============= */
-@media (max-width: 720px) {
-  :root { --menu-h: 28px; --dock-h: 68px; }
-  #widgets { display: none; }
-  .window {
-    top: var(--menu-h) !important; left: 0 !important;
-    width: 100vw !important;
-    height: calc(100vh - var(--menu-h) - var(--dock-h) - 20px) !important;
-    border-radius: 0; border-left: none; border-right: none;
-  }
-  .win-resize { display: none; }
-  .explorer-side { width: 130px; }
-  .spot-panel { width: calc(100vw - 24px); }
-  .dock-item { width: 46px; height: 46px; font-size: 1.3rem; }
-}
-</style>
-</head>
-<body>
-
-<!-- BOOT -->
-<div id="boot">
-  <div class="boot-glow"></div>
-  <div class="boot-mark">A</div>
-  <div class="boot-name">AryOS</div>
-  <div class="boot-sub">Portfolio Edition</div>
-  <div class="boot-bar"><div class="boot-bar-fill" id="boot-fill"></div></div>
-</div>
-
-<!-- MENU BAR -->
-<div id="menubar">
-  <div class="mb-item strong"><span class="mb-logo"></span>AryOS</div>
-  <div class="mb-item">File</div>
-  <div class="mb-item">Edit</div>
-  <div class="mb-item">View</div>
-  <div class="mb-item">Help</div>
-  <div class="mb-spacer"></div>
-  <div class="mb-item" id="mb-status"><span class="mb-dot"></span>online</div>
-  <div class="mb-item">🔋 100%</div>
-  <div class="mb-item">🔊</div>
-  <div class="mb-item" id="mb-clock"></div>
-</div>
-
-<!-- DESKTOP -->
-<div id="desktop">
-  <!-- WIDGETS -->
-  <div id="widgets">
-    <div class="widget widget-clock">
-      <div class="time" id="wg-time">00:00</div>
-      <div class="date" id="wg-date">—</div>
-    </div>
-    <div class="widget widget-greet">
-      <div class="hi">Welcome back</div>
-      <div class="name">Ary 👋</div>
-      <div class="role">Frontend Developer · Available for work</div>
-    </div>
-  </div>
-
-  <div id="windows-container"></div>
-</div>
-
-<!-- DOCK -->
-<div id="dock-wrap">
-  <div id="dock"></div>
-</div>
-
-<!-- SPOTLIGHT -->
-<div id="spotlight">
-  <div class="spot-panel">
-    <div class="spot-input-wrap">
-      <span class="spot-icon">🔍</span>
-      <input class="spot-input" id="spot-input" placeholder="Cari aplikasi atau perintah...">
-    </div>
-    <div class="spot-results" id="spot-results"></div>
-  </div>
-</div>
-
-<!-- CONTEXT MENU -->
-<div id="context-menu">
-  <div class="ctx-item" data-action="terminal">💻 Buka Terminal <span class="kbd">⌘T</span></div>
-  <div class="ctx-item" data-action="about">👤 Tentang Saya</div>
-  <div class="ctx-item" data-action="spotlight">🔍 Spotlight <span class="kbd">⌘K</span></div>
-  <div class="ctx-sep"></div>
-  <div class="ctx-item" data-action="wallpaper">🖼️ Ganti Wallpaper</div>
-  <div class="ctx-item" data-action="refresh">🔄 Tutup Semua Window</div>
-</div>
-
-<script>
-/* =========================================================
-   STATE
-========================================================= */
-const OS = {
-  windows: {},
-  topZ: 100,
-  windowIdCounter: 0,
-  spotIdx: 0,
-  spotFiltered: [],
-  wallpapers: [
-    // Mesh gradient wallpapers (modern style)
-    `radial-gradient(ellipse 80% 60% at 20% 10%, rgba(139,92,246,0.35), transparent 60%),
-     radial-gradient(ellipse 70% 60% at 80% 30%, rgba(236,72,153,0.25), transparent 60%),
-     radial-gradient(ellipse 90% 70% at 50% 100%, rgba(99,102,241,0.3), transparent 60%),
-     linear-gradient(180deg, #0a0a12 0%, #0f0b1f 100%)`,
-    `radial-gradient(ellipse 70% 60% at 30% 20%, rgba(6,182,212,0.4), transparent 60%),
-     radial-gradient(ellipse 80% 60% at 80% 80%, rgba(59,130,246,0.35), transparent 60%),
-     linear-gradient(180deg, #04141c 0%, #0a1a2e 100%)`,
-    `radial-gradient(ellipse 80% 60% at 20% 80%, rgba(251,146,60,0.35), transparent 60%),
-     radial-gradient(ellipse 70% 60% at 80% 20%, rgba(244,63,94,0.3), transparent 60%),
-     linear-gradient(180deg, #1a0a0f 0%, #2a1015 100%)`,
-    `radial-gradient(ellipse 80% 60% at 50% 50%, rgba(34,197,94,0.25), transparent 60%),
-     radial-gradient(ellipse 60% 60% at 80% 20%, rgba(16,185,129,0.3), transparent 60%),
-     linear-gradient(180deg, #051410 0%, #0a1f1a 100%)`,
-    `radial-gradient(ellipse 90% 60% at 30% 10%, rgba(168,85,247,0.4), transparent 60%),
-     radial-gradient(ellipse 80% 60% at 80% 90%, rgba(59,7,100,0.5), transparent 60%),
-     linear-gradient(180deg, #0d0518 0%, #1a0a2e 100%)`,
-    `radial-gradient(ellipse 100% 60% at 50% 0%, rgba(255,255,255,0.08), transparent 60%),
-     radial-gradient(ellipse 80% 60% at 20% 100%, rgba(99,102,241,0.4), transparent 60%),
-     linear-gradient(180deg, #0a0a0a 0%, #151520 100%)`
-  ],
-  currentWallpaper: 0
-};
-
-/* =========================================================
-   APPS
-========================================================= */
-const APPS = {
-  about: {
-    title: 'Tentang Saya', icon: '👤', iconClass: 'icon-about',
-    width: 560, height: 500,
-    render: () => `
-      <div class="about-hero">
-        <div class="about-avatar">👨‍💻</div>
-        <div>
-          <div class="about-name">Ary</div>
-          <div class="about-role">Frontend Developer & UI Enthusiast</div>
-        </div>
-      </div>
-      <p style="color:rgba(255,255,255,0.75);">Saya seorang developer yang suka bikin hal-hal interaktif di web. Fokus di React, TypeScript, dan animasi. Portfolio berbentuk OS ini salah satu eksperimen saya untuk menggabungkan skill teknis dengan storytelling.</p>
-      <h3 class="section-title">Skills</h3>
-      <div class="skill-tags">
-        <span class="skill-tag">React</span>
-        <span class="skill-tag">Next.js</span>
-        <span class="skill-tag">TypeScript</span>
-        <span class="skill-tag">Tailwind</span>
-        <span class="skill-tag">Framer Motion</span>
-        <span class="skill-tag">Node.js</span>
-        <span class="skill-tag">UI/UX</span>
-      </div>
-      <h3 class="section-title">Sekarang</h3>
-      <p style="color:var(--text-2);font-size:0.85rem;">Terbuka untuk freelance & kolaborasi. Buka <b style="color:var(--accent)">Mail</b> untuk kontak, atau <b style="color:var(--accent)">Terminal</b> untuk explore lebih dalam ✨</p>
-    `
-  },
-
-  projects: {
-    title: 'File Explorer', icon: '📁', iconClass: 'icon-projects',
-    width: 780, height: 520,
-    render: () => `
-      <div class="explorer">
-        <div class="explorer-side">
-          <div class="side-item active">📂 Semua Project</div>
-          <div class="side-item">⭐ Featured</div>
-          <div class="side-item">🌐 Web Apps</div>
-          <div class="side-item">🎨 UI Experiments</div>
-          <div class="side-item">🛠️ Tools</div>
-        </div>
-        <div class="explorer-main">
-          <div class="explorer-path">~/Projects</div>
-          <div class="project-grid">
-            ${[
-              { emoji: '🛒', title: 'E-Commerce App', desc: 'Full-stack toko online dengan Next.js + Stripe' },
-              { emoji: '📊', title: 'Dashboard Analytics', desc: 'Real-time chart & data viz' },
-              { emoji: '💬', title: 'Chat App', desc: 'WebSocket chat dengan auth' },
-              { emoji: '🎵', title: 'Music Player', desc: 'Custom audio visualizer' },
-              { emoji: '📝', title: 'Note Taking', desc: 'Markdown editor + cloud sync' },
-              { emoji: '🎮', title: 'Mini Game', desc: 'Game browser pakai Canvas' }
-            ].map(p => `
-              <div class="project-card" data-project="${p.title}" data-emoji="${p.emoji}">
-                <div class="emoji">${p.emoji}</div>
-                <div class="title">${p.title}</div>
-                <div class="desc">${p.desc}</div>
-              </div>
-            `).join('')}
-          </div>
-        </div>
-      </div>
-    `,
-    onMount: (el) => {
-      el.querySelectorAll('.project-card').forEach(card => {
-        card.addEventListener('click', () => {
-          const name = card.dataset.project;
-          const emoji = card.dataset.emoji;
-          createWindow('project-detail-' + name, {
-            title: name, icon: emoji, iconClass: 'icon-projects',
-            width: 540, height: 440, singleton: false,
-            render: () => `
-              <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
-                <div style="font-size:2.5rem;">${emoji}</div>
-                <div>
-                  <h2 style="font-size:1.4rem;font-weight:700;letter-spacing:-0.02em;">${name}</h2>
-                  <div style="color:var(--text-2);font-size:0.8rem;">Placeholder detail project</div>
-                </div>
-              </div>
-              <p style="color:var(--text-2);">Detail project ini akan kamu isi sendiri nanti. Ceritakan role, tantangan, dan solusi yang kamu bikin di project ini.</p>
-              <h3 class="section-title">Tech Stack</h3>
-              <div class="skill-tags">
-                <span class="skill-tag">React</span>
-                <span class="skill-tag">TypeScript</span>
-                <span class="skill-tag">Tailwind</span>
-              </div>
-              <h3 class="section-title">Link</h3>
-              <div class="socials">
-                <a class="social-chip" href="#" target="_blank">🔗 Live Demo</a>
-                <a class="social-chip" href="#" target="_blank">💻 GitHub</a>
-              </div>
-            `
-          });
-        });
-      });
-    }
-  },
-
-  terminal: {
-    title: 'Terminal', icon: '⌨️', iconClass: 'icon-terminal',
-    width: 660, height: 440,
-    render: () => `
-      <div class="terminal" id="terminal-root">
-        <div class="term-line term-out">AryOS Terminal — v1.0.0</div>
-        <div class="term-line term-out">Ketik <span style="color:#a78bfa">help</span> untuk lihat command tersedia.</div>
-        <div class="term-line">&nbsp;</div>
-      </div>
-    `,
-    onMount: initTerminal
-  },
-
-  contact: {
-    title: 'Mail — Kontak', icon: '✉️', iconClass: 'icon-mail',
-    width: 560, height: 540,
-    render: () => `
-      <div class="mail-form">
-        <div class="mail-field">
-          <label>Nama</label>
-          <input type="text" placeholder="Nama kamu...">
-        </div>
-        <div class="mail-field">
-          <label>Email</label>
-          <input type="email" placeholder="email@kamu.com">
-        </div>
-        <div class="mail-field">
-          <label>Pesan</label>
-          <textarea rows="5" placeholder="Tulis pesan..."></textarea>
-        </div>
-        <button class="btn-primary" onclick="alert('Demo aja ya! Nanti connect ke Formspree/Resend.')">Kirim Pesan</button>
-        <h3 class="section-title">Atau via</h3>
-        <div class="socials">
-          <a class="social-chip" href="mailto:hi@example.com">📧 Email</a>
-          <a class="social-chip" href="https://github.com" target="_blank">💻 GitHub</a>
-          <a class="social-chip" href="https://linkedin.com" target="_blank">💼 LinkedIn</a>
-          <a class="social-chip" href="https://twitter.com" target="_blank">🐦 Twitter</a>
-        </div>
-      </div>
-    `
-  },
-
-  settings: {
-    title: 'Pengaturan', icon: '⚙️', iconClass: 'icon-settings',
-    width: 600, height: 500,
-    render: () => `
-      <h3 class="section-title">Wallpaper</h3>
-      <div class="wallpaper-grid">
-        ${OS.wallpapers.map((w, i) => `
-          <div class="wallpaper-item ${i === OS.currentWallpaper ? 'active' : ''}"
-               style="background:${w};background-size:cover"
-               data-wallpaper="${i}"></div>
-        `).join('')}
-      </div>
-      <h3 class="section-title">Sistem</h3>
-      <p style="font-size:0.85rem;color:var(--text-2);">
-        <b style="color:var(--text)">AryOS v1.0.0</b><br>
-        Dibuat dengan HTML, CSS, dan JavaScript murni.<br>
-        Zero dependencies. Pure web platform. 🚀
-      </p>
-      <h3 class="section-title">Shortcut</h3>
-      <div style="font-size:0.82rem;color:var(--text-2);line-height:2;">
-        <div><kbd style="background:rgba(255,255,255,0.08);padding:2px 8px;border-radius:6px;font-family:monospace;font-size:0.75rem;">⌘K</kbd> &nbsp; Spotight search</div>
-        <div><kbd style="background:rgba(255,255,255,0.08);padding:2px 8px;border-radius:6px;font-family:monospace;font-size:0.75rem;">Esc</kbd> &nbsp; Tutup menu/modal</div>
-        <div><kbd style="background:rgba(255,255,255,0.08);padding:2px 8px;border-radius:6px;font-family:monospace;font-size:0.75rem;">Right-click</kbd> &nbsp; Context menu</div>
-      </div>
-    `,
-    onMount: (el) => {
-      el.querySelectorAll('.wallpaper-item').forEach(item => {
-        item.addEventListener('click', () => {
-          const idx = parseInt(item.dataset.wallpaper);
-          OS.currentWallpaper = idx;
-          document.getElementById('desktop').style.background = OS.wallpapers[idx];
-          document.getElementById('desktop').style.backgroundSize = 'cover';
-          el.querySelectorAll('.wallpaper-item').forEach(i => i.classList.remove('active'));
-          item.classList.add('active');
-        });
-      });
-    }
-  }
-};
-
-/* =========================================================
-   DOCK
-========================================================= */
-const DOCK_APPS = ['about', 'projects', 'terminal', 'contact', 'settings'];
-
-function renderDock() {
-  const dock = document.getElementById('dock');
-  dock.innerHTML = DOCK_APPS.map(id => {
-    const app = APPS[id];
-    return `
-      <div class="dock-item ${app.iconClass}" data-app="${id}">
-        <span>${app.icon}</span>
-        <div class="tooltip">${app.title}</div>
-      </div>
-    `;
-  }).join('') + `
-    <div class="dock-sep"></div>
-    <div class="dock-item" data-action="spotlight" style="background:linear-gradient(145deg,rgba(255,255,255,0.12),rgba(255,255,255,0.03));">
-      <span>🔍</span>
-      <div class="tooltip">Spotlight (⌘K)</div>
-    </div>
-  `;
-
-  dock.querySelectorAll('.dock-item').forEach(item => {
-    item.addEventListener('click', () => {
-      if (item.dataset.action === 'spotlight') return openSpotlight();
-      if (item.dataset.app) openApp(item.dataset.app);
-    });
-  });
-}
-
-function updateDockRunning() {
-  const runningApps = new Set(Object.values(OS.windows).filter(w => w.appId && APPS[w.appId]).map(w => w.appId));
-  document.querySelectorAll('.dock-item[data-app]').forEach(el => {
-    el.classList.toggle('dock-running', runningApps.has(el.dataset.app));
-  });
-}
-
-/* =========================================================
-   WINDOW MANAGER
-========================================================= */
-function openApp(appId) {
-  const app = APPS[appId];
-  if (!app) return;
-
-  // Singleton: kalau udah ada, focus
-  const existing = Object.values(OS.windows).find(w => w.appId === appId && w.singleton !== false);
-  if (existing) {
-    if (existing.state.minimized) restoreWindow(existing.id);
-    else focusWindow(existing.id);
-    return;
-  }
-  createWindow(appId, { ...app, singleton: true });
-}
-
-function createWindow(appId, config) {
-  const id = 'win-' + (++OS.windowIdCounter);
-  const isMobile = window.matchMedia('(max-width: 720px)').matches;
-
-  const offset = (OS.windowIdCounter % 8) * 28;
-  const w = config.width || 500;
-  const h = config.height || 400;
-  const left = isMobile ? 0 : Math.min(140 + offset, window.innerWidth - w - 24);
-  const top = isMobile ? 32 : Math.min(70 + offset, window.innerHeight - h - 100);
-
-  const el = document.createElement('div');
-  el.className = 'window focused';
-  el.dataset.id = id;
-  el.style.left = left + 'px';
-  el.style.top = top + 'px';
-  el.style.width = w + 'px';
-  el.style.height = h + 'px';
-  el.style.zIndex = ++OS.topZ;
-
-  el.innerHTML = `
-    <div class="win-titlebar">
-      <div class="traffic">
-        <button class="traffic-btn close" title="Close"></button>
-        <button class="traffic-btn minimize" title="Minimize"></button>
-        <button class="traffic-btn maximize" title="Maximize"></button>
-      </div>
-      <div class="win-title">
-        <span class="emoji">${config.icon}</span>
-        <span>${config.title}</span>
-      </div>
-    </div>
-    <div class="win-body">${config.render()}</div>
-    <div class="win-resize"></div>
-  `;
-
-  document.getElementById('windows-container').appendChild(el);
-
-  const winObj = {
-    id, appId, el,
-    singleton: config.singleton,
-    state: { minimized: false, maximized: false, prevBounds: null }
-  };
-  OS.windows[id] = winObj;
-
-  el.querySelector('.traffic-btn.close').addEventListener('click', e => { e.stopPropagation(); closeWindow(id); });
-  el.querySelector('.traffic-btn.minimize').addEventListener('click', e => { e.stopPropagation(); minimizeWindow(id); });
-  el.querySelector('.traffic-btn.maximize').addEventListener('click', e => { e.stopPropagation(); toggleMaximize(id); });
-
-  el.addEventListener('mousedown', () => focusWindow(id));
-
-  makeDraggable(el, el.querySelector('.win-titlebar'));
-  makeResizable(el, el.querySelector('.win-resize'));
-
-  if (config.onMount) {
-    const body = el.querySelector('.win-body');
-    setTimeout(() => config.onMount(body, id), 30);
-  }
-
-  updateDockRunning();
-  updateTaskbarState();
-  return id;
-}
-
-function focusWindow(id) {
-  const w = OS.windows[id];
-  if (!w) return;
-  w.el.style.zIndex = ++OS.topZ;
-  Object.values(OS.windows).forEach(x => x.el.classList.toggle('focused', x.id === id));
-}
-
-function closeWindow(id) {
-  const w = OS.windows[id];
-  if (!w) return;
-  w.el.classList.add('closing');
-  setTimeout(() => {
-    w.el.remove();
-    delete OS.windows[id];
-    updateDockRunning();
-    updateTaskbarState();
-  }, 180);
-}
-
-function minimizeWindow(id) {
-  const w = OS.windows[id];
-  if (!w) return;
-  w.state.minimized = true;
-  w.el.classList.add('minimized-anim');
-  setTimeout(() => {
-    w.el.style.display = 'none';
-    w.el.classList.remove('minimized-anim');
-  }, 250);
-}
-
-function restoreWindow(id) {
-  const w = OS.windows[id];
-  if (!w) return;
-  w.state.minimized = false;
-  w.el.style.display = 'flex';
-  w.el.style.animation = 'winOpen 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)';
-  focusWindow(id);
-}
-
-function toggleMaximize(id) {
-  const w = OS.windows[id];
-  if (!w) return;
-  const el = w.el;
-  if (w.state.maximized) {
-    const b = w.state.prevBounds;
-    el.style.left = b.left; el.style.top = b.top;
-    el.style.width = b.width; el.style.height = b.height;
-    el.classList.remove('maximized');
-    w.state.maximized = false;
-  } else {
-    w.state.prevBounds = { left: el.style.left, top: el.style.top, width: el.style.width, height: el.style.height };
-    el.style.left = '0px';
-    el.style.top = 'var(--menu-h)';
-    el.style.width = '100vw';
-    el.style.height = `calc(100vh - var(--menu-h) - var(--dock-h) - 20px)`;
-    el.classList.add('maximized');
-    w.state.maximized = true;
-  }
-}
-
-function updateTaskbarState() { /* no taskbar in this design — dock shows running */ }
-
-/* =========================================================
-   DRAG & RESIZE
-========================================================= */
-function makeDraggable(el, handle) {
-  let startX, startY, startLeft, startTop, dragging = false;
-
-  handle.addEventListener('mousedown', e => {
-    if (e.target.closest('.traffic-btn')) return;
-    if (OS.windows[el.dataset.id]?.state.maximized) return;
-    if (window.matchMedia('(max-width: 720px)').matches) return;
-    dragging = true;
-    startX = e.clientX; startY = e.clientY;
-    startLeft = el.offsetLeft; startTop = el.offsetTop;
-    document.body.style.cursor = 'grabbing';
-    e.preventDefault();
-  });
-
-  document.addEventListener('mousemove', e => {
-    if (!dragging) return;
-    const dx = e.clientX - startX;
-    const dy = e.clientY - startY;
-    let newLeft = startLeft + dx;
-    let newTop = startTop + dy;
-    newLeft = Math.max(-el.offsetWidth + 100, Math.min(newLeft, window.innerWidth - 100));
-    newTop = Math.max(32, Math.min(newTop, window.innerHeight - 100));
-    el.style.left = newLeft + 'px';
-    el.style.top = newTop + 'px';
-  });
-
-  document.addEventListener('mouseup', () => {
-    if (dragging) { dragging = false; document.body.style.cursor = ''; }
-  });
-}
-
-function makeResizable(el, handle) {
-  let resizing = false, startX, startY, startW, startH;
-  handle.addEventListener('mousedown', e => {
-    if (OS.windows[el.dataset.id]?.state.maximized) return;
-    resizing = true;
-    startX = e.clientX; startY = e.clientY;
-    startW = el.offsetWidth; startH = el.offsetHeight;
-    e.preventDefault(); e.stopPropagation();
-  });
-  document.addEventListener('mousemove', e => {
-    if (!resizing) return;
-    el.style.width = Math.max(300, startW + (e.clientX - startX)) + 'px';
-    el.style.height = Math.max(180, startH + (e.clientY - startY)) + 'px';
-  });
-  document.addEventListener('mouseup', () => { resizing = false; });
-}
-
-/* =========================================================
-   TERMINAL
-========================================================= */
-function initTerminal(root) {
-  const term = root.querySelector('#terminal-root');
-  let history = [], histIdx = -1;
-
-  const commands = {
-    help: () => `Command tersedia:
-  about      - Tentang saya
-  projects   - List project
-  contact    - Info kontak
-  skills     - Skill & tools
-  clear      - Bersihkan layar
-  whoami     - Siapa kamu
-  date       - Tanggal & waktu
-  echo <msg> - Echo pesan
-  open <app> - Buka aplikasi
-  sudo       - Jangan coba 😏`,
-    about: () => `Ary — Frontend Developer & UI Enthusiast.
-Fokus di React, TypeScript, dan animasi web.
-Suka bikin hal-hal interaktif & eksperimental di browser.`,
-    projects: () => `Project yang tersedia:
-  1. E-Commerce App       (Next.js + Stripe)
-  2. Dashboard Analytics  (React + D3)
-  3. Chat App             (WebSocket)
-  4. Music Player         (Canvas API)
-  5. Note Taking          (Markdown)
-  6. Mini Game            (HTML5 Canvas)
-
-Ketik "open projects" untuk lihat detail.`,
-    contact: () => `Email    : hi@example.com
-GitHub   : github.com/ary
-LinkedIn : linkedin.com/in/ary`,
-    skills: () => `Languages : JavaScript, TypeScript, HTML, CSS
-Framework : React, Next.js, Node.js, Express
-Tools     : Tailwind, Framer Motion, Git, Figma`,
-    whoami: () => `visitor@aryos`,
-    date: () => new Date().toString(),
-    sudo: () => `Nice try 😏 Tapi kamu bukan admin di sini.`,
-    open: (args) => {
-      if (!args[0]) return 'Usage: open <app>. Coba: open projects';
-      const map = { projects: 'projects', about: 'about', mail: 'contact', contact: 'contact', terminal: 'terminal', settings: 'settings' };
-      const target = map[args[0]];
-      if (target) { openApp(target); return `Membuka ${args[0]}...`; }
-      return `App "${args[0]}" tidak ditemukan.`;
-    }
-  };
-
-  function print(text, cls = 'term-out') {
-    const line = document.createElement('div');
-    line.className = 'term-line ' + cls;
-    line.textContent = text;
-    term.appendChild(line);
-  }
-  function printInput(cmd) {
-    const line = document.createElement('div');
-    line.className = 'term-line';
-    line.innerHTML = `<span class="term-prompt">visitor@aryos</span>:<span class="term-path">~</span>$ ${escapeHtml(cmd)}`;
-    term.appendChild(line);
-  }
-  function escapeHtml(s) {
-    return s.replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
-  }
-
-  function buildPrompt() {
-    const line = document.createElement('div');
-    line.className = 'term-line term-input-line';
-    line.innerHTML = `<span class="term-prompt">visitor@aryos</span>:<span class="term-path">~</span>$`;
-    const input = document.createElement('input');
-    input.className = 'term-input';
-    input.autocomplete = 'off'; input.spellcheck = false;
-    line.appendChild(input);
-    term.appendChild(line);
-    input.focus();
-    term.scrollTop = term.scrollHeight;
-
-    input.addEventListener('keydown', e => {
-      if (e.key === 'Enter') {
-        const val = input.value.trim();
-        if (val) { history.push(val); histIdx = history.length; }
-        input.style.display = 'none';
-        printInput(val);
-        if (val) {
-          const [cmd, ...args] = val.split(/\s+/);
-          if (cmd === 'clear') term.innerHTML = '';
-          else if (commands[cmd]) {
-            const out = commands[cmd](args);
-            if (out) print(out);
-          } else print(`command not found: ${cmd}. Ketik "help".`, 'term-err');
-        }
-        print('');
-        buildPrompt();
-        term.scrollTop = term.scrollHeight;
-      } else if (e.key === 'ArrowUp') {
-        if (histIdx > 0) { histIdx--; input.value = history[histIdx]; }
-        e.preventDefault();
-      } else if (e.key === 'ArrowDown') {
-        if (histIdx < history.length - 1) { histIdx++; input.value = history[histIdx]; }
-        else { histIdx = history.length; input.value = ''; }
-        e.preventDefault();
-      }
-    });
-    term.onclick = (e) => { if (!e.target.closest('input')) input.focus(); };
-  }
-  buildPrompt();
-}
-
-/* =========================================================
-   SPOTLIGHT
-========================================================= */
-function openSpotlight() {
-  const sp = document.getElementById('spotlight');
-  sp.classList.add('open');
-  const input = document.getElementById('spot-input');
-  input.value = '';
-  input.focus();
-  renderSpotlight('');
-}
-function closeSpotlight() {
-  document.getElementById('spotlight').classList.remove('open');
-}
-
-function renderSpotlight(query) {
-  const results = document.getElementById('spot-results');
-  const apps = Object.entries(APPS).filter(([id, a]) =>
-    a.title.toLowerCase().includes(query.toLowerCase())
-  );
-  OS.spotFiltered = apps;
-  if (OS.spotIdx >= apps.length) OS.spotIdx = 0;
-
-  if (!apps.length) {
-    results.innerHTML = `<div class="spot-empty">Tidak ada hasil untuk "${query}"</div>`;
-    return;
-  }
-
-  results.innerHTML = apps.map(([id, app], i) => `
-    <div class="spot-item ${i === OS.spotIdx ? 'active' : ''}" data-app="${id}">
-      <div class="ico ${app.iconClass}" style="color:#fff;">${app.icon}</div>
-      <div class="info">
-        <div class="name">${app.title}</div>
-        <div class="sub">Aplikasi · AryOS</div>
-      </div>
-      <span class="kbd">↵</span>
-    </div>
-  `).join('');
-
-  results.querySelectorAll('.spot-item').forEach(el => {
-    el.addEventListener('click', () => {
-      openApp(el.dataset.app);
-      closeSpotlight();
-    });
-  });
-}
-
-document.getElementById('spot-input').addEventListener('input', e => {
-  OS.spotIdx = 0;
-  renderSpotlight(e.target.value);
-});
-document.getElementById('spot-input').addEventListener('keydown', e => {
-  if (e.key === 'ArrowDown') {
-    OS.spotIdx = Math.min(OS.spotIdx + 1, OS.spotFiltered.length - 1);
-    renderSpotlight(e.target.value);
-    e.preventDefault();
-  } else if (e.key === 'ArrowUp') {
-    OS.spotIdx = Math.max(OS.spotIdx - 1, 0);
-    renderSpotlight(e.target.value);
-    e.preventDefault();
-  } else if (e.key === 'Enter') {
-    const [id] = OS.spotFiltered[OS.spotIdx] || [];
-    if (id) { openApp(id); closeSpotlight(); }
-  } else if (e.key === 'Escape') {
-    closeSpotlight();
-  }
-});
-document.getElementById('spotlight').addEventListener('click', e => {
-  if (e.target.id === 'spotlight') closeSpotlight();
-});
-
-/* =========================================================
-   CONTEXT MENU
-========================================================= */
-const ctxMenu = document.getElementById('context-menu');
-document.getElementById('desktop').addEventListener('contextmenu', e => {
-  if (e.target.closest('.window')) return;
-  e.preventDefault();
-  ctxMenu.style.left = Math.min(e.clientX, window.innerWidth - 220) + 'px';
-  ctxMenu.style.top = Math.min(e.clientY, window.innerHeight - 240) + 'px';
-  ctxMenu.classList.add('open');
-});
-document.addEventListener('click', e => {
-  if (!ctxMenu.contains(e.target)) ctxMenu.classList.remove('open');
-});
-ctxMenu.querySelectorAll('.ctx-item').forEach(item => {
-  item.addEventListener('click', () => {
-    const action = item.dataset.action;
-    if (action === 'terminal') openApp('terminal');
-    else if (action === 'about') openApp('about');
-    else if (action === 'spotlight') openSpotlight();
-    else if (action === 'wallpaper') {
-      OS.currentWallpaper = (OS.currentWallpaper + 1) % OS.wallpapers.length;
-      document.getElementById('desktop').style.background = OS.wallpapers[OS.currentWallpaper];
-      document.getElementById('desktop').style.backgroundSize = 'cover';
-    } else if (action === 'refresh') {
-      Object.keys(OS.windows).forEach(closeWindow);
-    }
-    ctxMenu.classList.remove('open');
-  });
-});
-
-/* =========================================================
-   CLOCK
-========================================================= */
-function updateClock() {
-  const now = new Date();
-  const time = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-  const date = now.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' });
-  document.getElementById('wg-time').textContent = time;
-  document.getElementById('wg-date').textContent = now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-  document.getElementById('mb-clock').textContent = `${date} ${time}`;
-}
-
-/* =========================================================
-   GLOBAL KEYBOARD
-========================================================= */
-document.addEventListener('keydown', e => {
-  if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-    e.preventDefault();
-    document.getElementById('spotlight').classList.contains('open') ? closeSpotlight() : openSpotlight();
-    return;
-  }
-  if (e.key === 'Escape') {
-    closeSpotlight();
-    ctxMenu.classList.remove('open');
-  }
-});
-
-/* =========================================================
-   BOOT
-========================================================= */
-function boot() {
-  const fill = document.getElementById('boot-fill');
-  let progress = 0;
-  const interval = setInterval(() => {
-    progress += Math.random() * 15 + 5;
-    if (progress >= 100) {
-      progress = 100;
-      fill.style.width = '100%';
-      clearInterval(interval);
-      setTimeout(() => {
-        document.getElementById('boot').classList.add('hide');
-        setTimeout(() => {
-          document.getElementById('boot').style.display = 'none';
-          openApp('about');
-        }, 800);
-      }, 400);
-    } else {
-      fill.style.width = progress + '%';
-    }
-  }, 200);
-}
-
-/* =========================================================
-   INIT
-========================================================= */
-function init() {
-  renderDock();
-  updateClock();
-  setInterval(updateClock, 1000);
-  document.getElementById('desktop').style.background = OS.wallpapers[0];
-  document.getElementById('desktop').style.backgroundSize = 'cover';
-  boot();
-}
-
-init();
-</script>
-</body>
-</html>
-````
-
 ## File: api/r2/presign.js
 ````javascript
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
@@ -4014,6 +1521,99 @@ export function driveViewUrl(id) {
 }
 ````
 
+## File: src/lib/logbook.js
+````javascript
+import { supabase } from './supabase.js'
+import { MULAI_MAGANG } from './constants.js'
+
+const EMPTY = '00000000-0000-0000-0000-000000000000'
+
+export async function syncGaleriFromLogbook(mahasiswaId, items, meta) {
+  const itemIds = items.map(function (i) { return i.id }).filter(Boolean)
+  const all = await supabase
+    .from('galeri')
+    .select('id, logbook_item_id')
+    .in('logbook_item_id', itemIds.length ? itemIds : [EMPTY])
+  const existing = new Map((all.data || []).map(function (g) { return [g.logbook_item_id, g.id] }))
+
+  for (const item of items) {
+    if (!item.id) continue
+    if (item.show_in_gallery && item.media_path) {
+      if (existing.has(item.id)) {
+        await supabase.from('galeri').update({
+          media_path: item.media_path,
+          media_type: item.media_type || 'foto',
+          media_thumb: item.media_thumb || null,
+          media_source: item.media_source || 'r2',
+          youtube_id: item.youtube_id || null
+        }).eq('id', existing.get(item.id))
+      } else {
+        await supabase.from('galeri').insert({
+          mahasiswa_id: mahasiswaId,
+          logbook_item_id: item.id,
+          judul: item.judul,
+          deskripsi: item.deskripsi || 'Dokumentasi kegiatan dari logbook harian.',
+          tanggal: meta.tanggal,
+          kegiatan: meta.kategori,
+          media_path: item.media_path,
+          media_type: item.media_type || 'foto',
+          media_thumb: item.media_thumb || null,
+          media_source: item.media_source || 'r2',
+          youtube_id: item.youtube_id || null
+        })
+      }
+    } else if (existing.has(item.id)) {
+      await supabase.from('galeri').delete().eq('id', existing.get(item.id))
+    }
+  }
+}
+
+/* ===== AUTO-BOLOS =====
+   Untuk setiap hari kerja (Sen-Jum) dari MULAI_MAGANG s/d KEMARIN yang belum
+   ada catatan hadir, otomatis isi sebagai "Bolos".
+   Hari ini TIDAK di-auto-Bolos supaya user masih punya kesempatan isi absen.
+
+   Dipanggil di refresh() DashboardPage. Aman dijalankan berulang karena
+   unique constraint (mahasiswa_id, tanggal) di DB mencegah duplikat.
+
+   Return: array tanggal ISO yang baru di-auto-Bolos (buat re-fetch di caller). */
+function pad2(n) { return (n < 10 ? '0' : '') + n }
+function isoDari(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) }
+
+export async function autoIsiBolos(mahasiswaId, tanggalSudahAda) {
+  const sudahAda = new Set(tanggalSudahAda || [])
+  const d = new Date(MULAI_MAGANG + 'T00:00:00')
+  const batas = new Date()
+  batas.setDate(batas.getDate() - 1) // kemarin
+
+  const rows = []
+  while (d <= batas) {
+    const iso = isoDari(d)
+    const hari = d.getDay()
+    if (hari !== 0 && hari !== 6 && !sudahAda.has(iso)) {
+      rows.push({
+        mahasiswa_id: mahasiswaId,
+        tanggal: iso,
+        status: 'Bolos',
+        alasan: 'Terisi otomatis: Tidak ada keterangan pada tanggal ini.'
+      })
+    }
+    d.setDate(d.getDate() + 1)
+  }
+
+  if (!rows.length) return []
+
+  const res = await supabase.from('daftar_hadir').insert(rows)
+  if (res.error) {
+    // Bisa terjadi race condition dengan tab lain yang sedang jalan auto-bolos.
+    // Unique constraint (mahasiswa_id, tanggal) mencegah duplikat, jadi error ini aman diabaikan.
+    console.warn('Auto-Bolos dilewati:', res.error.message)
+    return []
+  }
+  return rows.map(function (r) { return r.tanggal })
+}
+````
+
 ## File: .env.example
 ````
 VITE_SUPABASE_URL=
@@ -4036,6 +1636,40 @@ dist
 *.log
 .env.youtube-*
 repomix-output.md
+````
+
+## File: package.json
+````json
+{
+  "name": "mbsi-logbook",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview",
+    "apply-ai": "node apply-ai.cjs"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.600.0",
+    "@aws-sdk/s3-request-presigner": "^3.600.0",
+    "@supabase/supabase-js": "^2.45.0",
+    "heic2any": "^0.0.4",
+    "html2canvas": "^1.4.1",
+    "qrcode.react": "^4.2.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.10",
+    "vite": "^5.4.0"
+  }
+}
 ````
 
 ## File: api/youtube/latest.js
@@ -4161,99 +1795,6 @@ Aplikasi single page berbasis React dengan data tersimpan di Supabase dan media 
 - robots.txt mengizinkan perayap umum dan agen AI.
 ````
 
-## File: src/lib/logbook.js
-````javascript
-import { supabase } from './supabase.js'
-import { MULAI_MAGANG } from './constants.js'
-
-const EMPTY = '00000000-0000-0000-0000-000000000000'
-
-export async function syncGaleriFromLogbook(mahasiswaId, items, meta) {
-  const itemIds = items.map(function (i) { return i.id }).filter(Boolean)
-  const all = await supabase
-    .from('galeri')
-    .select('id, logbook_item_id')
-    .in('logbook_item_id', itemIds.length ? itemIds : [EMPTY])
-  const existing = new Map((all.data || []).map(function (g) { return [g.logbook_item_id, g.id] }))
-
-  for (const item of items) {
-    if (!item.id) continue
-    if (item.show_in_gallery && item.media_path) {
-      if (existing.has(item.id)) {
-        await supabase.from('galeri').update({
-          media_path: item.media_path,
-          media_type: item.media_type || 'foto',
-          media_thumb: item.media_thumb || null,
-          media_source: item.media_source || 'r2',
-          youtube_id: item.youtube_id || null
-        }).eq('id', existing.get(item.id))
-      } else {
-        await supabase.from('galeri').insert({
-          mahasiswa_id: mahasiswaId,
-          logbook_item_id: item.id,
-          judul: item.judul,
-          deskripsi: item.deskripsi || 'Dokumentasi kegiatan dari logbook harian.',
-          tanggal: meta.tanggal,
-          kegiatan: meta.kategori,
-          media_path: item.media_path,
-          media_type: item.media_type || 'foto',
-          media_thumb: item.media_thumb || null,
-          media_source: item.media_source || 'r2',
-          youtube_id: item.youtube_id || null
-        })
-      }
-    } else if (existing.has(item.id)) {
-      await supabase.from('galeri').delete().eq('id', existing.get(item.id))
-    }
-  }
-}
-
-/* ===== AUTO-BOLOS =====
-   Untuk setiap hari kerja (Sen-Jum) dari MULAI_MAGANG s/d KEMARIN yang belum
-   ada catatan hadir, otomatis isi sebagai "Bolos".
-   Hari ini TIDAK di-auto-Bolos supaya user masih punya kesempatan isi absen.
-
-   Dipanggil di refresh() DashboardPage. Aman dijalankan berulang karena
-   unique constraint (mahasiswa_id, tanggal) di DB mencegah duplikat.
-
-   Return: array tanggal ISO yang baru di-auto-Bolos (buat re-fetch di caller). */
-function pad2(n) { return (n < 10 ? '0' : '') + n }
-function isoDari(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) }
-
-export async function autoIsiBolos(mahasiswaId, tanggalSudahAda) {
-  const sudahAda = new Set(tanggalSudahAda || [])
-  const d = new Date(MULAI_MAGANG + 'T00:00:00')
-  const batas = new Date()
-  batas.setDate(batas.getDate() - 1) // kemarin
-
-  const rows = []
-  while (d <= batas) {
-    const iso = isoDari(d)
-    const hari = d.getDay()
-    if (hari !== 0 && hari !== 6 && !sudahAda.has(iso)) {
-      rows.push({
-        mahasiswa_id: mahasiswaId,
-        tanggal: iso,
-        status: 'Bolos',
-        alasan: 'Terisi otomatis: Tidak ada keterangan pada tanggal ini.'
-      })
-    }
-    d.setDate(d.getDate() + 1)
-  }
-
-  if (!rows.length) return []
-
-  const res = await supabase.from('daftar_hadir').insert(rows)
-  if (res.error) {
-    // Bisa terjadi race condition dengan tab lain yang sedang jalan auto-bolos.
-    // Unique constraint (mahasiswa_id, tanggal) mencegah duplikat, jadi error ini aman diabaikan.
-    console.warn('Auto-Bolos dilewati:', res.error.message)
-    return []
-  }
-  return rows.map(function (r) { return r.tanggal })
-}
-````
-
 ## File: src/lib/theme.jsx
 ````javascript
 import { createContext, useContext, useEffect, useState } from 'react'
@@ -4306,144 +1847,129 @@ export function useTheme() {
 }
 ````
 
-## File: src/lib/upload.js
+## File: src/components/Carousel.jsx
 ````javascript
-import { supabase } from './supabase.js'
-import { iniVideo, ekstensiFile, siapkanFoto } from './konversi.js'
+import { useEffect, useRef, useState } from 'react'
+import { SizedIcon } from './icons.jsx'
+import { Lightbox, SmartFit, MediaDrive } from './ui.jsx'
 
-const MAKS_FOTO = 15 * 1024 * 1024
-const MAKS_VIDEO = 50 * 1024 * 1024
+export default function Carousel(props) {
+  const slides = props.slides || []
+  const autoMs = props.autoMs || 4000
+  const [idx, setIdx] = useState(0)
+  const [paused, setPaused] = useState(false)
+  const [zoom, setZoom] = useState(null)
+  const trackRef = useRef(null)
+  const touchX = useRef(0)
+  const moved = useRef(false)
 
-async function getToken() {
-  const { data } = await supabase.auth.getSession()
-  return data.session ? data.session.access_token : ''
-}
+  useEffect(function () {
+    if (slides.length < 2 || paused) return undefined
+    const t = setInterval(function () {
+      setIdx(function (i) { return (i + 1) % slides.length })
+    }, autoMs)
+    return function () { clearInterval(t) }
+  }, [slides.length, paused, autoMs])
 
-function namaDasar(nama) {
-  return String(nama || 'media').replace(/\.[^.]+$/, '')
-}
+  useEffect(function () {
+    if (trackRef.current) trackRef.current.style.transform = 'translateX(-' + (idx * 100) + '%)'
+  }, [idx])
 
-function kirimDenganProgres(uploadUrl, blob, contentType, onProgres) {
-  return new Promise(function (resolve, reject) {
-    const xhr = new XMLHttpRequest()
-    xhr.open('PUT', uploadUrl)
-    xhr.setRequestHeader('Content-Type', contentType)
-    if (onProgres) {
-      xhr.upload.onprogress = function (e) {
-        if (e.lengthComputable) onProgres(e.loaded / e.total)
-      }
-    }
-    xhr.onload = function () {
-      if (xhr.status >= 200 && xhr.status < 300) resolve()
-      else reject(new Error('Gagal upload file ke R2 (status ' + xhr.status + ')'))
-    }
-    xhr.onerror = function () { reject(new Error('Gagal jaringan saat upload ke R2')) }
-    xhr.send(blob)
-  })
-}
+  if (!slides.length) return null
 
-async function mintaIzin(token, filename, contentType, kind) {
-  const res = await fetch('/api/r2/presign', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify({ filename: filename, contentType: contentType, kind: kind })
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error('Gagal membuat izin upload (status ' + res.status + '): ' + text)
+  if (slides.length === 1) {
+    const s = slides[0]
+    return (
+      <>
+        <div className="relative group rounded-2xl overflow-hidden aspect-video bg-slate-900">
+          {s.drive ? (
+            <MediaDrive driveId={s.drive} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} className="absolute inset-0 h-full w-full object-cover cursor-zoom-in" />
+          ) : (
+            <SmartFit src={s.src} full={s.full} type={s.type} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} />
+          )}
+          <button type="button" title="Perbesar Media" onClick={function () { setZoom(s) }}
+            className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
+            <SizedIcon name="expand" size={15} />
+          </button>
+        </div>
+        {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} driveId={zoom.drive || null} onClose={function () { setZoom(null) }} /> : null}
+      </>
+    )
   }
-  return res.json()
-}
 
-export async function uploadMedia(file, kind, onInfo) {
-  const video = iniVideo(file)
-  if (video && file.size > MAKS_VIDEO) {
-    throw new Error('Video melebihi 50 MB. Potong dulu durasinya supaya upload cepat dan kuota aman.')
-  }
-  if (!video && file.size > MAKS_FOTO) {
-    throw new Error('Foto melebihi 15 MB. Pilih file dengan ukuran lebih kecil.')
-  }
-  let fullBlob = file
-  let fullType = file.type
-  let thumbBlob = null
-  if (!video) {
-    try {
-      const hasil = await siapkanFoto(file, onInfo)
-      fullBlob = hasil.fullBlob
-      fullType = hasil.fullType
-      thumbBlob = hasil.thumbBlob
-    } catch (e) {
-      throw new Error('Foto format .' + ekstensiFile(file) + ' tidak bisa diproses browser. Ubah dulu ke JPG atau PNG. Di iPhone: Settings, Camera, Formats, pilih Most Compatible.')
-    }
-  }
-  if (onInfo) onInfo('')
-  const token = await getToken()
-  const extFull = fullType === 'image/webp' ? 'webp' : (fullType === 'image/jpeg' ? 'jpg' : ekstensiFile(file))
-  const infoFull = await mintaIzin(token, namaDasar(file.name) + '.' + extFull, fullType, kind)
-  await kirimDenganProgres(infoFull.uploadUrl, fullBlob, fullType, function (p) {
-    if (onInfo) onInfo('Mengunggah ' + Math.round(p * 100) + '%')
-  })
-  let thumbUrl = null
-  if (thumbBlob) {
-    try {
-      const namaThumb = namaDasar(infoFull.key.split('/').pop()) + '.webp'
-      const infoThumb = await mintaIzin(token, namaThumb, 'image/webp', 'thumb/' + kind)
-      await kirimDenganProgres(infoThumb.uploadUrl, thumbBlob, 'image/webp', null)
-      thumbUrl = infoThumb.publicUrl
-    } catch (e) {
-      thumbUrl = null
-    }
-  }
-  console.log('[UPLOAD] File penuh: ' + infoFull.key + ' | Thumbnail: ' + (thumbUrl || 'tidak dibuat'))
-  return { path: infoFull.key, publicUrl: infoFull.publicUrl, thumbUrl: thumbUrl }
-}
-
-export async function deleteMedia(key) {
-  const token = await getToken()
-  const res = await fetch('/api/r2/delete', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify({ key: key })
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error('Gagal hapus media di R2 (status ' + res.status + '): ' + text)
-  }
-  return res.json()
-}
-````
-
-## File: package.json
-````json
-{
-  "name": "mbsi-logbook",
-  "private": true,
-  "version": "1.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite --host",
-    "build": "vite build",
-    "preview": "vite preview",
-    "apply-ai": "node apply-ai.cjs"
-  },
-  "dependencies": {
-    "@aws-sdk/client-s3": "^3.600.0",
-    "@aws-sdk/s3-request-presigner": "^3.600.0",
-    "@supabase/supabase-js": "^2.45.0",
-    "heic2any": "^0.0.4",
-    "html2canvas": "^1.4.1",
-    "qrcode.react": "^4.2.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-router-dom": "^6.26.0"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.1",
-    "autoprefixer": "^10.4.19",
-    "postcss": "^8.4.38",
-    "tailwindcss": "^3.4.10",
-    "vite": "^5.4.0"
-  }
+  return (
+    <>
+      <div
+        className="media-carousel group"
+        onMouseEnter={function () { setPaused(true) }}
+        onMouseLeave={function () { setPaused(false) }}
+        onTouchStart={function (e) { touchX.current = e.touches[0].clientX; moved.current = false }}
+        onTouchEnd={function (e) {
+          const dx = e.changedTouches[0].clientX - touchX.current
+          if (Math.abs(dx) > 40) {
+            moved.current = true
+            setIdx(function (i) { return (i + (dx < 0 ? 1 : -1) + slides.length) % slides.length })
+          }
+        }}
+      >
+        <div ref={trackRef} className="carousel-track">
+          {slides.map(function (s, i) {
+            return (
+              <div key={i} className="carousel-slide">
+                {s.drive ? (
+                  <MediaDrive driveId={s.drive} alt={s.title || 'Media'} onClick={function () { if (moved.current) { moved.current = false; return } setZoom(s) }} className="absolute inset-0 h-full w-full object-cover cursor-zoom-in" />
+                ) : (
+                <SmartFit
+                  src={s.src}
+                  full={s.full}
+                   type={s.type}
+                  alt={s.title || 'Media'}
+                  onClick={function () {
+                    if (moved.current) { moved.current = false; return }
+                    setZoom(s)
+                  }}
+                />
+                )}
+                <button type="button" title="Perbesar Media" onClick={function (e) { e.stopPropagation(); setZoom(s) }}
+                  className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
+                  <SizedIcon name="expand" size={15} />
+                </button>
+                {s.title ? (
+                  <span className="absolute bottom-2 left-2 z-10 px-2 py-1 rounded-lg bg-black/60 text-white text-xs max-w-[85%] truncate">
+                    {s.title}
+                  </span>
+                ) : null}
+              </div>
+            )
+          })}
+        </div>
+        <button
+          onClick={function () { setIdx(function (i) { return (i - 1 + slides.length) % slides.length }) }}
+          className="absolute left-2 top-0 bottom-0 my-auto z-10 h-8 w-8 rounded-full bg-black/40 text-white grid place-items-center opacity-100 xl:opacity-0 xl:group-hover:opacity-100 hover:bg-black/60"
+        >
+          &#8249;
+        </button>
+        <button
+          onClick={function () { setIdx(function (i) { return (i + 1) % slides.length }) }}
+          className="absolute right-2 top-0 bottom-0 my-auto z-10 h-8 w-8 rounded-full bg-black/40 text-white grid place-items-center opacity-100 xl:opacity-0 xl:group-hover:opacity-100 hover:bg-black/60"
+        >
+          &#8250;
+        </button>
+        <div className="absolute bottom-2 right-2 z-10 flex gap-1.5">
+          {slides.map(function (s, i) {
+            return (
+              <button
+                key={i}
+                onClick={function () { setIdx(i) }} aria-label={'Ke slide ' + (i + 1)}
+                className={'carousel-dot h-2 w-2 rounded-full transition-all ' + (i === idx ? 'bg-white' : 'bg-white/40')}
+              />
+            )
+          })}
+        </div>
+      </div>
+      {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} driveId={zoom.drive || null} onClose={function () { setZoom(null) }} /> : null}
+    </>
+  )
 }
 ````
 
@@ -5021,128 +2547,461 @@ export function toTitleCase(teks) {
 }
 ````
 
-## File: src/components/Carousel.jsx
+## File: src/lib/konversi.js
 ````javascript
-import { useEffect, useRef, useState } from 'react'
-import { SizedIcon } from './icons.jsx'
-import { Lightbox, SmartFit, MediaDrive } from './ui.jsx'
+const MAKS_SISI_FULL = 2048
+const MAKS_BYTE_FULL = 500 * 1024
+const TINGKAT_KUALITAS_FULL = [0.88, 0.84, 0.80]
+const MAKS_SISI_THUMB = 900
+const MAKS_BYTE_THUMB = 70 * 1024
+const TINGKAT_KUALITAS_THUMB = [0.8, 0.72, 0.65]
+const EXT_VIDEO = ['mp4', 'mov', 'm4v', 'webm', 'ogg', 'mkv', 'avi']
 
-export default function Carousel(props) {
-  const slides = props.slides || []
-  const autoMs = props.autoMs || 4000
-  const [idx, setIdx] = useState(0)
-  const [paused, setPaused] = useState(false)
-  const [zoom, setZoom] = useState(null)
-  const trackRef = useRef(null)
-  const touchX = useRef(0)
-  const moved = useRef(false)
+export function ekstensiFile(file) {
+  return String(file.name || '').split('.').pop().toLowerCase()
+}
 
-  useEffect(function () {
-    if (slides.length < 2 || paused) return undefined
-    const t = setInterval(function () {
-      setIdx(function (i) { return (i + 1) % slides.length })
-    }, autoMs)
-    return function () { clearInterval(t) }
-  }, [slides.length, paused, autoMs])
+export function iniVideo(file) {
+  if (file.type && file.type.indexOf('video') === 0) return true
+  return EXT_VIDEO.indexOf(ekstensiFile(file)) !== -1
+}
 
-  useEffect(function () {
-    if (trackRef.current) trackRef.current.style.transform = 'translateX(-' + (idx * 100) + '%)'
-  }, [idx])
+export function formatHeic(file) {
+  const e = ekstensiFile(file)
+  return e === 'heic' || e === 'heif'
+}
 
-  if (!slides.length) return null
+async function heicKeJpeg(file) {
+  const mod = await import('heic2any')
+  const heic = mod.default || mod
+  const hasil = await heic({ blob: file, toType: 'image/jpeg', quality: 0.92 })
+  return Array.isArray(hasil) ? hasil[0] : hasil
+}
 
-  if (slides.length === 1) {
-    const s = slides[0]
-    return (
-      <>
-        <div className="relative group rounded-2xl overflow-hidden aspect-video bg-slate-900">
-          {s.drive ? (
-            <MediaDrive driveId={s.drive} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} className="absolute inset-0 h-full w-full object-cover cursor-zoom-in" />
-          ) : (
-            <SmartFit src={s.src} full={s.full} type={s.type} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} />
-          )}
-          <button type="button" title="Perbesar Media" onClick={function () { setZoom(s) }}
-            className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
-            <SizedIcon name="expand" size={15} />
-          </button>
-        </div>
-        {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} driveId={zoom.drive || null} onClose={function () { setZoom(null) }} /> : null}
-      </>
-    )
+async function bitmapDari(berkas) {
+  try {
+    return await createImageBitmap(berkas, { imageOrientation: 'from-image' })
+  } catch (e) {
+    return await createImageBitmap(berkas)
   }
+}
+
+async function keWebP(berkas, maksSisi, kualitas) {
+  const bitmap = await bitmapDari(berkas)
+  const skala = Math.min(1, maksSisi / Math.max(bitmap.width, bitmap.height))
+  const w = Math.max(1, Math.round(bitmap.width * skala))
+  const h = Math.max(1, Math.round(bitmap.height * skala))
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d')
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(bitmap, 0, 0, w, h)
+  bitmap.close()
+  const blob = await new Promise(function (resolve) {
+    canvas.toBlob(resolve, 'image/webp', kualitas)
+  })
+  canvas.width = 0
+  canvas.height = 0
+  if (!blob || blob.type !== 'image/webp') return null
+  return blob
+}
+
+/* File penuh untuk Lightbox dan unduhan: coba kualitas tertinggi dulu, turunkan bertahap hanya bila melewati batas ukuran */
+async function keWebPFull(berkas) {
+  let blob = null
+  for (let i = 0; i < TINGKAT_KUALITAS_FULL.length; i++) {
+    blob = await keWebP(berkas, MAKS_SISI_FULL, TINGKAT_KUALITAS_FULL[i])
+    if (!blob || blob.size <= MAKS_BYTE_FULL) break
+  }
+  return blob
+}
+
+/* Thumbnail kartu: coba kualitas tertinggi dulu, turunkan hanya bila masih di atas batas ukuran */
+async function keWebPThumb(berkas) {
+  let blob = null
+  for (let i = 0; i < TINGKAT_KUALITAS_THUMB.length; i++) {
+    blob = await keWebP(berkas, MAKS_SISI_THUMB, TINGKAT_KUALITAS_THUMB[i])
+    if (!blob || blob.size <= MAKS_BYTE_THUMB) break
+  }
+  return blob
+}
+
+export async function siapkanFoto(file, onInfo) {
+  let sumber = file
+  if (formatHeic(file)) {
+    if (onInfo) onInfo('Mengonversi HEIC ke JPG')
+    const jpeg = await heicKeJpeg(file)
+    if (!jpeg) throw new Error('File HEIC tidak bisa dibaca')
+    sumber = new File([jpeg], 'sumber.jpg', { type: 'image/jpeg' })
+  }
+  if (onInfo) onInfo('Menyiapkan WebP')
+  let fullBlob = null
+  try {
+    fullBlob = await keWebPFull(sumber)
+  } catch (e) {
+    fullBlob = null
+  }
+  const pakaiWebp = !!fullBlob && (sumber.type !== 'image/jpeg' || fullBlob.size < sumber.size)
+  const fullFinal = pakaiWebp ? fullBlob : sumber
+  const fullType = pakaiWebp ? 'image/webp' : sumber.type
+  let thumbBlob = null
+  try {
+    thumbBlob = await keWebPThumb(fullFinal)
+  } catch (e) {
+    thumbBlob = null
+  }
+  return { fullBlob: fullFinal, fullType: fullType, thumbBlob: thumbBlob }
+}
+
+export async function pratinjauHeic(file) {
+  if (!formatHeic(file)) return null
+  try {
+    const jpeg = await heicKeJpeg(file)
+    return jpeg || null
+  } catch (e) {
+    return null
+  }
+}
+
+export async function urlPratinjau(file) {
+  if (formatHeic(file)) {
+    const blob = await pratinjauHeic(file)
+    return URL.createObjectURL(blob || file)
+  }
+  return URL.createObjectURL(file)
+}
+
+/* foto-profil-webp: pipeline konversi foto profil, pola sama dengan alur media R2 */
+function muatGambarProfil(sumber) {
+  return new Promise(function (resolve, reject) {
+    const url = URL.createObjectURL(sumber)
+    const img = new Image()
+    img.onload = function () { resolve({ img: img, url: url }) }
+    img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('Gambar tidak dapat dibaca')) }
+    img.src = url
+  })
+}
+
+export async function siapkanFotoProfil(file, maksSisi, kualitas) {
+  const sisi = maksSisi || 640
+  const mutu = kualitas || 0.85
+  let kerja = file
+  if (formatHeic(file)) {
+    const jpeg = await heicKeJpeg(file)
+    if (!jpeg) throw new Error('File HEIC tidak bisa dibaca')
+    kerja = new File([jpeg], (file.name || 'foto').replace(/\.(heic|heif)$/i, '.jpg'), { type: 'image/jpeg' })
+  }
+  const muat = await muatGambarProfil(kerja)
+  try {
+    const rasio = Math.min(1, sisi / Math.max(muat.img.width, muat.img.height))
+    const w = Math.max(1, Math.round(muat.img.width * rasio))
+    const h = Math.max(1, Math.round(muat.img.height * rasio))
+    const canvas = document.createElement('canvas')
+    canvas.width = w
+    canvas.height = h
+    const ctx = canvas.getContext('2d')
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
+    ctx.drawImage(muat.img, 0, 0, w, h)
+    const blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/webp', mutu) })
+    if (!blob) throw new Error('Gagal mengonversi foto ke WebP')
+    return new File([blob], 'profil-' + Date.now() + '.webp', { type: 'image/webp' })
+  } finally {
+    URL.revokeObjectURL(muat.url)
+  }
+}
+````
+
+## File: src/components/controls.jsx
+````javascript
+import { pesanTanggalTerlarang } from '../lib/format.js'
+import { SelubungPanel } from './ui.jsx'
+import { useEffect, useRef, useState } from 'react'
+import { ICONS } from './icons.jsx'
+
+const BULAN_NAMA = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
+const BULAN_PENDEK = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
+const HARI_NAMA = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
+
+const defaultBtn = 'flex w-full items-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-bsi-500'
+
+function pad(n) {
+  return (n < 10 ? '0' : '') + n
+}
+
+function parseValue(value, mode) {
+  if (!value) return null
+  const p = String(value).split('-')
+  if (mode === 'month') {
+    if (p.length < 2) return null
+    const y = parseInt(p[0], 10)
+    const m = parseInt(p[1], 10) - 1
+    if (isNaN(y) || isNaN(m) || m < 0 || m > 11) return null
+    return { y: y, m: m }
+  }
+  if (p.length < 3) return null
+  const y = parseInt(p[0], 10)
+  const m = parseInt(p[1], 10) - 1
+  const d = parseInt(p[2], 10)
+  if (isNaN(y) || isNaN(m) || isNaN(d)) return null
+  return { y: y, m: m, d: d }
+}
+
+function useOutside(ref, open, setOpen) {
+  useEffect(function () {
+    if (!open) return undefined
+    function handler(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return function () { document.removeEventListener('mousedown', handler) }
+  }, [open])
+}
+
+export function CustomSelect(props) {
+  const [open, setOpen] = useState(false)
+  const boxRef = useRef(null)
+  useOutside(boxRef, open, setOpen)
+  const options = props.options || []
+  const current = options.find(function (o) { return o.value === props.value }) || null
 
   return (
-    <>
-      <div
-        className="media-carousel group"
-        onMouseEnter={function () { setPaused(true) }}
-        onMouseLeave={function () { setPaused(false) }}
-        onTouchStart={function (e) { touchX.current = e.touches[0].clientX; moved.current = false }}
-        onTouchEnd={function (e) {
-          const dx = e.changedTouches[0].clientX - touchX.current
-          if (Math.abs(dx) > 40) {
-            moved.current = true
-            setIdx(function (i) { return (i + (dx < 0 ? 1 : -1) + slides.length) % slides.length })
-          }
-        }}
+    <div ref={boxRef} className={'relative ' + (props.className || '')}>
+      <button
+        type="button"
+        onClick={function () { setOpen(function (o) { return !o }) }}
+        className={(props.buttonCls || defaultBtn) + ' text-left'}
       >
-        <div ref={trackRef} className="carousel-track">
-          {slides.map(function (s, i) {
-            return (
-              <div key={i} className="carousel-slide">
-                {s.drive ? (
-                  <MediaDrive driveId={s.drive} alt={s.title || 'Media'} onClick={function () { if (moved.current) { moved.current = false; return } setZoom(s) }} className="absolute inset-0 h-full w-full object-cover cursor-zoom-in" />
-                ) : (
-                <SmartFit
-                  src={s.src}
-                  full={s.full}
-                   type={s.type}
-                  alt={s.title || 'Media'}
-                  onClick={function () {
-                    if (moved.current) { moved.current = false; return }
-                    setZoom(s)
-                  }}
-                />
-                )}
-                <button type="button" title="Perbesar Media" onClick={function (e) { e.stopPropagation(); setZoom(s) }}
-                  className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
-                  <SizedIcon name="expand" size={15} />
-                </button>
-                {s.title ? (
-                  <span className="absolute bottom-2 left-2 z-10 px-2 py-1 rounded-lg bg-black/60 text-white text-xs max-w-[85%] truncate">
-                    {s.title}
-                  </span>
-                ) : null}
-              </div>
-            )
-          })}
-        </div>
-        <button
-          onClick={function () { setIdx(function (i) { return (i - 1 + slides.length) % slides.length }) }}
-          className="absolute left-2 top-0 bottom-0 my-auto z-10 h-8 w-8 rounded-full bg-black/40 text-white grid place-items-center opacity-100 xl:opacity-0 xl:group-hover:opacity-100 hover:bg-black/60"
-        >
-          &#8249;
-        </button>
-        <button
-          onClick={function () { setIdx(function (i) { return (i + 1) % slides.length }) }}
-          className="absolute right-2 top-0 bottom-0 my-auto z-10 h-8 w-8 rounded-full bg-black/40 text-white grid place-items-center opacity-100 xl:opacity-0 xl:group-hover:opacity-100 hover:bg-black/60"
-        >
-          &#8250;
-        </button>
-        <div className="absolute bottom-2 right-2 z-10 flex gap-1.5">
-          {slides.map(function (s, i) {
+        {props.icon ? <span className="shrink-0 text-slate-600">{props.icon}</span> : null}
+        <span className={'flex-1 truncate ' + (current ? 'text-slate-800' : 'text-slate-600')}>
+          {current ? current.label : (props.placeholder || 'Pilih')}
+        </span>
+        <span className={'shrink-0 text-slate-600 transition-transform duration-200 ' + (open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
+      </button>
+      <SelubungPanel open={open}>
+<div className="anim-modal absolute z-30 mt-2 max-h-64 w-full overflow-y-auto rounded-2xl border border-slate-200 bg-white py-1 shadow-xl">
+          {options.map(function (o) {
+            const active = o.value === props.value
             return (
               <button
-                key={i}
-                onClick={function () { setIdx(i) }} aria-label={'Ke slide ' + (i + 1)}
-                className={'carousel-dot h-2 w-2 rounded-full transition-all ' + (i === idx ? 'bg-white' : 'bg-white/40')}
-              />
+                type="button"
+                key={String(o.value)}
+                onClick={function () { props.onChange(o.value); setOpen(false) }}
+                className={'flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left text-sm ' + (active ? 'bg-bsi-800 text-white' : 'text-slate-700 hover:bg-slate-100')}
+              >
+                <span className="truncate">{o.label}</span>
+                {active ? <span className="shrink-0">{ICONS.check}</span> : null}
+              </button>
             )
           })}
         </div>
+</SelubungPanel>
+    </div>
+  )
+}
+
+export function CustomDateInput(props) {
+  const mode = props.mode || 'date'
+  const [open, setOpen] = useState(false)
+  const [alignRight, setAlignRight] = useState(false)
+
+  const [view, setView] = useState(function () {
+    const p = parseValue(props.value, mode)
+    const t = new Date()
+    return p ? { y: p.y, m: p.m } : { y: t.getFullYear(), m: t.getMonth() }
+  })
+  const boxRef = useRef(null)
+  useOutside(boxRef, open, setOpen)
+
+  const sel = parseValue(props.value, mode)
+  const today = new Date()
+
+  function toggle() {
+    if (!open) {
+      const p = parseValue(props.value, mode)
+      if (p) setView({ y: p.y, m: p.m })
+      if (boxRef.current) {
+        const r = boxRef.current.getBoundingClientRect()
+        const wadah = boxRef.current.closest('.filter-isi')
+        const batasKanan = wadah ? wadah.getBoundingClientRect().right : window.innerWidth - 8
+        setAlignRight(r.left + 296 > batasKanan)
+      }
+    }
+    setOpen(function (o) { return !o })
+  }
+
+  function shift(delta) {
+    setView(function (v) {
+      if (mode === 'month') return { y: v.y + delta, m: v.m }
+      let m = v.m + delta
+      let y = v.y
+      if (m < 0) { m = 11; y -= 1 }
+      if (m > 11) { m = 0; y += 1 }
+      return { y: y, m: m }
+    })
+  }
+
+    function pickDay(d) {
+    const ds = view.y + '-' + pad(view.m + 1) + '-' + pad(d)
+    const pesan = pesanTanggalTerlarang(ds, props.min, props.max)
+    if (pesan) {
+      if (props.onTerlarang) props.onTerlarang(pesan)
+      return
+    }
+    props.onChange(ds)
+    setOpen(false)
+  }
+
+  function pickMonth(m) {
+    props.onChange(view.y + '-' + pad(m + 1))
+    setOpen(false)
+  }
+
+  function pickToday() {
+    const t = new Date()
+    if (mode === 'month') props.onChange(t.getFullYear() + '-' + pad(t.getMonth() + 1))
+    else props.onChange(t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate()))
+    setOpen(false)
+  }
+
+  const label = sel
+    ? (mode === 'month' ? BULAN_NAMA[sel.m] + ' ' + sel.y : sel.d + ' ' + BULAN_PENDEK[sel.m] + ' ' + sel.y)
+    : ''
+
+  const firstDay = new Date(view.y, view.m, 1).getDay()
+  const daysCount = new Date(view.y, view.m + 1, 0).getDate()
+  const cells = []
+  for (let i = 0; i < firstDay; i++) cells.push(null)
+  for (let d = 1; d <= daysCount; d++) cells.push(d)
+
+  return (
+    <div ref={boxRef} className={'relative ' + (props.className || '')}>
+      <button type="button" onClick={toggle} className={(props.buttonCls || defaultBtn) + ' text-left'}>
+        <span className="shrink-0 text-slate-600">{ICONS.calendar}</span>
+        <span className={'flex-1 truncate ' + (props.value ? 'text-slate-800' : 'text-slate-600')}>
+          {label || (mode === 'month' ? 'Pilih Bulan' : 'Pilih Tanggal')}
+        </span>
+        <span className={'shrink-0 text-slate-600 transition-transform duration-200 ' + (open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
+      </button>
+      <SelubungPanel open={open}>
+<div className={'anim-modal absolute z-30 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl ' + (alignRight ? 'right-0' : '')}>
+          <div className="flex items-center justify-between">
+            <button type="button" onClick={function () { shift(-1) }} className="grid h-8 w-8 place-items-center rounded-lg text-slate-600 hover:bg-slate-100">&#8249;</button>
+            <p className="text-sm font-bold text-slate-800">
+              {mode === 'month' ? String(view.y) : BULAN_NAMA[view.m] + ' ' + view.y}
+            </p>
+            <button type="button" onClick={function () { shift(1) }} className="grid h-8 w-8 place-items-center rounded-lg text-slate-600 hover:bg-slate-100">&#8250;</button>
+          </div>
+
+          {mode === 'date' ? (
+            <div className="mt-3 grid grid-cols-7 gap-1 text-center">
+              {HARI_NAMA.map(function (h) {
+                return <span key={h} className="py-1 text-[11px] font-semibold text-slate-600">{h}</span>
+              })}
+                            {cells.map(function (d, i) {
+                if (d === null) return <span key={'kosong' + i} />
+                const isSel = sel && sel.y === view.y && sel.m === view.m && sel.d === d
+                const isToday = today.getFullYear() === view.y && today.getMonth() === view.m && today.getDate() === d
+                const terlarang = pesanTanggalTerlarang(view.y + '-' + pad(view.m + 1) + '-' + pad(d), props.min, props.max)
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={function () { pickDay(d) }}
+                    title={terlarang || undefined}
+                    className={'mx-auto grid h-8 w-8 place-items-center rounded-lg text-sm ' + (terlarang ? 'opacity-35 cursor-not-allowed ' : '') + (isSel ? 'bg-bsi-800 font-semibold text-white' : isToday ? 'font-bold text-bsi-700 ring-1 ring-bsi-500' : 'text-slate-700 hover:bg-slate-100')}
+                  >
+                    {d}
+                  </button>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {BULAN_NAMA.map(function (nama, m) {
+                const isSel = sel && sel.y === view.y && sel.m === m
+                const isNow = today.getFullYear() === view.y && today.getMonth() === m
+                return (
+                  <button
+                    key={nama}
+                    type="button"
+                    onClick={function () { pickMonth(m) }}
+                    className={'rounded-lg px-2 py-2 text-xs font-semibold ' + (isSel ? 'bg-bsi-800 text-white' : isNow ? 'text-bsi-700 ring-1 ring-bsi-500' : 'text-slate-700 hover:bg-slate-100')}
+                  >
+                    {nama}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
+            <button type="button" onClick={function () { props.onChange(''); setOpen(false) }} className="text-sm font-semibold text-slate-600 hover:text-red-600">Hapus</button>
+            <button type="button" onClick={pickToday} className="text-sm font-semibold text-bsi-700 hover:text-bsi-900">Hari Ini</button>
+          </div>
+        </div>
+</SelubungPanel>
+    </div>
+  )
+}
+
+export function FileInput(props) {
+  const inputRef = useRef(null)
+  return (
+    <div className={props.className || ''}>
+      <input
+        ref={inputRef}
+        type="file"
+        accept={props.accept || 'image/*,video/*'}
+        className="hidden"
+        onChange={function (e) {
+          if (props.onChange) props.onChange(e)
+          e.target.value = ''
+        }}
+      />
+      <button
+        type="button"
+        onClick={function () { inputRef.current.click() }}
+        className="flex w-full items-center gap-3 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-4 py-4 text-left transition hover:border-bsi-500 hover:bg-slate-100"
+      >
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-bsi-100 text-bsi-800">{ICONS.image}</span>
+        <span className="min-w-0 flex-1">
+          <span className={'block truncate text-sm font-semibold ' + (props.fileName ? 'text-slate-800' : 'text-slate-600')}>
+            {props.fileName || props.label || 'Klik untuk Pilih Foto atau Video'}
+          </span>
+          <span className="block text-xs text-slate-600">{props.hint || 'Foto JPG, PNG, atau HEIC otomatis dikonversi. Video maks 50 MB.'}</span>
+        </span>
+        {props.fileName ? <span className="shrink-0 text-xs font-semibold text-bsi-700">Ganti</span> : null}
+      </button>
+    </div>
+  )
+}
+export function ToggleModeMedia(props) {
+  const cls = function (aktif) {
+    return 'px-3 py-1.5 rounded-xl text-xs font-bold ' + (aktif ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700')
+  }
+  return (
+    <div className={props.className || 'flex gap-2'}>
+      <button type="button" onClick={function () { props.onChange('foto') }} className={cls(props.value !== 'video')}>Foto</button>
+      <button type="button" onClick={function () { props.onChange('video') }} className={cls(props.value === 'video')}>Video</button>
+    </div>
+  )
+}
+
+export function SumberVideo(props) {
+  const habis = props.quotaRemaining <= 0
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-semibold text-slate-600">Sisa kuota unggah video hari ini: {props.quotaLoading ? <span className="inline-block w-3 h-3 ml-1 border-2 border-slate-400 border-t-transparent rounded-full animate-spin align-middle"></span> : <>{props.quotaRemaining} dari {props.quotaLimit}</>}</p>
+      <div className={habis && !props.fileName ? 'opacity-50 pointer-events-none' : ''}>
+        <FileInput accept="video/*" fileName={props.fileName || ''} label="Klik untuk Pilih Video" hint="Video maks 50 MB. Format MP4, MOV, WebM, atau MKV." onChange={props.onFile} />
       </div>
-      {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} driveId={zoom.drive || null} onClose={function () { setZoom(null) }} /> : null}
-    </>
+      {habis ? <p className="text-xs text-red-600">Kuota habis. Gunakan tautan video di bawah.</p> : null}
+      <input className={props.inputCls} value={props.ytLink} onChange={props.onYtLink} aria-label="Tautan video YouTube" placeholder="Tautan video YouTube (opsional)" />
+      <input className={props.inputCls} value={props.driveLink} onChange={props.onDriveLink} aria-label="Tautan Google Drive" placeholder="Tautan Google Drive (opsional)" />
+    </div>
   )
 }
 ````
@@ -6215,173 +4074,6 @@ export function SkeletonQuick() {
 }
 ````
 
-## File: src/lib/konversi.js
-````javascript
-const MAKS_SISI_FULL = 2048
-const MAKS_BYTE_FULL = 500 * 1024
-const TINGKAT_KUALITAS_FULL = [0.88, 0.84, 0.80]
-const MAKS_SISI_THUMB = 900
-const MAKS_BYTE_THUMB = 70 * 1024
-const TINGKAT_KUALITAS_THUMB = [0.8, 0.72, 0.65]
-const EXT_VIDEO = ['mp4', 'mov', 'm4v', 'webm', 'ogg', 'mkv', 'avi']
-
-export function ekstensiFile(file) {
-  return String(file.name || '').split('.').pop().toLowerCase()
-}
-
-export function iniVideo(file) {
-  if (file.type && file.type.indexOf('video') === 0) return true
-  return EXT_VIDEO.indexOf(ekstensiFile(file)) !== -1
-}
-
-export function formatHeic(file) {
-  const e = ekstensiFile(file)
-  return e === 'heic' || e === 'heif'
-}
-
-async function heicKeJpeg(file) {
-  const mod = await import('heic2any')
-  const heic = mod.default || mod
-  const hasil = await heic({ blob: file, toType: 'image/jpeg', quality: 0.92 })
-  return Array.isArray(hasil) ? hasil[0] : hasil
-}
-
-async function bitmapDari(berkas) {
-  try {
-    return await createImageBitmap(berkas, { imageOrientation: 'from-image' })
-  } catch (e) {
-    return await createImageBitmap(berkas)
-  }
-}
-
-async function keWebP(berkas, maksSisi, kualitas) {
-  const bitmap = await bitmapDari(berkas)
-  const skala = Math.min(1, maksSisi / Math.max(bitmap.width, bitmap.height))
-  const w = Math.max(1, Math.round(bitmap.width * skala))
-  const h = Math.max(1, Math.round(bitmap.height * skala))
-  const canvas = document.createElement('canvas')
-  canvas.width = w
-  canvas.height = h
-  const ctx = canvas.getContext('2d')
-  ctx.imageSmoothingEnabled = true
-  ctx.imageSmoothingQuality = 'high'
-  ctx.drawImage(bitmap, 0, 0, w, h)
-  bitmap.close()
-  const blob = await new Promise(function (resolve) {
-    canvas.toBlob(resolve, 'image/webp', kualitas)
-  })
-  canvas.width = 0
-  canvas.height = 0
-  if (!blob || blob.type !== 'image/webp') return null
-  return blob
-}
-
-/* File penuh untuk Lightbox dan unduhan: coba kualitas tertinggi dulu, turunkan bertahap hanya bila melewati batas ukuran */
-async function keWebPFull(berkas) {
-  let blob = null
-  for (let i = 0; i < TINGKAT_KUALITAS_FULL.length; i++) {
-    blob = await keWebP(berkas, MAKS_SISI_FULL, TINGKAT_KUALITAS_FULL[i])
-    if (!blob || blob.size <= MAKS_BYTE_FULL) break
-  }
-  return blob
-}
-
-/* Thumbnail kartu: coba kualitas tertinggi dulu, turunkan hanya bila masih di atas batas ukuran */
-async function keWebPThumb(berkas) {
-  let blob = null
-  for (let i = 0; i < TINGKAT_KUALITAS_THUMB.length; i++) {
-    blob = await keWebP(berkas, MAKS_SISI_THUMB, TINGKAT_KUALITAS_THUMB[i])
-    if (!blob || blob.size <= MAKS_BYTE_THUMB) break
-  }
-  return blob
-}
-
-export async function siapkanFoto(file, onInfo) {
-  let sumber = file
-  if (formatHeic(file)) {
-    if (onInfo) onInfo('Mengonversi HEIC ke JPG')
-    const jpeg = await heicKeJpeg(file)
-    if (!jpeg) throw new Error('File HEIC tidak bisa dibaca')
-    sumber = new File([jpeg], 'sumber.jpg', { type: 'image/jpeg' })
-  }
-  if (onInfo) onInfo('Menyiapkan WebP')
-  let fullBlob = null
-  try {
-    fullBlob = await keWebPFull(sumber)
-  } catch (e) {
-    fullBlob = null
-  }
-  const pakaiWebp = !!fullBlob && (sumber.type !== 'image/jpeg' || fullBlob.size < sumber.size)
-  const fullFinal = pakaiWebp ? fullBlob : sumber
-  const fullType = pakaiWebp ? 'image/webp' : sumber.type
-  let thumbBlob = null
-  try {
-    thumbBlob = await keWebPThumb(fullFinal)
-  } catch (e) {
-    thumbBlob = null
-  }
-  return { fullBlob: fullFinal, fullType: fullType, thumbBlob: thumbBlob }
-}
-
-export async function pratinjauHeic(file) {
-  if (!formatHeic(file)) return null
-  try {
-    const jpeg = await heicKeJpeg(file)
-    return jpeg || null
-  } catch (e) {
-    return null
-  }
-}
-
-export async function urlPratinjau(file) {
-  if (formatHeic(file)) {
-    const blob = await pratinjauHeic(file)
-    return URL.createObjectURL(blob || file)
-  }
-  return URL.createObjectURL(file)
-}
-
-/* foto-profil-webp: pipeline konversi foto profil, pola sama dengan alur media R2 */
-function muatGambarProfil(sumber) {
-  return new Promise(function (resolve, reject) {
-    const url = URL.createObjectURL(sumber)
-    const img = new Image()
-    img.onload = function () { resolve({ img: img, url: url }) }
-    img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('Gambar tidak dapat dibaca')) }
-    img.src = url
-  })
-}
-
-export async function siapkanFotoProfil(file, maksSisi, kualitas) {
-  const sisi = maksSisi || 640
-  const mutu = kualitas || 0.85
-  let kerja = file
-  if (formatHeic(file)) {
-    const jpeg = await heicKeJpeg(file)
-    if (!jpeg) throw new Error('File HEIC tidak bisa dibaca')
-    kerja = new File([jpeg], (file.name || 'foto').replace(/\.(heic|heif)$/i, '.jpg'), { type: 'image/jpeg' })
-  }
-  const muat = await muatGambarProfil(kerja)
-  try {
-    const rasio = Math.min(1, sisi / Math.max(muat.img.width, muat.img.height))
-    const w = Math.max(1, Math.round(muat.img.width * rasio))
-    const h = Math.max(1, Math.round(muat.img.height * rasio))
-    const canvas = document.createElement('canvas')
-    canvas.width = w
-    canvas.height = h
-    const ctx = canvas.getContext('2d')
-    ctx.imageSmoothingEnabled = true
-    ctx.imageSmoothingQuality = 'high'
-    ctx.drawImage(muat.img, 0, 0, w, h)
-    const blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/webp', mutu) })
-    if (!blob) throw new Error('Gagal mengonversi foto ke WebP')
-    return new File([blob], 'profil-' + Date.now() + '.webp', { type: 'image/webp' })
-  } finally {
-    URL.revokeObjectURL(muat.url)
-  }
-}
-````
-
 ## File: vite.config.js
 ````javascript
 import { defineConfig, loadEnv } from 'vite'
@@ -6686,298 +4378,6 @@ console.log('[ENV DEBUG] GROQ_MODEL:', env.GROQ_MODEL || '(default: qwen/qwen3.8
     }
   }
 })
-````
-
-## File: src/components/controls.jsx
-````javascript
-import { pesanTanggalTerlarang } from '../lib/format.js'
-import { SelubungPanel } from './ui.jsx'
-import { useEffect, useRef, useState } from 'react'
-import { ICONS } from './icons.jsx'
-
-const BULAN_NAMA = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
-const BULAN_PENDEK = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
-const HARI_NAMA = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
-
-const defaultBtn = 'flex w-full items-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-bsi-500'
-
-function pad(n) {
-  return (n < 10 ? '0' : '') + n
-}
-
-function parseValue(value, mode) {
-  if (!value) return null
-  const p = String(value).split('-')
-  if (mode === 'month') {
-    if (p.length < 2) return null
-    const y = parseInt(p[0], 10)
-    const m = parseInt(p[1], 10) - 1
-    if (isNaN(y) || isNaN(m) || m < 0 || m > 11) return null
-    return { y: y, m: m }
-  }
-  if (p.length < 3) return null
-  const y = parseInt(p[0], 10)
-  const m = parseInt(p[1], 10) - 1
-  const d = parseInt(p[2], 10)
-  if (isNaN(y) || isNaN(m) || isNaN(d)) return null
-  return { y: y, m: m, d: d }
-}
-
-function useOutside(ref, open, setOpen) {
-  useEffect(function () {
-    if (!open) return undefined
-    function handler(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return function () { document.removeEventListener('mousedown', handler) }
-  }, [open])
-}
-
-export function CustomSelect(props) {
-  const [open, setOpen] = useState(false)
-  const boxRef = useRef(null)
-  useOutside(boxRef, open, setOpen)
-  const options = props.options || []
-  const current = options.find(function (o) { return o.value === props.value }) || null
-
-  return (
-    <div ref={boxRef} className={'relative ' + (props.className || '')}>
-      <button
-        type="button"
-        onClick={function () { setOpen(function (o) { return !o }) }}
-        className={(props.buttonCls || defaultBtn) + ' text-left'}
-      >
-        {props.icon ? <span className="shrink-0 text-slate-600">{props.icon}</span> : null}
-        <span className={'flex-1 truncate ' + (current ? 'text-slate-800' : 'text-slate-600')}>
-          {current ? current.label : (props.placeholder || 'Pilih')}
-        </span>
-        <span className={'shrink-0 text-slate-600 transition-transform duration-200 ' + (open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
-      </button>
-      <SelubungPanel open={open}>
-<div className="anim-modal absolute z-30 mt-2 max-h-64 w-full overflow-y-auto rounded-2xl border border-slate-200 bg-white py-1 shadow-xl">
-          {options.map(function (o) {
-            const active = o.value === props.value
-            return (
-              <button
-                type="button"
-                key={String(o.value)}
-                onClick={function () { props.onChange(o.value); setOpen(false) }}
-                className={'flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left text-sm ' + (active ? 'bg-bsi-800 text-white' : 'text-slate-700 hover:bg-slate-100')}
-              >
-                <span className="truncate">{o.label}</span>
-                {active ? <span className="shrink-0">{ICONS.check}</span> : null}
-              </button>
-            )
-          })}
-        </div>
-</SelubungPanel>
-    </div>
-  )
-}
-
-export function CustomDateInput(props) {
-  const mode = props.mode || 'date'
-  const [open, setOpen] = useState(false)
-  const [alignRight, setAlignRight] = useState(false)
-
-  const [view, setView] = useState(function () {
-    const p = parseValue(props.value, mode)
-    const t = new Date()
-    return p ? { y: p.y, m: p.m } : { y: t.getFullYear(), m: t.getMonth() }
-  })
-  const boxRef = useRef(null)
-  useOutside(boxRef, open, setOpen)
-
-  const sel = parseValue(props.value, mode)
-  const today = new Date()
-
-  function toggle() {
-    if (!open) {
-      const p = parseValue(props.value, mode)
-      if (p) setView({ y: p.y, m: p.m })
-      if (boxRef.current) {
-        const r = boxRef.current.getBoundingClientRect()
-        const wadah = boxRef.current.closest('.filter-isi')
-        const batasKanan = wadah ? wadah.getBoundingClientRect().right : window.innerWidth - 8
-        setAlignRight(r.left + 296 > batasKanan)
-      }
-    }
-    setOpen(function (o) { return !o })
-  }
-
-  function shift(delta) {
-    setView(function (v) {
-      if (mode === 'month') return { y: v.y + delta, m: v.m }
-      let m = v.m + delta
-      let y = v.y
-      if (m < 0) { m = 11; y -= 1 }
-      if (m > 11) { m = 0; y += 1 }
-      return { y: y, m: m }
-    })
-  }
-
-    function pickDay(d) {
-    const ds = view.y + '-' + pad(view.m + 1) + '-' + pad(d)
-    const pesan = pesanTanggalTerlarang(ds, props.min, props.max)
-    if (pesan) {
-      if (props.onTerlarang) props.onTerlarang(pesan)
-      return
-    }
-    props.onChange(ds)
-    setOpen(false)
-  }
-
-  function pickMonth(m) {
-    props.onChange(view.y + '-' + pad(m + 1))
-    setOpen(false)
-  }
-
-  function pickToday() {
-    const t = new Date()
-    if (mode === 'month') props.onChange(t.getFullYear() + '-' + pad(t.getMonth() + 1))
-    else props.onChange(t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate()))
-    setOpen(false)
-  }
-
-  const label = sel
-    ? (mode === 'month' ? BULAN_NAMA[sel.m] + ' ' + sel.y : sel.d + ' ' + BULAN_PENDEK[sel.m] + ' ' + sel.y)
-    : ''
-
-  const firstDay = new Date(view.y, view.m, 1).getDay()
-  const daysCount = new Date(view.y, view.m + 1, 0).getDate()
-  const cells = []
-  for (let i = 0; i < firstDay; i++) cells.push(null)
-  for (let d = 1; d <= daysCount; d++) cells.push(d)
-
-  return (
-    <div ref={boxRef} className={'relative ' + (props.className || '')}>
-      <button type="button" onClick={toggle} className={(props.buttonCls || defaultBtn) + ' text-left'}>
-        <span className="shrink-0 text-slate-600">{ICONS.calendar}</span>
-        <span className={'flex-1 truncate ' + (props.value ? 'text-slate-800' : 'text-slate-600')}>
-          {label || (mode === 'month' ? 'Pilih Bulan' : 'Pilih Tanggal')}
-        </span>
-        <span className={'shrink-0 text-slate-600 transition-transform duration-200 ' + (open ? 'rotate-180' : '')}>{ICONS.chevron}</span>
-      </button>
-      <SelubungPanel open={open}>
-<div className={'anim-modal absolute z-30 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl ' + (alignRight ? 'right-0' : '')}>
-          <div className="flex items-center justify-between">
-            <button type="button" onClick={function () { shift(-1) }} className="grid h-8 w-8 place-items-center rounded-lg text-slate-600 hover:bg-slate-100">&#8249;</button>
-            <p className="text-sm font-bold text-slate-800">
-              {mode === 'month' ? String(view.y) : BULAN_NAMA[view.m] + ' ' + view.y}
-            </p>
-            <button type="button" onClick={function () { shift(1) }} className="grid h-8 w-8 place-items-center rounded-lg text-slate-600 hover:bg-slate-100">&#8250;</button>
-          </div>
-
-          {mode === 'date' ? (
-            <div className="mt-3 grid grid-cols-7 gap-1 text-center">
-              {HARI_NAMA.map(function (h) {
-                return <span key={h} className="py-1 text-[11px] font-semibold text-slate-600">{h}</span>
-              })}
-                            {cells.map(function (d, i) {
-                if (d === null) return <span key={'kosong' + i} />
-                const isSel = sel && sel.y === view.y && sel.m === view.m && sel.d === d
-                const isToday = today.getFullYear() === view.y && today.getMonth() === view.m && today.getDate() === d
-                const terlarang = pesanTanggalTerlarang(view.y + '-' + pad(view.m + 1) + '-' + pad(d), props.min, props.max)
-                return (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={function () { pickDay(d) }}
-                    title={terlarang || undefined}
-                    className={'mx-auto grid h-8 w-8 place-items-center rounded-lg text-sm ' + (terlarang ? 'opacity-35 cursor-not-allowed ' : '') + (isSel ? 'bg-bsi-800 font-semibold text-white' : isToday ? 'font-bold text-bsi-700 ring-1 ring-bsi-500' : 'text-slate-700 hover:bg-slate-100')}
-                  >
-                    {d}
-                  </button>
-                )
-              })}
-            </div>
-          ) : (
-            <div className="mt-3 grid grid-cols-3 gap-2">
-              {BULAN_NAMA.map(function (nama, m) {
-                const isSel = sel && sel.y === view.y && sel.m === m
-                const isNow = today.getFullYear() === view.y && today.getMonth() === m
-                return (
-                  <button
-                    key={nama}
-                    type="button"
-                    onClick={function () { pickMonth(m) }}
-                    className={'rounded-lg px-2 py-2 text-xs font-semibold ' + (isSel ? 'bg-bsi-800 text-white' : isNow ? 'text-bsi-700 ring-1 ring-bsi-500' : 'text-slate-700 hover:bg-slate-100')}
-                  >
-                    {nama}
-                  </button>
-                )
-              })}
-            </div>
-          )}
-
-          <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
-            <button type="button" onClick={function () { props.onChange(''); setOpen(false) }} className="text-sm font-semibold text-slate-600 hover:text-red-600">Hapus</button>
-            <button type="button" onClick={pickToday} className="text-sm font-semibold text-bsi-700 hover:text-bsi-900">Hari Ini</button>
-          </div>
-        </div>
-</SelubungPanel>
-    </div>
-  )
-}
-
-export function FileInput(props) {
-  const inputRef = useRef(null)
-  return (
-    <div className={props.className || ''}>
-      <input
-        ref={inputRef}
-        type="file"
-        accept={props.accept || 'image/*,video/*'}
-        className="hidden"
-        onChange={function (e) {
-          if (props.onChange) props.onChange(e)
-          e.target.value = ''
-        }}
-      />
-      <button
-        type="button"
-        onClick={function () { inputRef.current.click() }}
-        className="flex w-full items-center gap-3 rounded-2xl border-2 border-dashed border-slate-300 bg-white px-4 py-4 text-left transition hover:border-bsi-500 hover:bg-slate-100"
-      >
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-bsi-100 text-bsi-800">{ICONS.image}</span>
-        <span className="min-w-0 flex-1">
-          <span className={'block truncate text-sm font-semibold ' + (props.fileName ? 'text-slate-800' : 'text-slate-600')}>
-            {props.fileName || props.label || 'Klik untuk Pilih Foto atau Video'}
-          </span>
-          <span className="block text-xs text-slate-600">{props.hint || 'Foto JPG, PNG, atau HEIC otomatis dikonversi. Video maks 50 MB.'}</span>
-        </span>
-        {props.fileName ? <span className="shrink-0 text-xs font-semibold text-bsi-700">Ganti</span> : null}
-      </button>
-    </div>
-  )
-}
-export function ToggleModeMedia(props) {
-  const cls = function (aktif) {
-    return 'px-3 py-1.5 rounded-xl text-xs font-bold ' + (aktif ? 'bg-bsi-800 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700')
-  }
-  return (
-    <div className={props.className || 'flex gap-2'}>
-      <button type="button" onClick={function () { props.onChange('foto') }} className={cls(props.value !== 'video')}>Foto</button>
-      <button type="button" onClick={function () { props.onChange('video') }} className={cls(props.value === 'video')}>Video</button>
-    </div>
-  )
-}
-
-export function SumberVideo(props) {
-  const habis = props.quotaRemaining <= 0
-  return (
-    <div className="space-y-2">
-      <p className="text-xs font-semibold text-slate-600">Sisa kuota unggah video hari ini: {props.quotaLoading ? <span className="inline-block w-3 h-3 ml-1 border-2 border-slate-400 border-t-transparent rounded-full animate-spin align-middle"></span> : <>{props.quotaRemaining} dari {props.quotaLimit}</>}</p>
-      <div className={habis && !props.fileName ? 'opacity-50 pointer-events-none' : ''}>
-        <FileInput accept="video/*" fileName={props.fileName || ''} label="Klik untuk Pilih Video" hint="Video maks 50 MB. Format MP4, MOV, WebM, atau MKV." onChange={props.onFile} />
-      </div>
-      {habis ? <p className="text-xs text-red-600">Kuota habis. Gunakan tautan video di bawah.</p> : null}
-      <input className={props.inputCls} value={props.ytLink} onChange={props.onYtLink} aria-label="Tautan video YouTube" placeholder="Tautan video YouTube (opsional)" />
-      <input className={props.inputCls} value={props.driveLink} onChange={props.onDriveLink} aria-label="Tautan Google Drive" placeholder="Tautan Google Drive (opsional)" />
-    </div>
-  )
-}
 ````
 
 ## File: src/main.jsx
@@ -8461,7 +5861,7 @@ export default function QuickPage() {
             <button
               type="button"
               onClick={function () { setAiOpen(function (v) { return !v }) }}
-              className="catatan-cepat-header flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50"
+              className="catatan-cepat-header flex w-full items-center gap-3 px-4 py-3 text-left"
             >
               <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-bsi-50 text-bsi-800">
                 <SizedIcon name="pencil" size={15} />
@@ -8577,183 +5977,6 @@ export default function QuickPage() {
           </form>
         </section>
       ) : null}
-    </div>
-  )
-}
-````
-
-## File: src/pages/HomePage.jsx
-````javascript
-import { urutkanTanggal } from '../lib/format.js'
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { supabase } from '../lib/supabase.js'
-import { useAuth } from '../lib/auth.js'
-import { EmptyState, Modal } from '../components/ui.jsx'
-import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
-import { SkeletonLogbookCard } from '../components/Skeleton.jsx'
-
-const GRADIENT_DOT = ['linear-gradient(135deg,#86ecb0,#1a9e57)', 'linear-gradient(135deg,#fbbf24,#d97706)', 'linear-gradient(135deg,#27c06d,#135033)']
-export default function HomePage() {
-  const { mahasiswa } = useAuth()
-  const [logs, setLogs] = useState([])
-  const [stats, setStats] = useState({ logbook: 0, galeri: 0, mahasiswa: 0 })
-  const [hadir, setHadir] = useState({ masuk: 0, izin: 0, bolos: 0 })
-  const [tim, setTim] = useState([])
-  const [detail, setDetail] = useState(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(function () {
-    async function load() {
-      const l = await supabase
-        .from('logbooks')
-        .select('*, mahasiswa(*), logbook_items(*)')
-        .eq('status', 'publik')
-        .order('tanggal', { ascending: false })
-        .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
-      const g = await supabase.from('galeri').select('id')
-      const p = await supabase.from('mahasiswa').select('id, nama, foto_profil').order('nama')
-      const h = await supabase.from('daftar_hadir').select('status')
-      const hitung = { masuk: 0, izin: 0, bolos: 0 }
-      const rows = h.data || []
-      for (let i = 0; i < rows.length; i++) {
-        if (rows[i].status === 'Masuk') hitung.masuk += 1
-        else if (rows[i].status === 'Izin') hitung.izin += 1
-        else if (rows[i].status === 'Bolos') hitung.bolos += 1
-      }
-      setLogs(l.data || [])
-      setStats({ logbook: (l.data || []).length, galeri: (g.data || []).length, mahasiswa: (p.data || []).length })
-      setTim(p.data || [])
-      setHadir(hitung)
-      setLoading(false)
-    }
-    load()
-  }, [])
-
-  const totalHadir = hadir.masuk + hadir.izin + hadir.bolos
-  const persenMasuk = totalHadir ? Math.round((hadir.masuk / totalHadir) * 100) : 0
-  const lebarMasuk = totalHadir ? (hadir.masuk / totalHadir) * 100 : 0
-  const lebarIzin = totalHadir ? (hadir.izin / totalHadir) * 100 : 0
-  const lebarBolos = totalHadir ? (hadir.bolos / totalHadir) * 100 : 0
-
-  return (
-    <div>
-      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-6 sm:p-10 lg:px-12 lg:py-7">
-        <div className="pointer-events-none absolute right-16 top-1/2 h-80 w-80 -translate-y-1/2 rounded-full bg-bsi-500/10 blur-3xl" />
-        <span className="bsi-chip bsi-chip-deep bsi-chip-mobile-1 xl:hidden">▦</span>
-        <span className="bsi-chip bsi-chip-gold bsi-chip-mobile-2 xl:hidden">▶</span>
-        <span className="bsi-chip bsi-chip-green bsi-chip-mobile-3 xl:hidden">✦</span>
-        <div className="relative z-10 flex items-center gap-10">
-          <div className="min-w-0 flex-1">
-            <h1 className="max-w-2xl text-2xl font-black leading-tight text-slate-900 sm:text-3xl lg:text-5xl">
-              Portal Logbook, Galeri & Kehadiran Magang <span className="bsi-grad-text"></span>
-            </h1>
-            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-slate-600 sm:mt-5 sm:text-base">
-              Platform terpusat untuk mendokumentasikan aktivitas dan kehadiran tim magang.
-            </p>
-            <div className="mt-6 flex flex-wrap gap-2 sm:mt-8 sm:gap-3">
-              <Link to="/logbook" className="inline-flex items-center gap-2 rounded-2xl bg-bsi-800 px-5 py-3 text-sm font-bold text-white shadow-lg hover:bg-bsi-900 sm:px-6 sm:text-base">Logbook</Link>
-              {/* <Link to="/galeri" className="bsi-btn-glass">Lihat Galeri</Link> */}
-              <Link to="/absen" className="bsi-btn-glass">Daftar Hadir</Link>
-              {/* {mahasiswa
-                ? <Link to="/dashboard" className="bsi-btn-white">Buka Dashboard</Link>
-                : <Link to="/login" className="bsi-btn-white">Masuk Akun</Link>} */}
-            </div>
-          </div>
-          <div className="bsi-hero-art relative hidden w-[430px] shrink-0 self-stretch min-h-[300px] xl:block">
-            <span className="bsi-chip bsi-chip-deep bsi-chip-c1">▦</span>
-            <span className="bsi-chip bsi-chip-green bsi-chip-c3">✦</span>
-            <span className="bsi-chip bsi-chip-gold bsi-chip-c2">▶</span>
-            <div className="bsi-mini-card bsi-mini-green absolute left-0 top-8 -rotate-2">
-              <p className="text-xs font-bold opacity-80">LOGBOOK PUBLIK</p>
-              <p className="mt-1 text-3xl font-black">{loading ? '—' : stats.logbook}</p>
-              <p className="mt-2 text-xs opacity-75">{loading ? 'Memuat data...' : stats.galeri + ' media di galeri'}</p>
-            </div>
-            <div className="bsi-mini-card bsi-mini-white absolute right-0 top-[32%] rotate-2">
-              <p className="text-xs font-bold opacity-80">KEHADIRAN TIM</p>
-              <p className="mt-1 text-3xl font-black">{loading ? '—' : persenMasuk + '%'}</p>
-              <div className="bsi-stack">
-                <i style={{ width: lebarMasuk + '%', background: '#10b981' }}></i>
-                <i style={{ width: lebarIzin + '%', background: '#f59e0b' }}></i>
-                <i style={{ width: lebarBolos + '%', background: '#ef4444' }}></i>
-              </div>
-              <p className="mt-2 text-xs opacity-75">Masuk {hadir.masuk} • Izin {hadir.izin} • Bolos {hadir.bolos}</p>
-            </div>
-            <div className="bsi-pill-card">
-              <span className="flex -space-x-2">
-                {loading
-                  ? [0, 1, 2].map(function (i) { return <i key={i} className="bsi-dot" style={{ background: GRADIENT_DOT[i] }}></i> })
-                  : tim.slice(0, 3).map(function (m, i) {
-                      return m.foto_profil
-                        ? <img key={m.id} src={m.foto_profil} alt={'Foto ' + m.nama} loading="lazy" decoding="async" className="bsi-dot bsi-dot-foto" />
-                        : <span key={m.id} className="bsi-dot bsi-dot-inisial" style={{ background: GRADIENT_DOT[i % GRADIENT_DOT.length] }}>{(m.nama || '?').charAt(0).toUpperCase()}</span>
-                    })}
-                {!loading && tim.length > 3 ? <span className="bsi-dot bsi-dot-lebih">+{tim.length - 3}</span> : null}
-              </span>
-              <span className="text-xs font-bold">{loading ? 'Memuat data...' : 'Tim magang • ' + stats.mahasiswa + ' mahasiswa'}</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {loading
-          ? [0, 1, 2].map(function (i) {
-              return (
-                <div key={i} className="bsi-stat">
-                  <div className="skeleton h-3 w-24 rounded-full"></div>
-                  <div className="skeleton mt-2 h-8 w-16 rounded-full"></div>
-                  <div className="skeleton mt-2 h-3 w-32 rounded-full"></div>
-                </div>
-              )
-            })
-          : [
-              <div key="mahasiswa" className="bsi-stat">
-                <p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Total Mahasiswa</p>
-                <p className="mt-2 text-3xl font-black text-slate-900">{stats.mahasiswa}</p>
-                <p className="mt-1 text-xs text-slate-500">Mahasiswa terdaftar dalam tim</p>
-              </div>,
-              <div key="logbook" className="bsi-stat">
-                <p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Logbook Publik</p>
-                <p className="mt-2 text-3xl font-black text-slate-900">{stats.logbook}</p>
-                <p className="mt-1 text-xs text-slate-500">Catatan kegiatan harian</p>
-              </div>,
-              <div key="galeri" className="bsi-stat">
-                <p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Media Galeri</p>
-                <p className="mt-2 text-3xl font-black text-slate-900">{stats.galeri}</p>
-                <p className="mt-1 text-xs text-slate-500">Foto dan video dokumentasi</p>
-              </div>
-            ]}
-      </section>
-
-      <section className="mt-10">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600 dark:text-gold-400">Kegiatan terbaru</p>
-            <h2 className="mt-2 text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Logbook Terbaru Tim</h2>
-          </div>
-          <Link to="/logbook" className="text-sm font-semibold text-bsi-800 hover:text-bsi-950">Lihat Semua Logbook</Link>
-        </div>
-        <div className="grid-pusat mt-6">
-          {loading
-            ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
-            : urutkanTanggal(logs, 'terbaru').slice(0, 6).map(function (l) {
-                return (
-                  <div key={l.id} className="kolom-kartu">
-                    <LogbookCard log={l} onDetail={function () { setDetail(l) }} />
-                  </div>
-                )
-              })}
-          {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum Ada Logbook Publik" desc="Logbook yang sudah dibagikan akan tampil di sini." /></div> : null}
-        </div>
-        <div className="mt-8 flex justify-center">
-          <Link to="/logbook" className="rounded-xl bg-bsi-800 px-5 py-2.5 text-xs font-bold text-white hover:bg-bsi-900 sm:rounded-2xl sm:px-6 sm:py-3 sm:text-sm">Lihat Semua Logbook</Link>
-        </div>
-      </section>
-
-      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
-        {detail ? <LogbookDetail log={detail} /> : null}
-      </Modal>
     </div>
   )
 }
@@ -9001,6 +6224,183 @@ export function AttendanceDetail(props) {
         <p className="mt-1 text-sm text-slate-700">{row.alasan || 'Tidak ada alasan.'}</p>
       </div>
       <div className="detail-footer border-t border-slate-100 pt-4"><PersonChip mahasiswa={row.mahasiswa} /></div>
+    </div>
+  )
+}
+````
+
+## File: src/pages/HomePage.jsx
+````javascript
+import { urutkanTanggal } from '../lib/format.js'
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { supabase } from '../lib/supabase.js'
+import { useAuth } from '../lib/auth.js'
+import { EmptyState, Modal } from '../components/ui.jsx'
+import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
+import { SkeletonLogbookCard } from '../components/Skeleton.jsx'
+
+const GRADIENT_DOT = ['linear-gradient(135deg,#86ecb0,#1a9e57)', 'linear-gradient(135deg,#fbbf24,#d97706)', 'linear-gradient(135deg,#27c06d,#135033)']
+export default function HomePage() {
+  const { mahasiswa } = useAuth()
+  const [logs, setLogs] = useState([])
+  const [stats, setStats] = useState({ logbook: 0, galeri: 0, mahasiswa: 0 })
+  const [hadir, setHadir] = useState({ masuk: 0, izin: 0, bolos: 0 })
+  const [tim, setTim] = useState([])
+  const [detail, setDetail] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(function () {
+    async function load() {
+      const l = await supabase
+        .from('logbooks')
+        .select('*, mahasiswa(*), logbook_items(*)')
+        .eq('status', 'publik')
+        .order('tanggal', { ascending: false })
+        .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
+      const g = await supabase.from('galeri').select('id')
+      const p = await supabase.from('mahasiswa').select('id, nama, foto_profil').order('nama')
+      const h = await supabase.from('daftar_hadir').select('status')
+      const hitung = { masuk: 0, izin: 0, bolos: 0 }
+      const rows = h.data || []
+      for (let i = 0; i < rows.length; i++) {
+        if (rows[i].status === 'Masuk') hitung.masuk += 1
+        else if (rows[i].status === 'Izin') hitung.izin += 1
+        else if (rows[i].status === 'Bolos') hitung.bolos += 1
+      }
+      setLogs(l.data || [])
+      setStats({ logbook: (l.data || []).length, galeri: (g.data || []).length, mahasiswa: (p.data || []).length })
+      setTim(p.data || [])
+      setHadir(hitung)
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  const totalHadir = hadir.masuk + hadir.izin + hadir.bolos
+  const persenMasuk = totalHadir ? Math.round((hadir.masuk / totalHadir) * 100) : 0
+  const lebarMasuk = totalHadir ? (hadir.masuk / totalHadir) * 100 : 0
+  const lebarIzin = totalHadir ? (hadir.izin / totalHadir) * 100 : 0
+  const lebarBolos = totalHadir ? (hadir.bolos / totalHadir) * 100 : 0
+
+  return (
+    <div>
+      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-6 sm:p-10 lg:px-12 lg:py-7">
+        <div className="pointer-events-none absolute right-16 top-1/2 h-80 w-80 -translate-y-1/2 rounded-full bg-bsi-500/10 blur-3xl" />
+        <span className="bsi-chip bsi-chip-deep bsi-chip-mobile-1 xl:hidden">▦</span>
+        <span className="bsi-chip bsi-chip-gold bsi-chip-mobile-2 xl:hidden">▶</span>
+        <span className="bsi-chip bsi-chip-green bsi-chip-mobile-3 xl:hidden">✦</span>
+        <div className="relative z-10 flex items-center gap-10">
+          <div className="min-w-0 flex-1">
+            <h1 className="max-w-2xl text-2xl font-black leading-tight text-slate-900 sm:text-3xl lg:text-5xl">
+              Portal Logbook, Galeri & Kehadiran Magang <span className="bsi-grad-text"></span>
+            </h1>
+            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-slate-600 sm:mt-5 sm:text-base">
+              Platform terpusat untuk mendokumentasikan aktivitas dan kehadiran tim magang.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-2 sm:mt-8 sm:gap-3">
+              <Link to="/logbook" className="inline-flex items-center gap-2 rounded-2xl bg-bsi-800 px-5 py-3 text-sm font-bold text-white shadow-lg hover:bg-bsi-900 sm:px-6 sm:text-base">Logbook</Link>
+              {/* <Link to="/galeri" className="bsi-btn-glass">Lihat Galeri</Link> */}
+              <Link to="/absen" className="bsi-btn-glass">Daftar Hadir</Link>
+              {/* {mahasiswa
+                ? <Link to="/dashboard" className="bsi-btn-white">Buka Dashboard</Link>
+                : <Link to="/login" className="bsi-btn-white">Masuk Akun</Link>} */}
+            </div>
+          </div>
+          <div className="bsi-hero-art relative hidden w-[430px] shrink-0 self-stretch min-h-[300px] xl:block">
+            <span className="bsi-chip bsi-chip-deep bsi-chip-c1">▦</span>
+            <span className="bsi-chip bsi-chip-green bsi-chip-c3">✦</span>
+            <span className="bsi-chip bsi-chip-gold bsi-chip-c2">▶</span>
+            <div className="bsi-mini-card bsi-mini-green absolute left-0 top-8 -rotate-2">
+              <p className="text-xs font-bold opacity-80">LOGBOOK PUBLIK</p>
+              <p className="mt-1 text-3xl font-black">{loading ? '—' : stats.logbook}</p>
+              <p className="mt-2 text-xs opacity-75">{loading ? 'Memuat data...' : stats.galeri + ' media di galeri'}</p>
+            </div>
+            <div className="bsi-mini-card bsi-mini-white absolute right-0 top-[32%] rotate-2">
+              <p className="text-xs font-bold opacity-80">KEHADIRAN TIM</p>
+              <p className="mt-1 text-3xl font-black">{loading ? '—' : persenMasuk + '%'}</p>
+              <div className="bsi-stack">
+                <i style={{ width: lebarMasuk + '%', background: '#10b981' }}></i>
+                <i style={{ width: lebarIzin + '%', background: '#f59e0b' }}></i>
+                <i style={{ width: lebarBolos + '%', background: '#ef4444' }}></i>
+              </div>
+              <p className="mt-2 text-xs opacity-75">Masuk {hadir.masuk} • Izin {hadir.izin} • Bolos {hadir.bolos}</p>
+            </div>
+            <div className="bsi-pill-card">
+              <span className="flex -space-x-2">
+                {loading
+                  ? [0, 1, 2].map(function (i) { return <i key={i} className="bsi-dot" style={{ background: GRADIENT_DOT[i] }}></i> })
+                  : tim.slice(0, 3).map(function (m, i) {
+                      return m.foto_profil
+                        ? <img key={m.id} src={m.foto_profil} alt={'Foto ' + m.nama} loading="lazy" decoding="async" className="bsi-dot bsi-dot-foto" />
+                        : <span key={m.id} className="bsi-dot bsi-dot-inisial" style={{ background: GRADIENT_DOT[i % GRADIENT_DOT.length] }}>{(m.nama || '?').charAt(0).toUpperCase()}</span>
+                    })}
+                {!loading && tim.length > 3 ? <span className="bsi-dot bsi-dot-lebih">+{tim.length - 3}</span> : null}
+              </span>
+              <span className="text-xs font-bold">{loading ? 'Memuat data...' : 'Tim magang • ' + stats.mahasiswa + ' mahasiswa'}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {loading
+          ? [0, 1, 2].map(function (i) {
+              return (
+                <div key={i} className="bsi-stat">
+                  <div className="skeleton h-3 w-24 rounded-full"></div>
+                  <div className="skeleton mt-2 h-8 w-16 rounded-full"></div>
+                  <div className="skeleton mt-2 h-3 w-32 rounded-full"></div>
+                </div>
+              )
+            })
+          : [
+              <div key="mahasiswa" className="bsi-stat">
+                <p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Total Mahasiswa</p>
+                <p className="mt-2 text-3xl font-black text-slate-900">{stats.mahasiswa}</p>
+                <p className="mt-1 text-xs text-slate-500">Mahasiswa terdaftar dalam tim</p>
+              </div>,
+              <div key="logbook" className="bsi-stat">
+                <p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Logbook Publik</p>
+                <p className="mt-2 text-3xl font-black text-slate-900">{stats.logbook}</p>
+                <p className="mt-1 text-xs text-slate-500">Catatan kegiatan harian</p>
+              </div>,
+              <div key="galeri" className="bsi-stat">
+                <p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Media Galeri</p>
+                <p className="mt-2 text-3xl font-black text-slate-900">{stats.galeri}</p>
+                <p className="mt-1 text-xs text-slate-500">Foto dan video dokumentasi</p>
+              </div>
+            ]}
+      </section>
+
+      <section className="mt-10">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600 dark:text-gold-400">Kegiatan terbaru</p>
+            <h2 className="mt-2 text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Logbook Terbaru Tim</h2>
+          </div>
+          <Link to="/logbook" className="text-sm font-semibold text-bsi-800 hover:text-bsi-950">Lihat Semua Logbook</Link>
+        </div>
+        <div className="grid-pusat mt-6">
+          {loading
+            ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
+            : urutkanTanggal(logs, 'terbaru').slice(0, 6).map(function (l) {
+                return (
+                  <div key={l.id} className="kolom-kartu">
+                    <LogbookCard log={l} onDetail={function () { setDetail(l) }} />
+                  </div>
+                )
+              })}
+          {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum Ada Logbook Publik" desc="Logbook yang sudah dibagikan akan tampil di sini." /></div> : null}
+        </div>
+        <div className="mt-8 flex justify-center">
+          <Link to="/logbook" className="rounded-xl bg-bsi-800 px-5 py-2.5 text-xs font-bold text-white hover:bg-bsi-900 sm:rounded-2xl sm:px-6 sm:py-3 sm:text-sm">Lihat Semua Logbook</Link>
+        </div>
+      </section>
+
+      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
+        {detail ? <LogbookDetail log={detail} /> : null}
+      </Modal>
     </div>
   )
 }
@@ -10707,6 +8107,7 @@ body { background-color: #f4f8f4; background-image: linear-gradient(160deg, #dff
 .dark .bg-slate-50, .dark .bg-slate-100, .dark .bg-slate-200 { background-color: rgba(234,244,238,.07) !important; }
 .hover\:bg-slate-100:hover, .hover\:bg-slate-200:hover { background-color: rgba(15,42,29,.10); }
 .dark .hover\:bg-slate-100:hover, .dark .hover\:bg-slate-200:hover { background-color: rgba(234,244,238,.10) !important; }
+.dark .hover\:bg-slate-50:hover { background-color: rgba(234,244,238,.08) !important; }
 .border-slate-100, .border-slate-200, .border-slate-300 { border-color: rgba(15,42,29,.10); }
 .dark .border-slate-100, .dark .border-slate-200, .dark .border-slate-300 { border-color: rgba(234,244,238,.10) !important; }
 .text-slate-900, .text-slate-800, .text-slate-700 { color: #0f2a1d; }
@@ -10717,6 +8118,7 @@ body { background-color: #f4f8f4; background-image: linear-gradient(160deg, #dff
 .dark .bg-slate-900 { background-color: #eaf4ee !important; color: #081a13 !important; }
 .bg-bsi-100 { background-color: rgba(39,192,109,.12); }
 .dark .bg-bsi-100 { background-color: rgba(39,192,109,.18) !important; }
+.dark .bg-bsi-50 { background-color: rgba(39,192,109,.14) !important; }
 .text-bsi-900, .text-bsi-800, .text-bsi-700 { color: #177c48; }
 .dark .text-bsi-900, .dark .text-bsi-800, .dark .text-bsi-700 { color: #86ecb0 !important; }
 .dark .bg-bsi-800 { background-color: #27c06d !important; }
@@ -12285,7 +9687,7 @@ export default function DashboardPage() {
               <button
                 type="button"
                 onClick={function () { setAiOpen(function (v) { return !v }) }}
-                className="catatan-cepat-header flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50"
+                className="catatan-cepat-header flex w-full items-center gap-3 px-4 py-3 text-left"
               >
                 <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-bsi-50 text-bsi-800">
                   <SizedIcon name="pencil" size={15} />

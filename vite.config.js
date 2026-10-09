@@ -209,27 +209,9 @@ function pluginApiAi(env) {
   }
   const setupMiddlewares = (server) => {
     server.middlewares.use('/api/ai/tulis', async function (req, res) {
-      // ====== DEBUG MULAI ======
-      console.log('\n[AI DEBUG] ============== REQUEST MASUK ==============')
-      console.log('[AI DEBUG] method:', req.method)
-      console.log('[AI DEBUG] url:', req.url)
       const authHeader = req.headers.authorization || ''
-      console.log('[AI DEBUG] authorization ada?', !!authHeader)
-      console.log('[AI DEBUG] authorization preview:', authHeader ? authHeader.slice(0, 40) + '...' : '(kosong)')
-      console.log('[AI DEBUG] token length:', authHeader.replace('Bearer ', '').length)
-      console.log('[AI DEBUG] VITE_SUPABASE_URL:', env.VITE_SUPABASE_URL || '(kosong)')
-      console.log('[AI DEBUG] VITE_SUPABASE_ANON_KEY ada?', !!env.VITE_SUPABASE_ANON_KEY)
-      // ====== DEBUG END ======
-
       if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
-
       const user = await cekSesi(env, authHeader)
-
-      // ====== DEBUG MULAI ======
-      console.log('[AI DEBUG] hasil cekSesi:', user ? ('USER OK → ' + user.email + ' (id: ' + user.id + ')') : 'NULL / INVALID')
-      console.log('[AI DEBUG] ============================================\n')
-      // ====== DEBUG END ======
-
       if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
       const body = await bacaBody(req)
       const draft = body.draft
@@ -245,7 +227,6 @@ function pluginApiAi(env) {
         })
         kirim(res, 200, hasil)
       } catch (err) {
-        console.log('[AI DEBUG] error dari Gemini:', err.message)
         kirim(res, 500, { error: err.message || 'Gagal memanggil AI' })
       }
     })
@@ -259,21 +240,6 @@ function pluginApiAi(env) {
 
 export default defineConfig(function ({ mode }) {
   const env = loadEnv(mode, process.cwd(), '')
-
-  // ====== DEBUG ENV ======
-  console.log('\n[ENV DEBUG] ===== CEK ENV SAAT STARTUP =====')
-  console.log('[ENV DEBUG] mode:', mode)
-  console.log('[ENV DEBUG] GEMINI_API_KEY:', env.GEMINI_API_KEY ? ('ADA (' + env.GEMINI_API_KEY.slice(0, 10) + '...), panjang: ' + env.GEMINI_API_KEY.length) : 'TIDAK ADA')
-  console.log('[ENV DEBUG] GEMINI_MODEL:', env.GEMINI_MODEL || 'TIDAK ADA')
-  console.log('[ENV DEBUG] VITE_SUPABASE_URL:', env.VITE_SUPABASE_URL || 'TIDAK ADA')
-  console.log('[ENV DEBUG] VITE_SUPABASE_ANON_KEY:', env.VITE_SUPABASE_ANON_KEY ? ('ADA (panjang: ' + env.VITE_SUPABASE_ANON_KEY.length + ')') : 'TIDAK ADA')
-  console.log('[ENV DEBUG] AI_PROVIDER:', env.AI_PROVIDER || '(default: gemini)')
-console.log('[ENV DEBUG] OPENROUTER_API_KEY:', env.OPENROUTER_API_KEY ? ('ADA (' + env.OPENROUTER_API_KEY.slice(0, 12) + '...), panjang: ' + env.OPENROUTER_API_KEY.length) : 'TIDAK ADA')
-console.log('[ENV DEBUG] OPENROUTER_MODEL:', env.OPENROUTER_MODEL || '(default: llama-3.3-70b)')
-console.log('[ENV DEBUG] GROQ_API_KEY:', env.GROQ_API_KEY ? ('ADA (' + env.GROQ_API_KEY.slice(0, 10) + '...), panjang: ' + env.GROQ_API_KEY.length) : 'TIDAK ADA')
-console.log('[ENV DEBUG] GROQ_MODEL:', env.GROQ_MODEL || '(default: qwen/qwen3.8-27b)')
-  console.log('[ENV DEBUG] =======================================\n')
-  // ====== DEBUG END ======
 
   return {
     plugins: [react(), pluginApiR2(env), pluginApiYoutube(env), pluginApiAi(env)],
