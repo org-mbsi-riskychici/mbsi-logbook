@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase.js'
 import { EmptyState, Modal , Avatar } from '../components/ui.jsx'
 import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
 import { SkeletonLogbookCard, SkeletonPersonCard } from '../components/Skeleton.jsx'
+// import DospemChat from '../components/DospemChat.jsx'  // dinonaktifkan: sudah digantikan ChatWidget floating
 
 export default function DospemPage() {
   const [logs, setLogs] = useState([])
@@ -66,6 +67,8 @@ export default function DospemPage() {
           <Link to="/absen" className="px-4 py-3 rounded-xl bsi-panel text-slate-700 text-xs font-bold hover:text-bsi-800 sm:px-5 sm:py-3 sm:rounded-2xl sm:text-sm">Daftar Hadir</Link>
         </div>
       </section>
+
+      {/* <DospemChat /> dinonaktifkan: sudah digantikan ChatWidget floating */}
 
       <section className="mt-10">
 <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Profil Tim Magang</h2>

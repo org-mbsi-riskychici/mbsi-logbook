@@ -17,3 +17,14 @@ export async function bantuTulisLogbook(draft, kategoriList, unitList) {
   if (!r.ok) throw new Error(j.error || 'Gagal memanggil AI')
   return j
 }
+
+export async function tanyaDospem(pertanyaan, riwayat) {
+  const r = await fetch('/api/ai/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pertanyaan: pertanyaan, riwayat: riwayat || [] })
+  })
+  const j = await r.json().catch(function () { return {} })
+  if (!r.ok) throw new Error(j.error || 'Gagal memanggil AI')
+  return j
+}

@@ -14,8 +14,10 @@ export async function panggilGroq(env, opsi) {
     messages: [{ role: 'user', content: opsi.prompt }],
     temperature: opsi.temperature == null ? 0.6 : opsi.temperature,
     max_completion_tokens: opsi.maxTokens || 2048,
-    reasoning_effort: opsi.reasoningEffort || 'none',
-    response_format: { type: 'json_object' }
+    reasoning_effort: opsi.reasoningEffort || 'none'
+  }
+  if (opsi.jsonMode !== false) {
+    body.response_format = { type: 'json_object' }
   }
 
   const r = await fetch(BASE, {
@@ -35,10 +37,10 @@ export async function panggilGroq(env, opsi) {
       if (j && j.error && j.error.message) detail = j.error.message
     } catch (e) {}
     if (r.status === 401) throw new Error('API key Groq tidak valid. Periksa GROQ_API_KEY di .env.local')
-    if (r.status === 404) throw new Error('Model "' + modelGroq(env) + '" tidak ditemukan di Groq. Cek https://console.groq.com/docs/models')
+    if (r.status === 404) throw new Error('Model "' + modelGroq(env) + '" tidak ditemukan di Groq.')
     if (r.status === 429) {
-      if (/per day|daily|RPD/i.test(detail)) throw new Error('Kuota harian Groq habis (1.000 request/hari untuk Qwen 3.8 27B). Reset tengah malam UTC.')
-      if (/per minute|TPM|RPM/i.test(detail)) throw new Error('Rate limit Groq: terlalu banyak request per menit. Tunggu 10-20 detik lalu coba lagi.')
+      if (/per day|daily|RPD/i.test(detail)) throw new Error('Kuota harian Groq habis. Coba lagi besok.')
+      if (/per minute|TPM|RPM/i.test(detail)) throw new Error('Terlalu banyak request. Tunggu 10-20 detik lalu coba lagi.')
       throw new Error('Groq rate limit: ' + (detail || 'coba lagi sebentar lagi'))
     }
     throw new Error('Groq gagal (status ' + r.status + '): ' + (detail || teks.slice(0, 200)))

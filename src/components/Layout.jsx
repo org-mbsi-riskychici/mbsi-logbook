@@ -4,6 +4,7 @@ import { useAuth, logoutMahasiswa } from '../lib/auth.js'
 import { SizedIcon } from './icons.jsx'
 import { ConfirmModal } from './ui.jsx'
 import { useEffect, useRef, useState } from 'react'
+import ChatWidget from './ChatWidget.jsx'
 
 const LINKS = [
   { to: '/', label: 'Beranda' },
@@ -35,6 +36,11 @@ export default function Layout() {
   const location = useLocation()
   const isAreaIntern = location.pathname.indexOf('/dashboard') === 0 ||
     location.pathname.indexOf('/qr') === 0
+
+  /* Chat widget tampil di halaman publik saja (bukan area intern) */
+  const HALAMAN_PUBLIK = ["/logbook", "/galeri", "/absen", "/dospem", "/tim"]
+  const isHalamanPublik = location.pathname === "/" ||
+    HALAMAN_PUBLIK.some(function (p) { return location.pathname === p || location.pathname.indexOf(p + "/") === 0 })
 
   /* menu-auto-close-v1: tutup menu mobile saat user berinteraksi di luar
      area menu atau tombol hamburger. Escape juga menutup menu. */
@@ -164,6 +170,7 @@ export default function Layout() {
   onCancel={function () { setKonfirmasiKeluar(false) }}
   onConfirm={benarKeluar}
 />
+      {isHalamanPublik ? <ChatWidget /> : null}
     </div>
   )
 }

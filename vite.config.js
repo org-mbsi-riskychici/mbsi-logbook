@@ -6,6 +6,7 @@ import { createClient } from '@supabase/supabase-js'
 import { LIMIT_PER_PROJECT, ptToday, daftarKredensial, getAccessToken } from './api/_lib/youtube.js'
 import { cekSesi, bacaBody } from './api/_lib/sesi.js'
 import { susunLogbookAi } from './api/_lib/ai-provider.js'
+import { jawabPertanyaanDospem } from './api/_lib/dospem-chat.js'
 
 function pluginApiR2(env) {
   const s3 = new S3Client({
@@ -227,6 +228,35 @@ function pluginApiAi(env) {
         })
         kirim(res, 200, hasil)
       } catch (err) {
+        kirim(res, 500, { error: err.message || 'Gagal memanggil AI' })
+      }
+    })
+
+    server.middlewares.use('/api/ai/chat', async function (req, res) {
+      if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
+      const body = await bacaBody(req)
+      const pertanyaan = String(body.pertanyaan || '').trim()
+      const riwayat = Array.isArray(body.riwayat) ? body.riwayat.slice(-10) : []
+      if (!pertanyaan) { kirim(res, 400, { error: 'Pertanyaan tidak boleh kosong.' }); return }
+      if (pertanyaan.length > 500) { kirim(res, 400, { error: 'Pertanyaan terlalu panjang (maks 500 karakter).' }); return }
+      try {
+        const sb = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY)
+        const [l, p, g, h] = await Promise.all([
+          sb.from('logbooks').select('id, mahasiswa_id, tanggal, kategori, judul, logbook_items(judul)')
+            .eq('status', 'publik').order('tanggal', { ascending: false }).limit(200),
+          sb.from('mahasiswa').select('id, nama, nim, prodi').order('nama').limit(50),
+          sb.from('galeri').select('id, mahasiswa_id').limit(500),
+          sb.from('daftar_hadir').select('id, mahasiswa_id, tanggal, status, alasan')
+            .order('tanggal', { ascending: false }).limit(1000)
+        ])
+        const jawaban = await jawabPertanyaanDospem(env, {
+          pertanyaan: pertanyaan,
+          riwayat: riwayat,
+          data: { logs: l.data || [], people: p.data || [], gal: g.data || [], hadir: h.data || [] }
+        })
+        kirim(res, 200, { jawaban: jawaban })
+      } catch (err) {
+        console.error('[ai/chat]', err)
         kirim(res, 500, { error: err.message || 'Gagal memanggil AI' })
       }
     })
