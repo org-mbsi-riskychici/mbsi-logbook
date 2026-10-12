@@ -54,6 +54,7 @@ api/
     quota.js
     session.js
 public/
+  avatar-asisten-magang.jpeg
   llms.txt
   logo-1.svg
   logo.svg
@@ -103,17 +104,59 @@ supabase/
   schema.sql
 .env.example
 .gitignore
-apply-redis-cache.cjs
+.os-marker
 index.html
 package.json
 postcss.config.js
 README.md
+start-ubuntu.sh
+start-windows.cmd
 tailwind.config.js
+uji-ai.html
 vercel.json
 vite.config.js
 ````
 
 # Files
+
+## File: src/lib/profil.js
+````javascript
+import { supabase } from './supabase.js'
+import { siapkanFotoProfil } from './konversi.js'
+
+const MAKS_FOTO_PROFIL = 5 * 1024 * 1024
+
+export async function uploadFotoProfil(file, userId) {
+  if (!file) throw new Error('File foto tidak ditemukan')
+  const tipe = String(file.type || '').toLowerCase()
+  if (tipe.indexOf('image/') !== 0) throw new Error('File harus berupa gambar')
+  if (file.size > MAKS_FOTO_PROFIL) throw new Error('Ukuran foto maksimal 5 MB')
+  const siap = await siapkanFotoProfil(file, 640, 0.85)
+  const namaFile = userId + '/profil-' + Date.now() + '.webp'
+  const { error } = await supabase.storage
+    .from('foto-profil')
+    .upload(namaFile, siap, { upsert: true, contentType: siap.type })
+  if (error) throw new Error(error.message)
+  const { data } = supabase.storage.from('foto-profil').getPublicUrl(namaFile)
+  return data.publicUrl
+}
+
+export async function updateFotoProfilMahasiswa(mahasiswaId, fotoUrl) {
+  const { error } = await supabase.from('mahasiswa').update({ foto_profil: fotoUrl }).eq('id', mahasiswaId)
+  if (error) throw new Error(error.message)
+}
+
+export async function hapusFotoProfil(mahasiswaId, fotoUrl) {
+  if (fotoUrl) {
+    const bagian = String(fotoUrl).split('/foto-profil/')
+    if (bagian[1]) {
+      await supabase.storage.from('foto-profil').remove([decodeURIComponent(bagian[1])])
+    }
+  }
+  const { error } = await supabase.from('mahasiswa').update({ foto_profil: null }).eq('id', mahasiswaId)
+  if (error) throw new Error(error.message)
+}
+````
 
 ## File: src/lib/supabase.js
 ````javascript
@@ -364,13 +407,6 @@ export default {
     tailwindcss: {},
     autoprefixer: {}
   }
-}
-````
-
-## File: vercel.json
-````json
-{
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }
 ````
 
@@ -704,55 +740,6 @@ export async function jawabPertanyaanDospem(env, opts) {
 }
 ````
 
-## File: api/_lib/redis.js
-````javascript
-import { Redis } from '@upstash/redis'
-
-/* Klien Redis untuk caching di serverless functions dan Vite dev middleware.
-   Redis.fromEnv() otomatis baca UPSTASH_REDIS_REST_URL dan
-   UPSTASH_REDIS_REST_TOKEN dari environment. */
-let klien = null
-
-export function ambilRedis(env) {
-  if (klien) return klien
-  if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) {
-    return null
-  }
-  klien = new Redis({
-    url: env.UPSTASH_REDIS_REST_URL,
-    token: env.UPSTASH_REDIS_REST_TOKEN
-  })
-  return klien
-}
-
-/* Cache-aside pattern: cek cache dulu, kalau miss panggil fetcher
-   lalu simpan hasilnya ke cache dengan TTL. Kalau Redis down
-   atau env tidak ada, langsung panggil fetcher tanpa error. */
-export async function denganCache(env, kunci, ttlDetik, fetcher) {
-  const redis = ambilRedis(env)
-  if (!redis) return { data: await fetcher(), dariCache: false }
-
-  try {
-    const cached = await redis.get(kunci)
-    if (cached !== null && cached !== undefined) {
-      return { data: cached, dariCache: true }
-    }
-  } catch (e) {
-    console.warn('[redis] get gagal, fallback ke fetcher:', e.message)
-  }
-
-  const hasil = await fetcher()
-
-  try {
-    await redis.set(kunci, hasil, { ex: ttlDetik })
-  } catch (e) {
-    console.warn('[redis] set gagal, dilewati:', e.message)
-  }
-
-  return { data: hasil, dariCache: false }
-}
-````
-
 ## File: api/_lib/sesi.js
 ````javascript
 import { createClient } from '@supabase/supabase-js'
@@ -877,56 +864,103 @@ export default async function handler(req, res) {
 }
 ````
 
-## File: api/r2/file.js
+## File: api/youtube/latest.js
 ````javascript
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
-
-const s3 = new S3Client({
-  region: 'auto',
-  endpoint: 'https://' + process.env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
-  }
-})
-
-/* Media disajikan lewat domain aplikasi sendiri:
-   default 302 ke presigned GET R2 (untuk <img>/<video>),
-   ?unduh=1 mem-proxy byte supaya unduhan Lightbox tetap same-origin. */
+import { createClient } from '@supabase/supabase-js'
+import { LIMIT_PER_PROJECT, ptToday, daftarKredensial, getAccessToken } from '../_lib/youtube.js'
+import { cekSesi } from '../_lib/sesi.js'
 export default async function handler(req, res) {
-  if (req.method !== 'GET') {
-    res.statusCode = 405
-    res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
-    return
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const authHeader = req.headers.authorization || ''
+  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
+  const chkUser = await cekSesi(process.env, authHeader)
+  if (!chkUser) return res.status(401).json({ error: 'Sesi tidak valid' })
+  const kredensial = daftarKredensial(process.env)
+  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
+  let terakhir = ''
+  for (const kred of kredensial) {
+    let access
+    try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
+    const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&order=date&maxResults=5', { headers: { Authorization: 'Bearer ' + access } })
+    if (!r.ok) { terakhir = 'project ' + kred.n + ' status ' + r.status; continue }
+    const j = await r.json()
+    const items = j.items || []
+    const batas = Date.now() - 15 * 60 * 1000
+    const cocok = items.find(function (it) {
+      const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
+      return isNaN(t) ? false : t >= batas
+    })
+    if (!cocok) return res.status(404).json({ error: 'Video terbaru tidak ditemukan' })
+    return res.status(200).json({ videoId: cocok.id && cocok.id.videoId, project: kred.n })
   }
-  const url = new URL(req.url, 'http://localhost')
-  const key = url.searchParams.get('key')
-  if (!key) {
-    res.statusCode = 400
-    res.end(JSON.stringify({ error: 'Key tidak ada' }))
-    return
+  return res.status(502).json({ error: 'Gagal memeriksa video terbaru: ' + terakhir })
+}
+````
+
+## File: api/youtube/quota.js
+````javascript
+import { createClient } from '@supabase/supabase-js'
+import { LIMIT_PER_PROJECT, ptToday, daftarKredensial, getAccessToken } from '../_lib/youtube.js'
+import { cekSesi } from '../_lib/sesi.js'
+export default async function handler(req, res) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+  const today = ptToday()
+  const kredensial = daftarKredensial(process.env)
+  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
+  let usedTotal = 0
+  const perProject = []
+  for (const kred of kredensial) {
+    const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
+    const used = hit.count || 0
+    usedTotal += used
+    perProject.push({ project: kred.n, used: used, remaining: Math.max(0, LIMIT_PER_PROJECT - used) })
   }
-  const cmd = new GetObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key })
-  if (url.searchParams.get('unduh') !== '1') {
-    const signed = await getSignedUrl(s3, cmd, { expiresIn: 300 })
-    res.statusCode = 302
-    res.setHeader('Location', signed)
-    res.setHeader('Cache-Control', 'public, max-age=60')
-    res.end()
-    return
+  const limit = kredensial.length * LIMIT_PER_PROJECT
+  res.setHeader('Cache-Control', 'no-store')
+  return res.status(200).json({ limit: limit, used: usedTotal, remaining: Math.max(0, limit - usedTotal), perProject: perProject, ptDate: today })
+}
+````
+
+## File: api/youtube/session.js
+````javascript
+import { createClient } from '@supabase/supabase-js'
+import { LIMIT_PER_PROJECT, ptToday, daftarKredensial, getAccessToken } from '../_lib/youtube.js'
+import { cekSesi } from '../_lib/sesi.js'
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const authHeader = req.headers.authorization || ''
+  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
+  const chkUser = await cekSesi(process.env, authHeader)
+  if (!chkUser) return res.status(401).json({ error: 'Sesi tidak valid' })
+  const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+  const today = ptToday()
+  const kredensial = daftarKredensial(process.env)
+  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
+  const body = req.body || {}
+  if (!body.title) return res.status(400).json({ error: 'Judul video wajib diisi' })
+  let terakhir = ''
+  for (const kred of kredensial) {
+    const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
+    if ((hit.count || 0) >= LIMIT_PER_PROJECT) { terakhir = 'project ' + kred.n + ' sudah penuh'; continue }
+    let access
+    try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
+    const meta = {
+      snippet: { title: String(body.title).slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
+      status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
+    }
+    const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
+      body: JSON.stringify(meta)
+    })
+    if (!init.ok) { terakhir = 'project ' + kred.n + ' ditolak Google (status ' + init.status + ')'; continue }
+    const sessionUri = init.headers.get('location')
+    if (!sessionUri) { terakhir = 'project ' + kred.n + ' tanpa lokasi upload'; continue }
+    await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: chkUser.id, project_id: kred.n })
+    return res.status(200).json({ sessionUri: sessionUri, project: kred.n })
   }
-  try {
-    const obj = await s3.send(cmd)
-    res.statusCode = 200
-    res.setHeader('Content-Type', obj.ContentType || 'application/octet-stream')
-    if (obj.ContentLength) res.setHeader('Content-Length', String(obj.ContentLength))
-    res.setHeader('Cache-Control', 'public, max-age=3600')
-    obj.Body.pipe(res)
-  } catch (e) {
-    res.statusCode = 404
-    res.end(JSON.stringify({ error: 'Media tidak ditemukan' }))
-  }
+  return res.status(429).json({ error: 'Kuota harian semua project video sudah habis. Coba lagi besok atau gunakan link video eksternal.', detail: terakhir })
 }
 ````
 
@@ -992,261 +1026,1473 @@ User-agent: PerplexityBot
 Allow: /
 ````
 
-## File: src/components/ChatWidget.jsx
+## File: src/lib/constants.js
 ````javascript
-import { useEffect, useRef, useState } from 'react'
-import { tanyaDospem } from '../lib/ai.js'
-import { TitikAnim } from './ui.jsx'
-
-const NAMA_ASISTEN = 'Konseling Online'
-const SUBTITLE_ASISTEN = 'Asisten Magang BSI \u2014 online'
-const GREETING = 'Halo! Saya asisten portal magang BSI. Tanya apa saja soal kegiatan tim, kehadiran, atau dokumentasi. Bisa ketik atau rekam suara.'
-const KEY_RIWAYAT = 'mbsi-chat-riwayat'
-const SARAN = [
-  'Siapa yang paling sering bolos?',
-  'Ringkas kegiatan tim minggu ini',
-  'Mahasiswa mana yang paling produktif?'
+export const KATEGORI = [
+  'Administrasi',
+  'Pengarsipan',
+  'Layanan Nasabah',
+  'Back Office',
+  'Edukasi Produk',
+  'Pendataan',
+  'Rapat',
+  'Pelatihan',
+  'Dokumentasi',
+  'Pendukung Lain'
 ]
 
-function IkonChat() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="22" height="22" aria-hidden="true">
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-    </svg>
-  )
-}
-function IkonClose() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  )
-}
-function IkonSend() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="17" height="17" aria-hidden="true">
-      <line x1="22" y1="2" x2="11" y2="13" />
-      <polygon points="22 2 15 22 11 13 2 9 22 2" />
-    </svg>
-  )
-}
-function IkonMic() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="17" height="17" aria-hidden="true">
-      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-      <line x1="12" y1="19" x2="12" y2="23" />
-      <line x1="8" y1="23" x2="16" y2="23" />
-    </svg>
-  )
-}
+export const UNIT = ['Frontliner', 'Back Office', 'Marketing', 'Operasional', 'Umum']
 
-export default function ChatWidget() {
-  const [open, setOpen] = useState(false)
-  const [riwayat, setRiwayat] = useState(function () {
-    try { return JSON.parse(sessionStorage.getItem(KEY_RIWAYAT) || '[]') } catch (e) { return [] }
-  })
-  const [input, setInput] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-  const [listening, setListening] = useState(false)
-  const [micSupported, setMicSupported] = useState(false)
-  const refScroll = useRef(null)
-  const refRecognition = useRef(null)
+export const GALERI_KEGIATAN = [
+  'Dokumentasi',
+  'Administrasi',
+  'Layanan Nasabah',
+  'Edukasi',
+  'Pelatihan',
+  'Operasional',
+  'Lainnya'
+]
+/* Hari pertama masa magang BSI; form tidak menerima tanggal sebelum ini */
+export const MULAI_MAGANG = '2026-09-08'
+````
 
-  useEffect(function () {
-    try { sessionStorage.setItem(KEY_RIWAYAT, JSON.stringify(riwayat)) } catch (e) {}
-  }, [riwayat])
+## File: src/lib/logbook.js
+````javascript
+import { supabase } from './supabase.js'
+import { MULAI_MAGANG } from './constants.js'
 
-  useEffect(function () {
-    if (open && refScroll.current) {
-      refScroll.current.scrollTop = refScroll.current.scrollHeight
-    }
-  }, [riwayat, busy, open])
+const EMPTY = '00000000-0000-0000-0000-000000000000'
 
-  useEffect(function () {
-    const SR = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition)
-    if (!SR) return undefined
-    setMicSupported(true)
-    const rec = new SR()
-    rec.lang = 'id-ID'
-    rec.continuous = false
-    rec.interimResults = false
-    rec.onresult = function (e) {
-      const teks = e.results[0][0].transcript
-      setInput(function (prev) { return (prev ? prev + ' ' : '') + teks })
-    }
-    rec.onend = function () { setListening(false) }
-    rec.onerror = function () { setListening(false) }
-    refRecognition.current = rec
-    return function () { try { rec.abort() } catch (e) {} }
-  }, [])
+export async function syncGaleriFromLogbook(mahasiswaId, items, meta) {
+  const itemIds = items.map(function (i) { return i.id }).filter(Boolean)
+  const all = await supabase
+    .from('galeri')
+    .select('id, logbook_item_id')
+    .in('logbook_item_id', itemIds.length ? itemIds : [EMPTY])
+  const existing = new Map((all.data || []).map(function (g) { return [g.logbook_item_id, g.id] }))
 
-  useEffect(function () { if (input) setError('') }, [input])
-
-  async function kirim(teksOverride) {
-    const teks = (teksOverride != null ? teksOverride : input).trim()
-    if (!teks || busy) return
-    setBusy(true)
-    setError('')
-    const riwayatLama = riwayat
-    setRiwayat(riwayatLama.concat([{ role: 'user', content: teks }]))
-    setInput('')
-    try {
-      const r = await tanyaDospem(teks, riwayatLama)
-      const jawaban = String(r.jawaban || '').trim() || 'Maaf, tidak ada jawaban.'
-      setRiwayat(function (prev) { return prev.concat([{ role: 'assistant', content: jawaban }]) })
-    } catch (err) {
-      setError(err.message || 'Gagal memanggil AI')
-      setRiwayat(riwayatLama)
-      setInput(teks)
-    }
-    setBusy(false)
-  }
-
-  function toggleMic() {
-    const rec = refRecognition.current
-    if (!rec) return
-    if (listening) {
-      try { rec.stop() } catch (e) {}
-      setListening(false)
-    } else {
-      try { rec.start(); setListening(true) } catch (e) { setListening(false) }
+  for (const item of items) {
+    if (!item.id) continue
+    if (item.show_in_gallery && item.media_path) {
+      if (existing.has(item.id)) {
+        await supabase.from('galeri').update({
+          media_path: item.media_path,
+          media_type: item.media_type || 'foto',
+          media_thumb: item.media_thumb || null,
+          media_source: item.media_source || 'r2',
+          youtube_id: item.youtube_id || null
+        }).eq('id', existing.get(item.id))
+      } else {
+        await supabase.from('galeri').insert({
+          mahasiswa_id: mahasiswaId,
+          logbook_item_id: item.id,
+          judul: item.judul,
+          deskripsi: item.deskripsi || 'Dokumentasi kegiatan dari logbook harian.',
+          tanggal: meta.tanggal,
+          kegiatan: meta.kategori,
+          media_path: item.media_path,
+          media_type: item.media_type || 'foto',
+          media_thumb: item.media_thumb || null,
+          media_source: item.media_source || 'r2',
+          youtube_id: item.youtube_id || null
+        })
+      }
+    } else if (existing.has(item.id)) {
+      await supabase.from('galeri').delete().eq('id', existing.get(item.id))
     }
   }
+}
 
-  function onKeyDown(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      kirim()
+/* ===== AUTO-BOLOS =====
+   Untuk setiap hari kerja (Sen-Jum) dari MULAI_MAGANG s/d KEMARIN yang belum
+   ada catatan hadir, otomatis isi sebagai "Bolos".
+   Hari ini TIDAK di-auto-Bolos supaya user masih punya kesempatan isi absen.
+
+   Dipanggil di refresh() DashboardPage. Aman dijalankan berulang karena
+   unique constraint (mahasiswa_id, tanggal) di DB mencegah duplikat.
+
+   Return: array tanggal ISO yang baru di-auto-Bolos (buat re-fetch di caller). */
+function pad2(n) { return (n < 10 ? '0' : '') + n }
+function isoDari(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) }
+
+export async function autoIsiBolos(mahasiswaId, tanggalSudahAda) {
+  const sudahAda = new Set(tanggalSudahAda || [])
+  const d = new Date(MULAI_MAGANG + 'T00:00:00')
+  const batas = new Date()
+  batas.setDate(batas.getDate() - 1) // kemarin
+
+  const rows = []
+  while (d <= batas) {
+    const iso = isoDari(d)
+    const hari = d.getDay()
+    if (hari !== 0 && hari !== 6 && !sudahAda.has(iso)) {
+      rows.push({
+        mahasiswa_id: mahasiswaId,
+        tanggal: iso,
+        status: 'Bolos',
+        alasan: 'Terisi otomatis: Tidak ada keterangan pada tanggal ini.'
+      })
     }
+    d.setDate(d.getDate() + 1)
   }
 
-  function reset() {
-    if (busy) return
-    setRiwayat([])
-    setError('')
-    try { sessionStorage.removeItem(KEY_RIWAYAT) } catch (e) {}
+  if (!rows.length) return []
+
+  const res = await supabase.from('daftar_hadir').insert(rows)
+  if (res.error) {
+    // Bisa terjadi race condition dengan tab lain yang sedang jalan auto-bolos.
+    // Unique constraint (mahasiswa_id, tanggal) mencegah duplikat, jadi error ini aman diabaikan.
+    console.warn('Auto-Bolos dilewati:', res.error.message)
+    return []
+  }
+  return rows.map(function (r) { return r.tanggal })
+}
+````
+
+## File: supabase/migrasi-drive-download.sql
+````sql
+-- Migrasi fitur download Google Drive
+-- Jalankan SQL ini di Supabase Dashboard > SQL Editor
+-- jika kolom drive_id belum ada.
+
+alter table public.logbook_items add column if not exists drive_id text;
+alter table public.galeri add column if not exists drive_id text;
+````
+
+## File: .gitignore
+````
+node_modules
+dist
+.env.local
+.env
+*.log
+.env.youtube-*
+repomix-output.md
+````
+
+## File: .os-marker
+````
+linux
+````
+
+## File: README.md
+````markdown
+# Logbook Magang BSI
+
+Portal pencatatan kegiatan magang mahasiswa Bank Syariah Indonesia (BSI) yang menggabungkan **logbook harian**, **galeri foto & video**, dan **daftar kehadiran** dalam satu tempat.
+
+Dibangun untuk memudahkan mahasiswa mendokumentasikan kegiatan magang, serta memberikan akses **publik** (tanpa login) kepada Dosen Pembimbing (Dospem) dan Kaprodi untuk memantau progres tim.
+
+## ✨ Fitur Utama
+
+### Untuk Mahasiswa (Login)
+- **Dashboard** dengan empat tab: Logbook, Galeri, Daftar Hadir, dan Profil.
+- **Form Logbook** interaktif: kolom Kendala / Solusi / Pembelajaran melebar otomatis saat difokuskan atau terisi, dengan animasi halus pada kartu form dan tombol Simpan.
+- **Upload foto** otomatis dikonversi ke WebP ringan (mendukung HEIC iPhone).
+- **Upload video** melalui YouTube (unlisted) dengan sistem kuota harian per project, atau alternatif link YouTube/Google Drive.
+- **Proteksi draf**: konfirmasi otomatis saat pindah tab, pindah halaman, refresh, tutup tab, batal edit, atau menimpa draf melalui tombol Edit.
+- **Profil & avatar** dengan upload foto profil sendiri.
+
+### Untuk Dosen Pembimbing & Kaprodi (Publik)
+- Halaman **Beranda** menampilkan logbook terbaru tim yang sudah dibagikan.
+- Halaman **Logbook**, **Galeri**, dan **Absen** dengan filter & pencarian.
+- Halaman **Dospem** menampilkan profil tim magang beserta rekap kehadiran (Masuk / Izin / Bolos) dan grafik per mahasiswa.
+- Semua halaman tersedia dalam mode terang & gelap.
+
+### Umum
+- **Pagination responsif**: ikon panah + elipsis `...` ala web korporat, tampil satu baris rapi di mobile, tablet, dan desktop.
+- **Dark mode** dengan transisi tema halus.
+- **Tampilan responsif** penuh dari 360px hingga desktop lebar.
+- **Skeleton loading** yang konsisten di setiap daftar.
+
+## 🛠️ Tech Stack
+
+| Lapisan | Teknologi |
+|---------|-----------|
+| Frontend | React 18 + Vite 5 |
+| Styling | Tailwind CSS 3 |
+| Routing | React Router |
+| Database & Auth | Supabase (PostgreSQL + Row Level Security) |
+| Penyimpanan File | Cloudflare R2 |
+| Video Hosting | YouTube Data API v3 (unlisted) |
+| Hosting | Vercel (frontend + serverless functions) |
+| Build Tool | Vite, PostCSS |
+
+## 📁 Struktur Proyek
+
+```
+mbsi-logbook/
+├── api/                    # Fungsi serverless Vercel
+│   ├── _lib/               # Helper server (supabase admin, r2, youtube)
+│   ├── r2/                 # Endpoint upload/unduh/hapus media R2
+│   └── youtube/            # Endpoint kuota, sesi upload, cek video terbaru
+├── public/                 # File statis (favicon, robots.txt, llms.txt)
+├── src/
+│   ├── components/         # Komponen UI bersama
+│   │   ├── ui.jsx          # Toast, Modal, Pagination, AutoTextArea, dll.
+│   │   ├── cards.jsx       # Kartu logbook, galeri, kehadiran
+│   │   ├── controls.jsx    # Filter, pencarian, dropdown
+│   │   ├── Layout.jsx      # Navbar, footer, guard unsaved changes
+│   │   ├── Carousel.jsx    # Carousel media
+│   │   ├── PemutarVideo.jsx# Custom video player
+│   │   └── icons.jsx       # Kumpulan ikon SVG inline
+│   ├── lib/                # Logika & helper
+│   │   ├── auth.js         # Sesi & autentikasi
+│   │   ├── upload.js       # Pipeline upload foto/video
+│   │   ├── konversi.js     # Konversi HEIC → WebP
+│   │   ├── youtube.js      # Helper YouTube API
+│   │   ├── drive.js        # Helper Google Drive
+│   │   ├── profil.js       # Upload avatar
+│   │   ├── logbook.js      # Logika form logbook
+│   │   ├── format.js       # Format tanggal, angka, file size
+│   │   └── constants.js    # Konstanta bersama
+│   ├── pages/              # Halaman utama
+│   │   ├── HomePage.jsx    # Landing page publik
+│   │   ├── LoginPage.jsx   # Login mahasiswa
+│   │   ├── DashboardPage.jsx # Dashboard mahasiswa (4 tab)
+│   │   ├── LogbookPage.jsx # Daftar logbook publik
+│   │   ├── GalleryPage.jsx # Galeri publik
+│   │   ├── AttendancePage.jsx # Daftar hadir publik
+│   │   └── DospemPage.jsx  # Halaman Dospem/Kaprodi
+│   ├── App.jsx             # Router utama
+│   ├── main.jsx            # Entry point + animasi halaman
+│   └── index.css           # Tema & utilitas global
+├── supabase/
+│   ├── schema.sql          # Skema database lengkap
+│   └── migrasi-drive-download.sql
+├── .env.example            # Contoh variabel lingkungan
+├── vercel.json             # Konfigurasi Vercel (rewrite SPA)
+├── vite.config.js          # Plugin Vite untuk middleware API lokal
+└── tailwind.config.js      # Konfigurasi Tailwind + tema BSI
+```
+
+## 🚀 Menjalankan di Lokal
+
+### Prasyarat
+- Node.js 18+
+- Akun [Supabase](https://supabase.com) (untuk DB + Auth)
+- Akun [Cloudflare](https://cloudflare.com) (untuk R2)
+- Akun [Google Cloud Console](https://console.cloud.google.com) (untuk YouTube API)
+
+### Langkah Setup
+
+1. **Clone & install**
+   ```bash
+   git clone <repo-url>
+   cd mbsi-logbook
+   npm install
+   ```
+
+2. **Salin `.env.example` menjadi `.env.local`**
+   ```bash
+   cp .env.example .env.local
+   ```
+   Isi semua variabel sesuai layanan yang kamu miliki (lihat bagian **Variabel Lingkungan**).
+
+3. **Jalankan skema database**
+   - Buka Supabase → SQL Editor.
+   - Tempel seluruh isi `supabase/schema.sql`, lalu jalankan.
+   - Buat user Auth dengan pola `NIM@mbsi.local` (sesuai konvensi kampus) dan isi tabel `mahasiswa` dengan `auth_uid` yang cocok.
+
+4. **Jalankan server lokal**
+   ```bash
+   npm run dev
+   ```
+   Buka `http://localhost:5173` (atau `http://<IP-lokal>:5173` untuk uji dari HP satu jaringan).
+
+5. **Preview build production**
+   ```bash
+   npm run build
+   npm run preview
+   ```
+
+## 🔐 Variabel Lingkungan
+
+### Client (dipakai saat build, prefix `VITE_`)
+| Variabel | Keterangan |
+|----------|-----------|
+| `VITE_SUPABASE_URL` | URL proyek Supabase |
+| `VITE_SUPABASE_ANON_KEY` | Public anon key Supabase |
+
+### Server (dipakai fungsi `api/` saat runtime)
+| Variabel | Keterangan |
+|----------|-----------|
+| `SUPABASE_SERVICE_ROLE_KEY` | Service role key (hanya di server) |
+| `R2_ACCOUNT_ID` | Cloudflare Account ID |
+| `R2_ACCESS_KEY_ID` | R2 access key |
+| `R2_SECRET_ACCESS_KEY` | R2 secret key |
+| `R2_BUCKET_NAME` | Nama bucket R2 |
+| `R2_PUBLIC_BASE_URL` | URL publik bucket (mis. `https://pub-xxx.r2.dev`) |
+| `YOUTUBE_CLIENT_ID_1` | OAuth client ID Google project ke-1 |
+| `YOUTUBE_CLIENT_SECRET_1` | OAuth client secret project ke-1 |
+| `YOUTUBE_REFRESH_TOKEN_1` | Refresh token project ke-1 |
+| `YOUTUBE_CLIENT_ID_2.._6` | Opsional — untuk kuota video lebih besar |
+| `YOUTUBE_CLIENT_SECRET_2.._6` | Opsional |
+| `YOUTUBE_REFRESH_TOKEN_2.._6` | Opsional |
+
+Setiap project YouTube mendapat kuota **5 upload/hari** (zona waktu Pacific). Tambahkan project 2–6 bila butuh kuota harian lebih besar (total hingga 30 upload/hari).
+
+## 🌐 Deploy ke Vercel
+
+1. Push repo ke GitHub.
+2. Import proyek di [Vercel](https://vercel.com).
+3. Salin seluruh isi `.env.local` ke **Settings → Environment Variables** (berlaku untuk Production + Preview).
+4. Deploy. Vercel otomatis mendeteksi framework Vite dan menjalankan fungsi serverless dari folder `api/`.
+
+> ⚠️ Tanpa variabel server (terutama `SUPABASE_SERVICE_ROLE_KEY`, `R2_*`, dan `YOUTUBE_*`), build akan sukses tetapi API akan mengembalikan `500` / "Kredensial belum dikonfigurasi".
+
+## 📏 Batasan & Catatan Produksi
+
+- **Ukuran foto maksimum**: 15 MB (dikonversi ke WebP sebelum diunggah).
+- **Ukuran video maksimum**: 50 MB (diperiksa di sisi klien).
+- **Kuota video YouTube**: 5 upload/project/hari; bila habis, sistem menyarankan link eksternal.
+- **Privasi video YouTube**: `unlisted` (hanya dapat diakses lewat link tertanam).
+- **Row Level Security (RLS)** Supabase wajib aktif di semua tabel produksi (`logbooks`, `logbook_items`, `galeri`, `daftar_hadir`, `mahasiswa`, `youtube_quota_usage`).
+- **Service role key Supabase** hanya boleh berada di sisi server (`api/`), jangan pernah masuk ke kode klien.
+
+## 📄 Lisensi
+
+Proyek internal untuk kegiatan magang Bank Syariah Indonesia. Hak cipta © 2026 Tim Magang BSI.
+````
+
+## File: start-ubuntu.sh
+````bash
+#!/bin/bash
+if [ ! -d node_modules ] || [ ! -f .os-marker ] || [ "$(cat .os-marker)" != "linux" ]; then
+  echo "Setup untuk Ubuntu..."
+  rm -rf node_modules
+  npm install
+  echo "linux" > .os-marker
+fi
+npm run dev
+````
+
+## File: start-windows.cmd
+````batch
+@echo off
+if not exist .os-marker goto install
+set /p OS=<.os-marker
+if not "%OS%"=="windows" goto install
+goto run
+
+:install
+echo Setup untuk Windows...
+if exist node_modules rmdir /s /q node_modules
+call npm install
+echo windows>.os-marker
+
+:run
+call npm run dev
+````
+
+## File: tailwind.config.js
+````javascript
+export default {
+  darkMode: 'class',
+  content: ['./index.html', './src/**/*.{js,jsx}'],
+  theme: {
+    extend: {
+      colors: {
+        bsi: {
+           50: '#f4fbf6', 100: '#dff0e4', 200: '#bfe3cc', 300: '#86ecb0',
+           400: '#4ed58f', 500: '#27c06d', 600: '#1a9e57', 700: '#177c48',
+           800: '#16623c', 900: '#135033', 950: '#081a13'
+         },
+         gold: { 400: '#fbbf24', 500: '#f59e0b', 600: '#d97706' }
+      }
+    }
+  },
+  plugins: []
+}
+````
+
+## File: uji-ai.html
+````html
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI API Tester — Uji API Key & Model AI</title>
+<style>
+  :root {
+    --bg: #0b0d13;
+    --panel: #12151d;
+    --panel-2: #171b26;
+    --border: #232838;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #6366f1;
+    --accent-2: #818cf8;
+    --user: #6366f1;
+    --ai: #1b2030;
+    --error: #ef4444;
+    --success: #22c55e;
+    --warn: #f59e0b;
   }
 
-  const bubble = riwayat.length ? riwayat : [{ role: 'assistant', content: GREETING }]
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+  }
 
-  return (
-    <>
-      <div className={'chat-widget-panel' + (open ? ' chat-widget-panel-buka' : '')} role="dialog" aria-hidden={!open}>
-        <header className="chat-widget-header">
-          <span className="chat-widget-avatar" aria-hidden="true">
-            <IkonChat />
-          </span>
-          <div className="chat-widget-title">
-            <p className="chat-widget-title-line">{NAMA_ASISTEN}</p>
-            <p className="chat-widget-sub">
-              <span className="chat-widget-dot-inline" />
-              {SUBTITLE_ASISTEN}
-            </p>
-          </div>
-          <button type="button" className="chat-widget-close" onClick={function () { setOpen(false) }} title="Tutup" aria-label="Tutup chat">
-            <IkonClose />
-          </button>
-        </header>
+  .app {
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    height: 100vh;
+    overflow: hidden;
+  }
 
-        <div ref={refScroll} className="chat-widget-body">
-          {bubble.map(function (m, i) {
-            const dariUser = m.role === 'user'
-            return (
-              <div key={i} className={'chat-widget-row ' + (dariUser ? 'chat-widget-row-user' : '')}>
-                <div className={'chat-widget-bubble ' + (dariUser ? 'chat-widget-bubble-user' : 'chat-widget-bubble-ai')}>
-                  {m.content}
-                </div>
-              </div>
-            )
-          })}
+  /* ---------- Sidebar ---------- */
+  .sidebar {
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    padding: 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
 
-          {!riwayat.length ? (
-            <div className="chat-widget-saran">
-              {SARAN.map(function (s) {
-                return (
-                  <button key={s} type="button" onClick={function () { kirim(s) }} disabled={busy} className="chat-widget-saran-btn">
-                    {s}
-                  </button>
-                )
-              })}
-            </div>
-          ) : null}
+  .sidebar h1 {
+    font-size: 17px;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    letter-spacing: -0.2px;
+  }
+  .sidebar h1::before {
+    content: '';
+    width: 9px; height: 9px;
+    background: var(--accent);
+    border-radius: 50%;
+    box-shadow: 0 0 12px var(--accent);
+    flex: 0 0 auto;
+  }
 
-          {busy ? (
-            <div className="chat-widget-row">
-              <div className="chat-widget-bubble chat-widget-bubble-ai">
-                <span className="inline-flex items-center gap-1">
-                  <span>Sedang menganalisis</span>
-                  <TitikAnim />
-                </span>
-              </div>
-            </div>
-          ) : null}
+  .sidebar .sub {
+    color: var(--muted);
+    font-size: 12px;
+    margin: -4px 0 6px 0;
+  }
 
-          {error ? <div className="chat-widget-error">{error}</div> : null}
-        </div>
+  label {
+    display: block;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 5px;
+    font-weight: 500;
+  }
 
-        <footer className="chat-widget-footer">
-          <div className="chat-widget-input-wrap">
-            <textarea
-              className="chat-widget-input"
-              rows={1}
-              value={input}
-              onChange={function (e) { setInput(e.target.value) }}
-              onKeyDown={onKeyDown}
-              placeholder="Tulis pertanyaan..."
-              disabled={busy}
-            />
-            {micSupported ? (
-              <button
-                type="button"
-                className={'chat-widget-mic' + (listening ? ' chat-widget-mic-aktif' : '')}
-                onClick={toggleMic}
-                title={listening ? 'Hentikan rekaman' : 'Rekam suara'}
-                aria-label="Rekam suara"
-                disabled={busy}
-              >
-                <IkonMic />
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className="chat-widget-send"
-              onClick={function () { kirim() }}
-              disabled={busy || !input.trim()}
-              title="Kirim"
-              aria-label="Kirim"
-            >
-              <IkonSend />
-            </button>
-          </div>
-          {riwayat.length ? (
-            <p className="chat-widget-catatan">
-              <button type="button" onClick={reset} className="chat-widget-reset">Mulai ulang percakapan</button>
-            </p>
-          ) : (
-            <p className="chat-widget-catatan">Jawaban berdasarkan data publik tim.</p>
-          )}
-        </footer>
+  input[type="text"], input[type="password"], select, textarea {
+    width: 100%;
+    padding: 9px 11px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(99,102,241,.15);
+  }
+  textarea { resize: vertical; }
+
+  select {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b93a7' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 30px;
+    cursor: pointer;
+  }
+
+  .field { margin-bottom: 2px; }
+
+  .input-group { position: relative; display: flex; }
+  .input-group input { padding-right: 40px; }
+  .input-group button {
+    position: absolute;
+    right: 4px; top: 4px; bottom: 4px;
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 0 9px;
+    border-radius: 6px;
+    font-size: 14px;
+    line-height: 1;
+  }
+  .input-group button:hover { background: var(--border); color: var(--text); }
+
+  .range-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  input[type="range"] {
+    flex: 1;
+    accent-color: var(--accent);
+  }
+  .range-val {
+    font-size: 12px;
+    color: var(--text);
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px 8px;
+    min-width: 38px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  button {
+    font-family: inherit;
+    cursor: pointer;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    padding: 9px 14px;
+    background: var(--accent);
+    color: white;
+    font-weight: 500;
+    transition: background .15s, opacity .15s, transform .05s;
+  }
+  button:hover:not(:disabled) { background: var(--accent-2); }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+
+  button.secondary {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    width: 100%;
+  }
+  button.secondary:hover { background: var(--border); }
+
+  .hint {
+    font-size: 11px;
+    color: var(--muted);
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-top: auto;
+    line-height: 1.55;
+  }
+  .hint strong { color: var(--text); }
+  .hint code {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 10.5px;
+  }
+
+  /* ---------- Chat ---------- */
+  .chat {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    background: var(--bg);
+  }
+
+  .chat-header {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--panel);
+    flex-wrap: wrap;
+  }
+
+  .status {
+    font-size: 12px;
+    color: var(--muted);
+    padding: 5px 11px;
+    border-radius: 999px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    transition: all .2s;
+  }
+  .status::before {
+    content: '';
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--muted);
+  }
+  .status.loading { color: var(--warn); border-color: rgba(245,158,11,.35); }
+  .status.loading::before { background: var(--warn); animation: pulse 1s infinite; }
+  .status.success { color: var(--success); border-color: rgba(34,197,94,.35); }
+  .status.success::before { background: var(--success); }
+  .status.error { color: var(--error); border-color: rgba(239,68,68,.35); }
+  .status.error::before { background: var(--error); }
+
+  @keyframes pulse { 50% { opacity: .3; } }
+
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 22px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    scroll-behavior: smooth;
+  }
+
+  .empty {
+    margin: auto;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    max-width: 340px;
+  }
+  .empty p { margin: 5px 0; }
+  .empty .big {
+    font-size: 30px;
+    margin-bottom: 10px;
+    filter: grayscale(.3);
+  }
+
+  .msg { display: flex; max-width: 100%; }
+  .msg.user { justify-content: flex-end; }
+  .msg.assistant { justify-content: flex-start; }
+
+  .bubble {
+    max-width: min(760px, 88%);
+    padding: 11px 15px;
+    border-radius: 14px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+    font-size: 13.5px;
+    line-height: 1.6;
+  }
+
+  .msg.user .bubble {
+    background: var(--user);
+    color: white;
+    border-bottom-right-radius: 4px;
+  }
+  .msg.assistant .bubble {
+    background: var(--ai);
+    border: 1px solid var(--border);
+    border-bottom-left-radius: 4px;
+  }
+  .msg.assistant .bubble.error-bubble {
+    border-color: rgba(239,68,68,.5);
+    color: #fca5a5;
+    background: rgba(239,68,68,.06);
+  }
+
+  .bubble.typing::after {
+    content: '▊';
+    animation: blink 1s steps(2) infinite;
+    margin-left: 1px;
+    color: var(--accent-2);
+    font-weight: 300;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .composer {
+    display: flex;
+    gap: 10px;
+    padding: 14px 20px;
+    border-top: 1px solid var(--border);
+    background: var(--panel);
+    align-items: flex-end;
+  }
+  .composer textarea {
+    flex: 1;
+    resize: none;
+    max-height: 180px;
+    min-height: 40px;
+    padding: 10px 12px;
+    line-height: 1.5;
+  }
+  .composer button {
+    height: 40px;
+    padding: 0 20px;
+    flex: 0 0 auto;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 10px;
+    border: 2px solid var(--panel);
+  }
+  ::-webkit-scrollbar-thumb:hover { background: #2f3549; }
+
+  @media (max-width: 860px) {
+    .app {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto 1fr;
+    }
+    .sidebar {
+      border-right: none;
+      border-bottom: 1px solid var(--border);
+      max-height: 55vh;
+      padding: 16px;
+    }
+    .hint { margin-top: 10px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <h1>AI API Tester</h1>
+    <p class="sub">Uji API key & model AI dari berbagai provider.</p>
+
+    <div class="field">
+      <label for="provider">Provider</label>
+      <select id="provider"></select>
+    </div>
+
+    <div class="field">
+      <label for="apiKey">API Key</label>
+      <div class="input-group">
+        <input type="password" id="apiKey" placeholder="Masukkan API key..." autocomplete="off" spellcheck="false">
+        <button type="button" id="toggleKey" title="Tampilkan / sembunyikan">👁</button>
       </div>
+    </div>
 
-      <button
-        type="button"
-        className={'chat-widget-fab' + (open ? ' chat-widget-fab-buka' : '')}
-        onClick={function () { setOpen(function (o) { return !o }) }}
-        aria-label={open ? 'Tutup chat' : 'Buka chat'}
-        title={open ? 'Tutup chat' : 'Tanya asisten'}
-      >
-        <span className="chat-widget-fab-icon">
-          {open ? <IkonClose /> : <IkonChat />}
-        </span>
-        {!open ? <span className="chat-widget-dot" /> : null}
-      </button>
-    </>
+    <div class="field">
+      <label for="model">Model</label>
+      <input type="text" id="model" placeholder="nama model" list="modelList" autocomplete="off" spellcheck="false">
+      <datalist id="modelList"></datalist>
+    </div>
+
+    <div class="field" id="baseUrlWrap" style="display:none">
+      <label for="baseUrl">Base URL</label>
+      <input type="text" id="baseUrl" placeholder="https://.../v1" autocomplete="off" spellcheck="false">
+    </div>
+
+    <div class="field">
+      <label for="system">System Prompt (opsional)</label>
+      <textarea id="system" rows="2" placeholder="You are a helpful assistant."></textarea>
+    </div>
+
+    <div class="field">
+      <label for="temp">Temperature</label>
+      <div class="range-row">
+        <input type="range" id="temp" min="0" max="2" step="0.1" value="0.7">
+        <span class="range-val" id="tempVal">0.7</span>
+      </div>
+    </div>
+
+    <div class="actions" style="margin-top:6px">
+      <button type="button" id="clearBtn" class="secondary">Bersihkan Chat</button>
+    </div>
+
+    <div class="hint">
+      <strong>🔒 Privasi:</strong> API key hanya disimpan di <code>localStorage</code> browser Anda dan dikirim langsung ke provider — tidak lewat server mana pun.<br><br>
+      <strong>ℹ️ Catatan:</strong> Beberapa provider mungkin memblokir request dari browser (CORS). Jika gagal, coba provider lain atau gunakan proxy.
+    </div>
+  </aside>
+
+  <main class="chat">
+    <header class="chat-header">
+      <div id="status" class="status">Siap</div>
+    </header>
+
+    <div id="messages" class="messages">
+      <div class="empty">
+        <div class="big">🧪</div>
+        <p><strong>Belum ada pesan.</strong></p>
+        <p>Isi API key & model di panel kiri, lalu kirim pesan untuk menguji apakah AI berfungsi normal.</p>
+      </div>
+    </div>
+
+    <form id="form" class="composer">
+      <textarea id="input" placeholder="Ketik pesan uji... (Enter kirim, Shift+Enter baris baru)" rows="1"></textarea>
+      <button type="submit" id="sendBtn">Kirim</button>
+    </form>
+  </main>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ============ Provider config ============
+  const PROVIDERS = {
+    gemini: {
+      name: 'Google AI Studio (Gemini)',
+      type: 'gemini',
+      defaultModel: 'gemini-2.0-flash',
+    },
+    groq: {
+      name: 'Groq',
+      type: 'openai',
+      baseUrl: 'https://api.groq.com/openai/v1',
+      defaultModel: 'llama-3.3-70b-versatile',
+    },
+    openai: {
+      name: 'OpenAI',
+      type: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      defaultModel: 'gpt-4o-mini',
+    },
+    anthropic: {
+      name: 'Anthropic (Claude)',
+      type: 'anthropic',
+      defaultModel: 'claude-3-5-sonnet-latest',
+    },
+    openrouter: {
+      name: 'OpenRouter',
+      type: 'openai',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      defaultModel: 'openai/gpt-4o-mini',
+    },
+    mistral: {
+      name: 'Mistral AI',
+      type: 'openai',
+      baseUrl: 'https://api.mistral.ai/v1',
+      defaultModel: 'mistral-small-latest',
+    },
+    together: {
+      name: 'Together AI',
+      type: 'openai',
+      baseUrl: 'https://api.together.xyz/v1',
+      defaultModel: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
+    },
+    deepseek: {
+      name: 'DeepSeek',
+      type: 'openai',
+      baseUrl: 'https://api.deepseek.com/v1',
+      defaultModel: 'deepseek-chat',
+    },
+    custom: {
+      name: 'Custom (OpenAI-compatible)',
+      type: 'openai',
+      baseUrl: '',
+      defaultModel: '',
+      needsBaseUrl: true,
+    },
+  };
+
+  const MODEL_SUGGESTIONS = {
+    gemini: ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-pro', 'gemini-1.5-flash'],
+    groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768', 'gemma2-9b-it'],
+    openai: ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo', 'o1-mini'],
+    anthropic: ['claude-3-5-sonnet-latest', 'claude-3-5-haiku-latest', 'claude-3-opus-latest'],
+    openrouter: [
+      'openai/gpt-4o-mini',
+      'anthropic/claude-3.5-sonnet',
+      'google/gemini-flash-1.5',
+      'meta-llama/llama-3.3-70b-instruct',
+    ],
+    mistral: ['mistral-small-latest', 'mistral-large-latest', 'open-mistral-7b'],
+    together: ['meta-llama/Llama-3.3-70B-Instruct-Turbo', 'meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo'],
+    deepseek: ['deepseek-chat', 'deepseek-reasoner'],
+    custom: [],
+  };
+
+  // ============ DOM refs ============
+  const $ = (id) => document.getElementById(id);
+  const els = {
+    provider: $('provider'),
+    apiKey: $('apiKey'),
+    model: $('model'),
+    modelList: $('modelList'),
+    baseUrl: $('baseUrl'),
+    baseUrlWrap: $('baseUrlWrap'),
+    system: $('system'),
+    temp: $('temp'),
+    tempVal: $('tempVal'),
+    toggleKey: $('toggleKey'),
+    clearBtn: $('clearBtn'),
+    status: $('status'),
+    messages: $('messages'),
+    form: $('form'),
+    input: $('input'),
+    sendBtn: $('sendBtn'),
+  };
+
+  // ============ State ============
+  let history = []; // { role: 'user' | 'assistant', content: string }
+  let lastProvider = null;
+  const STORAGE_KEY = 'ai-api-tester-v1';
+
+  // ============ Init ============
+  function populateProviders() {
+    Object.entries(PROVIDERS).forEach(([key, p]) => {
+      const opt = document.createElement('option');
+      opt.value = key;
+      opt.textContent = p.name;
+      els.provider.appendChild(opt);
+    });
+  }
+
+  function populateModelList(providerKey) {
+    els.modelList.innerHTML = '';
+    (MODEL_SUGGESTIONS[providerKey] || []).forEach((m) => {
+      const opt = document.createElement('option');
+      opt.value = m;
+      els.modelList.appendChild(opt);
+    });
+  }
+
+  function loadSettings() {
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch (_) {}
+
+    const providerKey = saved.provider && PROVIDERS[saved.provider] ? saved.provider : 'gemini';
+    els.provider.value = providerKey;
+    els.apiKey.value = saved.apiKey || '';
+    els.system.value = saved.system || '';
+    els.temp.value = saved.temp ?? '0.7';
+    els.tempVal.textContent = parseFloat(els.temp.value).toFixed(1);
+
+    const p = PROVIDERS[providerKey];
+    els.model.value = saved.model || p.defaultModel || '';
+    els.baseUrl.value = saved.baseUrl || p.baseUrl || '';
+    lastProvider = providerKey;
+
+    populateModelList(providerKey);
+    toggleBaseUrl();
+  }
+
+  function saveSettings() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        provider: els.provider.value,
+        apiKey: els.apiKey.value,
+        model: els.model.value,
+        baseUrl: els.baseUrl.value,
+        system: els.system.value,
+        temp: els.temp.value,
+      }));
+    } catch (_) {}
+  }
+
+  function toggleBaseUrl() {
+    const p = PROVIDERS[els.provider.value];
+    els.baseUrlWrap.style.display = p.needsBaseUrl ? '' : 'none';
+  }
+
+  // ============ UI helpers ============
+  function setStatus(text, type) {
+    els.status.textContent = text;
+    els.status.className = 'status' + (type ? ' ' + type : '');
+  }
+
+  function clearEmptyState() {
+    const empty = els.messages.querySelector('.empty');
+    if (empty) empty.remove();
+  }
+
+  function addMessage(role, content) {
+    clearEmptyState();
+    const wrap = document.createElement('div');
+    wrap.className = 'msg ' + role;
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.textContent = content;
+    wrap.appendChild(bubble);
+    els.messages.appendChild(wrap);
+    scrollToBottom();
+    return bubble;
+  }
+
+  function scrollToBottom() {
+    els.messages.scrollTop = els.messages.scrollHeight;
+  }
+
+  function resetChat() {
+    history = [];
+    els.messages.innerHTML = `
+      <div class="empty">
+        <div class="big">🧪</div>
+        <p><strong>Belum ada pesan.</strong></p>
+        <p>Isi API key & model di panel kiri, lalu kirim pesan untuk menguji apakah AI berfungsi normal.</p>
+      </div>`;
+    setStatus('Siap');
+  }
+
+  // ============ SSE parsing ============
+  async function* sseLines(response) {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let idx;
+        while ((idx = buffer.indexOf('\n')) !== -1) {
+          const line = buffer.slice(0, idx).replace(/\r$/, '');
+          buffer = buffer.slice(idx + 1);
+          yield line;
+        }
+      }
+      if (buffer) yield buffer.replace(/\r$/, '');
+    } finally {
+      try { reader.releaseLock(); } catch (_) {}
+    }
+  }
+
+  // ============ API calls ============
+  async function callGemini({ apiKey, model, onChunk }) {
+    const url =
+      `https://generativelanguage.googleapis.com/v1beta/models/` +
+      `${encodeURIComponent(model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey)}`;
+
+    const contents = history.map((m) => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }],
+    }));
+
+    const body = {
+      contents,
+      generationConfig: { temperature: parseFloat(els.temp.value) },
+    };
+    const sys = els.system.value.trim();
+    if (sys) body.systemInstruction = { parts: [{ text: sys }] };
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new Error(`HTTP ${res.status} ${res.statusText}${txt ? ' — ' + txt.slice(0, 400) : ''}`);
+    }
+
+    let full = '';
+    for await (const line of sseLines(res)) {
+      if (!line.startsWith('data:')) continue;
+      const data = line.slice(5).trim();
+      if (!data || data === '[DONE]') continue;
+      let json;
+      try { json = JSON.parse(data); } catch (_) { continue; }
+      const parts = json.candidates?.[0]?.content?.parts || [];
+      const text = parts.map((p) => p.text || '').join('');
+      if (text) { full += text; onChunk(text); }
+    }
+    return full;
+  }
+
+  async function callOpenAICompatible({ baseUrl, apiKey, model, onChunk }) {
+    const url = baseUrl.replace(/\/+$/, '') + '/chat/completions';
+    const messages = [];
+    const sys = els.system.value.trim();
+    if (sys) messages.push({ role: 'system', content: sys });
+    history.forEach((m) => messages.push({ role: m.role, content: m.content }));
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature: parseFloat(els.temp.value),
+        stream: true,
+      }),
+    });
+
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new Error(`HTTP ${res.status} ${res.statusText}${txt ? ' — ' + txt.slice(0, 400) : ''}`);
+    }
+
+    let full = '';
+    for await (const line of sseLines(res)) {
+      if (!line.startsWith('data:')) continue;
+      const data = line.slice(5).trim();
+      if (!data || data === '[DONE]') continue;
+      let json;
+      try { json = JSON.parse(data); } catch (_) { continue; }
+      const text = json.choices?.[0]?.delta?.content || '';
+      if (text) { full += text; onChunk(text); }
+    }
+    return full;
+  }
+
+  async function callAnthropic({ apiKey, model, onChunk }) {
+    const url = 'https://api.anthropic.com/v1/messages';
+    const messages = history.map((m) => ({ role: m.role, content: m.content }));
+    const body = {
+      model,
+      max_tokens: 4096,
+      messages,
+      temperature: parseFloat(els.temp.value),
+      stream: true,
+    };
+    const sys = els.system.value.trim();
+    if (sys) body.system = sys;
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new Error(`HTTP ${res.status} ${res.statusText}${txt ? ' — ' + txt.slice(0, 400) : ''}`);
+    }
+
+    let full = '';
+    for await (const line of sseLines(res)) {
+      if (!line.startsWith('data:')) continue;
+      const data = line.slice(5).trim();
+      if (!data) continue;
+      let json;
+      try { json = JSON.parse(data); } catch (_) { continue; }
+      if (json.type === 'content_block_delta' && json.delta?.type === 'text_delta') {
+        const text = json.delta.text || '';
+        if (text) { full += text; onChunk(text); }
+      } else if (json.type === 'error') {
+        throw new Error(json.error?.message || 'Anthropic error');
+      }
+    }
+    return full;
+  }
+
+  // ============ Main send handler ============
+  async function handleSend(userText) {
+    const providerKey = els.provider.value;
+    const provider = PROVIDERS[providerKey];
+    const apiKey = els.apiKey.value.trim();
+    const model = els.model.value.trim();
+    const baseUrl = (provider.needsBaseUrl ? els.baseUrl.value : provider.baseUrl || '').trim();
+
+    if (!apiKey) { setStatus('API key belum diisi', 'error'); els.apiKey.focus(); return; }
+    if (!model) { setStatus('Model belum diisi', 'error'); els.model.focus(); return; }
+    if (provider.type === 'openai' && !baseUrl) { setStatus('Base URL belum diisi', 'error'); els.baseUrl.focus(); return; }
+
+    addMessage('user', userText);
+    history.push({ role: 'user', content: userText });
+
+    els.sendBtn.disabled = true;
+    setStatus('Menghubungi ' + provider.name + '...', 'loading');
+
+    const bubble = addMessage('assistant', '');
+    bubble.classList.add('typing');
+
+    let full = '';
+    const onChunk = (t) => {
+      if (bubble.classList.contains('typing')) {
+        // nothing, keep cursor
+      }
+      full += t;
+      bubble.textContent = full;
+      scrollToBottom();
+    };
+
+    try {
+      if (provider.type === 'gemini') {
+        await callGemini({ apiKey, model, onChunk });
+      } else if (provider.type === 'anthropic') {
+        await callAnthropic({ apiKey, model, onChunk });
+      } else {
+        await callOpenAICompatible({ baseUrl, apiKey, model, onChunk });
+      }
+
+      if (!full) {
+        bubble.textContent = '(tidak ada respons teks dari model)';
+        bubble.classList.remove('typing');
+        setStatus('Terhubung, tapi respons kosong', 'error');
+        return;
+      }
+
+      history.push({ role: 'assistant', content: full });
+      setStatus('✓ Berhasil — ' + provider.name + ' (' + model + ')', 'success');
+    } catch (err) {
+      console.error('[AI API Tester] error:', err);
+      bubble.classList.remove('typing');
+      bubble.classList.add('error-bubble');
+
+      let msg = err && err.message ? err.message : String(err);
+      if (msg === 'Failed to fetch' || (err instanceof TypeError)) {
+        msg = 'Gagal terhubung (kemungkinan diblokir CORS atau jaringan bermasalah). Coba provider lain, atau pastikan API key & base URL benar.';
+      }
+      bubble.textContent = '⚠️ Error: ' + msg;
+      setStatus('Gagal: ' + msg.slice(0, 120), 'error');
+
+      // Hapus pesan user terakhir dari history agar tidak mengotori konteks
+      history.pop();
+    } finally {
+      bubble.classList.remove('typing');
+      els.sendBtn.disabled = false;
+      els.input.focus();
+    }
+  }
+
+  // ============ Event bindings ============
+  function bindEvents() {
+    // Provider change
+    els.provider.addEventListener('change', () => {
+      const oldP = lastProvider ? PROVIDERS[lastProvider] : null;
+      const newKey = els.provider.value;
+      const newP = PROVIDERS[newKey];
+
+      // Ganti model default jika field kosong atau masih model default provider sebelumnya
+      if (!els.model.value || (oldP && els.model.value === oldP.defaultModel)) {
+        els.model.value = newP.defaultModel || '';
+      }
+      if (!newP.needsBaseUrl && newP.baseUrl) {
+        els.baseUrl.value = newP.baseUrl;
+      } else if (newP.needsBaseUrl && oldP && els.baseUrl.value === oldP.baseUrl) {
+        els.baseUrl.value = '';
+      }
+
+      lastProvider = newKey;
+      populateModelList(newKey);
+      toggleBaseUrl();
+      saveSettings();
+    });
+
+    // Inputs save
+    ['apiKey', 'model', 'baseUrl', 'system'].forEach((id) => {
+      els[id].addEventListener('input', saveSettings);
+    });
+
+    // Temperature
+    els.temp.addEventListener('input', () => {
+      els.tempVal.textContent = parseFloat(els.temp.value).toFixed(1);
+      saveSettings();
+    });
+
+    // Toggle API key visibility
+    els.toggleKey.addEventListener('click', () => {
+      const isPwd = els.apiKey.type === 'password';
+      els.apiKey.type = isPwd ? 'text' : 'password';
+      els.toggleKey.textContent = isPwd ? '🙈' : '👁';
+    });
+
+    // Clear chat
+    els.clearBtn.addEventListener('click', () => {
+      if (history.length && !confirm('Bersihkan seluruh riwayat chat?')) return;
+      resetChat();
+    });
+
+    // Auto-resize textarea
+    els.input.addEventListener('input', () => {
+      els.input.style.height = 'auto';
+      els.input.style.height = Math.min(els.input.scrollHeight, 180) + 'px';
+    });
+
+    // Enter to send
+    els.input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        els.form.requestSubmit();
+      }
+    });
+
+    // Form submit
+    els.form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (els.sendBtn.disabled) return;
+      const text = els.input.value.trim();
+      if (!text) return;
+      els.input.value = '';
+      els.input.style.height = 'auto';
+      handleSend(text);
+    });
+  }
+
+  // ============ Boot ============
+  populateProviders();
+  loadSettings();
+  bindEvents();
+})();
+</script>
+</body>
+</html>
+````
+
+## File: vercel.json
+````json
+{
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}
+````
+
+## File: api/_lib/ai-provider.js
+````javascript
+import { susunLogbookDenganGroq } from './groq.js'
+
+/* Titik masuk tunggal untuk semua fitur AI di aplikasi.
+   Saat ini memakai Groq (Qwen 3.8 27B) sebagai provider tunggal.
+   Kalau nanti mau tambah provider lain, cukup tambahkan cabang
+   di sini tanpa mengubah tulis.js atau vite.config.js. */
+export async function susunLogbookAi(env, opts) {
+  return susunLogbookDenganGroq(env, opts)
+}
+````
+
+## File: api/_lib/redis.js
+````javascript
+import { Redis } from '@upstash/redis'
+import { createHash } from 'node:crypto'
+
+let klien = null
+
+export function ambilRedis(env) {
+  if (klien) return klien
+  if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) {
+    return null
+  }
+  klien = new Redis({
+    url: env.UPSTASH_REDIS_REST_URL,
+    token: env.UPSTASH_REDIS_REST_TOKEN
+  })
+  return klien
+}
+
+export async function denganCache(env, kunci, ttlDetik, fetcher) {
+  const redis = ambilRedis(env)
+  if (!redis) return { data: await fetcher(), dariCache: false }
+
+  try {
+    const cached = await redis.get(kunci)
+    if (cached !== null && cached !== undefined) {
+      return { data: cached, dariCache: true }
+    }
+  } catch (e) {
+    console.warn('[redis] get gagal, fallback ke fetcher:', e.message)
+  }
+
+  const hasil = await fetcher()
+
+  try {
+    await redis.set(kunci, hasil, { ex: ttlDetik })
+  } catch (e) {
+    console.warn('[redis] set gagal, dilewati:', e.message)
+  }
+
+  return { data: hasil, dariCache: false }
+}
+
+/* Normalisasi pertanyaan jadi hash pendek untuk kunci cache jawaban.
+   Lowercase + hapus tanda baca + rapikan spasi -> hash SHA-256 -> 16 char.
+   Efeknya: "Risky prodi apa?" dan "risky prodi apa" dianggap sama. */
+export function kunciJawaban(pertanyaan) {
+  const bersih = String(pertanyaan || '')
+    .toLowerCase()
+    .replace(/[^\w\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  const hash = createHash('sha256').update(bersih).digest('hex').slice(0, 16)
+  return 'mbsi:chat:jawaban:v1:' + hash
+}
+````
+
+## File: api/r2/file.js
+````javascript
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+
+const s3 = new S3Client({
+  region: 'auto',
+  endpoint: 'https://' + process.env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
+  }
+})
+
+/* Media disajikan lewat domain aplikasi sendiri:
+   default 302 ke presigned GET R2 (untuk <img>/<video>),
+   ?unduh=1 mem-proxy byte supaya unduhan Lightbox tetap same-origin. */
+export default async function handler(req, res) {
+  if (req.method !== 'GET') {
+    res.statusCode = 405
+    res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
+    return
+  }
+  const url = new URL(req.url, 'http://localhost')
+  const key = url.searchParams.get('key')
+  if (!key) {
+    res.statusCode = 400
+    res.end(JSON.stringify({ error: 'Key tidak ada' }))
+    return
+  }
+  const cmd = new GetObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key })
+  if (url.searchParams.get('unduh') !== '1') {
+    const signed = await getSignedUrl(s3, cmd, { expiresIn: 300 })
+    res.statusCode = 302
+    res.setHeader('Location', signed)
+    res.setHeader('Cache-Control', 'public, max-age=60')
+    res.end()
+    return
+  }
+  try {
+    const obj = await s3.send(cmd)
+    res.statusCode = 200
+    res.setHeader('Content-Type', obj.ContentType || 'application/octet-stream')
+    if (obj.ContentLength) res.setHeader('Content-Length', String(obj.ContentLength))
+    res.setHeader('Cache-Control', 'public, max-age=3600')
+    obj.Body.pipe(res)
+  } catch (e) {
+    res.statusCode = 404
+    res.end(JSON.stringify({ error: 'Media tidak ditemukan' }))
+  }
+}
+````
+
+## File: api/r2/presign.js
+````javascript
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { cekSesi } from '../_lib/sesi.js'
+
+const s3 = new S3Client({
+  region: 'auto',
+  endpoint: 'https://' + process.env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
+  }
+})
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
+  const user = await cekSesi(process.env, req.headers.authorization)
+  if (!user) return res.status(401).json({ error: 'Sesi tidak valid' })
+  const { filename, contentType, kind } = req.body || {}
+  if (!filename || !contentType || !kind) return res.status(400).json({ error: 'Payload tidak lengkap' })
+  const ext = (filename.split('.').pop() || 'bin').toLowerCase()
+  const key = kind + '/' + new Date().getFullYear() + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + ext
+  const uploadUrl = await getSignedUrl(
+    s3,
+    new PutObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key, ContentType: contentType }),
+    { expiresIn: 300 }
   )
+  const publicUrl = '/api/r2/file?key=' + key
+  return res.status(200).json({ uploadUrl, publicUrl, key })
 }
 ````
 
@@ -1452,7 +2698,7 @@ export default function DospemChat() {
           </button>
         </div>
         <p className="mt-2 text-[11px] text-slate-500">
-          Sisa pertanyaan hari ini: <strong>{sisa}</strong> dari {MAKS_HARIAN}. Jawaban berdasarkan data publik tim.
+          Sisa pertanyaan hari ini: <strong>{sisa}</strong> dari {MAKS_HARIAN}. Jawaban berdasarkan data portal.
         </p>
       </div>
     </section>
@@ -1460,757 +2706,144 @@ export default function DospemChat() {
 }
 ````
 
-## File: src/lib/constants.js
+## File: src/lib/auth.js
 ````javascript
-export const KATEGORI = [
-  'Administrasi',
-  'Pengarsipan',
-  'Layanan Nasabah',
-  'Back Office',
-  'Edukasi Produk',
-  'Pendataan',
-  'Rapat',
-  'Pelatihan',
-  'Dokumentasi',
-  'Pendukung Lain'
-]
-
-export const UNIT = ['Frontliner', 'Back Office', 'Marketing', 'Operasional', 'Umum']
-
-export const GALERI_KEGIATAN = [
-  'Dokumentasi',
-  'Administrasi',
-  'Layanan Nasabah',
-  'Edukasi',
-  'Pelatihan',
-  'Operasional',
-  'Lainnya'
-]
-/* Hari pertama masa magang BSI; form tidak menerima tanggal sebelum ini */
-export const MULAI_MAGANG = '2026-09-08'
-````
-
-## File: src/lib/profil.js
-````javascript
+import { useEffect, useState } from 'react'
 import { supabase } from './supabase.js'
-import { siapkanFotoProfil } from './konversi.js'
 
-const MAKS_FOTO_PROFIL = 5 * 1024 * 1024
+const EMAIL_DOMAIN = '@mbsi.local'
 
-export async function uploadFotoProfil(file, userId) {
-  if (!file) throw new Error('File foto tidak ditemukan')
-  const tipe = String(file.type || '').toLowerCase()
-  if (tipe.indexOf('image/') !== 0) throw new Error('File harus berupa gambar')
-  if (file.size > MAKS_FOTO_PROFIL) throw new Error('Ukuran foto maksimal 5 MB')
-  const siap = await siapkanFotoProfil(file, 640, 0.85)
-  const namaFile = userId + '/profil-' + Date.now() + '.webp'
-  const { error } = await supabase.storage
-    .from('foto-profil')
-    .upload(namaFile, siap, { upsert: true, contentType: siap.type })
-  if (error) throw new Error(error.message)
-  const { data } = supabase.storage.from('foto-profil').getPublicUrl(namaFile)
-  return data.publicUrl
-}
-
-export async function updateFotoProfilMahasiswa(mahasiswaId, fotoUrl) {
-  const { error } = await supabase.from('mahasiswa').update({ foto_profil: fotoUrl }).eq('id', mahasiswaId)
-  if (error) throw new Error(error.message)
-}
-
-export async function hapusFotoProfil(mahasiswaId, fotoUrl) {
-  if (fotoUrl) {
-    const bagian = String(fotoUrl).split('/foto-profil/')
-    if (bagian[1]) {
-      await supabase.storage.from('foto-profil').remove([decodeURIComponent(bagian[1])])
-    }
-  }
-  const { error } = await supabase.from('mahasiswa').update({ foto_profil: null }).eq('id', mahasiswaId)
-  if (error) throw new Error(error.message)
-}
-````
-
-## File: supabase/migrasi-drive-download.sql
-````sql
--- Migrasi fitur download Google Drive
--- Jalankan SQL ini di Supabase Dashboard > SQL Editor
--- jika kolom drive_id belum ada.
-
-alter table public.logbook_items add column if not exists drive_id text;
-alter table public.galeri add column if not exists drive_id text;
-````
-
-## File: .gitignore
-````
-node_modules
-dist
-.env.local
-.env
-*.log
-.env.youtube-*
-repomix-output.md
-````
-
-## File: apply-redis-cache.cjs
-````javascript
-#!/usr/bin/env node
-'use strict'
-
-/**
- * apply-redis-cache.cjs
- * ---------------------------------------------------------------------
- * Terapkan Upstash Redis sebagai cache untuk AI Chat Dospem.
- *
- * Langkah:
- *   1. Cek package @upstash/redis (harus diinstall dulu)
- *   2. Buat api/_lib/redis.js (helper cache-aside)
- *   3. Update .env.example
- *   4. Rewrite api/ai/chat.js dengan cache
- *   5. Rewrite pluginApiAi di vite.config.js dengan cache
- *   6. Verifikasi
- *
- * CRLF-safe, idempotent.
- * ---------------------------------------------------------------------
- */
-
-const fs = require('fs')
-const path = require('path')
-const ROOT = process.cwd()
-
-function fp(rel) { return path.join(ROOT, rel) }
-function exists(rel) { return fs.existsSync(fp(rel)) }
-function read(rel) { return fs.readFileSync(fp(rel), 'utf8') }
-function write(rel, content) {
-  fs.mkdirSync(path.dirname(fp(rel)), { recursive: true })
-  fs.writeFileSync(fp(rel), content, 'utf8')
-}
-function backup(rel) {
-  if (!exists(rel)) return false
-  try { fs.copyFileSync(fp(rel), fp(rel) + '.bak'); return true } catch (e) { return false }
-}
-function head(m) { console.log('\n\x1b[1m\x1b[36m' + m + '\x1b[0m') }
-function ok(m)   { console.log('  \x1b[32m\u2713\x1b[0m ' + m) }
-function skip(m) { console.log('  \x1b[2m\u00b7 ' + m + '\x1b[0m') }
-function warn(m) { console.log('  \x1b[33m!\x1b[0m ' + m) }
-
-// ==================== KONTEN BARU ====================
-
-const REDIS_HELPER = String.raw`import { Redis } from '@upstash/redis'
-
-/* Klien Redis untuk caching di serverless functions dan Vite dev middleware.
-   Redis.fromEnv() otomatis baca UPSTASH_REDIS_REST_URL dan
-   UPSTASH_REDIS_REST_TOKEN dari environment. */
-let klien = null
-
-export function ambilRedis(env) {
-  if (klien) return klien
-  if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) {
-    return null
-  }
-  klien = new Redis({
-    url: env.UPSTASH_REDIS_REST_URL,
-    token: env.UPSTASH_REDIS_REST_TOKEN
+export async function loginWithNim(nim, kode) {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: nim.trim() + EMAIL_DOMAIN,
+    password: kode
   })
-  return klien
+  if (error) throw error
+  return data
 }
 
-/* Cache-aside pattern: cek cache dulu, kalau miss panggil fetcher
-   lalu simpan hasilnya ke cache dengan TTL. Kalau Redis down
-   atau env tidak ada, langsung panggil fetcher tanpa error. */
-export async function denganCache(env, kunci, ttlDetik, fetcher) {
-  const redis = ambilRedis(env)
-  if (!redis) return { data: await fetcher(), dariCache: false }
+export async function logoutMahasiswa() {
+  await supabase.auth.signOut()
+}
 
-  try {
-    const cached = await redis.get(kunci)
-    if (cached !== null && cached !== undefined) {
-      return { data: cached, dariCache: true }
+async function cariMahasiswa(uid) {
+  if (!uid) return null
+  const { data } = await supabase
+    .from('mahasiswa')
+    .select('*')
+    .eq('auth_uid', uid)
+    .single()
+  return data || null
+}
+
+export function useAuth() {
+  const [mahasiswa, setMahasiswa] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(function () {
+    let active = true
+
+    async function sinkronkan(sessionUser) {
+      try {
+        let uid = sessionUser ? sessionUser.id : null
+
+        if (!uid) {
+          const { data } = await supabase.auth.getSession()
+          uid = data.session ? data.session.user.id : null
+        }
+
+        if (!uid) {
+          if (active) {
+            setMahasiswa(null)
+            setLoading(false)
+          }
+          return
+        }
+
+        const mhs = await cariMahasiswa(uid)
+        if (active) {
+          setMahasiswa(function (prev) {
+            if (prev && mhs && prev.id === mhs.id) return prev
+            if (!mhs && prev && prev.auth_uid === uid) return prev
+            return mhs
+          })
+          setLoading(false)
+        }
+      } catch (e) {
+        if (active) setLoading(false)
+      }
     }
-  } catch (e) {
-    console.warn('[redis] get gagal, fallback ke fetcher:', e.message)
-  }
 
-  const hasil = await fetcher()
+    sinkronkan(null)
 
-  try {
-    await redis.set(kunci, hasil, { ex: ttlDetik })
-  } catch (e) {
-    console.warn('[redis] set gagal, dilewati:', e.message)
-  }
+    function onVisibility() {
+      if (document.visibilityState === 'visible') {
+        sinkronkan(null)
+      }
+    }
 
-  return { data: hasil, dariCache: false }
-}
-`
+    document.addEventListener('visibilitychange', onVisibility)
 
-const AI_CHAT_ENDPOINT = String.raw`import { createClient } from '@supabase/supabase-js'
-import { jawabPertanyaanDospem } from '../_lib/dospem-chat.js'
-import { denganCache } from '../_lib/redis.js'
-
-const MAKS_PERTANYAAN = 500
-const MAKS_RIWAYAT = 10
-const TTL_KONTEKS = 300 // 5 menit
-const KUNCI_KONTEKS = 'mbsi:chat:konteks:v1'
-
-async function ambilDataTim(env) {
-  const sb = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY)
-  const [l, p, g, h] = await Promise.all([
-    sb.from('logbooks').select('id, mahasiswa_id, tanggal, kategori, judul, logbook_items(judul)')
-      .eq('status', 'publik').order('tanggal', { ascending: false }).limit(200),
-    sb.from('mahasiswa').select('id, nama, nim, prodi').order('nama').limit(50),
-    sb.from('galeri').select('id, mahasiswa_id').limit(500),
-    sb.from('daftar_hadir').select('id, mahasiswa_id, tanggal, status, alasan')
-      .order('tanggal', { ascending: false }).limit(1000)
-  ])
-  return {
-    logs: l.data || [],
-    people: p.data || [],
-    gal: g.data || [],
-    hadir: h.data || []
-  }
-}
-
-export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
-
-  const body = req.body || {}
-  const pertanyaan = String(body.pertanyaan || '').trim()
-  const riwayat = Array.isArray(body.riwayat) ? body.riwayat.slice(-MAKS_RIWAYAT) : []
-
-  if (!pertanyaan) return res.status(400).json({ error: 'Pertanyaan tidak boleh kosong.' })
-  if (pertanyaan.length > MAKS_PERTANYAAN) {
-    return res.status(400).json({ error: 'Pertanyaan terlalu panjang (maks ' + MAKS_PERTANYAAN + ' karakter).' })
-  }
-
-  try {
-    const { data: dataTim, dariCache } = await denganCache(
-      process.env,
-      KUNCI_KONTEKS,
-      TTL_KONTEKS,
-      function () { return ambilDataTim(process.env) }
-    )
-
-    console.log('[ai/chat] data tim:', dariCache ? 'dari cache' : 'fresh dari Supabase')
-
-    const jawaban = await jawabPertanyaanDospem(process.env, {
-      pertanyaan: pertanyaan,
-      riwayat: riwayat,
-      data: dataTim
-    })
-
-    return res.status(200).json({ jawaban: jawaban, cache: dariCache ? 'hit' : 'miss' })
-  } catch (err) {
-    console.error('[ai/chat]', err)
-    return res.status(500).json({ error: err.message || 'Gagal memanggil AI' })
-  }
-}
-`
-
-const PLUGIN_AI_NEW = String.raw`function pluginApiAi(env) {
-  function kirim(res, code, obj) {
-    res.statusCode = code
-    res.setHeader('Content-Type', 'application/json')
-    res.end(JSON.stringify(obj))
-  }
-  const setupMiddlewares = (server) => {
-    server.middlewares.use('/api/ai/tulis', async function (req, res) {
-      const authHeader = req.headers.authorization || ''
-      if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
-      const user = await cekSesi(env, authHeader)
-      if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
-      const body = await bacaBody(req)
-      const draft = body.draft
-      if (!draft || !String(draft).trim()) {
-        kirim(res, 400, { error: 'Tuliskan dulu catatan kasar kegiatanmu.' })
+    const sub = supabase.auth.onAuthStateChange(function (event, session) {
+      if (event === 'SIGNED_OUT') {
+        if (active) {
+          setMahasiswa(null)
+          setLoading(false)
+        }
         return
       }
-      try {
-        const hasil = await susunLogbookAi(env, {
-          draft: draft,
-          kategoriList: Array.isArray(body.kategori) ? body.kategori : [],
-          unitList: Array.isArray(body.unit) ? body.unit : []
-        })
-        kirim(res, 200, hasil)
-      } catch (err) {
-        kirim(res, 500, { error: err.message || 'Gagal memanggil AI' })
-      }
+
+      sinkronkan(session && session.user ? session.user : null)
     })
 
-    server.middlewares.use('/api/ai/chat', async function (req, res) {
-      if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
-      const body = await bacaBody(req)
-      const pertanyaan = String(body.pertanyaan || '').trim()
-      const riwayat = Array.isArray(body.riwayat) ? body.riwayat.slice(-10) : []
-      if (!pertanyaan) { kirim(res, 400, { error: 'Pertanyaan tidak boleh kosong.' }); return }
-      if (pertanyaan.length > 500) { kirim(res, 400, { error: 'Pertanyaan terlalu panjang (maks 500 karakter).' }); return }
-      try {
-        const { data: dataTim, dariCache } = await denganCache(
-          env,
-          'mbsi:chat:konteks:v1',
-          300,
-          async function () {
-            const sb = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY)
-            const [l, p, g, h] = await Promise.all([
-              sb.from('logbooks').select('id, mahasiswa_id, tanggal, kategori, judul, logbook_items(judul)')
-                .eq('status', 'publik').order('tanggal', { ascending: false }).limit(200),
-              sb.from('mahasiswa').select('id, nama, nim, prodi').order('nama').limit(50),
-              sb.from('galeri').select('id, mahasiswa_id').limit(500),
-              sb.from('daftar_hadir').select('id, mahasiswa_id, tanggal, status, alasan')
-                .order('tanggal', { ascending: false }).limit(1000)
-            ])
-            return { logs: l.data || [], people: p.data || [], gal: g.data || [], hadir: h.data || [] }
-          }
-        )
-        console.log('[ai/chat] data tim:', dariCache ? 'dari cache' : 'fresh dari Supabase')
-        const jawaban = await jawabPertanyaanDospem(env, {
-          pertanyaan: pertanyaan,
-          riwayat: riwayat,
-          data: dataTim
-        })
-        kirim(res, 200, { jawaban: jawaban, cache: dariCache ? 'hit' : 'miss' })
-      } catch (err) {
-        console.error('[ai/chat]', err)
-        kirim(res, 500, { error: err.message || 'Gagal memanggil AI' })
-      }
-    })
-  }
-  return {
-    name: 'api-ai-dev',
-    configureServer: setupMiddlewares,
-    configurePreviewServer: setupMiddlewares
-  }
-}`
-
-// ==================== STEPS ====================
-
-function step1() {
-  head('[1/6] Cek package @upstash/redis')
-  if (exists('node_modules/@upstash/redis')) {
-    ok('@upstash/redis sudah terinstall')
-    return true
-  }
-  warn('@upstash/redis belum diinstall')
-  console.log('')
-  console.log('  Jalankan dulu:')
-  console.log('    \x1b[1mnpm install @upstash/redis\x1b[0m')
-  console.log('')
-  console.log('  Lalu jalankan ulang script ini.')
-  return false
-}
-
-function step2() {
-  head('[2/6] File api/_lib/redis.js')
-  const rel = 'api/_lib/redis.js'
-  if (exists(rel)) {
-    const src = read(rel)
-    if (src.indexOf('export async function denganCache') !== -1 && src.indexOf('ambilRedis') !== -1) {
-      skip('sudah ada & valid')
-      return
+    return function () {
+      active = false
+      document.removeEventListener('visibilitychange', onVisibility)
+      sub.data.subscription.unsubscribe()
     }
-    warn('file ada tapi isinya berbeda, overwrite')
-  }
-  write(rel, REDIS_HELPER)
-  ok('dibuat')
+  }, [])
+
+  return { mahasiswa: mahasiswa, loading: loading }
 }
+````
 
-function step3() {
-  head('[3/6] Update .env.example')
-  const rel = '.env.example'
-  if (!exists(rel)) { warn('tidak ditemukan, dilewati'); return }
-  const raw = read(rel)
-  const eol = raw.indexOf('\r\n') !== -1 ? '\r\n' : '\n'
-  let src = raw.replace(/\r\n/g, '\n')
+## File: src/lib/drive.js
+````javascript
+export function parseDriveId(url) {
+  if (!url) return null
+  const s = String(url).trim()
 
-  if (src.indexOf('UPSTASH_REDIS_REST_URL') !== -1) {
-    skip('sudah berisi UPSTASH_*')
-    return
-  }
-  src = src.replace(/\s*$/, '') + '\nUPSTASH_REDIS_REST_URL=\nUPSTASH_REDIS_REST_TOKEN=\n'
-  const out = eol === '\r\n' ? src.replace(/\n/g, '\r\n') : src
-  write(rel, out)
-  ok('UPSTASH_REDIS_REST_URL & UPSTASH_REDIS_REST_TOKEN ditambahkan')
-}
-
-function step4() {
-  head('[4/6] Rewrite api/ai/chat.js dengan cache')
-  const rel = 'api/ai/chat.js'
-  if (!exists(rel)) {
-    warn('tidak ditemukan, dibuat baru')
-    write(rel, AI_CHAT_ENDPOINT)
-    ok('dibuat baru dengan cache')
-    return
-  }
-  const src = read(rel)
-  if (src.indexOf("from '../_lib/redis.js'") !== -1 && src.indexOf('denganCache') !== -1) {
-    skip('sudah pakai cache')
-    return
-  }
-  backup(rel)
-  write(rel, AI_CHAT_ENDPOINT)
-  ok('ditulis ulang dengan cache (backup: ' + rel + '.bak)')
-}
-
-function step5() {
-  head('[5/6] Update vite.config.js')
-  const rel = 'vite.config.js'
-  if (!exists(rel)) { warn('tidak ditemukan, dilewati'); return }
-  const raw = read(rel)
-  const eol = raw.indexOf('\r\n') !== -1 ? '\r\n' : '\n'
-  let src = raw.replace(/\r\n/g, '\n')
-  let changed = 0
-
-  // 5a. Tambah import denganCache
-  if (src.indexOf("from './api/_lib/redis.js'") === -1) {
-    const anchor = "import { jawabPertanyaanDospem } from './api/_lib/dospem-chat.js'"
-    if (src.indexOf(anchor) !== -1) {
-      src = src.replace(anchor, anchor + "\nimport { denganCache } from './api/_lib/redis.js'")
-      changed++
-      console.log('  \x1b[32m\u2713\x1b[0m import denganCache ditambahkan')
-    } else {
-      warn('anchor import jawabPertanyaanDospem tidak ditemukan')
-    }
-  } else {
-    skip('import denganCache sudah ada')
-  }
-
-  // 5b. Cek pluginApiAi sudah pakai cache
-  if (src.indexOf("'mbsi:chat:konteks:v1'") !== -1) {
-    skip('pluginApiAi sudah pakai cache')
-  } else if (src.indexOf('/api/ai/chat') !== -1) {
-    // Rewrite seluruh pluginApiAi
-    const reFn = /function pluginApiAi\(env\) \{[\s\S]*?\n\}\n\nexport default defineConfig/
-    if (reFn.test(src)) {
-      src = src.replace(reFn, PLUGIN_AI_NEW + '\n\nexport default defineConfig')
-      changed++
-      console.log('  \x1b[32m\u2713\x1b[0m pluginApiAi diganti versi dengan cache')
-    } else {
-      warn('pola pluginApiAi tidak match, cek manual')
-    }
-  } else {
-    warn('pluginApiAi tidak ditemukan di vite.config.js')
-  }
-
-  if (changed > 0) {
-    backup(rel)
-    const out = eol === '\r\n' ? src.replace(/\n/g, '\r\n') : src
-    write(rel, out)
-    ok(changed + ' perubahan diterapkan (backup: ' + rel + '.bak)')
-  } else {
-    skip('tidak ada perubahan')
-  }
-}
-
-function step6() {
-  head('[6/6] Verifikasi')
-  const checks = [
-    { rel: 'api/_lib/redis.js', must: 'export async function denganCache' },
-    { rel: 'api/ai/chat.js', must: "from '../_lib/redis.js'" },
-    { rel: 'api/ai/chat.js', must: 'denganCache' },
-    { rel: 'api/ai/chat.js', must: 'KUNCI_KONTEKS' },
-    { rel: 'vite.config.js', must: "from './api/_lib/redis.js'" },
-    { rel: 'vite.config.js', must: "'mbsi:chat:konteks:v1'" }
-  ]
-  let semuaOk = true
-  for (const c of checks) {
-    if (!exists(c.rel)) { warn(c.rel + ' tidak ditemukan'); semuaOk = false; continue }
-    const src = read(c.rel)
-    if (src.indexOf(c.must) !== -1) {
-      console.log('  \x1b[32m\u2713\x1b[0m ' + c.rel + ' \u2192 "' + c.must + '"')
-    } else {
-      warn(c.rel + ' tidak mengandung "' + c.must + '"')
-      semuaOk = false
-    }
-  }
-  return semuaOk
-}
-
-// ==================== MAIN ====================
-
-function main() {
-  console.log('\n\x1b[1m\x1b[36m\u{1F534} Apply Redis Cache untuk AI Chat\x1b[0m')
-  console.log('\x1b[2m   Cache konteks chat dospem pakai Upstash Redis, TTL 5 menit.\x1b[0m')
-
-  if (!exists('package.json') || !exists('src/App.jsx')) {
-    console.log('\n\x1b[31mJalankan dari root project (folder yang berisi package.json & src/).\x1b[0m\n')
-    process.exit(1)
-  }
+  if (/^[a-zA-Z0-9_-]{20,}$/.test(s) && s.indexOf('/') === -1 && s.indexOf('.') === -1) return s
 
   try {
-    const lanjut = step1()
-    if (!lanjut) {
-      console.log('\n\x1b[33mScript dihentikan. Install package dulu lalu ulangi.\x1b[0m\n')
-      process.exit(1)
+    const u = new URL(s)
+    const host = u.hostname.replace('www.', '')
+
+    if (host === 'drive.google.com' || host === 'drive.usercontent.google.com') {
+      const m = u.pathname.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)
+      if (m) return m[1]
+      const id = u.searchParams.get('id')
+      if (id) return id
     }
-    step2()
-    step3()
-    step4()
-    step5()
-    const semuaOk = step6()
-    if (!semuaOk) {
-      console.log('\n\x1b[33mAda beberapa item yang perlu cek manual. Lihat warning di atas.\x1b[0m')
-    }
-  } catch (e) {
-    console.log('\n\x1b[31mGagal: ' + e.message + '\x1b[0m')
-    console.error(e)
-    process.exit(1)
-  }
+  } catch (e) {}
 
-  console.log('\n\x1b[1m\x1b[32m\u2705 Selesai!\x1b[0m')
-  console.log(`
-  \x1b[1mYang perlu kamu lakukan manual:\x1b[0m
-
-  1. Daftar & buat database di Upstash:
-     \x1b[36mhttps://console.upstash.com\x1b[0m
-     \u2192 + Create Database
-     \u2192 Name: \x1b[1mmbsi-logbook-cache\x1b[0m
-     \u2192 Region: \x1b[1map-southeast-1\x1b[0m (Singapore)
-     \u2192 Plan: \x1b[1mFree\x1b[0m (256 MB, 500K commands/bulan)
-     \u2192 Copy UPSTASH_REDIS_REST_URL & UPSTASH_REDIS_REST_TOKEN
-
-  2. Tambahkan ke \x1b[1m.env.local\x1b[0m:
-     \x1b[2mUPSTASH_REDIS_REST_URL=https://xxx-xxxxx.upstash.io\x1b[0m
-     \x1b[2mUPSTASH_REDIS_REST_TOKEN=AXxxxxxxxxxxxxxxxxxxxxxx\x1b[0m
-
-  3. Restart dev server:
-     Ctrl+C, lalu \x1b[1mnpm run dev\x1b[0m
-
-  \x1b[1mCara test:\x1b[0m
-
-  Buka halaman publik, klik FAB chat, tanya apa saja 2x berturut-turut.
-  Perhatikan terminal dev server:
-
-    Request 1: \x1b[36m[ai/chat] data tim: fresh dari Supabase\x1b[0m
-    Request 2: \x1b[36m[ai/chat] data tim: dari cache\x1b[0m       \u2190 cache hit!
-
-  Kalau request ke-2 masih "fresh", cek:
-    - Apakah UPSTASH_* sudah ada di .env.local? (restart dev server setelah isi)
-    - Buka \x1b[36mhttps://console.upstash.com\x1b[0m \u2192 Data Browser,
-      cek apakah ada key \x1b[1mmbsi:chat:konteks:v1\x1b[0m
-    - Ada warning \x1b[33m[redis] get/set gagal\x1b[0m? Itu penyebabnya, kabari aku.
-
-  \x1b[1mUntuk deploy ke Vercel:\x1b[0m
-
-  Tambahkan 2 env var yang sama di
-  Vercel \u2192 Settings \u2192 Environment Variables (Production + Preview).
-
-  \x1b[1mFile backup:\x1b[0m Kalau ada masalah, restore dari:
-    api/ai/chat.js.bak
-    vite.config.js.bak
-`)
+  return null
 }
 
-main()
-````
-
-## File: README.md
-````markdown
-# Logbook Magang BSI
-
-Portal pencatatan kegiatan magang mahasiswa Bank Syariah Indonesia (BSI) yang menggabungkan **logbook harian**, **galeri foto & video**, dan **daftar kehadiran** dalam satu tempat.
-
-Dibangun untuk memudahkan mahasiswa mendokumentasikan kegiatan magang, serta memberikan akses **publik** (tanpa login) kepada Dosen Pembimbing (Dospem) dan Kaprodi untuk memantau progres tim.
-
-## ✨ Fitur Utama
-
-### Untuk Mahasiswa (Login)
-- **Dashboard** dengan empat tab: Logbook, Galeri, Daftar Hadir, dan Profil.
-- **Form Logbook** interaktif: kolom Kendala / Solusi / Pembelajaran melebar otomatis saat difokuskan atau terisi, dengan animasi halus pada kartu form dan tombol Simpan.
-- **Upload foto** otomatis dikonversi ke WebP ringan (mendukung HEIC iPhone).
-- **Upload video** melalui YouTube (unlisted) dengan sistem kuota harian per project, atau alternatif link YouTube/Google Drive.
-- **Proteksi draf**: konfirmasi otomatis saat pindah tab, pindah halaman, refresh, tutup tab, batal edit, atau menimpa draf melalui tombol Edit.
-- **Profil & avatar** dengan upload foto profil sendiri.
-
-### Untuk Dosen Pembimbing & Kaprodi (Publik)
-- Halaman **Beranda** menampilkan logbook terbaru tim yang sudah dibagikan.
-- Halaman **Logbook**, **Galeri**, dan **Absen** dengan filter & pencarian.
-- Halaman **Dospem** menampilkan profil tim magang beserta rekap kehadiran (Masuk / Izin / Bolos) dan grafik per mahasiswa.
-- Semua halaman tersedia dalam mode terang & gelap.
-
-### Umum
-- **Pagination responsif**: ikon panah + elipsis `...` ala web korporat, tampil satu baris rapi di mobile, tablet, dan desktop.
-- **Dark mode** dengan transisi tema halus.
-- **Tampilan responsif** penuh dari 360px hingga desktop lebar.
-- **Skeleton loading** yang konsisten di setiap daftar.
-
-## 🛠️ Tech Stack
-
-| Lapisan | Teknologi |
-|---------|-----------|
-| Frontend | React 18 + Vite 5 |
-| Styling | Tailwind CSS 3 |
-| Routing | React Router |
-| Database & Auth | Supabase (PostgreSQL + Row Level Security) |
-| Penyimpanan File | Cloudflare R2 |
-| Video Hosting | YouTube Data API v3 (unlisted) |
-| Hosting | Vercel (frontend + serverless functions) |
-| Build Tool | Vite, PostCSS |
-
-## 📁 Struktur Proyek
-
-```
-mbsi-logbook/
-├── api/                    # Fungsi serverless Vercel
-│   ├── _lib/               # Helper server (supabase admin, r2, youtube)
-│   ├── r2/                 # Endpoint upload/unduh/hapus media R2
-│   └── youtube/            # Endpoint kuota, sesi upload, cek video terbaru
-├── public/                 # File statis (favicon, robots.txt, llms.txt)
-├── src/
-│   ├── components/         # Komponen UI bersama
-│   │   ├── ui.jsx          # Toast, Modal, Pagination, AutoTextArea, dll.
-│   │   ├── cards.jsx       # Kartu logbook, galeri, kehadiran
-│   │   ├── controls.jsx    # Filter, pencarian, dropdown
-│   │   ├── Layout.jsx      # Navbar, footer, guard unsaved changes
-│   │   ├── Carousel.jsx    # Carousel media
-│   │   ├── PemutarVideo.jsx# Custom video player
-│   │   └── icons.jsx       # Kumpulan ikon SVG inline
-│   ├── lib/                # Logika & helper
-│   │   ├── auth.js         # Sesi & autentikasi
-│   │   ├── upload.js       # Pipeline upload foto/video
-│   │   ├── konversi.js     # Konversi HEIC → WebP
-│   │   ├── youtube.js      # Helper YouTube API
-│   │   ├── drive.js        # Helper Google Drive
-│   │   ├── profil.js       # Upload avatar
-│   │   ├── logbook.js      # Logika form logbook
-│   │   ├── format.js       # Format tanggal, angka, file size
-│   │   └── constants.js    # Konstanta bersama
-│   ├── pages/              # Halaman utama
-│   │   ├── HomePage.jsx    # Landing page publik
-│   │   ├── LoginPage.jsx   # Login mahasiswa
-│   │   ├── DashboardPage.jsx # Dashboard mahasiswa (4 tab)
-│   │   ├── LogbookPage.jsx # Daftar logbook publik
-│   │   ├── GalleryPage.jsx # Galeri publik
-│   │   ├── AttendancePage.jsx # Daftar hadir publik
-│   │   └── DospemPage.jsx  # Halaman Dospem/Kaprodi
-│   ├── App.jsx             # Router utama
-│   ├── main.jsx            # Entry point + animasi halaman
-│   └── index.css           # Tema & utilitas global
-├── supabase/
-│   ├── schema.sql          # Skema database lengkap
-│   └── migrasi-drive-download.sql
-├── .env.example            # Contoh variabel lingkungan
-├── vercel.json             # Konfigurasi Vercel (rewrite SPA)
-├── vite.config.js          # Plugin Vite untuk middleware API lokal
-└── tailwind.config.js      # Konfigurasi Tailwind + tema BSI
-```
-
-## 🚀 Menjalankan di Lokal
-
-### Prasyarat
-- Node.js 18+
-- Akun [Supabase](https://supabase.com) (untuk DB + Auth)
-- Akun [Cloudflare](https://cloudflare.com) (untuk R2)
-- Akun [Google Cloud Console](https://console.cloud.google.com) (untuk YouTube API)
-
-### Langkah Setup
-
-1. **Clone & install**
-   ```bash
-   git clone <repo-url>
-   cd mbsi-logbook
-   npm install
-   ```
-
-2. **Salin `.env.example` menjadi `.env.local`**
-   ```bash
-   cp .env.example .env.local
-   ```
-   Isi semua variabel sesuai layanan yang kamu miliki (lihat bagian **Variabel Lingkungan**).
-
-3. **Jalankan skema database**
-   - Buka Supabase → SQL Editor.
-   - Tempel seluruh isi `supabase/schema.sql`, lalu jalankan.
-   - Buat user Auth dengan pola `NIM@mbsi.local` (sesuai konvensi kampus) dan isi tabel `mahasiswa` dengan `auth_uid` yang cocok.
-
-4. **Jalankan server lokal**
-   ```bash
-   npm run dev
-   ```
-   Buka `http://localhost:5173` (atau `http://<IP-lokal>:5173` untuk uji dari HP satu jaringan).
-
-5. **Preview build production**
-   ```bash
-   npm run build
-   npm run preview
-   ```
-
-## 🔐 Variabel Lingkungan
-
-### Client (dipakai saat build, prefix `VITE_`)
-| Variabel | Keterangan |
-|----------|-----------|
-| `VITE_SUPABASE_URL` | URL proyek Supabase |
-| `VITE_SUPABASE_ANON_KEY` | Public anon key Supabase |
-
-### Server (dipakai fungsi `api/` saat runtime)
-| Variabel | Keterangan |
-|----------|-----------|
-| `SUPABASE_SERVICE_ROLE_KEY` | Service role key (hanya di server) |
-| `R2_ACCOUNT_ID` | Cloudflare Account ID |
-| `R2_ACCESS_KEY_ID` | R2 access key |
-| `R2_SECRET_ACCESS_KEY` | R2 secret key |
-| `R2_BUCKET_NAME` | Nama bucket R2 |
-| `R2_PUBLIC_BASE_URL` | URL publik bucket (mis. `https://pub-xxx.r2.dev`) |
-| `YOUTUBE_CLIENT_ID_1` | OAuth client ID Google project ke-1 |
-| `YOUTUBE_CLIENT_SECRET_1` | OAuth client secret project ke-1 |
-| `YOUTUBE_REFRESH_TOKEN_1` | Refresh token project ke-1 |
-| `YOUTUBE_CLIENT_ID_2.._6` | Opsional — untuk kuota video lebih besar |
-| `YOUTUBE_CLIENT_SECRET_2.._6` | Opsional |
-| `YOUTUBE_REFRESH_TOKEN_2.._6` | Opsional |
-
-Setiap project YouTube mendapat kuota **5 upload/hari** (zona waktu Pacific). Tambahkan project 2–6 bila butuh kuota harian lebih besar (total hingga 30 upload/hari).
-
-## 🌐 Deploy ke Vercel
-
-1. Push repo ke GitHub.
-2. Import proyek di [Vercel](https://vercel.com).
-3. Salin seluruh isi `.env.local` ke **Settings → Environment Variables** (berlaku untuk Production + Preview).
-4. Deploy. Vercel otomatis mendeteksi framework Vite dan menjalankan fungsi serverless dari folder `api/`.
-
-> ⚠️ Tanpa variabel server (terutama `SUPABASE_SERVICE_ROLE_KEY`, `R2_*`, dan `YOUTUBE_*`), build akan sukses tetapi API akan mengembalikan `500` / "Kredensial belum dikonfigurasi".
-
-## 📏 Batasan & Catatan Produksi
-
-- **Ukuran foto maksimum**: 15 MB (dikonversi ke WebP sebelum diunggah).
-- **Ukuran video maksimum**: 50 MB (diperiksa di sisi klien).
-- **Kuota video YouTube**: 5 upload/project/hari; bila habis, sistem menyarankan link eksternal.
-- **Privasi video YouTube**: `unlisted` (hanya dapat diakses lewat link tertanam).
-- **Row Level Security (RLS)** Supabase wajib aktif di semua tabel produksi (`logbooks`, `logbook_items`, `galeri`, `daftar_hadir`, `mahasiswa`, `youtube_quota_usage`).
-- **Service role key Supabase** hanya boleh berada di sisi server (`api/`), jangan pernah masuk ke kode klien.
-
-## 📄 Lisensi
-
-Proyek internal untuk kegiatan magang Bank Syariah Indonesia. Hak cipta © 2026 Tim Magang BSI.
-````
-
-## File: tailwind.config.js
-````javascript
-export default {
-  darkMode: 'class',
-  content: ['./index.html', './src/**/*.{js,jsx}'],
-  theme: {
-    extend: {
-      colors: {
-        bsi: {
-           50: '#f4fbf6', 100: '#dff0e4', 200: '#bfe3cc', 300: '#86ecb0',
-           400: '#4ed58f', 500: '#27c06d', 600: '#1a9e57', 700: '#177c48',
-           800: '#16623c', 900: '#135033', 950: '#081a13'
-         },
-         gold: { 400: '#fbbf24', 500: '#f59e0b', 600: '#d97706' }
-      }
-    }
-  },
-  plugins: []
+export function drivePreviewUrl(id) {
+  return 'https://drive.google.com/file/d/' + id + '/preview'
 }
-````
 
-## File: api/_lib/ai-provider.js
-````javascript
-import { susunLogbookDenganGroq } from './groq.js'
+export function driveThumbUrl(id) {
+  return 'https://drive.google.com/thumbnail?id=' + id + '&sz=w1000'
+}
 
-/* Titik masuk tunggal untuk semua fitur AI di aplikasi.
-   Saat ini memakai Groq (Qwen 3.8 27B) sebagai provider tunggal.
-   Kalau nanti mau tambah provider lain, cukup tambahkan cabang
-   di sini tanpa mengubah tulis.js atau vite.config.js. */
-export async function susunLogbookAi(env, opts) {
-  return susunLogbookDenganGroq(env, opts)
+export function driveDownloadUrl(id) {
+  return 'https://drive.usercontent.google.com/download?id=' + id + '&export=download&confirm=t'
+}
+
+export function driveViewUrl(id) {
+  return 'https://drive.google.com/file/d/' + id + '/view'
 }
 ````
 
@@ -2383,11 +3016,12 @@ export async function susunLogbookDenganGroq(env, opts) {
 ````javascript
 import { createClient } from '@supabase/supabase-js'
 import { jawabPertanyaanDospem } from '../_lib/dospem-chat.js'
-import { denganCache } from '../_lib/redis.js'
+import { denganCache, ambilRedis, kunciJawaban } from '../_lib/redis.js'
 
 const MAKS_PERTANYAAN = 500
 const MAKS_RIWAYAT = 10
-const TTL_KONTEKS = 300 // 5 menit
+const TTL_KONTEKS = 300      // 5 menit
+const TTL_JAWABAN = 3600     // 1 jam
 const KUNCI_KONTEKS = 'mbsi:chat:konteks:v1'
 
 async function ambilDataTim(env) {
@@ -2421,159 +3055,479 @@ export default async function handler(req, res) {
   }
 
   try {
+    const redis = ambilRedis(process.env)
+    /* Hanya cache pertanyaan self-contained (tanpa riwayat).
+       Kalau ada riwayat, jawaban tergantung konteks percakapan sebelumnya. */
+    const bisaPakaiCacheJawaban = riwayat.length === 0
+    const kunci = bisaPakaiCacheJawaban ? kunciJawaban(pertanyaan) : null
+
+    /* Lapis 2: cache jawaban AI */
+    if (kunci && redis) {
+      try {
+        const cached = await redis.get(kunci)
+        if (cached) {
+          console.log('[ai/chat] jawaban dari cache')
+          return res.status(200).json({ jawaban: cached, cache: 'jawaban' })
+        }
+      } catch (e) {
+        console.warn('[redis] get jawaban gagal:', e.message)
+      }
+    }
+
+    /* Lapis 1: cache konteks Supabase */
     const { data: dataTim, dariCache } = await denganCache(
       process.env,
       KUNCI_KONTEKS,
       TTL_KONTEKS,
       function () { return ambilDataTim(process.env) }
     )
+    console.log('[ai/chat] konteks tim:', dariCache ? 'dari cache' : 'fresh dari Supabase')
 
-    console.log('[ai/chat] data tim:', dariCache ? 'dari cache' : 'fresh dari Supabase')
-
+    /* Panggil Groq */
     const jawaban = await jawabPertanyaanDospem(process.env, {
       pertanyaan: pertanyaan,
       riwayat: riwayat,
       data: dataTim
     })
 
-    return res.status(200).json({ jawaban: jawaban, cache: dariCache ? 'hit' : 'miss' })
+    /* Simpan jawaban ke cache (hanya kalau self-contained) */
+    if (kunci && redis) {
+      try {
+        await redis.set(kunci, jawaban, { ex: TTL_JAWABAN })
+      } catch (e) {
+        console.warn('[redis] set jawaban gagal:', e.message)
+      }
+    }
+
+    return res.status(200).json({ jawaban: jawaban, cache: 'fresh' })
   } catch (err) {
     console.error('[ai/chat]', err)
-    return res.status(500).json({ error: err.message || 'Gagal memanggil AI' })
+    const status = err.statusCode || 500
+    const body = { error: err.message || 'Gagal memanggil AI' }
+    if (err.retryAfter) body.retryAfter = err.retryAfter
+    return res.status(status).json(body)
   }
 }
 ````
 
-## File: api/r2/presign.js
+## File: src/components/Carousel.jsx
 ````javascript
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
-import { cekSesi } from '../_lib/sesi.js'
+import { useEffect, useRef, useState } from 'react'
+import { SizedIcon } from './icons.jsx'
+import { Lightbox, SmartFit, MediaDrive } from './ui.jsx'
 
-const s3 = new S3Client({
-  region: 'auto',
-  endpoint: 'https://' + process.env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
+export default function Carousel(props) {
+  const slides = props.slides || []
+  const autoMs = props.autoMs || 4000
+  const [idx, setIdx] = useState(0)
+  const [paused, setPaused] = useState(false)
+  const [zoom, setZoom] = useState(null)
+  const trackRef = useRef(null)
+  const touchX = useRef(0)
+  const moved = useRef(false)
+
+  useEffect(function () {
+    if (slides.length < 2 || paused) return undefined
+    const t = setInterval(function () {
+      setIdx(function (i) { return (i + 1) % slides.length })
+    }, autoMs)
+    return function () { clearInterval(t) }
+  }, [slides.length, paused, autoMs])
+
+  useEffect(function () {
+    if (trackRef.current) trackRef.current.style.transform = 'translateX(-' + (idx * 100) + '%)'
+  }, [idx])
+
+  if (!slides.length) return null
+
+  if (slides.length === 1) {
+    const s = slides[0]
+    return (
+      <>
+        <div className="relative group rounded-2xl overflow-hidden aspect-video bg-slate-900">
+          {s.drive ? (
+            <MediaDrive driveId={s.drive} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} className="absolute inset-0 h-full w-full object-cover cursor-zoom-in" />
+          ) : (
+            <SmartFit src={s.src} full={s.full} type={s.type} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} />
+          )}
+          <button type="button" title="Perbesar Media" onClick={function () { setZoom(s) }}
+            className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
+            <SizedIcon name="expand" size={15} />
+          </button>
+        </div>
+        {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} driveId={zoom.drive || null} onClose={function () { setZoom(null) }} /> : null}
+      </>
+    )
   }
-})
 
-export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
-  const user = await cekSesi(process.env, req.headers.authorization)
-  if (!user) return res.status(401).json({ error: 'Sesi tidak valid' })
-  const { filename, contentType, kind } = req.body || {}
-  if (!filename || !contentType || !kind) return res.status(400).json({ error: 'Payload tidak lengkap' })
-  const ext = (filename.split('.').pop() || 'bin').toLowerCase()
-  const key = kind + '/' + new Date().getFullYear() + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + ext
-  const uploadUrl = await getSignedUrl(
-    s3,
-    new PutObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key, ContentType: contentType }),
-    { expiresIn: 300 }
+  return (
+    <>
+      <div
+        className="media-carousel group"
+        onMouseEnter={function () { setPaused(true) }}
+        onMouseLeave={function () { setPaused(false) }}
+        onTouchStart={function (e) { touchX.current = e.touches[0].clientX; moved.current = false }}
+        onTouchEnd={function (e) {
+          const dx = e.changedTouches[0].clientX - touchX.current
+          if (Math.abs(dx) > 40) {
+            moved.current = true
+            setIdx(function (i) { return (i + (dx < 0 ? 1 : -1) + slides.length) % slides.length })
+          }
+        }}
+      >
+        <div ref={trackRef} className="carousel-track">
+          {slides.map(function (s, i) {
+            return (
+              <div key={i} className="carousel-slide">
+                {s.drive ? (
+                  <MediaDrive driveId={s.drive} alt={s.title || 'Media'} onClick={function () { if (moved.current) { moved.current = false; return } setZoom(s) }} className="absolute inset-0 h-full w-full object-cover cursor-zoom-in" />
+                ) : (
+                <SmartFit
+                  src={s.src}
+                  full={s.full}
+                   type={s.type}
+                  alt={s.title || 'Media'}
+                  onClick={function () {
+                    if (moved.current) { moved.current = false; return }
+                    setZoom(s)
+                  }}
+                />
+                )}
+                <button type="button" title="Perbesar Media" onClick={function (e) { e.stopPropagation(); setZoom(s) }}
+                  className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
+                  <SizedIcon name="expand" size={15} />
+                </button>
+                {s.title ? (
+                  <span className="absolute bottom-2 left-2 z-10 px-2 py-1 rounded-lg bg-black/60 text-white text-xs max-w-[85%] truncate">
+                    {s.title}
+                  </span>
+                ) : null}
+              </div>
+            )
+          })}
+        </div>
+        <button
+          onClick={function () { setIdx(function (i) { return (i - 1 + slides.length) % slides.length }) }}
+          className="absolute left-2 top-0 bottom-0 my-auto z-10 h-8 w-8 rounded-full bg-black/40 text-white grid place-items-center opacity-100 xl:opacity-0 xl:group-hover:opacity-100 hover:bg-black/60"
+        >
+          &#8249;
+        </button>
+        <button
+          onClick={function () { setIdx(function (i) { return (i + 1) % slides.length }) }}
+          className="absolute right-2 top-0 bottom-0 my-auto z-10 h-8 w-8 rounded-full bg-black/40 text-white grid place-items-center opacity-100 xl:opacity-0 xl:group-hover:opacity-100 hover:bg-black/60"
+        >
+          &#8250;
+        </button>
+        <div className="absolute bottom-2 right-2 z-10 flex gap-1.5">
+          {slides.map(function (s, i) {
+            return (
+              <button
+                key={i}
+                onClick={function () { setIdx(i) }} aria-label={'Ke slide ' + (i + 1)}
+                className={'carousel-dot h-2 w-2 rounded-full transition-all ' + (i === idx ? 'bg-white' : 'bg-white/40')}
+              />
+            )
+          })}
+        </div>
+      </div>
+      {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} driveId={zoom.drive || null} onClose={function () { setZoom(null) }} /> : null}
+    </>
   )
-  const publicUrl = '/api/r2/file?key=' + key
-  return res.status(200).json({ uploadUrl, publicUrl, key })
 }
 ````
 
-## File: api/youtube/latest.js
+## File: src/components/ChatWidget.jsx
 ````javascript
-import { createClient } from '@supabase/supabase-js'
-import { LIMIT_PER_PROJECT, ptToday, daftarKredensial, getAccessToken } from '../_lib/youtube.js'
-import { cekSesi } from '../_lib/sesi.js'
-export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
-  const authHeader = req.headers.authorization || ''
-  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
-  const chkUser = await cekSesi(process.env, authHeader)
-  if (!chkUser) return res.status(401).json({ error: 'Sesi tidak valid' })
-  const kredensial = daftarKredensial(process.env)
-  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
-  let terakhir = ''
-  for (const kred of kredensial) {
-    let access
-    try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
-    const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&order=date&maxResults=5', { headers: { Authorization: 'Bearer ' + access } })
-    if (!r.ok) { terakhir = 'project ' + kred.n + ' status ' + r.status; continue }
-    const j = await r.json()
-    const items = j.items || []
-    const batas = Date.now() - 15 * 60 * 1000
-    const cocok = items.find(function (it) {
-      const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
-      return isNaN(t) ? false : t >= batas
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { tanyaDospem } from '../lib/ai.js'
+import { TitikAnim } from './ui.jsx'
+
+const NAMA_ASISTEN = 'Asisten Magang'
+const SUBTITLE_ASISTEN = 'Online'
+const GREETING = 'Hai, aku Asisten Magang disini. Tanya apa aja deh soal kegiatan mahasiswa. Tapi jangan tanya yang lain yaa wkwk'
+const KEY_RIWAYAT = 'mbsi-chat-riwayat'
+const COOLDOWN_NORMAL = 5
+const COOLDOWN_RATE_LIMIT = 30
+const SARAN = [
+  'Siapa yang paling sering bolos?',
+  'Ringkas kegiatan mahasiswa minggu ini',
+  'Mahasiswa mana yang paling produktif?'
+]
+
+function IkonChat() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="22" height="22" aria-hidden="true">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </svg>
+  )
+}
+function IkonClose() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  )
+}
+function IkonSend() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="17" height="17" aria-hidden="true">
+      <line x1="22" y1="2" x2="11" y2="13" />
+      <polygon points="22 2 15 22 11 13 2 9 22 2" />
+    </svg>
+  )
+}
+function IkonMic() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="17" height="17" aria-hidden="true">
+      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+      <line x1="12" y1="19" x2="12" y2="23" />
+      <line x1="8" y1="23" x2="16" y2="23" />
+    </svg>
+  )
+}
+
+export default function ChatWidget() {
+  const [open, setOpen] = useState(false)
+  const [riwayat, setRiwayat] = useState(function () {
+    try { return JSON.parse(sessionStorage.getItem(KEY_RIWAYAT) || '[]') } catch (e) { return [] }
+  })
+  const [input, setInput] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [cooldown, setCooldown] = useState(0)
+  const [listening, setListening] = useState(false)
+  const [micSupported, setMicSupported] = useState(false)
+  const [autoScroll, setAutoScroll] = useState(true)
+  const refScroll = useRef(null)
+  const refRecognition = useRef(null)
+
+  useEffect(function () {
+    try { sessionStorage.setItem(KEY_RIWAYAT, JSON.stringify(riwayat)) } catch (e) {}
+  }, [riwayat])
+
+  useLayoutEffect(function () {
+    if (!open) return
+    const el = refScroll.current
+    if (!el || !autoScroll) return
+    requestAnimationFrame(function () {
+      if (el) el.scrollTop = el.scrollHeight
     })
-    if (!cocok) return res.status(404).json({ error: 'Video terbaru tidak ditemukan' })
-    return res.status(200).json({ videoId: cocok.id && cocok.id.videoId, project: kred.n })
-  }
-  return res.status(502).json({ error: 'Gagal memeriksa video terbaru: ' + terakhir })
-}
-````
+  }, [riwayat, busy, error, open, autoScroll])
 
-## File: api/youtube/quota.js
-````javascript
-import { createClient } from '@supabase/supabase-js'
-import { LIMIT_PER_PROJECT, ptToday, daftarKredensial, getAccessToken } from '../_lib/youtube.js'
-import { cekSesi } from '../_lib/sesi.js'
-export default async function handler(req, res) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method tidak diizinkan' })
-  const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
-  const today = ptToday()
-  const kredensial = daftarKredensial(process.env)
-  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
-  let usedTotal = 0
-  const perProject = []
-  for (const kred of kredensial) {
-    const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
-    const used = hit.count || 0
-    usedTotal += used
-    perProject.push({ project: kred.n, used: used, remaining: Math.max(0, LIMIT_PER_PROJECT - used) })
+  function onScrollBody(e) {
+    const el = e.currentTarget
+    const jarak = el.scrollHeight - el.scrollTop - el.clientHeight
+    setAutoScroll(jarak < 80)
   }
-  const limit = kredensial.length * LIMIT_PER_PROJECT
-  res.setHeader('Cache-Control', 'no-store')
-  return res.status(200).json({ limit: limit, used: usedTotal, remaining: Math.max(0, limit - usedTotal), perProject: perProject, ptDate: today })
-}
-````
 
-## File: api/youtube/session.js
-````javascript
-import { createClient } from '@supabase/supabase-js'
-import { LIMIT_PER_PROJECT, ptToday, daftarKredensial, getAccessToken } from '../_lib/youtube.js'
-import { cekSesi } from '../_lib/sesi.js'
-export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
-  const authHeader = req.headers.authorization || ''
-  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Belum login' })
-  const chkUser = await cekSesi(process.env, authHeader)
-  if (!chkUser) return res.status(401).json({ error: 'Sesi tidak valid' })
-  const admin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
-  const today = ptToday()
-  const kredensial = daftarKredensial(process.env)
-  if (!kredensial.length) return res.status(500).json({ error: 'Kredensial YouTube belum dikonfigurasi di environment' })
-  const body = req.body || {}
-  if (!body.title) return res.status(400).json({ error: 'Judul video wajib diisi' })
-  let terakhir = ''
-  for (const kred of kredensial) {
-    const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
-    if ((hit.count || 0) >= LIMIT_PER_PROJECT) { terakhir = 'project ' + kred.n + ' sudah penuh'; continue }
-    let access
-    try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
-    const meta = {
-      snippet: { title: String(body.title).slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
-      status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
+  useEffect(function () {
+    const SR = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition)
+    if (!SR) return undefined
+    setMicSupported(true)
+    const rec = new SR()
+    rec.lang = 'id-ID'
+    rec.continuous = false
+    rec.interimResults = false
+    rec.onresult = function (e) {
+      const teks = e.results[0][0].transcript
+      setInput(function (prev) { return (prev ? prev + ' ' : '') + teks })
     }
-    const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
-      body: JSON.stringify(meta)
-    })
-    if (!init.ok) { terakhir = 'project ' + kred.n + ' ditolak Google (status ' + init.status + ')'; continue }
-    const sessionUri = init.headers.get('location')
-    if (!sessionUri) { terakhir = 'project ' + kred.n + ' tanpa lokasi upload'; continue }
-    await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: chkUser.id, project_id: kred.n })
-    return res.status(200).json({ sessionUri: sessionUri, project: kred.n })
+    rec.onend = function () { setListening(false) }
+    rec.onerror = function () { setListening(false) }
+    refRecognition.current = rec
+    return function () { try { rec.abort() } catch (e) {} }
+  }, [])
+
+  useEffect(function () {
+    if (cooldown <= 0) return undefined
+    const t = setTimeout(function () {
+      setCooldown(function (c) { return Math.max(0, c - 1) })
+    }, 1000)
+    return function () { clearTimeout(t) }
+  }, [cooldown])
+
+  useEffect(function () { if (input) setError('') }, [input])
+
+  async function kirim(teksOverride) {
+    const teks = (teksOverride != null ? teksOverride : input).trim()
+    if (!teks || busy || cooldown > 0) return
+    setBusy(true)
+    setError('')
+    const riwayatLama = riwayat
+    setRiwayat(riwayatLama.concat([{ role: 'user', content: teks }]))
+    setInput('')
+    setAutoScroll(true)
+
+    try {
+      const r = await tanyaDospem(teks, riwayatLama)
+      const jawaban = String(r.jawaban || '').trim() || 'Maaf, tidak ada jawaban.'
+      setRiwayat(function (prev) { return prev.concat([{ role: 'assistant', content: jawaban }]) })
+      setCooldown(COOLDOWN_NORMAL)
+    } catch (err) {
+      const pesan = err.message || 'Gagal memanggil AI'
+      const rateLimit = /terlalu banyak|rate limit|sibuk|429/i.test(pesan)
+      setError(rateLimit ? 'Server AI sedang sibuk. Tunggu ' + COOLDOWN_RATE_LIMIT + ' detik, lalu coba lagi.' : pesan)
+      setCooldown(rateLimit ? COOLDOWN_RATE_LIMIT : COOLDOWN_NORMAL)
+      setRiwayat(riwayatLama)
+      setInput(teks)
+    }
+    setBusy(false)
   }
-  return res.status(429).json({ error: 'Kuota harian semua project video sudah habis. Coba lagi besok atau gunakan link video eksternal.', detail: terakhir })
+
+  function toggleMic() {
+    const rec = refRecognition.current
+    if (!rec) return
+    if (listening) {
+      try { rec.stop() } catch (e) {}
+      setListening(false)
+    } else {
+      try { rec.start(); setListening(true) } catch (e) { setListening(false) }
+    }
+  }
+
+  function onKeyDown(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      if (cooldown > 0) return
+      kirim()
+    }
+  }
+
+  function reset() {
+    if (busy) return
+    setRiwayat([])
+    setError('')
+    setCooldown(0)
+    try { sessionStorage.removeItem(KEY_RIWAYAT) } catch (e) {}
+  }
+
+  const terkunci = busy || cooldown > 0
+  const bubble = riwayat.length ? riwayat : [{ role: 'assistant', content: GREETING }]
+
+  const placeholder = busy
+    ? 'Sedang menganalisis...'
+    : cooldown > 0
+      ? 'Tunggu ' + cooldown + ' detik sebelum kirim lagi'
+      : 'Tulis pertanyaan...'
+
+  return (
+    <>
+      <div className={'chat-widget-panel' + (open ? ' chat-widget-panel-buka' : '')} role="dialog" aria-hidden={!open}>
+        <header className="chat-widget-header">
+          <span className="chat-widget-avatar" aria-hidden="true">
+            <img className='rounded-full' src="avatar-asisten-magang.jpeg" alt="avatar-asisten-magang" />
+            {/* <IkonChat /> */}
+          </span>
+          <div className="chat-widget-title">
+            <p className="chat-widget-title-line">{NAMA_ASISTEN}</p>
+            <p className="chat-widget-sub">
+              <span className="chat-widget-dot-inline" />
+              {SUBTITLE_ASISTEN}
+            </p>
+          </div>
+          <button type="button" className="chat-widget-close" onClick={function () { setOpen(false) }} title="Tutup" aria-label="Tutup chat">
+            <IkonClose />
+          </button>
+        </header>
+
+        <div ref={refScroll} className="chat-widget-body" onScroll={onScrollBody}>
+          {bubble.map(function (m, i) {
+            const dariUser = m.role === 'user'
+            return (
+              <div key={i} className={'chat-widget-row ' + (dariUser ? 'chat-widget-row-user' : '')}>
+                <div className={'chat-widget-bubble ' + (dariUser ? 'chat-widget-bubble-user' : 'chat-widget-bubble-ai')}>
+                  {m.content}
+                </div>
+              </div>
+            )
+          })}
+
+          {!riwayat.length && !input ? (
+            <div className="chat-widget-saran">
+              {SARAN.map(function (s) {
+                return (
+                  <button key={s} type="button" onClick={function () { kirim(s) }} disabled={terkunci} className="chat-widget-saran-btn">
+                    {s}
+                  </button>
+                )
+              })}
+            </div>
+          ) : null}
+
+          {busy ? (
+            <div className="chat-widget-row">
+              <div className="chat-widget-bubble chat-widget-bubble-ai">
+                <span className="inline-flex items-center">
+                  <span></span>
+                  <TitikAnim />
+                </span>
+              </div>
+            </div>
+          ) : null}
+
+          {error ? <div className="chat-widget-error">{error}</div> : null}
+        </div>
+
+        <footer className="chat-widget-footer">
+          <div className="chat-widget-input-wrap">
+            <textarea
+              className="chat-widget-input"
+              rows={1}
+              value={input}
+              onChange={function (e) { setInput(e.target.value) }}
+              onKeyDown={onKeyDown}
+              placeholder={placeholder}
+              disabled={terkunci}
+            />
+            {micSupported ? (
+              <button
+                type="button"
+                className={'chat-widget-mic' + (listening ? ' chat-widget-mic-aktif' : '')}
+                onClick={toggleMic}
+                title={listening ? 'Hentikan rekaman' : 'Rekam suara'}
+                aria-label="Rekam suara"
+                disabled={terkunci}
+              >
+                <IkonMic />
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="chat-widget-send"
+              onClick={function () { kirim() }}
+              disabled={terkunci || !input.trim()}
+              title={cooldown > 0 ? 'Tunggu ' + cooldown + ' detik' : 'Kirim'}
+              aria-label="Kirim"
+            >
+              {cooldown > 0 ? String(cooldown) : <IkonSend />}
+            </button>
+          </div>
+          {riwayat.length ? (
+            <p className="chat-widget-catatan">
+              <button type="button" onClick={reset} className="chat-widget-reset">Mulai ulang percakapan</button>
+            </p>
+          ) : (
+            <p className="chat-widget-catatan">Jawaban berdasarkan data portal.</p>
+          )}
+        </footer>
+      </div>
+
+      <button
+        type="button"
+        className={'chat-widget-fab' + (open ? ' chat-widget-fab-buka' : '')}
+        onClick={function () { setOpen(function (o) { return !o }) }}
+        aria-label={open ? 'Tutup chat' : 'Buka chat'}
+        title={open ? 'Tutup chat' : 'Tanya asisten'}
+      >
+        <span className="chat-widget-fab-icon">
+          {open ? <IkonClose /> : <IkonChat />}
+        </span>
+        {!open ? <span className="chat-widget-dot" /> : null}
+      </button>
+    </>
+  )
 }
 ````
 
@@ -2850,441 +3804,6 @@ export async function tanyaDospem(pertanyaan, riwayat) {
 }
 ````
 
-## File: src/lib/auth.js
-````javascript
-import { useEffect, useState } from 'react'
-import { supabase } from './supabase.js'
-
-const EMAIL_DOMAIN = '@mbsi.local'
-
-export async function loginWithNim(nim, kode) {
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: nim.trim() + EMAIL_DOMAIN,
-    password: kode
-  })
-  if (error) throw error
-  return data
-}
-
-export async function logoutMahasiswa() {
-  await supabase.auth.signOut()
-}
-
-async function cariMahasiswa(uid) {
-  if (!uid) return null
-  const { data } = await supabase
-    .from('mahasiswa')
-    .select('*')
-    .eq('auth_uid', uid)
-    .single()
-  return data || null
-}
-
-export function useAuth() {
-  const [mahasiswa, setMahasiswa] = useState(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(function () {
-    let active = true
-
-    async function sinkronkan(sessionUser) {
-      try {
-        let uid = sessionUser ? sessionUser.id : null
-
-        if (!uid) {
-          const { data } = await supabase.auth.getSession()
-          uid = data.session ? data.session.user.id : null
-        }
-
-        if (!uid) {
-          if (active) {
-            setMahasiswa(null)
-            setLoading(false)
-          }
-          return
-        }
-
-        const mhs = await cariMahasiswa(uid)
-        if (active) {
-          setMahasiswa(function (prev) {
-            if (prev && mhs && prev.id === mhs.id) return prev
-            if (!mhs && prev && prev.auth_uid === uid) return prev
-            return mhs
-          })
-          setLoading(false)
-        }
-      } catch (e) {
-        if (active) setLoading(false)
-      }
-    }
-
-    sinkronkan(null)
-
-    function onVisibility() {
-      if (document.visibilityState === 'visible') {
-        sinkronkan(null)
-      }
-    }
-
-    document.addEventListener('visibilitychange', onVisibility)
-
-    const sub = supabase.auth.onAuthStateChange(function (event, session) {
-      if (event === 'SIGNED_OUT') {
-        if (active) {
-          setMahasiswa(null)
-          setLoading(false)
-        }
-        return
-      }
-
-      sinkronkan(session && session.user ? session.user : null)
-    })
-
-    return function () {
-      active = false
-      document.removeEventListener('visibilitychange', onVisibility)
-      sub.data.subscription.unsubscribe()
-    }
-  }, [])
-
-  return { mahasiswa: mahasiswa, loading: loading }
-}
-````
-
-## File: src/lib/drive.js
-````javascript
-export function parseDriveId(url) {
-  if (!url) return null
-  const s = String(url).trim()
-
-  if (/^[a-zA-Z0-9_-]{20,}$/.test(s) && s.indexOf('/') === -1 && s.indexOf('.') === -1) return s
-
-  try {
-    const u = new URL(s)
-    const host = u.hostname.replace('www.', '')
-
-    if (host === 'drive.google.com' || host === 'drive.usercontent.google.com') {
-      const m = u.pathname.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)
-      if (m) return m[1]
-      const id = u.searchParams.get('id')
-      if (id) return id
-    }
-  } catch (e) {}
-
-  return null
-}
-
-export function drivePreviewUrl(id) {
-  return 'https://drive.google.com/file/d/' + id + '/preview'
-}
-
-export function driveThumbUrl(id) {
-  return 'https://drive.google.com/thumbnail?id=' + id + '&sz=w1000'
-}
-
-export function driveDownloadUrl(id) {
-  return 'https://drive.usercontent.google.com/download?id=' + id + '&export=download&confirm=t'
-}
-
-export function driveViewUrl(id) {
-  return 'https://drive.google.com/file/d/' + id + '/view'
-}
-````
-
-## File: src/lib/logbook.js
-````javascript
-import { supabase } from './supabase.js'
-import { MULAI_MAGANG } from './constants.js'
-
-const EMPTY = '00000000-0000-0000-0000-000000000000'
-
-export async function syncGaleriFromLogbook(mahasiswaId, items, meta) {
-  const itemIds = items.map(function (i) { return i.id }).filter(Boolean)
-  const all = await supabase
-    .from('galeri')
-    .select('id, logbook_item_id')
-    .in('logbook_item_id', itemIds.length ? itemIds : [EMPTY])
-  const existing = new Map((all.data || []).map(function (g) { return [g.logbook_item_id, g.id] }))
-
-  for (const item of items) {
-    if (!item.id) continue
-    if (item.show_in_gallery && item.media_path) {
-      if (existing.has(item.id)) {
-        await supabase.from('galeri').update({
-          media_path: item.media_path,
-          media_type: item.media_type || 'foto',
-          media_thumb: item.media_thumb || null,
-          media_source: item.media_source || 'r2',
-          youtube_id: item.youtube_id || null
-        }).eq('id', existing.get(item.id))
-      } else {
-        await supabase.from('galeri').insert({
-          mahasiswa_id: mahasiswaId,
-          logbook_item_id: item.id,
-          judul: item.judul,
-          deskripsi: item.deskripsi || 'Dokumentasi kegiatan dari logbook harian.',
-          tanggal: meta.tanggal,
-          kegiatan: meta.kategori,
-          media_path: item.media_path,
-          media_type: item.media_type || 'foto',
-          media_thumb: item.media_thumb || null,
-          media_source: item.media_source || 'r2',
-          youtube_id: item.youtube_id || null
-        })
-      }
-    } else if (existing.has(item.id)) {
-      await supabase.from('galeri').delete().eq('id', existing.get(item.id))
-    }
-  }
-}
-
-/* ===== AUTO-BOLOS =====
-   Untuk setiap hari kerja (Sen-Jum) dari MULAI_MAGANG s/d KEMARIN yang belum
-   ada catatan hadir, otomatis isi sebagai "Bolos".
-   Hari ini TIDAK di-auto-Bolos supaya user masih punya kesempatan isi absen.
-
-   Dipanggil di refresh() DashboardPage. Aman dijalankan berulang karena
-   unique constraint (mahasiswa_id, tanggal) di DB mencegah duplikat.
-
-   Return: array tanggal ISO yang baru di-auto-Bolos (buat re-fetch di caller). */
-function pad2(n) { return (n < 10 ? '0' : '') + n }
-function isoDari(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) }
-
-export async function autoIsiBolos(mahasiswaId, tanggalSudahAda) {
-  const sudahAda = new Set(tanggalSudahAda || [])
-  const d = new Date(MULAI_MAGANG + 'T00:00:00')
-  const batas = new Date()
-  batas.setDate(batas.getDate() - 1) // kemarin
-
-  const rows = []
-  while (d <= batas) {
-    const iso = isoDari(d)
-    const hari = d.getDay()
-    if (hari !== 0 && hari !== 6 && !sudahAda.has(iso)) {
-      rows.push({
-        mahasiswa_id: mahasiswaId,
-        tanggal: iso,
-        status: 'Bolos',
-        alasan: 'Terisi otomatis: Tidak ada keterangan pada tanggal ini.'
-      })
-    }
-    d.setDate(d.getDate() + 1)
-  }
-
-  if (!rows.length) return []
-
-  const res = await supabase.from('daftar_hadir').insert(rows)
-  if (res.error) {
-    // Bisa terjadi race condition dengan tab lain yang sedang jalan auto-bolos.
-    // Unique constraint (mahasiswa_id, tanggal) mencegah duplikat, jadi error ini aman diabaikan.
-    console.warn('Auto-Bolos dilewati:', res.error.message)
-    return []
-  }
-  return rows.map(function (r) { return r.tanggal })
-}
-````
-
-## File: public/llms.txt
-````
-# Logbook Magang BSI
-Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia.
-Aplikasi single page berbasis React dengan data tersimpan di Supabase dan media di Cloudflare R2, YouTube, serta Google Drive.
-
-## Halaman publik
-- / : beranda, ringkasan statistik dan logbook terbaru tim
-- /logbook : daftar logbook publik lengkap dengan filter mahasiswa, kategori, dan tanggal
-- /galeri : galeri foto dan video kegiatan magang
-- /absen : daftar hadir tim beserta grafik kehadiran per mahasiswa
-- /dospem : ringkasan kegiatan untuk dosen pembimbing dan kaprodi tanpa login
-
-## Area intern
-- /login : masuk mahasiswa menggunakan NIM dan kode akses
-- /dashboard : pengelolaan logbook, galeri, daftar hadir, dan foto profil, memerlukan sesi login
-- /qr : form cepat berbasis QR untuk menambah kegiatan logbook hari ini dan daftar hadir tanpa membuka dashboard, memerlukan sesi login
-
-## Catatan teknis
-- Seluruh konten dimuat lewat JavaScript, tersedia blok noscript berisi tautan halaman utama.
-- robots.txt mengizinkan perayap umum dan agen AI.
-````
-
-## File: src/components/Carousel.jsx
-````javascript
-import { useEffect, useRef, useState } from 'react'
-import { SizedIcon } from './icons.jsx'
-import { Lightbox, SmartFit, MediaDrive } from './ui.jsx'
-
-export default function Carousel(props) {
-  const slides = props.slides || []
-  const autoMs = props.autoMs || 4000
-  const [idx, setIdx] = useState(0)
-  const [paused, setPaused] = useState(false)
-  const [zoom, setZoom] = useState(null)
-  const trackRef = useRef(null)
-  const touchX = useRef(0)
-  const moved = useRef(false)
-
-  useEffect(function () {
-    if (slides.length < 2 || paused) return undefined
-    const t = setInterval(function () {
-      setIdx(function (i) { return (i + 1) % slides.length })
-    }, autoMs)
-    return function () { clearInterval(t) }
-  }, [slides.length, paused, autoMs])
-
-  useEffect(function () {
-    if (trackRef.current) trackRef.current.style.transform = 'translateX(-' + (idx * 100) + '%)'
-  }, [idx])
-
-  if (!slides.length) return null
-
-  if (slides.length === 1) {
-    const s = slides[0]
-    return (
-      <>
-        <div className="relative group rounded-2xl overflow-hidden aspect-video bg-slate-900">
-          {s.drive ? (
-            <MediaDrive driveId={s.drive} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} className="absolute inset-0 h-full w-full object-cover cursor-zoom-in" />
-          ) : (
-            <SmartFit src={s.src} full={s.full} type={s.type} alt={s.title || 'Media'} onClick={function () { setZoom(s) }} />
-          )}
-          <button type="button" title="Perbesar Media" onClick={function () { setZoom(s) }}
-            className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
-            <SizedIcon name="expand" size={15} />
-          </button>
-        </div>
-        {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} driveId={zoom.drive || null} onClose={function () { setZoom(null) }} /> : null}
-      </>
-    )
-  }
-
-  return (
-    <>
-      <div
-        className="media-carousel group"
-        onMouseEnter={function () { setPaused(true) }}
-        onMouseLeave={function () { setPaused(false) }}
-        onTouchStart={function (e) { touchX.current = e.touches[0].clientX; moved.current = false }}
-        onTouchEnd={function (e) {
-          const dx = e.changedTouches[0].clientX - touchX.current
-          if (Math.abs(dx) > 40) {
-            moved.current = true
-            setIdx(function (i) { return (i + (dx < 0 ? 1 : -1) + slides.length) % slides.length })
-          }
-        }}
-      >
-        <div ref={trackRef} className="carousel-track">
-          {slides.map(function (s, i) {
-            return (
-              <div key={i} className="carousel-slide">
-                {s.drive ? (
-                  <MediaDrive driveId={s.drive} alt={s.title || 'Media'} onClick={function () { if (moved.current) { moved.current = false; return } setZoom(s) }} className="absolute inset-0 h-full w-full object-cover cursor-zoom-in" />
-                ) : (
-                <SmartFit
-                  src={s.src}
-                  full={s.full}
-                   type={s.type}
-                  alt={s.title || 'Media'}
-                  onClick={function () {
-                    if (moved.current) { moved.current = false; return }
-                    setZoom(s)
-                  }}
-                />
-                )}
-                <button type="button" title="Perbesar Media" onClick={function (e) { e.stopPropagation(); setZoom(s) }}
-                  className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 opacity-100 xl:opacity-0 xl:group-hover:opacity-100">
-                  <SizedIcon name="expand" size={15} />
-                </button>
-                {s.title ? (
-                  <span className="absolute bottom-2 left-2 z-10 px-2 py-1 rounded-lg bg-black/60 text-white text-xs max-w-[85%] truncate">
-                    {s.title}
-                  </span>
-                ) : null}
-              </div>
-            )
-          })}
-        </div>
-        <button
-          onClick={function () { setIdx(function (i) { return (i - 1 + slides.length) % slides.length }) }}
-          className="absolute left-2 top-0 bottom-0 my-auto z-10 h-8 w-8 rounded-full bg-black/40 text-white grid place-items-center opacity-100 xl:opacity-0 xl:group-hover:opacity-100 hover:bg-black/60"
-        >
-          &#8249;
-        </button>
-        <button
-          onClick={function () { setIdx(function (i) { return (i + 1) % slides.length }) }}
-          className="absolute right-2 top-0 bottom-0 my-auto z-10 h-8 w-8 rounded-full bg-black/40 text-white grid place-items-center opacity-100 xl:opacity-0 xl:group-hover:opacity-100 hover:bg-black/60"
-        >
-          &#8250;
-        </button>
-        <div className="absolute bottom-2 right-2 z-10 flex gap-1.5">
-          {slides.map(function (s, i) {
-            return (
-              <button
-                key={i}
-                onClick={function () { setIdx(i) }} aria-label={'Ke slide ' + (i + 1)}
-                className={'carousel-dot h-2 w-2 rounded-full transition-all ' + (i === idx ? 'bg-white' : 'bg-white/40')}
-              />
-            )
-          })}
-        </div>
-      </div>
-      {zoom ? <Lightbox src={zoom.full || zoom.src} type={zoom.type} title={zoom.title} youtubeId={zoom.yt || null} driveId={zoom.drive || null} onClose={function () { setZoom(null) }} /> : null}
-    </>
-  )
-}
-````
-
-## File: src/lib/theme.jsx
-````javascript
-import { createContext, useContext, useEffect, useState } from 'react'
-
-const ThemeContext = createContext(null)
-
-/* View Transition hanya aman saat toolbar browser pasti stabil.
-   Di perangkat sentuh, toolbar bisa sedang beranimasi buka/tutup
-   ketika user scroll. Snapshot VT pada momen itu membuat toolbar
-   meluas menutupi navbar, jadi VT dilewati kecuali halaman
-   benar-benar di paling atas. */
-function bolehTransisiVT() {
-  if (!document.startViewTransition) return false
-  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false
-  if (window.matchMedia('(pointer: coarse)').matches && window.scrollY > 0) return false
-  return true
-}
-
-export function ThemeProvider(props) {
-  const [dark, setDark] = useState(function () {
-    const saved = localStorage.getItem('mbsi-theme')
-    if (saved) return saved === 'dark'
-    return window.matchMedia('(prefers-color-scheme: dark)').matches
-  })
-  useEffect(function () {
-    document.documentElement.classList.toggle('dark', dark)
-    localStorage.setItem('mbsi-theme', dark ? 'dark' : 'light')
-  }, [dark])
-  return (
-    <ThemeContext.Provider value={{ dark: dark, toggle: function () {
-      const ganti = function () { setDark(function (d) { return !d }) }
-      if (bolehTransisiVT()) {
-        const akar = document.documentElement
-        const vt = document.startViewTransition(function () {
-          akar.classList.add('vt-tema')
-          ganti()
-        })
-        const lepas = function () { akar.classList.remove('vt-tema') }
-        vt.finished.then(lepas, lepas)
-        setTimeout(lepas, 600)
-      } else ganti()
-    } }}>
-      {props.children}
-    </ThemeContext.Provider>
-  )
-}
-
-export function useTheme() {
-  return useContext(ThemeContext)
-}
-````
-
 ## File: src/lib/youtube.js
 ````javascript
 import { supabase } from './supabase.js'
@@ -3400,51 +3919,6 @@ export async function ambilTokenSesi() {
 }
 ````
 
-## File: index.html
-````html
-<!DOCTYPE html>
-<html lang="id">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="robots" content="index, follow" />
-    <meta name="description" content="Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia. Catatan kegiatan harian, dokumentasi media, dan monitoring kehadiran tim magang dalam satu portal." />
-    <meta name="theme-color" content="#16623c" />
-    <meta property="og:type" content="website" />
-    <meta property="og:title" content="Logbook Magang BSI" />
-    <meta property="og:description" content="Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia." />
-    <meta property="og:locale" content="id_ID" />
-    <link rel="preconnect" href="https://i.ytimg.com" crossorigin />
-    <link rel="preconnect" href="https://drive.google.com" crossorigin />
-    <link rel="dns-prefetch" href="https://drive.usercontent.google.com" />
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%3E%3Crect%20width='24'%20height='24'%20rx='5'%20fill='%2316623c'/%3E%3Cg%20fill='none'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M4%207V17C4%2018.1%204.9%2019%206%2019H18C19.1%2019%2020%2018.1%2020%2017V7'%20stroke='%23ffffff'/%3E%3Cpath%20d='M4%207L12%2012L20%207'%20stroke='%23fbbf24'/%3E%3Cpath%20d='M12%2012V19'%20stroke='%23ffffff'/%3E%3C/g%3E%3C/svg%3E" />
-    <title>Portal Magang BSI</title>
-      <script type="application/ld+json">
-    {"@context":"https://schema.org","@type":"WebSite","name":"Portal Magang BSI","alternateName":"Portal Logbook Magang Bank Syariah Indonesia","description":"Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia.","inLanguage":"id-ID"}
-    </script>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet" />
-</head>
-  <body class="text-slate-800 min-h-screen antialiased">
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-      <noscript>
-      <div style="max-width:640px;margin:48px auto;padding:24px;font-family:sans-serif;line-height:1.6">
-        <h1>Logbook Magang BSI</h1>
-        <p>Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia. Aktifkan JavaScript untuk menggunakan portal ini secara penuh.</p>
-        <ul>
-          <li><a href="/logbook">Logbook publik</a></li>
-          <li><a href="/galeri">Galeri dokumentasi</a></li>
-          <li><a href="/absen">Daftar hadir tim</a></li>
-          <li><a href="/dospem">Ringkasan untuk dosen pembimbing dan kaprodi</a></li>
-        </ul>
-      </div>
-    </noscript>
-  </body>
-</html>
-````
-
 ## File: package.json
 ````json
 {
@@ -3478,6 +3952,29 @@ export async function ambilTokenSesi() {
     "vite": "^5.4.0"
   }
 }
+````
+
+## File: public/llms.txt
+````
+# Logbook Magang BSI
+Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia.
+Aplikasi single page berbasis React dengan data tersimpan di Supabase dan media di Cloudflare R2, YouTube, serta Google Drive.
+
+## Halaman publik
+- / : beranda, ringkasan statistik dan logbook terbaru tim
+- /logbook : daftar logbook publik lengkap dengan filter mahasiswa, kategori, dan tanggal
+- /galeri : galeri foto dan video kegiatan magang
+- /absen : daftar hadir tim beserta grafik kehadiran per mahasiswa
+- /dospem : ringkasan kegiatan untuk dosen pembimbing dan kaprodi tanpa login
+
+## Area intern
+- /login : masuk mahasiswa menggunakan NIM dan kode akses
+- /dashboard : pengelolaan logbook, galeri, daftar hadir, dan foto profil, memerlukan sesi login
+- /qr : form cepat berbasis QR untuk menambah kegiatan logbook hari ini dan daftar hadir tanpa membuka dashboard, memerlukan sesi login
+
+## Catatan teknis
+- Seluruh konten dimuat lewat JavaScript, tersedia blok noscript berisi tautan halaman utama.
+- robots.txt mengizinkan perayap umum dan agen AI.
 ````
 
 ## File: src/lib/format.js
@@ -3655,21 +4152,6 @@ export function toTitleCase(teks) {
 }
 ````
 
-## File: .env.example
-````
-VITE_SUPABASE_URL=
-VITE_SUPABASE_ANON_KEY=
-R2_ACCOUNT_ID=
-R2_ACCESS_KEY_ID=
-R2_SECRET_ACCESS_KEY=
-R2_BUCKET_NAME=mbsi-media
-R2_PUBLIC_BASE_URL=
-GROQ_API_KEY=
-GROQ_MODEL=qwen/qwen3.8-27b
-UPSTASH_REDIS_REST_URL=
-UPSTASH_REDIS_REST_TOKEN=
-````
-
 ## File: src/lib/konversi.js
 ````javascript
 const MAKS_SISI_FULL = 2048
@@ -3835,6 +4317,118 @@ export async function siapkanFotoProfil(file, maksSisi, kualitas) {
     URL.revokeObjectURL(muat.url)
   }
 }
+````
+
+## File: src/lib/theme.jsx
+````javascript
+import { createContext, useContext, useEffect, useState } from 'react'
+
+const ThemeContext = createContext(null)
+
+/* View Transition hanya aman saat toolbar browser pasti stabil.
+   Di perangkat sentuh, toolbar bisa sedang beranimasi buka/tutup
+   ketika user scroll. Snapshot VT pada momen itu membuat toolbar
+   meluas menutupi navbar, jadi VT dilewati kecuali halaman
+   benar-benar di paling atas. */
+function bolehTransisiVT() {
+  if (!document.startViewTransition) return false
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false
+  if (window.matchMedia('(pointer: coarse)').matches && window.scrollY > 0) return false
+  return true
+}
+
+export function ThemeProvider(props) {
+  const [dark, setDark] = useState(function () {
+    const saved = localStorage.getItem('mbsi-theme')
+    if (saved) return saved === 'dark'
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  })
+  useEffect(function () {
+    document.documentElement.classList.toggle('dark', dark)
+    localStorage.setItem('mbsi-theme', dark ? 'dark' : 'light')
+  }, [dark])
+  return (
+    <ThemeContext.Provider value={{ dark: dark, toggle: function () {
+      const ganti = function () { setDark(function (d) { return !d }) }
+      if (bolehTransisiVT()) {
+        const akar = document.documentElement
+        const vt = document.startViewTransition(function () {
+          akar.classList.add('vt-tema')
+          ganti()
+        })
+        const lepas = function () { akar.classList.remove('vt-tema') }
+        vt.finished.then(lepas, lepas)
+        setTimeout(lepas, 600)
+      } else ganti()
+    } }}>
+      {props.children}
+    </ThemeContext.Provider>
+  )
+}
+
+export function useTheme() {
+  return useContext(ThemeContext)
+}
+````
+
+## File: .env.example
+````
+VITE_SUPABASE_URL=
+VITE_SUPABASE_ANON_KEY=
+R2_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET_NAME=mbsi-media
+R2_PUBLIC_BASE_URL=
+GROQ_API_KEY=
+GROQ_MODEL=qwen/qwen3.8-27b
+UPSTASH_REDIS_REST_URL=
+UPSTASH_REDIS_REST_TOKEN=
+````
+
+## File: index.html
+````html
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="index, follow" />
+    <meta name="description" content="Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia. Catatan kegiatan harian, dokumentasi media, dan monitoring kehadiran tim magang dalam satu portal." />
+    <meta name="theme-color" content="#16623c" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Logbook Magang BSI" />
+    <meta property="og:description" content="Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia." />
+    <meta property="og:locale" content="id_ID" />
+    <link rel="preconnect" href="https://i.ytimg.com" crossorigin />
+    <link rel="preconnect" href="https://drive.google.com" crossorigin />
+    <link rel="dns-prefetch" href="https://drive.usercontent.google.com" />
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%3E%3Crect%20width='24'%20height='24'%20rx='5'%20fill='%2316623c'/%3E%3Cg%20fill='none'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M4%207V17C4%2018.1%204.9%2019%206%2019H18C19.1%2019%2020%2018.1%2020%2017V7'%20stroke='%23ffffff'/%3E%3Cpath%20d='M4%207L12%2012L20%207'%20stroke='%23fbbf24'/%3E%3Cpath%20d='M12%2012V19'%20stroke='%23ffffff'/%3E%3C/g%3E%3C/svg%3E" />
+    <title>Portal Magang BSI</title>
+      <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"WebSite","name":"Portal Magang BSI","alternateName":"Portal Logbook Magang Bank Syariah Indonesia","description":"Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia.","inLanguage":"id-ID"}
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet" />
+</head>
+  <body class="text-slate-800 min-h-screen antialiased">
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+      <noscript>
+      <div style="max-width:640px;margin:48px auto;padding:24px;font-family:sans-serif;line-height:1.6">
+        <h1>Logbook Magang BSI</h1>
+        <p>Portal logbook, galeri, dan daftar hadir mahasiswa magang Bank Syariah Indonesia. Aktifkan JavaScript untuk menggunakan portal ini secara penuh.</p>
+        <ul>
+          <li><a href="/logbook">Logbook publik</a></li>
+          <li><a href="/galeri">Galeri dokumentasi</a></li>
+          <li><a href="/absen">Daftar hadir tim</a></li>
+          <li><a href="/dospem">Ringkasan untuk dosen pembimbing dan kaprodi</a></li>
+        </ul>
+      </div>
+    </noscript>
+  </body>
+</html>
 ````
 
 ## File: src/components/FilterBar.jsx
@@ -4540,6 +5134,300 @@ export default function PemutarVideo(props) {
 }
 ````
 
+## File: src/components/Skeleton.jsx
+````javascript
+export function SkeletonLogbookCard() {
+  return (
+    <div className="card-hover bsi-panel flex h-full flex-col gap-4 rounded-3xl p-6">
+      {/* Media / carousel */}
+      <div className="skeleton aspect-video w-full rounded-2xl"></div>
+
+      {/* Badge kategori, unit, dan status */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-1.5">
+          <div className="skeleton h-6 w-24 rounded-full"></div>
+          <div className="skeleton h-6 w-20 rounded-full"></div>
+        </div>
+        <div className="skeleton h-6 w-20 rounded-full"></div>
+      </div>
+
+      {/* Tanggal, judul, dan daftar kegiatan */}
+      <div>
+        <div className="skeleton h-4 w-36 rounded-full"></div>
+        <div className="skeleton mt-2 h-6 w-4/5 rounded-full"></div>
+        <div className="skeleton mt-3 h-3 w-28 rounded-full"></div>
+        <div className="mt-2 space-y-1">
+          <div className="skeleton h-3 w-full rounded-full"></div>
+          <div className="skeleton h-3 w-2/3 rounded-full"></div>
+        </div>
+      </div>
+
+      {/* Footer: profil + tombol detail */}
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-4">
+        <div className="flex items-center gap-3">
+          <div className="skeleton h-11 w-11 shrink-0" style={{ borderRadius: '28%' }}></div>
+          <div className="space-y-1.5">
+            <div className="skeleton h-3.5 w-28 rounded-full"></div>
+            <div className="skeleton h-3 w-20 rounded-full"></div>
+          </div>
+        </div>
+        <div className="skeleton h-8 w-16 rounded-xl"></div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonGalleryCard() {
+  return (
+    <div className="card-hover bsi-panel flex h-full flex-col overflow-hidden rounded-3xl">
+      {/* Media menempel tepi atas sesuai GalleryCard asli */}
+      <div className="skeleton aspect-video w-full"></div>
+
+      <div className="flex flex-1 flex-col gap-3 p-5">
+        {/* Badge kegiatan dan tanggal */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap gap-1.5">
+            <div className="skeleton h-6 w-24 rounded-full"></div>
+            <div className="skeleton h-5 w-20 rounded-full"></div>
+          </div>
+          <div className="skeleton h-3 w-16 rounded-full"></div>
+        </div>
+
+        {/* Judul dan deskripsi */}
+        <div className="skeleton h-5 w-3/4 rounded-full"></div>
+        <div className="space-y-1.5">
+          <div className="skeleton h-3.5 w-full rounded-full"></div>
+          <div className="skeleton h-3.5 w-2/3 rounded-full"></div>
+        </div>
+
+        {/* Footer: profil + keterangan */}
+        <div className="mt-auto space-y-3 border-t border-slate-100 pt-3">
+          <div className="flex items-center gap-3">
+            <div className="skeleton h-11 w-11 shrink-0" style={{ borderRadius: '28%' }}></div>
+            <div className="space-y-1.5">
+              <div className="skeleton h-3.5 w-28 rounded-full"></div>
+              <div className="skeleton h-3 w-20 rounded-full"></div>
+            </div>
+          </div>
+          <div className="skeleton h-3 w-40 rounded-full"></div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonAttendanceCard() {
+  return (
+    <div className="card-hover bsi-panel flex h-full flex-col rounded-3xl p-5">
+      {/* Tanggal + profil + badge status */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="skeleton h-4 w-40 rounded-full"></div>
+          <div className="mt-4 flex items-center gap-3">
+            <div className="skeleton h-11 w-11 shrink-0" style={{ borderRadius: '28%' }}></div>
+            <div className="space-y-1.5">
+              <div className="skeleton h-4 w-28 rounded-full"></div>
+              <div className="skeleton h-3 w-20 rounded-full"></div>
+            </div>
+          </div>
+        </div>
+        <div className="skeleton h-6 w-16 rounded-full"></div>
+      </div>
+
+      {/* Box alasan / keterangan */}
+      <div className="mt-4 flex-1 rounded-2xl bg-slate-50 p-4">
+        <div className="skeleton h-3 w-32 rounded-full"></div>
+        <div className="skeleton mt-2 h-3.5 w-3/4 rounded-full"></div>
+      </div>
+
+      {/* Tombol aksi */}
+      <div className="mt-4 flex gap-2">
+        <div className="skeleton h-8 w-16 rounded-xl"></div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonPersonCard() {
+  return (
+    <div className="card-hover bsi-panel flex h-full flex-col rounded-3xl p-5">
+      {/* Profil mahasiswa */}
+      <div className="flex items-center gap-4">
+        <div className="skeleton h-14 w-14 shrink-0" style={{ borderRadius: '28%' }}></div>
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <div className="skeleton h-5 w-36 rounded-full"></div>
+          <div className="skeleton h-3 w-24 rounded-full"></div>
+          <div className="skeleton h-5 w-20 rounded-full"></div>
+        </div>
+      </div>
+
+      {/* Statistik logbook dan media */}
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <div className="rounded-2xl bg-slate-50 p-3">
+          <div className="skeleton h-3 w-16 rounded-full"></div>
+          <div className="skeleton mt-1.5 h-5 w-8 rounded-full"></div>
+        </div>
+        <div className="rounded-2xl bg-slate-50 p-3">
+          <div className="skeleton h-3 w-16 rounded-full"></div>
+          <div className="skeleton mt-1.5 h-5 w-8 rounded-full"></div>
+        </div>
+      </div>
+
+      {/* Rekap kehadiran */}
+      <div className="mt-3 border-t border-slate-100 pt-3">
+        <div className="skeleton h-3 w-24 rounded-full"></div>
+        <div className="mt-2 grid grid-cols-3 gap-2">
+          <div className="rounded-xl bg-slate-50 p-2">
+            <div className="skeleton h-3 w-full rounded-full"></div>
+            <div className="skeleton mx-auto mt-1.5 h-4 w-6 rounded-full"></div>
+          </div>
+          <div className="rounded-xl bg-slate-50 p-2">
+            <div className="skeleton h-3 w-full rounded-full"></div>
+            <div className="skeleton mx-auto mt-1.5 h-4 w-6 rounded-full"></div>
+          </div>
+          <div className="rounded-xl bg-slate-50 p-2">
+            <div className="skeleton h-3 w-full rounded-full"></div>
+            <div className="skeleton mx-auto mt-1.5 h-4 w-6 rounded-full"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonDashboard() {
+  return (
+    <div className="space-y-6">
+      {/* skeleton-dash-v2: header meniru layout baru (identitas di atas, tab di bawah) */}
+      <div className="bsi-panel rounded-[2rem] p-5 sm:p-8 lg:p-10">
+        <div className="flex flex-col gap-5 sm:gap-6">
+          {/* Baris identitas: avatar + badge, nama, NIM, prodi */}
+          <div className="flex flex-wrap items-center gap-4 sm:gap-6 min-w-0">
+            <div className="avatar-kepala-dash relative shrink-0">
+              <div className="skeleton h-14 w-14 shrink-0 rounded-[28%] sm:h-24 sm:w-24"></div>
+              <div className="skeleton !absolute h-[22px] w-[22px] rounded-full -bottom-[3px] -right-[3px] sm:h-9 sm:w-9 sm:-bottom-1.5 sm:-right-1.5"></div>
+            </div>
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className="skeleton h-4 w-48 rounded-full sm:h-7"></div>
+              <div className="skeleton h-3 w-28 rounded-full sm:h-4"></div>
+              <div className="skeleton h-3 w-32 rounded-full sm:h-4"></div>
+            </div>
+          </div>
+
+          {/* Baris tab: 4 pill (Logbook, Galeri, Hadir, Cetak QR) */}
+          <div className="flex flex-wrap gap-1.5 sm:gap-2">
+            <div className="skeleton h-9 w-20 rounded-xl sm:h-11 sm:w-28 sm:rounded-2xl"></div>
+            <div className="skeleton h-9 w-16 rounded-xl sm:h-11 sm:w-24 sm:rounded-2xl"></div>
+            <div className="skeleton h-9 w-16 rounded-xl sm:h-11 sm:w-32 sm:rounded-2xl"></div>
+            <div className="skeleton h-9 w-12 rounded-xl sm:h-11 sm:w-28 sm:rounded-2xl"></div>
+          </div>
+        </div>
+      </div>
+
+      {/* Form logbook + daftar logbook */}
+      <div className="grid items-start gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+        <div className="space-y-4 bsi-panel rounded-[2rem] p-5 shadow-sm sm:p-8">
+          <div className="skeleton h-6 w-48 rounded-full"></div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="skeleton h-11 w-full rounded-2xl"></div>
+            <div className="skeleton h-11 w-full rounded-2xl"></div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="skeleton h-11 w-full rounded-2xl"></div>
+            <div className="skeleton h-11 w-full rounded-2xl"></div>
+          </div>
+          <div className="skeleton h-11 w-full rounded-2xl"></div>
+          <div className="skeleton h-40 w-full rounded-2xl"></div>
+          <div className="skeleton h-11 w-full rounded-2xl"></div>
+        </div>
+        <div className="space-y-5">
+          <div className="skeleton h-6 w-32 rounded-full"></div>
+          <div className="skeleton h-12 w-full rounded-3xl"></div>
+          <div className="skeleton h-4 w-28 rounded-full"></div>
+          <div className="grid gap-5 md:grid-cols-2 kartu-grid">
+            <SkeletonLogbookCard />
+            <SkeletonLogbookCard />
+            <SkeletonLogbookCard />
+            <SkeletonLogbookCard />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonStatCard() {
+  return (
+    <div className="card-hover bsi-panel rounded-3xl p-3 shadow-sm sm:p-6">
+      <div className="skeleton h-3 w-3/4 rounded-full sm:h-4 sm:w-28"></div>
+      <div className="skeleton mt-1 h-6 w-1/2 rounded-full sm:mt-3 sm:h-9 sm:w-16"></div>
+      <div className="skeleton mt-2 h-3 w-36 rounded-full hidden sm:block"></div>
+    </div>
+  )
+}
+
+export function SkeletonChartRow() {
+  return (
+    <div className="card-hover bsi-panel rounded-[1.5rem] p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="space-y-1.5">
+          <div className="skeleton h-4 w-32 rounded-full"></div>
+          <div className="skeleton h-3 w-20 rounded-full"></div>
+        </div>
+        <div className="skeleton h-3 w-36 rounded-full"></div>
+      </div>
+      <div className="skeleton mt-4 h-4 w-full rounded-full"></div>
+    </div>
+  )
+}
+
+export function SkeletonQuick() {
+  return (
+    <div className="mx-auto w-full max-w-xl space-y-5">
+      {/* Hero: avatar + identitas + tab switcher */}
+      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="avatar-kepala-cepat">
+            <div className="skeleton h-14 w-14 sm:h-[67px] sm:w-[67px]" style={{ borderRadius: '20px' }} />
+          </div>
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="skeleton h-5 w-48 rounded-full sm:h-6" />
+            <div className="skeleton h-3.5 w-40 rounded-full" />
+          </div>
+        </div>
+        <div className="mt-4 flex gap-2">
+          <div className="skeleton h-10 flex-1 rounded-xl sm:h-12 sm:rounded-2xl" />
+          <div className="skeleton h-10 flex-1 rounded-xl sm:h-12 sm:rounded-2xl" />
+        </div>
+      </section>
+
+      {/* Form logbook: info terakhir + kartu kegiatan */}
+      <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
+        <div className="mb-4 flex items-center gap-1.5">
+          <div className="skeleton h-3.5 w-3.5 rounded-full" />
+          <div className="skeleton h-3 w-56 rounded-full" />
+        </div>
+
+        <div className="mt-1.5 skeleton h-11 w-full rounded-2xl" />
+
+        <div className="mt-5 space-y-4">
+          <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="skeleton h-3 w-24 rounded-full" />
+            <div className="skeleton h-11 w-full rounded-2xl" />
+            <div className="skeleton h-16 w-full rounded-2xl" />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="skeleton h-12 w-full rounded-2xl" />
+              <div className="skeleton h-12 w-full rounded-2xl" />
+            </div>
+          </div>
+          <div className="skeleton h-12 w-full rounded-xl sm:h-14 sm:rounded-2xl" />
+        </div>
+      </section>
+    </div>
+  )
+}
+````
+
 ## File: src/components/QrPrintTab.jsx
 ````javascript
 import { useRef, useState } from 'react'
@@ -4903,296 +5791,281 @@ async function unduhPng() {
 }
 ````
 
-## File: src/components/Skeleton.jsx
+## File: src/pages/LogbookPage.jsx
 ````javascript
-export function SkeletonLogbookCard() {
+import { useEffect, useState } from 'react'
+import { supabase } from '../lib/supabase.js'
+import { useAuth } from '../lib/auth.js'
+import { EmptyState, Modal, Pagination } from '../components/ui.jsx'
+import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
+import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
+import { ICONS } from '../components/icons.jsx'
+import { matchesDateFilters, urutkanTanggal } from '../lib/format.js'
+import { KATEGORI } from '../lib/constants.js'
+import { SkeletonLogbookCard } from '../components/Skeleton.jsx'
+
+const INITIAL = { mahasiswa: '', kategori: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
+const PER_PAGE = 12
+
+export default function LogbookPage() {
+  const { mahasiswa } = useAuth()
+  const [all, setAll] = useState([])
+  const [people, setPeople] = useState([])
+  const [filter, setFilter] = useState(INITIAL)
+  const [sort, setSort] = useState('terbaru')
+  const [open, setOpen] = useState(false)
+  const [detail, setDetail] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
+
+  useEffect(function () {
+    async function load() {
+      const l = await supabase
+        .from('logbooks')
+        .select('*, mahasiswa(*), logbook_items(*)')
+        .eq('status', 'publik')
+        .order('tanggal', { ascending: false })
+        .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
+      const p = await supabase.from('mahasiswa').select('id, nama').order('nama')
+      setAll(l.data || [])
+      setPeople(p.data || [])
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  useEffect(function () {
+    setPage(1)
+  }, [filter, sort])
+  function gantiHalaman(p) {
+    setPage(p)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+  const logs = all.filter(function (l) {
+    if (filter.mahasiswa && l.mahasiswa_id !== filter.mahasiswa) return false
+    if (filter.kategori && l.kategori !== filter.kategori) return false
+    return matchesDateFilters(l.tanggal, filter)
+  })
+  const active = countActiveFilters(filter)
+  const sortedLogs = urutkanTanggal(logs, sort)
+  const totalData = sortedLogs.length
+  const totalPages = Math.ceil(totalData / PER_PAGE)
+  const pageAman = Math.min(page, Math.max(1, totalPages))
+  const paginatedLogs = sortedLogs.slice((pageAman - 1) * PER_PAGE, pageAman * PER_PAGE)
+
   return (
-    <div className="card-hover bsi-panel flex h-full flex-col gap-4 rounded-3xl p-6">
-      {/* Media / carousel */}
-      <div className="skeleton aspect-video w-full rounded-2xl"></div>
-
-      {/* Badge kategori, unit, dan status */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-1.5">
-          <div className="skeleton h-6 w-24 rounded-full"></div>
-          <div className="skeleton h-6 w-20 rounded-full"></div>
-        </div>
-        <div className="skeleton h-6 w-20 rounded-full"></div>
-      </div>
-
-      {/* Tanggal, judul, dan daftar kegiatan */}
-      <div>
-        <div className="skeleton h-4 w-36 rounded-full"></div>
-        <div className="skeleton mt-2 h-6 w-4/5 rounded-full"></div>
-        <div className="skeleton mt-3 h-3 w-28 rounded-full"></div>
-        <div className="mt-2 space-y-1">
-          <div className="skeleton h-3 w-full rounded-full"></div>
-          <div className="skeleton h-3 w-2/3 rounded-full"></div>
-        </div>
-      </div>
-
-      {/* Footer: profil + tombol detail */}
-      <div className="mt-auto flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-4">
-        <div className="flex items-center gap-3">
-          <div className="skeleton h-11 w-11 shrink-0" style={{ borderRadius: '28%' }}></div>
-          <div className="space-y-1.5">
-            <div className="skeleton h-3.5 w-28 rounded-full"></div>
-            <div className="skeleton h-3 w-20 rounded-full"></div>
-          </div>
-        </div>
-        <div className="skeleton h-8 w-16 rounded-xl"></div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonGalleryCard() {
-  return (
-    <div className="card-hover bsi-panel flex h-full flex-col overflow-hidden rounded-3xl">
-      {/* Media menempel tepi atas sesuai GalleryCard asli */}
-      <div className="skeleton aspect-video w-full"></div>
-
-      <div className="flex flex-1 flex-col gap-3 p-5">
-        {/* Badge kegiatan dan tanggal */}
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap gap-1.5">
-            <div className="skeleton h-6 w-24 rounded-full"></div>
-            <div className="skeleton h-5 w-20 rounded-full"></div>
-          </div>
-          <div className="skeleton h-3 w-16 rounded-full"></div>
-        </div>
-
-        {/* Judul dan deskripsi */}
-        <div className="skeleton h-5 w-3/4 rounded-full"></div>
-        <div className="space-y-1.5">
-          <div className="skeleton h-3.5 w-full rounded-full"></div>
-          <div className="skeleton h-3.5 w-2/3 rounded-full"></div>
-        </div>
-
-        {/* Footer: profil + keterangan */}
-        <div className="mt-auto space-y-3 border-t border-slate-100 pt-3">
-          <div className="flex items-center gap-3">
-            <div className="skeleton h-11 w-11 shrink-0" style={{ borderRadius: '28%' }}></div>
-            <div className="space-y-1.5">
-              <div className="skeleton h-3.5 w-28 rounded-full"></div>
-              <div className="skeleton h-3 w-20 rounded-full"></div>
-            </div>
-          </div>
-          <div className="skeleton h-3 w-40 rounded-full"></div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonAttendanceCard() {
-  return (
-    <div className="card-hover bsi-panel flex h-full flex-col rounded-3xl p-5">
-      {/* Tanggal + profil + badge status */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="skeleton h-4 w-40 rounded-full"></div>
-          <div className="mt-4 flex items-center gap-3">
-            <div className="skeleton h-11 w-11 shrink-0" style={{ borderRadius: '28%' }}></div>
-            <div className="space-y-1.5">
-              <div className="skeleton h-4 w-28 rounded-full"></div>
-              <div className="skeleton h-3 w-20 rounded-full"></div>
-            </div>
-          </div>
-        </div>
-        <div className="skeleton h-6 w-16 rounded-full"></div>
-      </div>
-
-      {/* Box alasan / keterangan */}
-      <div className="mt-4 flex-1 rounded-2xl bg-slate-50 p-4">
-        <div className="skeleton h-3 w-32 rounded-full"></div>
-        <div className="skeleton mt-2 h-3.5 w-3/4 rounded-full"></div>
-      </div>
-
-      {/* Tombol aksi */}
-      <div className="mt-4 flex gap-2">
-        <div className="skeleton h-8 w-16 rounded-xl"></div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonPersonCard() {
-  return (
-    <div className="card-hover bsi-panel flex h-full flex-col rounded-3xl p-5">
-      {/* Profil mahasiswa */}
-      <div className="flex items-center gap-4">
-        <div className="skeleton h-14 w-14 shrink-0" style={{ borderRadius: '28%' }}></div>
-        <div className="min-w-0 flex-1 space-y-1.5">
-          <div className="skeleton h-5 w-36 rounded-full"></div>
-          <div className="skeleton h-3 w-24 rounded-full"></div>
-          <div className="skeleton h-5 w-20 rounded-full"></div>
-        </div>
-      </div>
-
-      {/* Statistik logbook dan media */}
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <div className="rounded-2xl bg-slate-50 p-3">
-          <div className="skeleton h-3 w-16 rounded-full"></div>
-          <div className="skeleton mt-1.5 h-5 w-8 rounded-full"></div>
-        </div>
-        <div className="rounded-2xl bg-slate-50 p-3">
-          <div className="skeleton h-3 w-16 rounded-full"></div>
-          <div className="skeleton mt-1.5 h-5 w-8 rounded-full"></div>
-        </div>
-      </div>
-
-      {/* Rekap kehadiran */}
-      <div className="mt-3 border-t border-slate-100 pt-3">
-        <div className="skeleton h-3 w-24 rounded-full"></div>
-        <div className="mt-2 grid grid-cols-3 gap-2">
-          <div className="rounded-xl bg-slate-50 p-2">
-            <div className="skeleton h-3 w-full rounded-full"></div>
-            <div className="skeleton mx-auto mt-1.5 h-4 w-6 rounded-full"></div>
-          </div>
-          <div className="rounded-xl bg-slate-50 p-2">
-            <div className="skeleton h-3 w-full rounded-full"></div>
-            <div className="skeleton mx-auto mt-1.5 h-4 w-6 rounded-full"></div>
-          </div>
-          <div className="rounded-xl bg-slate-50 p-2">
-            <div className="skeleton h-3 w-full rounded-full"></div>
-            <div className="skeleton mx-auto mt-1.5 h-4 w-6 rounded-full"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonDashboard() {
-  return (
-    <div className="space-y-6">
-      {/* skeleton-dash-v2: header meniru layout baru (identitas di atas, tab di bawah) */}
-      <div className="bsi-panel rounded-[2rem] p-5 sm:p-8 lg:p-10">
-        <div className="flex flex-col gap-5 sm:gap-6">
-          {/* Baris identitas: avatar + badge, nama, NIM, prodi */}
-          <div className="flex flex-wrap items-center gap-4 sm:gap-6 min-w-0">
-            <div className="avatar-kepala-dash relative shrink-0">
-              <div className="skeleton h-14 w-14 shrink-0 rounded-[28%] sm:h-24 sm:w-24"></div>
-              <div className="skeleton !absolute h-[22px] w-[22px] rounded-full -bottom-[3px] -right-[3px] sm:h-9 sm:w-9 sm:-bottom-1.5 sm:-right-1.5"></div>
-            </div>
-            <div className="min-w-0 flex-1 space-y-2">
-              <div className="skeleton h-4 w-48 rounded-full sm:h-7"></div>
-              <div className="skeleton h-3 w-28 rounded-full sm:h-4"></div>
-              <div className="skeleton h-3 w-32 rounded-full sm:h-4"></div>
-            </div>
-          </div>
-
-          {/* Baris tab: 4 pill (Logbook, Galeri, Hadir, Cetak QR) */}
-          <div className="flex flex-wrap gap-1.5 sm:gap-2">
-            <div className="skeleton h-9 w-20 rounded-xl sm:h-11 sm:w-28 sm:rounded-2xl"></div>
-            <div className="skeleton h-9 w-16 rounded-xl sm:h-11 sm:w-24 sm:rounded-2xl"></div>
-            <div className="skeleton h-9 w-16 rounded-xl sm:h-11 sm:w-32 sm:rounded-2xl"></div>
-            <div className="skeleton h-9 w-12 rounded-xl sm:h-11 sm:w-28 sm:rounded-2xl"></div>
-          </div>
-        </div>
-      </div>
-
-      {/* Form logbook + daftar logbook */}
-      <div className="grid items-start gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-        <div className="space-y-4 bsi-panel rounded-[2rem] p-5 shadow-sm sm:p-8">
-          <div className="skeleton h-6 w-48 rounded-full"></div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="skeleton h-11 w-full rounded-2xl"></div>
-            <div className="skeleton h-11 w-full rounded-2xl"></div>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="skeleton h-11 w-full rounded-2xl"></div>
-            <div className="skeleton h-11 w-full rounded-2xl"></div>
-          </div>
-          <div className="skeleton h-11 w-full rounded-2xl"></div>
-          <div className="skeleton h-40 w-full rounded-2xl"></div>
-          <div className="skeleton h-11 w-full rounded-2xl"></div>
-        </div>
-        <div className="space-y-5">
-          <div className="skeleton h-6 w-32 rounded-full"></div>
-          <div className="skeleton h-12 w-full rounded-3xl"></div>
-          <div className="skeleton h-4 w-28 rounded-full"></div>
-          <div className="grid gap-5 md:grid-cols-2 kartu-grid">
-            <SkeletonLogbookCard />
-            <SkeletonLogbookCard />
-            <SkeletonLogbookCard />
-            <SkeletonLogbookCard />
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonStatCard() {
-  return (
-    <div className="card-hover bsi-panel rounded-3xl p-3 shadow-sm sm:p-6">
-      <div className="skeleton h-3 w-3/4 rounded-full sm:h-4 sm:w-28"></div>
-      <div className="skeleton mt-1 h-6 w-1/2 rounded-full sm:mt-3 sm:h-9 sm:w-16"></div>
-      <div className="skeleton mt-2 h-3 w-36 rounded-full hidden sm:block"></div>
-    </div>
-  )
-}
-
-export function SkeletonChartRow() {
-  return (
-    <div className="card-hover bsi-panel rounded-[1.5rem] p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="space-y-1.5">
-          <div className="skeleton h-4 w-32 rounded-full"></div>
-          <div className="skeleton h-3 w-20 rounded-full"></div>
-        </div>
-        <div className="skeleton h-3 w-36 rounded-full"></div>
-      </div>
-      <div className="skeleton mt-4 h-4 w-full rounded-full"></div>
-    </div>
-  )
-}
-
-export function SkeletonQuick() {
-  return (
-    <div className="mx-auto w-full max-w-xl space-y-5">
-      {/* Hero: avatar + identitas + tab switcher */}
-      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="avatar-kepala-cepat">
-            <div className="skeleton h-14 w-14 sm:h-[67px] sm:w-[67px]" style={{ borderRadius: '20px' }} />
-          </div>
-          <div className="min-w-0 flex-1 space-y-2">
-            <div className="skeleton h-5 w-48 rounded-full sm:h-6" />
-            <div className="skeleton h-3.5 w-40 rounded-full" />
-          </div>
-        </div>
-        <div className="mt-4 flex gap-2">
-          <div className="skeleton h-10 flex-1 rounded-xl sm:h-12 sm:rounded-2xl" />
-          <div className="skeleton h-10 flex-1 rounded-xl sm:h-12 sm:rounded-2xl" />
-        </div>
+    <div>
+      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8 lg:p-10">
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600 dark:text-gold-400">Logbook Publik</p>
+        <h1 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Catatan Kegiatan Magang</h1>
+        <p className="mt-2 text-sm text-slate-600 max-w-2xl sm:mt-3 sm:text-base">Satu logbook mewakili satu hari kerja dan bisa berisi beberapa kegiatan.</p>
       </section>
 
-      {/* Form logbook: info terakhir + kartu kegiatan */}
-      <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
-        <div className="mb-4 flex items-center gap-1.5">
-          <div className="skeleton h-3.5 w-3.5 rounded-full" />
-          <div className="skeleton h-3 w-56 rounded-full" />
-        </div>
-
-        <div className="mt-1.5 skeleton h-11 w-full rounded-2xl" />
-
-        <div className="mt-5 space-y-4">
-          <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <div className="skeleton h-3 w-24 rounded-full" />
-            <div className="skeleton h-11 w-full rounded-2xl" />
-            <div className="skeleton h-16 w-full rounded-2xl" />
-            <div className="grid grid-cols-2 gap-3">
-              <div className="skeleton h-12 w-full rounded-2xl" />
-              <div className="skeleton h-12 w-full rounded-2xl" />
-            </div>
-          </div>
-          <div className="skeleton h-12 w-full rounded-xl sm:h-14 sm:rounded-2xl" />
-        </div>
+      <section className="mt-6">
+        <FilterBar open={open} onToggle={function () { setOpen(function (o) { return !o }) }} activeCount={active}
+          onReset={function () { setFilter(INITIAL) }}>
+          <FilterSelect icon={ICONS.user} value={filter.mahasiswa} onChange={function (v) { setFilter(Object.assign({}, filter, { mahasiswa: v })) }}
+            options={[{ value: '', label: 'Semua Mahasiswa' }].concat(people.map(function (p) { return { value: p.id, label: p.nama } }))} />
+          <FilterSelect icon={ICONS.tag} value={filter.kategori} onChange={function (v) { setFilter(Object.assign({}, filter, { kategori: v })) }}
+            options={[{ value: '', label: 'Semua Kategori' }].concat(KATEGORI.map(function (k) { return { value: k, label: k } }))} />
+          <TimeFilter filter={filter} set={setFilter} />
+          <SortSelect value={sort} onChange={setSort} />
+        </FilterBar>
       </section>
+
+      <section className="grid-pusat mt-8">
+        {loading
+          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
+          : paginatedLogs.map(function (l) {
+              return (
+                <div key={l.id} className="kolom-kartu">
+                  <LogbookCard log={l} isOwner={mahasiswa && mahasiswa.id === l.mahasiswa_id}
+                    onDetail={function () { setDetail(l) }} />
+                </div>
+              )
+            })}
+        {!loading && !logs.length ? <div className="w-full"><EmptyState title="Logbook Tidak Ditemukan" desc="Coba reset filter atau pilih filter lain." /></div> : null}
+      </section>
+      {!loading && totalData > 0 ? (
+        <div className="mt-6 text-center text-sm text-slate-600">
+          Total {totalData} logbook{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}
+        </div>
+      ) : null}
+      {!loading ? <Pagination totalItems={totalData} perPage={PER_PAGE} page={pageAman} onPageChange={gantiHalaman} /> : null}
+
+      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
+        {detail ? <LogbookDetail log={detail} /> : null}
+      </Modal>
     </div>
+  )
+}
+````
+
+## File: src/pages/GalleryPage.jsx
+````javascript
+import { useEffect, useState } from 'react'
+import { supabase } from '../lib/supabase.js'
+import { useAuth } from '../lib/auth.js'
+import { EmptyState, Modal, Pagination } from '../components/ui.jsx'
+import { GalleryCard, GalleryDetail } from '../components/cards.jsx'
+import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
+import { ICONS } from '../components/icons.jsx'
+import { matchesDateFilters, urutkanTanggal } from '../lib/format.js'
+import { GALERI_KEGIATAN } from '../lib/constants.js'
+import { SkeletonGalleryCard } from '../components/Skeleton.jsx'
+
+const INITIAL = { kegiatan: '', tipe: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
+const PER_PAGE = 12
+
+export default function GalleryPage() {
+  const { mahasiswa } = useAuth()
+  const [all, setAll] = useState([])
+  const [filter, setFilter] = useState(INITIAL)
+  const [sort, setSort] = useState('terbaru')
+  const [open, setOpen] = useState(false)
+  const [detail, setDetail] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
+
+  useEffect(function () {
+    async function load() {
+      const g = await supabase.from('galeri').select('*, mahasiswa(*)').order('tanggal', { ascending: false })
+      setAll(g.data || [])
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  useEffect(function () {
+    setPage(1)
+  }, [filter, sort])
+  function gantiHalaman(p) {
+    setPage(p)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+  const items = all.filter(function (i) {
+    if (filter.kegiatan && (i.kegiatan || 'Lainnya') !== filter.kegiatan) return false
+    if (filter.tipe && i.media_type !== filter.tipe) return false
+    return matchesDateFilters(i.tanggal, filter)
+  })
+  const active = countActiveFilters(filter)
+  const sortedItems = urutkanTanggal(items, sort)
+  const totalData = sortedItems.length
+  const totalPages = Math.ceil(totalData / PER_PAGE)
+  const pageAman = Math.min(page, Math.max(1, totalPages))
+  const paginatedItems = sortedItems.slice((pageAman - 1) * PER_PAGE, pageAman * PER_PAGE)
+
+  return (
+    <div>
+      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8 lg:p-10">
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600 dark:text-gold-400">Galeri dokumentasi</p>
+        <h1 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Foto dan Video Kegiatan Magang</h1>
+        <p className="mt-2 text-sm text-slate-600 max-w-2xl sm:mt-3 sm:text-base">Setiap foto atau video mewakili satu kegiatan. Klik untuk melihat detail.</p>
+      </section>
+
+      <section className="mt-6">
+        <FilterBar open={open} onToggle={function () { setOpen(function (o) { return !o }) }} activeCount={active}
+          onReset={function () { setFilter(INITIAL) }}>
+          <FilterSelect icon={ICONS.tag} value={filter.kegiatan} onChange={function (v) { setFilter(Object.assign({}, filter, { kegiatan: v })) }}
+            options={[{ value: '', label: 'Semua Kegiatan' }].concat(GALERI_KEGIATAN.map(function (k) { return { value: k, label: k } }))} />
+          <FilterSelect icon={ICONS.image} value={filter.tipe} onChange={function (v) { setFilter(Object.assign({}, filter, { tipe: v })) }}
+            options={[{ value: '', label: 'Semua Media' }, { value: 'foto', label: 'Foto' }, { value: 'video', label: 'Video' }]} />
+          <TimeFilter filter={filter} set={setFilter} />
+          <SortSelect value={sort} onChange={setSort} />
+        </FilterBar>
+      </section>
+
+      <section className="grid-pusat mt-8">
+        {loading
+          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonGalleryCard /></div> })
+          : paginatedItems.map(function (i) {
+              return (
+                <div key={i.id} className="kolom-kartu">
+                  <GalleryCard item={i} isOwner={mahasiswa && mahasiswa.id === i.mahasiswa_id}
+                    onDetail={function () { setDetail(i) }} />
+                </div>
+              )
+            })}
+        {!loading && !items.length ? <div className="w-full"><EmptyState icon="camera" title="Belum Ada Media Galeri" desc="Media galeri yang diunggah mahasiswa akan tampil di sini." /></div> : null}
+      </section>
+      {!loading && totalData > 0 ? (
+        <div className="mt-6 text-center text-sm text-slate-600">
+          Total {totalData} media{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}
+        </div>
+      ) : null}
+      {!loading ? <Pagination totalItems={totalData} perPage={PER_PAGE} page={pageAman} onPageChange={gantiHalaman} /> : null}
+
+      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
+        {detail ? <GalleryDetail item={detail} /> : null}
+      </Modal>
+    </div>
+  )
+}
+````
+
+## File: src/App.jsx
+````javascript
+import { SkeletonDashboard, SkeletonQuick } from './components/Skeleton.jsx'
+import { useEffect } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { ThemeProvider } from './lib/theme.jsx'
+ import { ToastProvider } from './components/ui.jsx'
+import { useAuth } from './lib/auth.js'
+import Layout from './components/Layout.jsx'
+import HomePage from './pages/HomePage.jsx'
+import LogbookPage from './pages/LogbookPage.jsx'
+import GalleryPage from './pages/GalleryPage.jsx'
+import AttendancePage from './pages/AttendancePage.jsx'
+import DospemPage from './pages/DospemPage.jsx'
+import LoginPage from './pages/LoginPage.jsx'
+import DashboardPage from './pages/DashboardPage.jsx'
+import QuickPage from './pages/QuickPage.jsx'
+
+function ScrollToTop() {
+  const { pathname } = useLocation()
+  useEffect(function () {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+  }, [pathname])
+  return null
+}
+function RequireAuth(props) {
+  const { mahasiswa, loading } = useAuth()
+  const location = useLocation()
+  if (loading) return props.fallback || <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:py-8"><SkeletonDashboard /></div>
+  if (!mahasiswa) return <Navigate to={'/login?next=' + encodeURIComponent(location.pathname + location.search)} replace />
+  return props.children
+}
+
+function RequireGuest(props) {
+  const { mahasiswa, loading } = useAuth()
+  if (loading) return <div className="grid min-h-[60vh] place-items-center"><div className="h-10 w-10 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div></div>
+  if (mahasiswa) return <Navigate to="/dashboard" replace />
+  return props.children
+}
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <ToastProvider>
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ScrollToTop />
+        <Routes>
+          <Route element={<Layout />}>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/logbook" element={<LogbookPage />} />
+            <Route path="/galeri" element={<GalleryPage />} />
+            <Route path="/absen" element={<AttendancePage />} />
+            <Route path="/dospem" element={<DospemPage />} />
+            <Route path="/tim" element={<Navigate to="/dospem" replace />} />
+            <Route path="/login" element={<RequireGuest><LoginPage /></RequireGuest>} />
+            <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
+            <Route path="/qr" element={<RequireAuth fallback={<SkeletonQuick />}><QuickPage /></RequireAuth>} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+      </ToastProvider>
+    </ThemeProvider>
   )
 }
 ````
@@ -5666,702 +6539,6 @@ export default function PengingatBanner(props) {
 }
 ````
 
-## File: src/pages/LogbookPage.jsx
-````javascript
-import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase.js'
-import { useAuth } from '../lib/auth.js'
-import { EmptyState, Modal, Pagination } from '../components/ui.jsx'
-import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
-import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
-import { ICONS } from '../components/icons.jsx'
-import { matchesDateFilters, urutkanTanggal } from '../lib/format.js'
-import { KATEGORI } from '../lib/constants.js'
-import { SkeletonLogbookCard } from '../components/Skeleton.jsx'
-
-const INITIAL = { mahasiswa: '', kategori: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
-const PER_PAGE = 12
-
-export default function LogbookPage() {
-  const { mahasiswa } = useAuth()
-  const [all, setAll] = useState([])
-  const [people, setPeople] = useState([])
-  const [filter, setFilter] = useState(INITIAL)
-  const [sort, setSort] = useState('terbaru')
-  const [open, setOpen] = useState(false)
-  const [detail, setDetail] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [page, setPage] = useState(1)
-
-  useEffect(function () {
-    async function load() {
-      const l = await supabase
-        .from('logbooks')
-        .select('*, mahasiswa(*), logbook_items(*)')
-        .eq('status', 'publik')
-        .order('tanggal', { ascending: false })
-        .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
-      const p = await supabase.from('mahasiswa').select('id, nama').order('nama')
-      setAll(l.data || [])
-      setPeople(p.data || [])
-      setLoading(false)
-    }
-    load()
-  }, [])
-
-  useEffect(function () {
-    setPage(1)
-  }, [filter, sort])
-  function gantiHalaman(p) {
-    setPage(p)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-  const logs = all.filter(function (l) {
-    if (filter.mahasiswa && l.mahasiswa_id !== filter.mahasiswa) return false
-    if (filter.kategori && l.kategori !== filter.kategori) return false
-    return matchesDateFilters(l.tanggal, filter)
-  })
-  const active = countActiveFilters(filter)
-  const sortedLogs = urutkanTanggal(logs, sort)
-  const totalData = sortedLogs.length
-  const totalPages = Math.ceil(totalData / PER_PAGE)
-  const pageAman = Math.min(page, Math.max(1, totalPages))
-  const paginatedLogs = sortedLogs.slice((pageAman - 1) * PER_PAGE, pageAman * PER_PAGE)
-
-  return (
-    <div>
-      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8 lg:p-10">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600 dark:text-gold-400">Logbook Publik</p>
-        <h1 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Catatan Kegiatan Magang</h1>
-        <p className="mt-2 text-sm text-slate-600 max-w-2xl sm:mt-3 sm:text-base">Satu logbook mewakili satu hari kerja dan bisa berisi beberapa kegiatan.</p>
-      </section>
-
-      <section className="mt-6">
-        <FilterBar open={open} onToggle={function () { setOpen(function (o) { return !o }) }} activeCount={active}
-          onReset={function () { setFilter(INITIAL) }}>
-          <FilterSelect icon={ICONS.user} value={filter.mahasiswa} onChange={function (v) { setFilter(Object.assign({}, filter, { mahasiswa: v })) }}
-            options={[{ value: '', label: 'Semua Mahasiswa' }].concat(people.map(function (p) { return { value: p.id, label: p.nama } }))} />
-          <FilterSelect icon={ICONS.tag} value={filter.kategori} onChange={function (v) { setFilter(Object.assign({}, filter, { kategori: v })) }}
-            options={[{ value: '', label: 'Semua Kategori' }].concat(KATEGORI.map(function (k) { return { value: k, label: k } }))} />
-          <TimeFilter filter={filter} set={setFilter} />
-          <SortSelect value={sort} onChange={setSort} />
-        </FilterBar>
-      </section>
-
-      <section className="grid-pusat mt-8">
-        {loading
-          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
-          : paginatedLogs.map(function (l) {
-              return (
-                <div key={l.id} className="kolom-kartu">
-                  <LogbookCard log={l} isOwner={mahasiswa && mahasiswa.id === l.mahasiswa_id}
-                    onDetail={function () { setDetail(l) }} />
-                </div>
-              )
-            })}
-        {!loading && !logs.length ? <div className="w-full"><EmptyState title="Logbook Tidak Ditemukan" desc="Coba reset filter atau pilih filter lain." /></div> : null}
-      </section>
-      {!loading && totalData > 0 ? (
-        <div className="mt-6 text-center text-sm text-slate-600">
-          Total {totalData} logbook{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}
-        </div>
-      ) : null}
-      {!loading ? <Pagination totalItems={totalData} perPage={PER_PAGE} page={pageAman} onPageChange={gantiHalaman} /> : null}
-
-      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
-        {detail ? <LogbookDetail log={detail} /> : null}
-      </Modal>
-    </div>
-  )
-}
-````
-
-## File: src/pages/LoginPage.jsx
-````javascript
-import { useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { loginWithNim } from '../lib/auth.js'
-import { inputCls, labelCls, btnPrimary, LabelProses } from '../components/ui.jsx'
-import { EyeToggle, SizedIcon } from '../components/icons.jsx'
-
-function pesanErrorLogin(err) {
-  const pesan = String((err && err.message) || '')
-  const rendah = pesan.toLowerCase()
-  if (rendah.indexOf('invalid login credentials') !== -1) {
-    return 'NIM atau kode akses yang kamu masukkan tidak cocok dengan data kami. Periksa kembali penulisannya, pastikan tidak ada spasi berlebih, lalu coba lagi.'
-  }
-  if (rendah.indexOf('not confirmed') !== -1) {
-    return 'Akun untuk NIM ini belum diaktifkan. Hubungi admin tim magang untuk mengaktifkan akunmu terlebih dahulu.'
-  }
-  if (rendah.indexOf('too many requests') !== -1 || rendah.indexOf('try again after') !== -1 || rendah.indexOf('rate limit') !== -1) {
-    return 'Terlalu banyak percobaan masuk dalam waktu singkat demi keamanan. Tunggu sekitar satu menit, lalu coba lagi.'
-  }
-  if (rendah.indexOf('fetch') !== -1 || rendah.indexOf('network') !== -1 || rendah.indexOf('failed to load') !== -1 || (typeof navigator !== 'undefined' && !navigator.onLine)) {
-    return 'Tidak bisa terhubung ke server. Periksa koneksi internetmu, lalu coba lagi.'
-  }
-  if (rendah.indexOf('email') !== -1 && rendah.indexOf('format') !== -1) {
-    return 'Format NIM tidak terbaca. Masukkan NIM berupa angka tanpa spasi, contoh: 24070041.'
-  }
-  if (pesan) return 'Gagal masuk: ' + pesan + '. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
-  return 'Terjadi kesalahan tidak terduga saat masuk. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
-}
-export default function LoginPage() {
-  const navigate = useNavigate()
-  const [params] = useSearchParams()
-  const [nim, setNim] = useState('')
-  const [kode, setKode] = useState('')
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [lihatKode, setLihatKode] = useState(false)
-
-  async function submit(e) {
-    e.preventDefault()
-    setBusy(true)
-    setError('')
-    try {
-  await loginWithNim(nim, kode)
-  const next = params.get('next')
-  navigate(next && next.charAt(0) === '/' && next.indexOf('//') !== 0 ? next : '/dashboard')
-} catch (err) {
-  setError(pesanErrorLogin(err))
-}
-    setBusy(false)
-  }
-
-  return (
-    <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr] items-start">
-      <div className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8 lg:p-10">
-        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black leading-tight text-slate-900">Masuk untuk Mengisi Logbook, Galeri, dan Daftar Hadir</h1>
-        <p className="mt-3 text-sm leading-relaxed text-slate-600 sm:mt-4 sm:text-base">Halaman ini khusus mahasiswa magang. Dosen pembimbing dan kaprodi dapat melihat halaman umum tanpa masuk.</p>
-      </div>
-      <div className="card-hover bsi-panel rounded-[2rem] p-5 sm:p-8 lg:p-10">
-        <h2 className="text-xl sm:text-2xl font-black text-slate-900">Masuk Dashboard</h2>
-        {error ? (
-          <div className="mt-3 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-red-100 text-red-600">
-              <SizedIcon name="close" size={12} />
-            </span>
-            <div className="min-w-0">
-              <p className="font-bold">Gagal Masuk</p>
-              <p className="mt-1 leading-relaxed">{error}</p>
-            </div>
-          </div>
-        ) : null}
-        <form onSubmit={submit} className="mt-6 space-y-5">
-          <div>
-            <label className={labelCls}>NIM <span className="text-red-500">*</span></label>
-            <input className={inputCls} value={nim} onChange={function (e) { setNim(e.target.value) }} aria-label="NIM" placeholder="Contoh: 20260001" required />
-          </div>
-          <div>
-            <label className={labelCls}>Kode akses <span className="text-red-500">*</span></label>
-            <div className="relative mt-1.5">
-              <input
-                type={lihatKode ? 'text' : 'password'}
-                className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 pr-12 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
-                value={kode}
-                onChange={function (e) { setKode(e.target.value) }}
-                aria-label="Kode Akses" placeholder="Masukkan kode akses"
-                required
-              />
-              <button
-                type="button"
-                onClick={function () { setLihatKode(function (v) { return !v }) }}
-                title={lihatKode ? 'Sembunyikan Kode Akses' : 'Lihat Kode Akses'}
-                className="absolute right-2 top-0 bottom-0 my-auto grid h-9 w-9 place-items-center rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-600"
-              >
-                <EyeToggle open={lihatKode} size={18} />
-              </button>
-            </div>
-          </div>
-          <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks="Memproses" /> : 'Masuk'}</button>
-        </form>
-      </div>
-    </section>
-  )
-}
-````
-
-## File: src/App.jsx
-````javascript
-import { SkeletonDashboard, SkeletonQuick } from './components/Skeleton.jsx'
-import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import { ThemeProvider } from './lib/theme.jsx'
- import { ToastProvider } from './components/ui.jsx'
-import { useAuth } from './lib/auth.js'
-import Layout from './components/Layout.jsx'
-import HomePage from './pages/HomePage.jsx'
-import LogbookPage from './pages/LogbookPage.jsx'
-import GalleryPage from './pages/GalleryPage.jsx'
-import AttendancePage from './pages/AttendancePage.jsx'
-import DospemPage from './pages/DospemPage.jsx'
-import LoginPage from './pages/LoginPage.jsx'
-import DashboardPage from './pages/DashboardPage.jsx'
-import QuickPage from './pages/QuickPage.jsx'
-
-function ScrollToTop() {
-  const { pathname } = useLocation()
-  useEffect(function () {
-    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
-  }, [pathname])
-  return null
-}
-function RequireAuth(props) {
-  const { mahasiswa, loading } = useAuth()
-  const location = useLocation()
-  if (loading) return props.fallback || <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:py-8"><SkeletonDashboard /></div>
-  if (!mahasiswa) return <Navigate to={'/login?next=' + encodeURIComponent(location.pathname + location.search)} replace />
-  return props.children
-}
-
-function RequireGuest(props) {
-  const { mahasiswa, loading } = useAuth()
-  if (loading) return <div className="grid min-h-[60vh] place-items-center"><div className="h-10 w-10 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div></div>
-  if (mahasiswa) return <Navigate to="/dashboard" replace />
-  return props.children
-}
-
-export default function App() {
-  return (
-    <ThemeProvider>
-      <ToastProvider>
-      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <ScrollToTop />
-        <Routes>
-          <Route element={<Layout />}>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/logbook" element={<LogbookPage />} />
-            <Route path="/galeri" element={<GalleryPage />} />
-            <Route path="/absen" element={<AttendancePage />} />
-            <Route path="/dospem" element={<DospemPage />} />
-            <Route path="/tim" element={<Navigate to="/dospem" replace />} />
-            <Route path="/login" element={<RequireGuest><LoginPage /></RequireGuest>} />
-            <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
-            <Route path="/qr" element={<RequireAuth fallback={<SkeletonQuick />}><QuickPage /></RequireAuth>} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-      </ToastProvider>
-    </ThemeProvider>
-  )
-}
-````
-
-## File: vite.config.js
-````javascript
-import { defineConfig, loadEnv } from 'vite'
-import react from '@vitejs/plugin-react'
-import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
-import { createClient } from '@supabase/supabase-js'
-import { LIMIT_PER_PROJECT, ptToday, daftarKredensial, getAccessToken } from './api/_lib/youtube.js'
-import { cekSesi, bacaBody } from './api/_lib/sesi.js'
-import { susunLogbookAi } from './api/_lib/ai-provider.js'
-import { jawabPertanyaanDospem } from './api/_lib/dospem-chat.js'
-import { denganCache } from './api/_lib/redis.js'
-
-function pluginApiR2(env) {
-  const s3 = new S3Client({
-    region: 'auto',
-    endpoint: 'https://' + env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
-    credentials: {
-      accessKeyId: env.R2_ACCESS_KEY_ID,
-      secretAccessKey: env.R2_SECRET_ACCESS_KEY
-    }
-  })
-
-  const setupMiddlewares = (server) => {
-    server.middlewares.use('/api/r2/presign', async function (req, res) {
-      if (req.method !== 'POST') {
-        res.statusCode = 405
-        res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
-        return
-      }
-      const ok = await cekSesi(env, req.headers.authorization)
-      if (!ok) {
-        res.statusCode = 401
-        res.end(JSON.stringify({ error: 'Sesi tidak valid' }))
-        return
-      }
-      const body = await bacaBody(req)
-      const ext = String(body.filename || 'bin').split('.').pop().toLowerCase()
-      const key = body.kind + '/' + new Date().getFullYear() + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + ext
-      const uploadUrl = await getSignedUrl(
-        s3,
-        new PutObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: key, ContentType: body.contentType }),
-        { expiresIn: 300 }
-      )
-      res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({
-        uploadUrl: uploadUrl,
-        publicUrl: '/api/r2/file?key=' + key,
-        key: key
-      }))
-    })
-
-    server.middlewares.use('/api/r2/delete', async function (req, res) {
-      if (req.method !== 'POST') {
-        res.statusCode = 405
-        res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
-        return
-      }
-      const ok = await cekSesi(env, req.headers.authorization)
-      if (!ok) {
-        res.statusCode = 401
-        res.end(JSON.stringify({ error: 'Sesi tidak valid' }))
-        return
-      }
-      const body = await bacaBody(req)
-      await s3.send(new DeleteObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: body.key }))
-      res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({ ok: true }))
-    })
-
-    server.middlewares.use('/api/r2/file', async function (req, res) {
-      if (req.method !== 'GET') {
-        res.statusCode = 405
-        res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
-        return
-      }
-      const url = new URL(req.url, 'http://localhost')
-      const key = url.searchParams.get('key')
-      if (!key) {
-        res.statusCode = 400
-        res.end(JSON.stringify({ error: 'Key tidak ada' }))
-        return
-      }
-      const cmd = new GetObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: key })
-      if (url.searchParams.get('unduh') !== '1') {
-        const signed = await getSignedUrl(s3, cmd, { expiresIn: 300 })
-        res.statusCode = 302
-        res.setHeader('Location', signed)
-        res.setHeader('Cache-Control', 'public, max-age=60')
-        res.end()
-        return
-      }
-      try {
-        const obj = await s3.send(cmd)
-        res.statusCode = 200
-        res.setHeader('Content-Type', obj.ContentType || 'application/octet-stream')
-        if (obj.ContentLength) res.setHeader('Content-Length', String(obj.ContentLength))
-        res.setHeader('Cache-Control', 'public, max-age=3600')
-        obj.Body.pipe(res)
-      } catch (e) {
-        res.statusCode = 404
-        res.end(JSON.stringify({ error: 'Media tidak ditemukan' }))
-      }
-    })
-  }
-
-  return {
-    name: 'api-r2-dev',
-    configureServer: setupMiddlewares,
-    configurePreviewServer: setupMiddlewares
-  }
-}
-
-function pluginApiYoutube(env) {
-  const admin = createClient(env.VITE_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY)
-  function kirim(res, code, obj) {
-    res.statusCode = code
-    res.setHeader('Content-Type', 'application/json')
-    res.end(JSON.stringify(obj))
-  }
-
-  const setupMiddlewares = (server) => {
-    server.middlewares.use('/api/youtube/quota', async function (req, res) {
-      const today = ptToday()
-      const kredensial = daftarKredensial(env)
-      if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
-      let usedTotal = 0
-      const perProject = []
-      for (const kred of kredensial) {
-        const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
-        const used = hit.count || 0
-        usedTotal += used
-        perProject.push({ project: kred.n, used: used, remaining: Math.max(0, LIMIT_PER_PROJECT - used) })
-      }
-      const limit = kredensial.length * LIMIT_PER_PROJECT
-      res.setHeader('Cache-Control', 'no-store')
-      kirim(res, 200, { limit: limit, used: usedTotal, remaining: Math.max(0, limit - usedTotal), perProject: perProject, ptDate: today })
-    })
-
-    server.middlewares.use('/api/youtube/session', async function (req, res) {
-      if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
-      const user = await cekSesi(env, req.headers.authorization)
-      if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
-      const today = ptToday()
-      const kredensial = daftarKredensial(env)
-      if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
-      const body = await bacaBody(req)
-      if (!body.title) { kirim(res, 400, { error: 'Judul video wajib diisi' }); return }
-      let terakhir = ''
-      for (const kred of kredensial) {
-        const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
-        if ((hit.count || 0) >= LIMIT_PER_PROJECT) { terakhir = 'project ' + kred.n + ' sudah penuh'; continue }
-        let access
-        try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
-        const meta = {
-          snippet: { title: String(body.title).slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
-          status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
-        }
-        const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
-          method: 'POST',
-          headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
-          body: JSON.stringify(meta)
-        })
-        if (!init.ok) { terakhir = 'project ' + kred.n + ' ditolak Google (status ' + init.status + ')'; continue }
-        const sessionUri = init.headers.get('location')
-        if (!sessionUri) { terakhir = 'project ' + kred.n + ' tanpa lokasi upload'; continue }
-        await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: user.id, project_id: kred.n })
-        kirim(res, 200, { sessionUri: sessionUri, project: kred.n })
-        return
-      }
-      kirim(res, 429, { error: 'Kuota harian semua project video sudah habis. Coba lagi besok atau gunakan link video eksternal.', detail: terakhir })
-    })
-
-    server.middlewares.use('/api/youtube/latest', async function (req, res) {
-      if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
-      const user = await cekSesi(env, req.headers.authorization)
-      if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
-      const kredensial = daftarKredensial(env)
-      if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
-      let terakhir = ''
-      for (const kred of kredensial) {
-        let access
-        try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
-        const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&order=date&maxResults=5', { headers: { Authorization: 'Bearer ' + access } })
-        if (!r.ok) { terakhir = 'project ' + kred.n + ' status ' + r.status; continue }
-        const j = await r.json()
-        const items = j.items || []
-        const batas = Date.now() - 15 * 60 * 1000
-        const cocok = items.find(function (it) {
-          const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
-          return isNaN(t) ? false : t >= batas
-        })
-        if (!cocok) { kirim(res, 404, { error: 'Video terbaru tidak ditemukan' }); return }
-        kirim(res, 200, { videoId: cocok.id && cocok.id.videoId, project: kred.n })
-        return
-      }
-      kirim(res, 502, { error: 'Gagal memeriksa video terbaru: ' + terakhir })
-    })
-  }
-
-  return {
-    name: 'api-youtube-dev',
-    configureServer: setupMiddlewares,
-    configurePreviewServer: setupMiddlewares
-  }
-}
-
-function pluginApiAi(env) {
-  function kirim(res, code, obj) {
-    res.statusCode = code
-    res.setHeader('Content-Type', 'application/json')
-    res.end(JSON.stringify(obj))
-  }
-  const setupMiddlewares = (server) => {
-    server.middlewares.use('/api/ai/tulis', async function (req, res) {
-      const authHeader = req.headers.authorization || ''
-      if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
-      const user = await cekSesi(env, authHeader)
-      if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
-      const body = await bacaBody(req)
-      const draft = body.draft
-      if (!draft || !String(draft).trim()) {
-        kirim(res, 400, { error: 'Tuliskan dulu catatan kasar kegiatanmu.' })
-        return
-      }
-      try {
-        const hasil = await susunLogbookAi(env, {
-          draft: draft,
-          kategoriList: Array.isArray(body.kategori) ? body.kategori : [],
-          unitList: Array.isArray(body.unit) ? body.unit : []
-        })
-        kirim(res, 200, hasil)
-      } catch (err) {
-        kirim(res, 500, { error: err.message || 'Gagal memanggil AI' })
-      }
-    })
-
-    server.middlewares.use('/api/ai/chat', async function (req, res) {
-      if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
-      const body = await bacaBody(req)
-      const pertanyaan = String(body.pertanyaan || '').trim()
-      const riwayat = Array.isArray(body.riwayat) ? body.riwayat.slice(-10) : []
-      if (!pertanyaan) { kirim(res, 400, { error: 'Pertanyaan tidak boleh kosong.' }); return }
-      if (pertanyaan.length > 500) { kirim(res, 400, { error: 'Pertanyaan terlalu panjang (maks 500 karakter).' }); return }
-      try {
-        const { data: dataTim, dariCache } = await denganCache(
-          env,
-          'mbsi:chat:konteks:v1',
-          300,
-          async function () {
-            const sb = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY)
-            const [l, p, g, h] = await Promise.all([
-              sb.from('logbooks').select('id, mahasiswa_id, tanggal, kategori, judul, logbook_items(judul)')
-                .eq('status', 'publik').order('tanggal', { ascending: false }).limit(200),
-              sb.from('mahasiswa').select('id, nama, nim, prodi').order('nama').limit(50),
-              sb.from('galeri').select('id, mahasiswa_id').limit(500),
-              sb.from('daftar_hadir').select('id, mahasiswa_id, tanggal, status, alasan')
-                .order('tanggal', { ascending: false }).limit(1000)
-            ])
-            return { logs: l.data || [], people: p.data || [], gal: g.data || [], hadir: h.data || [] }
-          }
-        )
-        console.log('[ai/chat] data tim:', dariCache ? 'dari cache' : 'fresh dari Supabase')
-        const jawaban = await jawabPertanyaanDospem(env, {
-          pertanyaan: pertanyaan,
-          riwayat: riwayat,
-          data: dataTim
-        })
-        kirim(res, 200, { jawaban: jawaban, cache: dariCache ? 'hit' : 'miss' })
-      } catch (err) {
-        console.error('[ai/chat]', err)
-        kirim(res, 500, { error: err.message || 'Gagal memanggil AI' })
-      }
-    })
-  }
-  return {
-    name: 'api-ai-dev',
-    configureServer: setupMiddlewares,
-    configurePreviewServer: setupMiddlewares
-  }
-}
-
-export default defineConfig(function ({ mode }) {
-  const env = loadEnv(mode, process.cwd(), '')
-
-  return {
-    plugins: [react(), pluginApiR2(env), pluginApiYoutube(env), pluginApiAi(env)],
-
-    server: {
-      host: true
-    },
-    preview: {
-      host: true
-    },
-
-    build: {
-      chunkSizeWarningLimit: 1000,
-      rollupOptions: {
-        output: {
-          manualChunks: {
-            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-            'vendor-supabase': ['@supabase/supabase-js'],
-            'vendor-aws': ['@aws-sdk/client-s3', '@aws-sdk/s3-request-presigner'],
-            'vendor-media': ['heic2any']
-          }
-        }
-      }
-    }
-  }
-})
-````
-
-## File: src/pages/GalleryPage.jsx
-````javascript
-import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase.js'
-import { useAuth } from '../lib/auth.js'
-import { EmptyState, Modal, Pagination } from '../components/ui.jsx'
-import { GalleryCard, GalleryDetail } from '../components/cards.jsx'
-import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
-import { ICONS } from '../components/icons.jsx'
-import { matchesDateFilters, urutkanTanggal } from '../lib/format.js'
-import { GALERI_KEGIATAN } from '../lib/constants.js'
-import { SkeletonGalleryCard } from '../components/Skeleton.jsx'
-
-const INITIAL = { kegiatan: '', tipe: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
-const PER_PAGE = 12
-
-export default function GalleryPage() {
-  const { mahasiswa } = useAuth()
-  const [all, setAll] = useState([])
-  const [filter, setFilter] = useState(INITIAL)
-  const [sort, setSort] = useState('terbaru')
-  const [open, setOpen] = useState(false)
-  const [detail, setDetail] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [page, setPage] = useState(1)
-
-  useEffect(function () {
-    async function load() {
-      const g = await supabase.from('galeri').select('*, mahasiswa(*)').order('tanggal', { ascending: false })
-      setAll(g.data || [])
-      setLoading(false)
-    }
-    load()
-  }, [])
-
-  useEffect(function () {
-    setPage(1)
-  }, [filter, sort])
-  function gantiHalaman(p) {
-    setPage(p)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-  const items = all.filter(function (i) {
-    if (filter.kegiatan && (i.kegiatan || 'Lainnya') !== filter.kegiatan) return false
-    if (filter.tipe && i.media_type !== filter.tipe) return false
-    return matchesDateFilters(i.tanggal, filter)
-  })
-  const active = countActiveFilters(filter)
-  const sortedItems = urutkanTanggal(items, sort)
-  const totalData = sortedItems.length
-  const totalPages = Math.ceil(totalData / PER_PAGE)
-  const pageAman = Math.min(page, Math.max(1, totalPages))
-  const paginatedItems = sortedItems.slice((pageAman - 1) * PER_PAGE, pageAman * PER_PAGE)
-
-  return (
-    <div>
-      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8 lg:p-10">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600 dark:text-gold-400">Galeri dokumentasi</p>
-        <h1 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Foto dan Video Kegiatan Magang</h1>
-        <p className="mt-2 text-sm text-slate-600 max-w-2xl sm:mt-3 sm:text-base">Setiap foto atau video mewakili satu kegiatan. Klik untuk melihat detail.</p>
-      </section>
-
-      <section className="mt-6">
-        <FilterBar open={open} onToggle={function () { setOpen(function (o) { return !o }) }} activeCount={active}
-          onReset={function () { setFilter(INITIAL) }}>
-          <FilterSelect icon={ICONS.tag} value={filter.kegiatan} onChange={function (v) { setFilter(Object.assign({}, filter, { kegiatan: v })) }}
-            options={[{ value: '', label: 'Semua Kegiatan' }].concat(GALERI_KEGIATAN.map(function (k) { return { value: k, label: k } }))} />
-          <FilterSelect icon={ICONS.image} value={filter.tipe} onChange={function (v) { setFilter(Object.assign({}, filter, { tipe: v })) }}
-            options={[{ value: '', label: 'Semua Media' }, { value: 'foto', label: 'Foto' }, { value: 'video', label: 'Video' }]} />
-          <TimeFilter filter={filter} set={setFilter} />
-          <SortSelect value={sort} onChange={setSort} />
-        </FilterBar>
-      </section>
-
-      <section className="grid-pusat mt-8">
-        {loading
-          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonGalleryCard /></div> })
-          : paginatedItems.map(function (i) {
-              return (
-                <div key={i.id} className="kolom-kartu">
-                  <GalleryCard item={i} isOwner={mahasiswa && mahasiswa.id === i.mahasiswa_id}
-                    onDetail={function () { setDetail(i) }} />
-                </div>
-              )
-            })}
-        {!loading && !items.length ? <div className="w-full"><EmptyState icon="camera" title="Belum Ada Media Galeri" desc="Media galeri yang diunggah mahasiswa akan tampil di sini." /></div> : null}
-      </section>
-      {!loading && totalData > 0 ? (
-        <div className="mt-6 text-center text-sm text-slate-600">
-          Total {totalData} media{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}
-        </div>
-      ) : null}
-      {!loading ? <Pagination totalItems={totalData} perPage={PER_PAGE} page={pageAman} onPageChange={gantiHalaman} /> : null}
-
-      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
-        {detail ? <GalleryDetail item={detail} /> : null}
-      </Modal>
-    </div>
-  )
-}
-````
-
 ## File: src/pages/AttendancePage.jsx
 ````javascript
 import { useEffect, useState } from 'react'
@@ -6680,6 +6857,454 @@ return (
 }
 ````
 
+## File: src/pages/LoginPage.jsx
+````javascript
+import { useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { loginWithNim } from '../lib/auth.js'
+import { inputCls, labelCls, btnPrimary, LabelProses } from '../components/ui.jsx'
+import { EyeToggle, SizedIcon } from '../components/icons.jsx'
+
+function pesanErrorLogin(err) {
+  const pesan = String((err && err.message) || '')
+  const rendah = pesan.toLowerCase()
+  if (rendah.indexOf('invalid login credentials') !== -1) {
+    return 'NIM atau kode akses yang kamu masukkan tidak cocok dengan data kami. Periksa kembali penulisannya, pastikan tidak ada spasi berlebih, lalu coba lagi.'
+  }
+  if (rendah.indexOf('not confirmed') !== -1) {
+    return 'Akun untuk NIM ini belum diaktifkan. Hubungi admin tim magang untuk mengaktifkan akunmu terlebih dahulu.'
+  }
+  if (rendah.indexOf('too many requests') !== -1 || rendah.indexOf('try again after') !== -1 || rendah.indexOf('rate limit') !== -1) {
+    return 'Terlalu banyak percobaan masuk dalam waktu singkat demi keamanan. Tunggu sekitar satu menit, lalu coba lagi.'
+  }
+  if (rendah.indexOf('fetch') !== -1 || rendah.indexOf('network') !== -1 || rendah.indexOf('failed to load') !== -1 || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+    return 'Tidak bisa terhubung ke server. Periksa koneksi internetmu, lalu coba lagi.'
+  }
+  if (rendah.indexOf('email') !== -1 && rendah.indexOf('format') !== -1) {
+    return 'Format NIM tidak terbaca. Masukkan NIM berupa angka tanpa spasi, contoh: 24070041.'
+  }
+  if (pesan) return 'Gagal masuk: ' + pesan + '. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
+  return 'Terjadi kesalahan tidak terduga saat masuk. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
+}
+export default function LoginPage() {
+  const navigate = useNavigate()
+  const [params] = useSearchParams()
+  const [nim, setNim] = useState('')
+  const [kode, setKode] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [lihatKode, setLihatKode] = useState(false)
+
+  async function submit(e) {
+    e.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+  await loginWithNim(nim, kode)
+  const next = params.get('next')
+  navigate(next && next.charAt(0) === '/' && next.indexOf('//') !== 0 ? next : '/dashboard')
+} catch (err) {
+  setError(pesanErrorLogin(err))
+}
+    setBusy(false)
+  }
+
+  return (
+    <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr] items-start">
+      <div className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8 lg:p-10">
+        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black leading-tight text-slate-900">Masuk untuk Mengisi Logbook, Galeri, dan Daftar Hadir</h1>
+        <p className="mt-3 text-sm leading-relaxed text-slate-600 sm:mt-4 sm:text-base">Halaman ini khusus mahasiswa magang. Dosen pembimbing dan kaprodi dapat melihat halaman umum tanpa masuk.</p>
+      </div>
+      <div className="card-hover bsi-panel rounded-[2rem] p-5 sm:p-8 lg:p-10">
+        <h2 className="text-xl sm:text-2xl font-black text-slate-900">Masuk Dashboard</h2>
+        {error ? (
+          <div className="mt-3 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-red-100 text-red-600">
+              <SizedIcon name="close" size={12} />
+            </span>
+            <div className="min-w-0">
+              <p className="font-bold">Gagal Masuk</p>
+              <p className="mt-1 leading-relaxed">{error}</p>
+            </div>
+          </div>
+        ) : null}
+        <form onSubmit={submit} className="mt-6 space-y-5">
+          <div>
+            <label className={labelCls}>NIM <span className="text-red-500">*</span></label>
+            <input className={inputCls} value={nim} onChange={function (e) { setNim(e.target.value) }} aria-label="NIM" placeholder="Contoh: 20260001" required />
+          </div>
+          <div>
+            <label className={labelCls}>Kode akses <span className="text-red-500">*</span></label>
+            <div className="relative mt-1.5">
+              <input
+                type={lihatKode ? 'text' : 'password'}
+                className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 pr-12 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+                value={kode}
+                onChange={function (e) { setKode(e.target.value) }}
+                aria-label="Kode Akses" placeholder="Masukkan kode akses"
+                required
+              />
+              <button
+                type="button"
+                onClick={function () { setLihatKode(function (v) { return !v }) }}
+                title={lihatKode ? 'Sembunyikan Kode Akses' : 'Lihat Kode Akses'}
+                className="absolute right-2 top-0 bottom-0 my-auto grid h-9 w-9 place-items-center rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-600"
+              >
+                <EyeToggle open={lihatKode} size={18} />
+              </button>
+            </div>
+          </div>
+          <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks="Memproses" /> : 'Masuk'}</button>
+        </form>
+      </div>
+    </section>
+  )
+}
+````
+
+## File: vite.config.js
+````javascript
+import { defineConfig, loadEnv } from 'vite'
+import react from '@vitejs/plugin-react'
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { createClient } from '@supabase/supabase-js'
+import { LIMIT_PER_PROJECT, ptToday, daftarKredensial, getAccessToken } from './api/_lib/youtube.js'
+import { cekSesi, bacaBody } from './api/_lib/sesi.js'
+import { susunLogbookAi } from './api/_lib/ai-provider.js'
+import { jawabPertanyaanDospem } from './api/_lib/dospem-chat.js'
+import { denganCache, ambilRedis, kunciJawaban } from './api/_lib/redis.js'
+
+function pluginApiR2(env) {
+  const s3 = new S3Client({
+    region: 'auto',
+    endpoint: 'https://' + env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
+    credentials: {
+      accessKeyId: env.R2_ACCESS_KEY_ID,
+      secretAccessKey: env.R2_SECRET_ACCESS_KEY
+    }
+  })
+
+  const setupMiddlewares = (server) => {
+    server.middlewares.use('/api/r2/presign', async function (req, res) {
+      if (req.method !== 'POST') {
+        res.statusCode = 405
+        res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
+        return
+      }
+      const ok = await cekSesi(env, req.headers.authorization)
+      if (!ok) {
+        res.statusCode = 401
+        res.end(JSON.stringify({ error: 'Sesi tidak valid' }))
+        return
+      }
+      const body = await bacaBody(req)
+      const ext = String(body.filename || 'bin').split('.').pop().toLowerCase()
+      const key = body.kind + '/' + new Date().getFullYear() + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + ext
+      const uploadUrl = await getSignedUrl(
+        s3,
+        new PutObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: key, ContentType: body.contentType }),
+        { expiresIn: 300 }
+      )
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({
+        uploadUrl: uploadUrl,
+        publicUrl: '/api/r2/file?key=' + key,
+        key: key
+      }))
+    })
+
+    server.middlewares.use('/api/r2/delete', async function (req, res) {
+      if (req.method !== 'POST') {
+        res.statusCode = 405
+        res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
+        return
+      }
+      const ok = await cekSesi(env, req.headers.authorization)
+      if (!ok) {
+        res.statusCode = 401
+        res.end(JSON.stringify({ error: 'Sesi tidak valid' }))
+        return
+      }
+      const body = await bacaBody(req)
+      await s3.send(new DeleteObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: body.key }))
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ ok: true }))
+    })
+
+    server.middlewares.use('/api/r2/file', async function (req, res) {
+      if (req.method !== 'GET') {
+        res.statusCode = 405
+        res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
+        return
+      }
+      const url = new URL(req.url, 'http://localhost')
+      const key = url.searchParams.get('key')
+      if (!key) {
+        res.statusCode = 400
+        res.end(JSON.stringify({ error: 'Key tidak ada' }))
+        return
+      }
+      const cmd = new GetObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: key })
+      if (url.searchParams.get('unduh') !== '1') {
+        const signed = await getSignedUrl(s3, cmd, { expiresIn: 300 })
+        res.statusCode = 302
+        res.setHeader('Location', signed)
+        res.setHeader('Cache-Control', 'public, max-age=60')
+        res.end()
+        return
+      }
+      try {
+        const obj = await s3.send(cmd)
+        res.statusCode = 200
+        res.setHeader('Content-Type', obj.ContentType || 'application/octet-stream')
+        if (obj.ContentLength) res.setHeader('Content-Length', String(obj.ContentLength))
+        res.setHeader('Cache-Control', 'public, max-age=3600')
+        obj.Body.pipe(res)
+      } catch (e) {
+        res.statusCode = 404
+        res.end(JSON.stringify({ error: 'Media tidak ditemukan' }))
+      }
+    })
+  }
+
+  return {
+    name: 'api-r2-dev',
+    configureServer: setupMiddlewares,
+    configurePreviewServer: setupMiddlewares
+  }
+}
+
+function pluginApiYoutube(env) {
+  const admin = createClient(env.VITE_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY)
+  function kirim(res, code, obj) {
+    res.statusCode = code
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify(obj))
+  }
+
+  const setupMiddlewares = (server) => {
+    server.middlewares.use('/api/youtube/quota', async function (req, res) {
+      const today = ptToday()
+      const kredensial = daftarKredensial(env)
+      if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
+      let usedTotal = 0
+      const perProject = []
+      for (const kred of kredensial) {
+        const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
+        const used = hit.count || 0
+        usedTotal += used
+        perProject.push({ project: kred.n, used: used, remaining: Math.max(0, LIMIT_PER_PROJECT - used) })
+      }
+      const limit = kredensial.length * LIMIT_PER_PROJECT
+      res.setHeader('Cache-Control', 'no-store')
+      kirim(res, 200, { limit: limit, used: usedTotal, remaining: Math.max(0, limit - usedTotal), perProject: perProject, ptDate: today })
+    })
+
+    server.middlewares.use('/api/youtube/session', async function (req, res) {
+      if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
+      const user = await cekSesi(env, req.headers.authorization)
+      if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
+      const today = ptToday()
+      const kredensial = daftarKredensial(env)
+      if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
+      const body = await bacaBody(req)
+      if (!body.title) { kirim(res, 400, { error: 'Judul video wajib diisi' }); return }
+      let terakhir = ''
+      for (const kred of kredensial) {
+        const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
+        if ((hit.count || 0) >= LIMIT_PER_PROJECT) { terakhir = 'project ' + kred.n + ' sudah penuh'; continue }
+        let access
+        try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
+        const meta = {
+          snippet: { title: String(body.title).slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
+          status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
+        }
+        const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
+          body: JSON.stringify(meta)
+        })
+        if (!init.ok) { terakhir = 'project ' + kred.n + ' ditolak Google (status ' + init.status + ')'; continue }
+        const sessionUri = init.headers.get('location')
+        if (!sessionUri) { terakhir = 'project ' + kred.n + ' tanpa lokasi upload'; continue }
+        await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: user.id, project_id: kred.n })
+        kirim(res, 200, { sessionUri: sessionUri, project: kred.n })
+        return
+      }
+      kirim(res, 429, { error: 'Kuota harian semua project video sudah habis. Coba lagi besok atau gunakan link video eksternal.', detail: terakhir })
+    })
+
+    server.middlewares.use('/api/youtube/latest', async function (req, res) {
+      if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
+      const user = await cekSesi(env, req.headers.authorization)
+      if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
+      const kredensial = daftarKredensial(env)
+      if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
+      let terakhir = ''
+      for (const kred of kredensial) {
+        let access
+        try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
+        const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&order=date&maxResults=5', { headers: { Authorization: 'Bearer ' + access } })
+        if (!r.ok) { terakhir = 'project ' + kred.n + ' status ' + r.status; continue }
+        const j = await r.json()
+        const items = j.items || []
+        const batas = Date.now() - 15 * 60 * 1000
+        const cocok = items.find(function (it) {
+          const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
+          return isNaN(t) ? false : t >= batas
+        })
+        if (!cocok) { kirim(res, 404, { error: 'Video terbaru tidak ditemukan' }); return }
+        kirim(res, 200, { videoId: cocok.id && cocok.id.videoId, project: kred.n })
+        return
+      }
+      kirim(res, 502, { error: 'Gagal memeriksa video terbaru: ' + terakhir })
+    })
+  }
+
+  return {
+    name: 'api-youtube-dev',
+    configureServer: setupMiddlewares,
+    configurePreviewServer: setupMiddlewares
+  }
+}
+
+function pluginApiAi(env) {
+  function kirim(res, code, obj) {
+    res.statusCode = code
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify(obj))
+  }
+  const setupMiddlewares = (server) => {
+    server.middlewares.use('/api/ai/tulis', async function (req, res) {
+      const authHeader = req.headers.authorization || ''
+      if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
+      const user = await cekSesi(env, authHeader)
+      if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
+      const body = await bacaBody(req)
+      const draft = body.draft
+      if (!draft || !String(draft).trim()) {
+        kirim(res, 400, { error: 'Tuliskan dulu catatan kasar kegiatanmu.' })
+        return
+      }
+      try {
+        const hasil = await susunLogbookAi(env, {
+          draft: draft,
+          kategoriList: Array.isArray(body.kategori) ? body.kategori : [],
+          unitList: Array.isArray(body.unit) ? body.unit : []
+        })
+        kirim(res, 200, hasil)
+      } catch (err) {
+        kirim(res, 500, { error: err.message || 'Gagal memanggil AI' })
+      }
+    })
+
+    server.middlewares.use('/api/ai/chat', async function (req, res) {
+      if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
+      const body = await bacaBody(req)
+      const pertanyaan = String(body.pertanyaan || '').trim()
+      const riwayat = Array.isArray(body.riwayat) ? body.riwayat.slice(-10) : []
+      if (!pertanyaan) { kirim(res, 400, { error: 'Pertanyaan tidak boleh kosong.' }); return }
+      if (pertanyaan.length > 500) { kirim(res, 400, { error: 'Pertanyaan terlalu panjang (maks 500 karakter).' }); return }
+
+      try {
+        const redis = ambilRedis(env)
+        const bisaPakaiCacheJawaban = riwayat.length === 0
+        const kunci = bisaPakaiCacheJawaban ? kunciJawaban(pertanyaan) : null
+
+        if (kunci && redis) {
+          try {
+            const cached = await redis.get(kunci)
+            if (cached) {
+              console.log('[ai/chat] jawaban dari cache')
+              kirim(res, 200, { jawaban: cached, cache: 'jawaban' })
+              return
+            }
+          } catch (e) {
+            console.warn('[redis] get jawaban gagal:', e.message)
+          }
+        }
+
+        const { data: dataTim, dariCache } = await denganCache(
+          env,
+          'mbsi:chat:konteks:v1',
+          300,
+          async function () {
+            const sb = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY)
+            const [l, p, g, h] = await Promise.all([
+              sb.from('logbooks').select('id, mahasiswa_id, tanggal, kategori, judul, logbook_items(judul)')
+                .eq('status', 'publik').order('tanggal', { ascending: false }).limit(200),
+              sb.from('mahasiswa').select('id, nama, nim, prodi').order('nama').limit(50),
+              sb.from('galeri').select('id, mahasiswa_id').limit(500),
+              sb.from('daftar_hadir').select('id, mahasiswa_id, tanggal, status, alasan')
+                .order('tanggal', { ascending: false }).limit(1000)
+            ])
+            return { logs: l.data || [], people: p.data || [], gal: g.data || [], hadir: h.data || [] }
+          }
+        )
+        console.log('[ai/chat] konteks tim:', dariCache ? 'dari cache' : 'fresh dari Supabase')
+
+        const jawaban = await jawabPertanyaanDospem(env, {
+          pertanyaan: pertanyaan,
+          riwayat: riwayat,
+          data: dataTim
+        })
+
+        if (kunci && redis) {
+          try {
+            await redis.set(kunci, jawaban, { ex: 3600 })
+          } catch (e) {
+            console.warn('[redis] set jawaban gagal:', e.message)
+          }
+        }
+
+        kirim(res, 200, { jawaban: jawaban, cache: 'fresh' })
+      } catch (err) {
+        console.error('[ai/chat]', err)
+        const status = err.statusCode || 500
+        const body2 = { error: err.message || 'Gagal memanggil AI' }
+        if (err.retryAfter) body2.retryAfter = err.retryAfter
+        kirim(res, status, body2)
+      }
+    })
+  }
+  return {
+    name: 'api-ai-dev',
+    configureServer: setupMiddlewares,
+    configurePreviewServer: setupMiddlewares
+  }
+}
+
+export default defineConfig(function ({ mode }) {
+  const env = loadEnv(mode, process.cwd(), '')
+
+  return {
+    plugins: [react(), pluginApiR2(env), pluginApiYoutube(env), pluginApiAi(env)],
+
+    server: {
+      host: true
+    },
+    preview: {
+      host: true
+    },
+
+    build: {
+      chunkSizeWarningLimit: 1000,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+            'vendor-supabase': ['@supabase/supabase-js'],
+            'vendor-aws': ['@aws-sdk/client-s3', '@aws-sdk/s3-request-presigner'],
+            'vendor-media': ['heic2any']
+          }
+        }
+      }
+    }
+  }
+})
+````
+
 ## File: src/components/cards.jsx
 ````javascript
 import { Avatar } from './ui.jsx'
@@ -6922,6 +7547,183 @@ export function AttendanceDetail(props) {
         <p className="mt-1 text-sm text-slate-700">{row.alasan || 'Tidak ada alasan.'}</p>
       </div>
       <div className="detail-footer border-t border-slate-100 pt-4"><PersonChip mahasiswa={row.mahasiswa} /></div>
+    </div>
+  )
+}
+````
+
+## File: src/pages/HomePage.jsx
+````javascript
+import { urutkanTanggal } from '../lib/format.js'
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { supabase } from '../lib/supabase.js'
+import { useAuth } from '../lib/auth.js'
+import { EmptyState, Modal } from '../components/ui.jsx'
+import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
+import { SkeletonLogbookCard } from '../components/Skeleton.jsx'
+
+const GRADIENT_DOT = ['linear-gradient(135deg,#86ecb0,#1a9e57)', 'linear-gradient(135deg,#fbbf24,#d97706)', 'linear-gradient(135deg,#27c06d,#135033)']
+export default function HomePage() {
+  const { mahasiswa } = useAuth()
+  const [logs, setLogs] = useState([])
+  const [stats, setStats] = useState({ logbook: 0, galeri: 0, mahasiswa: 0 })
+  const [hadir, setHadir] = useState({ masuk: 0, izin: 0, bolos: 0 })
+  const [tim, setTim] = useState([])
+  const [detail, setDetail] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(function () {
+    async function load() {
+      const l = await supabase
+        .from('logbooks')
+        .select('*, mahasiswa(*), logbook_items(*)')
+        .eq('status', 'publik')
+        .order('tanggal', { ascending: false })
+        .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
+      const g = await supabase.from('galeri').select('id')
+      const p = await supabase.from('mahasiswa').select('id, nama, foto_profil').order('nama')
+      const h = await supabase.from('daftar_hadir').select('status')
+      const hitung = { masuk: 0, izin: 0, bolos: 0 }
+      const rows = h.data || []
+      for (let i = 0; i < rows.length; i++) {
+        if (rows[i].status === 'Masuk') hitung.masuk += 1
+        else if (rows[i].status === 'Izin') hitung.izin += 1
+        else if (rows[i].status === 'Bolos') hitung.bolos += 1
+      }
+      setLogs(l.data || [])
+      setStats({ logbook: (l.data || []).length, galeri: (g.data || []).length, mahasiswa: (p.data || []).length })
+      setTim(p.data || [])
+      setHadir(hitung)
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  const totalHadir = hadir.masuk + hadir.izin + hadir.bolos
+  const persenMasuk = totalHadir ? Math.round((hadir.masuk / totalHadir) * 100) : 0
+  const lebarMasuk = totalHadir ? (hadir.masuk / totalHadir) * 100 : 0
+  const lebarIzin = totalHadir ? (hadir.izin / totalHadir) * 100 : 0
+  const lebarBolos = totalHadir ? (hadir.bolos / totalHadir) * 100 : 0
+
+  return (
+    <div>
+      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-6 sm:p-10 lg:px-12 lg:py-7">
+        <div className="pointer-events-none absolute right-16 top-1/2 h-80 w-80 -translate-y-1/2 rounded-full bg-bsi-500/10 blur-3xl" />
+        <span className="bsi-chip bsi-chip-deep bsi-chip-mobile-1 xl:hidden">▦</span>
+        <span className="bsi-chip bsi-chip-gold bsi-chip-mobile-2 xl:hidden">▶</span>
+        <span className="bsi-chip bsi-chip-green bsi-chip-mobile-3 xl:hidden">✦</span>
+        <div className="relative z-10 flex items-center gap-10">
+          <div className="min-w-0 flex-1">
+            <h1 className="max-w-2xl text-2xl font-black leading-tight text-slate-900 sm:text-3xl lg:text-5xl">
+              Portal Logbook, Galeri & Kehadiran Magang <span className="bsi-grad-text"></span>
+            </h1>
+            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-slate-600 sm:mt-5 sm:text-base">
+              Platform terpusat untuk mendokumentasikan aktivitas dan kehadiran tim magang.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-2 sm:mt-8 sm:gap-3">
+              <Link to="/logbook" className="inline-flex items-center gap-2 rounded-2xl bg-bsi-800 px-5 py-3 text-sm font-bold text-white shadow-lg hover:bg-bsi-900 sm:px-6 sm:text-base">Logbook</Link>
+              {/* <Link to="/galeri" className="bsi-btn-glass">Lihat Galeri</Link> */}
+              <Link to="/absen" className="bsi-btn-glass">Daftar Hadir</Link>
+              {/* {mahasiswa
+                ? <Link to="/dashboard" className="bsi-btn-white">Buka Dashboard</Link>
+                : <Link to="/login" className="bsi-btn-white">Masuk Akun</Link>} */}
+            </div>
+          </div>
+          <div className="bsi-hero-art relative hidden w-[430px] shrink-0 self-stretch min-h-[300px] xl:block">
+            <span className="bsi-chip bsi-chip-deep bsi-chip-c1">▦</span>
+            <span className="bsi-chip bsi-chip-green bsi-chip-c3">✦</span>
+            <span className="bsi-chip bsi-chip-gold bsi-chip-c2">▶</span>
+            <div className="bsi-mini-card bsi-mini-green absolute left-0 top-8 -rotate-2">
+              <p className="text-xs font-bold opacity-80">LOGBOOK PUBLIK</p>
+              <p className="mt-1 text-3xl font-black">{loading ? '—' : stats.logbook}</p>
+              <p className="mt-2 text-xs opacity-75">{loading ? 'Memuat data...' : stats.galeri + ' media di galeri'}</p>
+            </div>
+            <div className="bsi-mini-card bsi-mini-white absolute right-0 top-[32%] rotate-2">
+              <p className="text-xs font-bold opacity-80">KEHADIRAN TIM</p>
+              <p className="mt-1 text-3xl font-black">{loading ? '—' : persenMasuk + '%'}</p>
+              <div className="bsi-stack">
+                <i style={{ width: lebarMasuk + '%', background: '#10b981' }}></i>
+                <i style={{ width: lebarIzin + '%', background: '#f59e0b' }}></i>
+                <i style={{ width: lebarBolos + '%', background: '#ef4444' }}></i>
+              </div>
+              <p className="mt-2 text-xs opacity-75">Masuk {hadir.masuk} • Izin {hadir.izin} • Bolos {hadir.bolos}</p>
+            </div>
+            <div className="bsi-pill-card">
+              <span className="flex -space-x-2">
+                {loading
+                  ? [0, 1, 2].map(function (i) { return <i key={i} className="bsi-dot" style={{ background: GRADIENT_DOT[i] }}></i> })
+                  : tim.slice(0, 3).map(function (m, i) {
+                      return m.foto_profil
+                        ? <img key={m.id} src={m.foto_profil} alt={'Foto ' + m.nama} loading="lazy" decoding="async" className="bsi-dot bsi-dot-foto" />
+                        : <span key={m.id} className="bsi-dot bsi-dot-inisial" style={{ background: GRADIENT_DOT[i % GRADIENT_DOT.length] }}>{(m.nama || '?').charAt(0).toUpperCase()}</span>
+                    })}
+                {!loading && tim.length > 3 ? <span className="bsi-dot bsi-dot-lebih">+{tim.length - 3}</span> : null}
+              </span>
+              <span className="text-xs font-bold">{loading ? 'Memuat data...' : 'Tim magang • ' + stats.mahasiswa + ' mahasiswa'}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {loading
+          ? [0, 1, 2].map(function (i) {
+              return (
+                <div key={i} className="bsi-stat">
+                  <div className="skeleton h-3 w-24 rounded-full"></div>
+                  <div className="skeleton mt-2 h-8 w-16 rounded-full"></div>
+                  <div className="skeleton mt-2 h-3 w-32 rounded-full"></div>
+                </div>
+              )
+            })
+          : [
+              <div key="mahasiswa" className="bsi-stat">
+                <p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Total Mahasiswa</p>
+                <p className="mt-2 text-3xl font-black text-slate-900">{stats.mahasiswa}</p>
+                <p className="mt-1 text-xs text-slate-500">Mahasiswa terdaftar dalam tim</p>
+              </div>,
+              <div key="logbook" className="bsi-stat">
+                <p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Logbook Publik</p>
+                <p className="mt-2 text-3xl font-black text-slate-900">{stats.logbook}</p>
+                <p className="mt-1 text-xs text-slate-500">Catatan kegiatan harian</p>
+              </div>,
+              <div key="galeri" className="bsi-stat">
+                <p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Media Galeri</p>
+                <p className="mt-2 text-3xl font-black text-slate-900">{stats.galeri}</p>
+                <p className="mt-1 text-xs text-slate-500">Foto dan video dokumentasi</p>
+              </div>
+            ]}
+      </section>
+
+      <section className="mt-10">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600 dark:text-gold-400">Kegiatan terbaru</p>
+            <h2 className="mt-2 text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Logbook Terbaru Tim</h2>
+          </div>
+          <Link to="/logbook" className="text-sm font-semibold text-bsi-800 hover:text-bsi-950">Lihat Semua Logbook</Link>
+        </div>
+        <div className="grid-pusat mt-6">
+          {loading
+            ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
+            : urutkanTanggal(logs, 'terbaru').slice(0, 6).map(function (l) {
+                return (
+                  <div key={l.id} className="kolom-kartu">
+                    <LogbookCard log={l} onDetail={function () { setDetail(l) }} />
+                  </div>
+                )
+              })}
+          {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum Ada Logbook Publik" desc="Logbook yang sudah dibagikan akan tampil di sini." /></div> : null}
+        </div>
+        <div className="mt-8 flex justify-center">
+          <Link to="/logbook" className="rounded-xl bg-bsi-800 px-5 py-2.5 text-xs font-bold text-white hover:bg-bsi-900 sm:rounded-2xl sm:px-6 sm:py-3 sm:text-sm">Lihat Semua Logbook</Link>
+        </div>
+      </section>
+
+      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
+        {detail ? <LogbookDetail log={detail} /> : null}
+      </Modal>
     </div>
   )
 }
@@ -7356,183 +8158,6 @@ export default function QuickPage() {
           </form>
         </section>
       ) : null}
-    </div>
-  )
-}
-````
-
-## File: src/pages/HomePage.jsx
-````javascript
-import { urutkanTanggal } from '../lib/format.js'
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { supabase } from '../lib/supabase.js'
-import { useAuth } from '../lib/auth.js'
-import { EmptyState, Modal } from '../components/ui.jsx'
-import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
-import { SkeletonLogbookCard } from '../components/Skeleton.jsx'
-
-const GRADIENT_DOT = ['linear-gradient(135deg,#86ecb0,#1a9e57)', 'linear-gradient(135deg,#fbbf24,#d97706)', 'linear-gradient(135deg,#27c06d,#135033)']
-export default function HomePage() {
-  const { mahasiswa } = useAuth()
-  const [logs, setLogs] = useState([])
-  const [stats, setStats] = useState({ logbook: 0, galeri: 0, mahasiswa: 0 })
-  const [hadir, setHadir] = useState({ masuk: 0, izin: 0, bolos: 0 })
-  const [tim, setTim] = useState([])
-  const [detail, setDetail] = useState(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(function () {
-    async function load() {
-      const l = await supabase
-        .from('logbooks')
-        .select('*, mahasiswa(*), logbook_items(*)')
-        .eq('status', 'publik')
-        .order('tanggal', { ascending: false })
-        .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
-      const g = await supabase.from('galeri').select('id')
-      const p = await supabase.from('mahasiswa').select('id, nama, foto_profil').order('nama')
-      const h = await supabase.from('daftar_hadir').select('status')
-      const hitung = { masuk: 0, izin: 0, bolos: 0 }
-      const rows = h.data || []
-      for (let i = 0; i < rows.length; i++) {
-        if (rows[i].status === 'Masuk') hitung.masuk += 1
-        else if (rows[i].status === 'Izin') hitung.izin += 1
-        else if (rows[i].status === 'Bolos') hitung.bolos += 1
-      }
-      setLogs(l.data || [])
-      setStats({ logbook: (l.data || []).length, galeri: (g.data || []).length, mahasiswa: (p.data || []).length })
-      setTim(p.data || [])
-      setHadir(hitung)
-      setLoading(false)
-    }
-    load()
-  }, [])
-
-  const totalHadir = hadir.masuk + hadir.izin + hadir.bolos
-  const persenMasuk = totalHadir ? Math.round((hadir.masuk / totalHadir) * 100) : 0
-  const lebarMasuk = totalHadir ? (hadir.masuk / totalHadir) * 100 : 0
-  const lebarIzin = totalHadir ? (hadir.izin / totalHadir) * 100 : 0
-  const lebarBolos = totalHadir ? (hadir.bolos / totalHadir) * 100 : 0
-
-  return (
-    <div>
-      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-6 sm:p-10 lg:px-12 lg:py-7">
-        <div className="pointer-events-none absolute right-16 top-1/2 h-80 w-80 -translate-y-1/2 rounded-full bg-bsi-500/10 blur-3xl" />
-        <span className="bsi-chip bsi-chip-deep bsi-chip-mobile-1 xl:hidden">▦</span>
-        <span className="bsi-chip bsi-chip-gold bsi-chip-mobile-2 xl:hidden">▶</span>
-        <span className="bsi-chip bsi-chip-green bsi-chip-mobile-3 xl:hidden">✦</span>
-        <div className="relative z-10 flex items-center gap-10">
-          <div className="min-w-0 flex-1">
-            <h1 className="max-w-2xl text-2xl font-black leading-tight text-slate-900 sm:text-3xl lg:text-5xl">
-              Portal Logbook, Galeri & Kehadiran Magang <span className="bsi-grad-text"></span>
-            </h1>
-            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-slate-600 sm:mt-5 sm:text-base">
-              Platform terpusat untuk mendokumentasikan aktivitas dan kehadiran tim magang.
-            </p>
-            <div className="mt-6 flex flex-wrap gap-2 sm:mt-8 sm:gap-3">
-              <Link to="/logbook" className="inline-flex items-center gap-2 rounded-2xl bg-bsi-800 px-5 py-3 text-sm font-bold text-white shadow-lg hover:bg-bsi-900 sm:px-6 sm:text-base">Logbook</Link>
-              {/* <Link to="/galeri" className="bsi-btn-glass">Lihat Galeri</Link> */}
-              <Link to="/absen" className="bsi-btn-glass">Daftar Hadir</Link>
-              {/* {mahasiswa
-                ? <Link to="/dashboard" className="bsi-btn-white">Buka Dashboard</Link>
-                : <Link to="/login" className="bsi-btn-white">Masuk Akun</Link>} */}
-            </div>
-          </div>
-          <div className="bsi-hero-art relative hidden w-[430px] shrink-0 self-stretch min-h-[300px] xl:block">
-            <span className="bsi-chip bsi-chip-deep bsi-chip-c1">▦</span>
-            <span className="bsi-chip bsi-chip-green bsi-chip-c3">✦</span>
-            <span className="bsi-chip bsi-chip-gold bsi-chip-c2">▶</span>
-            <div className="bsi-mini-card bsi-mini-green absolute left-0 top-8 -rotate-2">
-              <p className="text-xs font-bold opacity-80">LOGBOOK PUBLIK</p>
-              <p className="mt-1 text-3xl font-black">{loading ? '—' : stats.logbook}</p>
-              <p className="mt-2 text-xs opacity-75">{loading ? 'Memuat data...' : stats.galeri + ' media di galeri'}</p>
-            </div>
-            <div className="bsi-mini-card bsi-mini-white absolute right-0 top-[32%] rotate-2">
-              <p className="text-xs font-bold opacity-80">KEHADIRAN TIM</p>
-              <p className="mt-1 text-3xl font-black">{loading ? '—' : persenMasuk + '%'}</p>
-              <div className="bsi-stack">
-                <i style={{ width: lebarMasuk + '%', background: '#10b981' }}></i>
-                <i style={{ width: lebarIzin + '%', background: '#f59e0b' }}></i>
-                <i style={{ width: lebarBolos + '%', background: '#ef4444' }}></i>
-              </div>
-              <p className="mt-2 text-xs opacity-75">Masuk {hadir.masuk} • Izin {hadir.izin} • Bolos {hadir.bolos}</p>
-            </div>
-            <div className="bsi-pill-card">
-              <span className="flex -space-x-2">
-                {loading
-                  ? [0, 1, 2].map(function (i) { return <i key={i} className="bsi-dot" style={{ background: GRADIENT_DOT[i] }}></i> })
-                  : tim.slice(0, 3).map(function (m, i) {
-                      return m.foto_profil
-                        ? <img key={m.id} src={m.foto_profil} alt={'Foto ' + m.nama} loading="lazy" decoding="async" className="bsi-dot bsi-dot-foto" />
-                        : <span key={m.id} className="bsi-dot bsi-dot-inisial" style={{ background: GRADIENT_DOT[i % GRADIENT_DOT.length] }}>{(m.nama || '?').charAt(0).toUpperCase()}</span>
-                    })}
-                {!loading && tim.length > 3 ? <span className="bsi-dot bsi-dot-lebih">+{tim.length - 3}</span> : null}
-              </span>
-              <span className="text-xs font-bold">{loading ? 'Memuat data...' : 'Tim magang • ' + stats.mahasiswa + ' mahasiswa'}</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {loading
-          ? [0, 1, 2].map(function (i) {
-              return (
-                <div key={i} className="bsi-stat">
-                  <div className="skeleton h-3 w-24 rounded-full"></div>
-                  <div className="skeleton mt-2 h-8 w-16 rounded-full"></div>
-                  <div className="skeleton mt-2 h-3 w-32 rounded-full"></div>
-                </div>
-              )
-            })
-          : [
-              <div key="mahasiswa" className="bsi-stat">
-                <p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Total Mahasiswa</p>
-                <p className="mt-2 text-3xl font-black text-slate-900">{stats.mahasiswa}</p>
-                <p className="mt-1 text-xs text-slate-500">Mahasiswa terdaftar dalam tim</p>
-              </div>,
-              <div key="logbook" className="bsi-stat">
-                <p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Logbook Publik</p>
-                <p className="mt-2 text-3xl font-black text-slate-900">{stats.logbook}</p>
-                <p className="mt-1 text-xs text-slate-500">Catatan kegiatan harian</p>
-              </div>,
-              <div key="galeri" className="bsi-stat">
-                <p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Media Galeri</p>
-                <p className="mt-2 text-3xl font-black text-slate-900">{stats.galeri}</p>
-                <p className="mt-1 text-xs text-slate-500">Foto dan video dokumentasi</p>
-              </div>
-            ]}
-      </section>
-
-      <section className="mt-10">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600 dark:text-gold-400">Kegiatan terbaru</p>
-            <h2 className="mt-2 text-xl sm:text-2xl lg:text-3xl font-black text-slate-900">Logbook Terbaru Tim</h2>
-          </div>
-          <Link to="/logbook" className="text-sm font-semibold text-bsi-800 hover:text-bsi-950">Lihat Semua Logbook</Link>
-        </div>
-        <div className="grid-pusat mt-6">
-          {loading
-            ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
-            : urutkanTanggal(logs, 'terbaru').slice(0, 6).map(function (l) {
-                return (
-                  <div key={l.id} className="kolom-kartu">
-                    <LogbookCard log={l} onDetail={function () { setDetail(l) }} />
-                  </div>
-                )
-              })}
-          {!loading && !logs.length ? <div className="w-full"><EmptyState title="Belum Ada Logbook Publik" desc="Logbook yang sudah dibagikan akan tampil di sini." /></div> : null}
-        </div>
-        <div className="mt-8 flex justify-center">
-          <Link to="/logbook" className="rounded-xl bg-bsi-800 px-5 py-2.5 text-xs font-bold text-white hover:bg-bsi-900 sm:rounded-2xl sm:px-6 sm:py-3 sm:text-sm">Lihat Semua Logbook</Link>
-        </div>
-      </section>
-
-      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
-        {detail ? <LogbookDetail log={detail} /> : null}
-      </Modal>
     </div>
   )
 }
