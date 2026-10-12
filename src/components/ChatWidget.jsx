@@ -177,7 +177,7 @@ export default function ChatWidget() {
       <div className={'chat-widget-panel' + (open ? ' chat-widget-panel-buka' : '')} role="dialog" aria-hidden={!open}>
         <header className="chat-widget-header">
           <span className="chat-widget-avatar" aria-hidden="true">
-            <img className='rounded-full' src="https://private-user-images.githubusercontent.com/192952054/671082853-ab1c03e0-7407-47d2-ad6c-cc581e12b8cd.jpeg?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3OTE3ODcxMDcsIm5iZiI6MTc5MTc4NjgwNywicGF0aCI6Ii8xOTI5NTIwNTQvNjcxMDgyODUzLWFiMWMwM2UwLTc0MDctNDdkMi1hZDZjLWNjNTgxZTEyYjhjZC5qcGVnP1gtQW16LUFsZ29yaXRobT1BV1M0LUhNQUMtU0hBMjU2JlgtQW16LUNyZWRlbnRpYWw9QUtJQVZDT0RZTFNBNTNQUUs0WkElMkYyMDI2MTAxMiUyRnVzLWVhc3QtMSUyRnMzJTJGYXdzNF9yZXF1ZXN0JlgtQW16LURhdGU9MjAyNjEwMTJUMDYzMzI3WiZYLUFtei1FeHBpcmVzPTMwMCZYLUFtei1TaWduYXR1cmU9NTAzZDA4MjhlMmQwYTc5OGY3NGM0N2UxZDY4NzkxNWVhMGJhMjFlNzBmZGQ1OGRmYmRiMzIwMzljNDgyNjAxNSZYLUFtei1TaWduZWRIZWFkZXJzPWhvc3QmcmVzcG9uc2UtY29udGVudC10eXBlPWltYWdlJTJGanBlZyJ9.pQ7OLQKKx5ApCLCFpJtEfMJTgRK7L9-uLFFNMyTk0wA" alt="avatar-asisten-magang" />
+            <img className='rounded-full' src="avatar-asisten-magang.jpeg" alt="avatar-asisten-magang" />
             {/* <IkonChat /> */}
           </span>
           <div className="chat-widget-title">
