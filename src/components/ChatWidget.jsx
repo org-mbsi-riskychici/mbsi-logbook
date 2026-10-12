@@ -37,17 +37,6 @@ function IkonSend() {
     </svg>
   )
 }
-function IkonMic() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="17" height="17" aria-hidden="true">
-      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-      <line x1="12" y1="19" x2="12" y2="23" />
-      <line x1="8" y1="23" x2="16" y2="23" />
-    </svg>
-  )
-}
-
 export default function ChatWidget() {
   const [open, setOpen] = useState(false)
   const [riwayat, setRiwayat] = useState(function () {
@@ -57,11 +46,8 @@ export default function ChatWidget() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [cooldown, setCooldown] = useState(0)
-  const [listening, setListening] = useState(false)
-  const [micSupported, setMicSupported] = useState(false)
   const [autoScroll, setAutoScroll] = useState(true)
   const refScroll = useRef(null)
-  const refRecognition = useRef(null)
 
   useEffect(function () {
     try { sessionStorage.setItem(KEY_RIWAYAT, JSON.stringify(riwayat)) } catch (e) {}
@@ -76,29 +62,15 @@ export default function ChatWidget() {
     })
   }, [riwayat, busy, error, open, autoScroll])
 
-  function onScrollBody(e) {
-    const el = e.currentTarget
+  /* Deteksi user scroll manual pakai wheel/touchmove saja.
+     Sebelumnya pakai onScroll yang kena trigger oleh auto-scroll
+     programatik, sehingga bisa buat loop autoScroll nyala-mati. */
+  function onWheelBody() {
+    const el = refScroll.current
+    if (!el) return
     const jarak = el.scrollHeight - el.scrollTop - el.clientHeight
     setAutoScroll(jarak < 80)
   }
-
-  useEffect(function () {
-    const SR = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition)
-    if (!SR) return undefined
-    setMicSupported(true)
-    const rec = new SR()
-    rec.lang = 'id-ID'
-    rec.continuous = false
-    rec.interimResults = false
-    rec.onresult = function (e) {
-      const teks = e.results[0][0].transcript
-      setInput(function (prev) { return (prev ? prev + ' ' : '') + teks })
-    }
-    rec.onend = function () { setListening(false) }
-    rec.onerror = function () { setListening(false) }
-    refRecognition.current = rec
-    return function () { try { rec.abort() } catch (e) {} }
-  }, [])
 
   useEffect(function () {
     if (cooldown <= 0) return undefined
@@ -134,17 +106,6 @@ export default function ChatWidget() {
       setInput(teks)
     }
     setBusy(false)
-  }
-
-  function toggleMic() {
-    const rec = refRecognition.current
-    if (!rec) return
-    if (listening) {
-      try { rec.stop() } catch (e) {}
-      setListening(false)
-    } else {
-      try { rec.start(); setListening(true) } catch (e) { setListening(false) }
-    }
   }
 
   function onKeyDown(e) {
@@ -192,7 +153,8 @@ export default function ChatWidget() {
           </button>
         </header>
 
-        <div ref={refScroll} className="chat-widget-body" onScroll={onScrollBody}>
+        <div ref={refScroll} className="chat-widget-body" onWheel={onWheelBody}
+          onTouchMove={onWheelBody}>
           {bubble.map(function (m, i) {
             const dariUser = m.role === 'user'
             return (
@@ -241,18 +203,6 @@ export default function ChatWidget() {
               placeholder={placeholder}
               disabled={terkunci}
             />
-            {micSupported ? (
-              <button
-                type="button"
-                className={'chat-widget-mic' + (listening ? ' chat-widget-mic-aktif' : '')}
-                onClick={toggleMic}
-                title={listening ? 'Hentikan rekaman' : 'Rekam suara'}
-                aria-label="Rekam suara"
-                disabled={terkunci}
-              >
-                <IkonMic />
-              </button>
-            ) : null}
             <button
               type="button"
               className="chat-widget-send"

@@ -1400,7 +1400,7 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
   box-shadow: 0 0 0 3px rgba(39, 192, 109, 0.14);
 }
 .dark .chat-widget-input-wrap {
-  background: #081a13;
+  background: #0b2019;
   border-color: rgba(234, 244, 238, 0.12);
 }
 .chat-widget-input {
@@ -1422,7 +1422,6 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
 .dark .chat-widget-input::placeholder { color: rgba(234, 244, 238, 0.35); }
 .chat-widget-input:disabled { cursor: not-allowed; }
 
-.chat-widget-mic,
 .chat-widget-send {
   display: grid;
   place-items: center;
@@ -1432,20 +1431,6 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
   cursor: pointer;
   flex-shrink: 0;
   transition: background-color 0.15s ease, transform 0.15s ease, color 0.15s ease;
-}
-.chat-widget-mic {
-  background: transparent;
-  color: rgba(15, 42, 29, 0.55);
-}
-.chat-widget-mic:hover { background: rgba(15, 42, 29, 0.08); color: #0f2a1d; }
-.chat-widget-mic-aktif {
-  background: rgba(239, 68, 68, 0.12);
-  color: #dc2626;
-  animation: chatWidgetPulse 1.2s ease-in-out infinite;
-}
-@keyframes chatWidgetPulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.08); }
 }
 .chat-widget-send {
   background: #27c06d;
