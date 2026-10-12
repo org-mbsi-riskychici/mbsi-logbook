@@ -1,8 +1,6 @@
 import { Redis } from '@upstash/redis'
+import { createHash } from 'node:crypto'
 
-/* Klien Redis untuk caching di serverless functions dan Vite dev middleware.
-   Redis.fromEnv() otomatis baca UPSTASH_REDIS_REST_URL dan
-   UPSTASH_REDIS_REST_TOKEN dari environment. */
 let klien = null
 
 export function ambilRedis(env) {
@@ -17,9 +15,6 @@ export function ambilRedis(env) {
   return klien
 }
 
-/* Cache-aside pattern: cek cache dulu, kalau miss panggil fetcher
-   lalu simpan hasilnya ke cache dengan TTL. Kalau Redis down
-   atau env tidak ada, langsung panggil fetcher tanpa error. */
 export async function denganCache(env, kunci, ttlDetik, fetcher) {
   const redis = ambilRedis(env)
   if (!redis) return { data: await fetcher(), dariCache: false }
@@ -42,4 +37,17 @@ export async function denganCache(env, kunci, ttlDetik, fetcher) {
   }
 
   return { data: hasil, dariCache: false }
+}
+
+/* Normalisasi pertanyaan jadi hash pendek untuk kunci cache jawaban.
+   Lowercase + hapus tanda baca + rapikan spasi -> hash SHA-256 -> 16 char.
+   Efeknya: "Risky prodi apa?" dan "risky prodi apa" dianggap sama. */
+export function kunciJawaban(pertanyaan) {
+  const bersih = String(pertanyaan || '')
+    .toLowerCase()
+    .replace(/[^\w\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  const hash = createHash('sha256').update(bersih).digest('hex').slice(0, 16)
+  return 'mbsi:chat:jawaban:v1:' + hash
 }

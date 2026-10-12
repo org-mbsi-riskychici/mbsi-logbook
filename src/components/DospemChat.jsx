@@ -198,7 +198,7 @@ export default function DospemChat() {
           </button>
         </div>
         <p className="mt-2 text-[11px] text-slate-500">
-          Sisa pertanyaan hari ini: <strong>{sisa}</strong> dari {MAKS_HARIAN}. Jawaban berdasarkan data publik tim.
+          Sisa pertanyaan hari ini: <strong>{sisa}</strong> dari {MAKS_HARIAN}. Jawaban berdasarkan data portal.
         </p>
       </div>
     </section>

@@ -1,14 +1,16 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { tanyaDospem } from '../lib/ai.js'
 import { TitikAnim } from './ui.jsx'
 
-const NAMA_ASISTEN = 'Konseling Online'
-const SUBTITLE_ASISTEN = 'Asisten Magang BSI \u2014 online'
-const GREETING = 'Halo! Saya asisten portal magang BSI. Tanya apa saja soal kegiatan tim, kehadiran, atau dokumentasi. Bisa ketik atau rekam suara.'
+const NAMA_ASISTEN = 'Asisten Magang'
+const SUBTITLE_ASISTEN = 'Online'
+const GREETING = 'Hai, aku Asisten Magang disini. Tanya apa aja deh soal kegiatan mahasiswa. Tapi jangan tanya yang lain yaa wkwk'
 const KEY_RIWAYAT = 'mbsi-chat-riwayat'
+const COOLDOWN_NORMAL = 5
+const COOLDOWN_RATE_LIMIT = 30
 const SARAN = [
   'Siapa yang paling sering bolos?',
-  'Ringkas kegiatan tim minggu ini',
+  'Ringkas kegiatan mahasiswa minggu ini',
   'Mahasiswa mana yang paling produktif?'
 ]
 
@@ -54,8 +56,10 @@ export default function ChatWidget() {
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [cooldown, setCooldown] = useState(0)
   const [listening, setListening] = useState(false)
   const [micSupported, setMicSupported] = useState(false)
+  const [autoScroll, setAutoScroll] = useState(true)
   const refScroll = useRef(null)
   const refRecognition = useRef(null)
 
@@ -63,11 +67,20 @@ export default function ChatWidget() {
     try { sessionStorage.setItem(KEY_RIWAYAT, JSON.stringify(riwayat)) } catch (e) {}
   }, [riwayat])
 
-  useEffect(function () {
-    if (open && refScroll.current) {
-      refScroll.current.scrollTop = refScroll.current.scrollHeight
-    }
-  }, [riwayat, busy, open])
+  useLayoutEffect(function () {
+    if (!open) return
+    const el = refScroll.current
+    if (!el || !autoScroll) return
+    requestAnimationFrame(function () {
+      if (el) el.scrollTop = el.scrollHeight
+    })
+  }, [riwayat, busy, error, open, autoScroll])
+
+  function onScrollBody(e) {
+    const el = e.currentTarget
+    const jarak = el.scrollHeight - el.scrollTop - el.clientHeight
+    setAutoScroll(jarak < 80)
+  }
 
   useEffect(function () {
     const SR = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition)
@@ -87,22 +100,36 @@ export default function ChatWidget() {
     return function () { try { rec.abort() } catch (e) {} }
   }, [])
 
+  useEffect(function () {
+    if (cooldown <= 0) return undefined
+    const t = setTimeout(function () {
+      setCooldown(function (c) { return Math.max(0, c - 1) })
+    }, 1000)
+    return function () { clearTimeout(t) }
+  }, [cooldown])
+
   useEffect(function () { if (input) setError('') }, [input])
 
   async function kirim(teksOverride) {
     const teks = (teksOverride != null ? teksOverride : input).trim()
-    if (!teks || busy) return
+    if (!teks || busy || cooldown > 0) return
     setBusy(true)
     setError('')
     const riwayatLama = riwayat
     setRiwayat(riwayatLama.concat([{ role: 'user', content: teks }]))
     setInput('')
+    setAutoScroll(true)
+
     try {
       const r = await tanyaDospem(teks, riwayatLama)
       const jawaban = String(r.jawaban || '').trim() || 'Maaf, tidak ada jawaban.'
       setRiwayat(function (prev) { return prev.concat([{ role: 'assistant', content: jawaban }]) })
+      setCooldown(COOLDOWN_NORMAL)
     } catch (err) {
-      setError(err.message || 'Gagal memanggil AI')
+      const pesan = err.message || 'Gagal memanggil AI'
+      const rateLimit = /terlalu banyak|rate limit|sibuk|429/i.test(pesan)
+      setError(rateLimit ? 'Server AI sedang sibuk. Tunggu ' + COOLDOWN_RATE_LIMIT + ' detik, lalu coba lagi.' : pesan)
+      setCooldown(rateLimit ? COOLDOWN_RATE_LIMIT : COOLDOWN_NORMAL)
       setRiwayat(riwayatLama)
       setInput(teks)
     }
@@ -123,6 +150,7 @@ export default function ChatWidget() {
   function onKeyDown(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
+      if (cooldown > 0) return
       kirim()
     }
   }
@@ -131,17 +159,26 @@ export default function ChatWidget() {
     if (busy) return
     setRiwayat([])
     setError('')
+    setCooldown(0)
     try { sessionStorage.removeItem(KEY_RIWAYAT) } catch (e) {}
   }
 
+  const terkunci = busy || cooldown > 0
   const bubble = riwayat.length ? riwayat : [{ role: 'assistant', content: GREETING }]
+
+  const placeholder = busy
+    ? 'Sedang menganalisis...'
+    : cooldown > 0
+      ? 'Tunggu ' + cooldown + ' detik sebelum kirim lagi'
+      : 'Tulis pertanyaan...'
 
   return (
     <>
       <div className={'chat-widget-panel' + (open ? ' chat-widget-panel-buka' : '')} role="dialog" aria-hidden={!open}>
         <header className="chat-widget-header">
           <span className="chat-widget-avatar" aria-hidden="true">
-            <IkonChat />
+            <img className='rounded-full' src="https://private-user-images.githubusercontent.com/192952054/671082853-ab1c03e0-7407-47d2-ad6c-cc581e12b8cd.jpeg?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3OTE3ODcxMDcsIm5iZiI6MTc5MTc4NjgwNywicGF0aCI6Ii8xOTI5NTIwNTQvNjcxMDgyODUzLWFiMWMwM2UwLTc0MDctNDdkMi1hZDZjLWNjNTgxZTEyYjhjZC5qcGVnP1gtQW16LUFsZ29yaXRobT1BV1M0LUhNQUMtU0hBMjU2JlgtQW16LUNyZWRlbnRpYWw9QUtJQVZDT0RZTFNBNTNQUUs0WkElMkYyMDI2MTAxMiUyRnVzLWVhc3QtMSUyRnMzJTJGYXdzNF9yZXF1ZXN0JlgtQW16LURhdGU9MjAyNjEwMTJUMDYzMzI3WiZYLUFtei1FeHBpcmVzPTMwMCZYLUFtei1TaWduYXR1cmU9NTAzZDA4MjhlMmQwYTc5OGY3NGM0N2UxZDY4NzkxNWVhMGJhMjFlNzBmZGQ1OGRmYmRiMzIwMzljNDgyNjAxNSZYLUFtei1TaWduZWRIZWFkZXJzPWhvc3QmcmVzcG9uc2UtY29udGVudC10eXBlPWltYWdlJTJGanBlZyJ9.pQ7OLQKKx5ApCLCFpJtEfMJTgRK7L9-uLFFNMyTk0wA" alt="avatar-asisten-magang" />
+            {/* <IkonChat /> */}
           </span>
           <div className="chat-widget-title">
             <p className="chat-widget-title-line">{NAMA_ASISTEN}</p>
@@ -155,7 +192,7 @@ export default function ChatWidget() {
           </button>
         </header>
 
-        <div ref={refScroll} className="chat-widget-body">
+        <div ref={refScroll} className="chat-widget-body" onScroll={onScrollBody}>
           {bubble.map(function (m, i) {
             const dariUser = m.role === 'user'
             return (
@@ -167,11 +204,11 @@ export default function ChatWidget() {
             )
           })}
 
-          {!riwayat.length ? (
+          {!riwayat.length && !input ? (
             <div className="chat-widget-saran">
               {SARAN.map(function (s) {
                 return (
-                  <button key={s} type="button" onClick={function () { kirim(s) }} disabled={busy} className="chat-widget-saran-btn">
+                  <button key={s} type="button" onClick={function () { kirim(s) }} disabled={terkunci} className="chat-widget-saran-btn">
                     {s}
                   </button>
                 )
@@ -182,8 +219,8 @@ export default function ChatWidget() {
           {busy ? (
             <div className="chat-widget-row">
               <div className="chat-widget-bubble chat-widget-bubble-ai">
-                <span className="inline-flex items-center gap-1">
-                  <span>Sedang menganalisis</span>
+                <span className="inline-flex items-center">
+                  <span></span>
                   <TitikAnim />
                 </span>
               </div>
@@ -201,8 +238,8 @@ export default function ChatWidget() {
               value={input}
               onChange={function (e) { setInput(e.target.value) }}
               onKeyDown={onKeyDown}
-              placeholder="Tulis pertanyaan..."
-              disabled={busy}
+              placeholder={placeholder}
+              disabled={terkunci}
             />
             {micSupported ? (
               <button
@@ -211,7 +248,7 @@ export default function ChatWidget() {
                 onClick={toggleMic}
                 title={listening ? 'Hentikan rekaman' : 'Rekam suara'}
                 aria-label="Rekam suara"
-                disabled={busy}
+                disabled={terkunci}
               >
                 <IkonMic />
               </button>
@@ -220,11 +257,11 @@ export default function ChatWidget() {
               type="button"
               className="chat-widget-send"
               onClick={function () { kirim() }}
-              disabled={busy || !input.trim()}
-              title="Kirim"
+              disabled={terkunci || !input.trim()}
+              title={cooldown > 0 ? 'Tunggu ' + cooldown + ' detik' : 'Kirim'}
               aria-label="Kirim"
             >
-              <IkonSend />
+              {cooldown > 0 ? String(cooldown) : <IkonSend />}
             </button>
           </div>
           {riwayat.length ? (
@@ -232,7 +269,7 @@ export default function ChatWidget() {
               <button type="button" onClick={reset} className="chat-widget-reset">Mulai ulang percakapan</button>
             </p>
           ) : (
-            <p className="chat-widget-catatan">Jawaban berdasarkan data publik tim.</p>
+            <p className="chat-widget-catatan">Jawaban berdasarkan data portal.</p>
           )}
         </footer>
       </div>

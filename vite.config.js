@@ -7,7 +7,7 @@ import { LIMIT_PER_PROJECT, ptToday, daftarKredensial, getAccessToken } from './
 import { cekSesi, bacaBody } from './api/_lib/sesi.js'
 import { susunLogbookAi } from './api/_lib/ai-provider.js'
 import { jawabPertanyaanDospem } from './api/_lib/dospem-chat.js'
-import { denganCache } from './api/_lib/redis.js'
+import { denganCache, ambilRedis, kunciJawaban } from './api/_lib/redis.js'
 
 function pluginApiR2(env) {
   const s3 = new S3Client({
@@ -240,7 +240,25 @@ function pluginApiAi(env) {
       const riwayat = Array.isArray(body.riwayat) ? body.riwayat.slice(-10) : []
       if (!pertanyaan) { kirim(res, 400, { error: 'Pertanyaan tidak boleh kosong.' }); return }
       if (pertanyaan.length > 500) { kirim(res, 400, { error: 'Pertanyaan terlalu panjang (maks 500 karakter).' }); return }
+
       try {
+        const redis = ambilRedis(env)
+        const bisaPakaiCacheJawaban = riwayat.length === 0
+        const kunci = bisaPakaiCacheJawaban ? kunciJawaban(pertanyaan) : null
+
+        if (kunci && redis) {
+          try {
+            const cached = await redis.get(kunci)
+            if (cached) {
+              console.log('[ai/chat] jawaban dari cache')
+              kirim(res, 200, { jawaban: cached, cache: 'jawaban' })
+              return
+            }
+          } catch (e) {
+            console.warn('[redis] get jawaban gagal:', e.message)
+          }
+        }
+
         const { data: dataTim, dariCache } = await denganCache(
           env,
           'mbsi:chat:konteks:v1',
@@ -258,16 +276,29 @@ function pluginApiAi(env) {
             return { logs: l.data || [], people: p.data || [], gal: g.data || [], hadir: h.data || [] }
           }
         )
-        console.log('[ai/chat] data tim:', dariCache ? 'dari cache' : 'fresh dari Supabase')
+        console.log('[ai/chat] konteks tim:', dariCache ? 'dari cache' : 'fresh dari Supabase')
+
         const jawaban = await jawabPertanyaanDospem(env, {
           pertanyaan: pertanyaan,
           riwayat: riwayat,
           data: dataTim
         })
-        kirim(res, 200, { jawaban: jawaban, cache: dariCache ? 'hit' : 'miss' })
+
+        if (kunci && redis) {
+          try {
+            await redis.set(kunci, jawaban, { ex: 3600 })
+          } catch (e) {
+            console.warn('[redis] set jawaban gagal:', e.message)
+          }
+        }
+
+        kirim(res, 200, { jawaban: jawaban, cache: 'fresh' })
       } catch (err) {
         console.error('[ai/chat]', err)
-        kirim(res, 500, { error: err.message || 'Gagal memanggil AI' })
+        const status = err.statusCode || 500
+        const body2 = { error: err.message || 'Gagal memanggil AI' }
+        if (err.retryAfter) body2.retryAfter = err.retryAfter
+        kirim(res, status, body2)
       }
     })
   }

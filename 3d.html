@@ -1,0 +1,1300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Cozy Ops · Workspace Mockup</title>
+<style>
+  :root{
+    --ink:#4a3f4e;
+    --ink-soft:#7d7183;
+    --card:rgba(255,253,250,0.92);
+    --card-line:rgba(120,100,120,0.14);
+    --accent:#b98ad6;
+    --accent-2:#f0a6bd;
+    --shadow:0 10px 30px rgba(90,70,100,0.16), 0 2px 6px rgba(90,70,100,0.08);
+    --r:18px;
+    --font: ui-rounded, "SF Pro Rounded", "Nunito", "Quicksand", "Segoe UI", system-ui, -apple-system, sans-serif;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;margin:0;}
+  body{font-family:var(--font); color:var(--ink); background:#f4ecf6; overflow:hidden; overscroll-behavior:none;}
+  #wrap{position:fixed; inset:0; overflow:hidden;}
+  canvas{display:block; position:absolute; inset:0; touch-action:none;}
+  .layer{position:absolute; inset:0; pointer-events:none; padding:14px; display:flex; flex-direction:column; gap:10px;}
+  .chip{pointer-events:auto; background:var(--card); border:1px solid var(--card-line); border-radius:999px;
+    box-shadow:var(--shadow); backdrop-filter: blur(12px) saturate(1.2); -webkit-backdrop-filter: blur(12px) saturate(1.2);}
+  .topbar{display:flex; align-items:flex-start; gap:10px; flex-wrap:wrap;}
+  .brand{display:flex; align-items:center; gap:9px; padding:8px 14px 8px 10px; font-weight:700; font-size:14px; letter-spacing:.2px;}
+  .brand .dot{width:10px;height:10px;border-radius:50%;background:linear-gradient(140deg,var(--accent),var(--accent-2));}
+  .badge{font-size:10px; font-weight:800; letter-spacing:.9px; padding:3px 8px; border-radius:999px;
+    background:linear-gradient(140deg,#ffe1ec,#e6dcff); color:#8a5fa8; border:1px solid rgba(160,120,190,.25);}
+  .spacer{flex:1;}
+  .ctrls{display:flex; gap:6px; align-items:center; flex-wrap:wrap; justify-content:flex-end;}
+  button.btn{pointer-events:auto; font-family:var(--font); font-size:13px; font-weight:700; color:var(--ink);
+    background:var(--card); border:1px solid var(--card-line); box-shadow:var(--shadow); border-radius:12px;
+    padding:8px 11px; cursor:pointer; transition:transform .12s ease, background .15s ease, box-shadow .15s;
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); line-height:1;}
+  button.btn:hover{background:#fff; transform:translateY(-1px);}
+  button.btn:active{transform:translateY(0) scale(.97);}
+  button.btn.on{background:linear-gradient(140deg,#f3e2ff,#ffe6f0); border-color:rgba(180,130,210,.4);}
+  .btn.icon{width:36px;height:36px;padding:0;display:grid;place-items:center;font-size:15px;}
+  .legend{pointer-events:auto; align-self:flex-start; width:220px; max-height:min(52vh, 460px); overflow:auto;
+    padding:12px; border-radius:var(--r); background:var(--card); border:1px solid var(--card-line);
+    box-shadow:var(--shadow); backdrop-filter: blur(12px) saturate(1.2); -webkit-backdrop-filter: blur(12px) saturate(1.2);}
+  .legend h3{margin:0 0 8px; font-size:11px; letter-spacing:1.1px; text-transform:uppercase; color:var(--ink-soft);}
+  .legend .row{display:flex; align-items:center; gap:8px; padding:6px 7px; border-radius:10px; cursor:pointer;
+    font-size:12.5px; font-weight:600; transition:background .14s;}
+  .legend .row:hover{background:rgba(180,150,200,.12);}
+  .legend .row.active{background:linear-gradient(100deg,rgba(233,214,255,.7),rgba(255,224,236,.7));}
+  .legend .sw{width:11px;height:11px;border-radius:4px; flex:0 0 auto; box-shadow:inset 0 0 0 1px rgba(0,0,0,.06);}
+  .legend .row small{margin-left:auto; color:var(--ink-soft); font-weight:600; font-size:10.5px;}
+  .legend hr{border:none; border-top:1px dashed rgba(140,120,150,.22); margin:9px 2px;}
+  .legend .note{font-size:10.5px; color:var(--ink-soft); line-height:1.45; font-weight:600;}
+  .inspector{pointer-events:auto; position:absolute; right:14px; top:64px; bottom:14px; width:300px; overflow:auto;
+    border-radius:var(--r); background:var(--card); border:1px solid var(--card-line); box-shadow:var(--shadow);
+    backdrop-filter: blur(14px) saturate(1.2); -webkit-backdrop-filter: blur(14px) saturate(1.2);
+    padding:14px; transform:translateX(calc(100% + 24px)); transition:transform .28s cubic-bezier(.3,.9,.3,1);
+    display:flex; flex-direction:column; gap:11px;}
+  .inspector.show{transform:translateX(0);}
+  .insp-head{display:flex; align-items:flex-start; gap:10px;}
+  .insp-avatar{width:44px;height:44px;border-radius:14px; flex:0 0 auto; display:grid;place-items:center; font-size:20px;
+    box-shadow:inset 0 0 0 2px rgba(255,255,255,.5), 0 3px 8px rgba(120,90,130,.18);}
+  .insp-title{font-size:16px; font-weight:800; line-height:1.15;}
+  .insp-sub{font-size:11.5px; color:var(--ink-soft); font-weight:700; margin-top:2px;}
+  .close-x{margin-left:auto; pointer-events:auto; cursor:pointer; width:26px;height:26px;border-radius:9px;border:none;
+    background:rgba(160,130,170,.12); color:var(--ink-soft); font-size:14px; font-weight:800;
+    display:grid;place-items:center; font-family:var(--font);}
+  .close-x:hover{background:rgba(160,130,170,.22);}
+  .field{display:flex; flex-direction:column; gap:3px;}
+  .field .k{font-size:9.5px; letter-spacing:1px; text-transform:uppercase; color:var(--ink-soft); font-weight:800;}
+  .field .v{font-size:12.5px; font-weight:600; line-height:1.45;}
+  .tag{display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:800; padding:4px 9px;
+    border-radius:999px; background:rgba(190,160,210,.14); color:#7a5f95; width:fit-content;}
+  .tag.warn{background:rgba(255,190,140,.22); color:#a2703a;}
+  .tag.sample{background:rgba(150,190,240,.2); color:#4b6d99;}
+  .insp .samplebar{font-size:10.5px; font-weight:800; letter-spacing:.3px;
+    background:linear-gradient(100deg,rgba(255,231,200,.7),rgba(226,236,255,.7));
+    border:1px dashed rgba(150,130,170,.35); color:#7a6a86; border-radius:12px; padding:8px 10px; line-height:1.4;}
+  .actions{display:flex; gap:7px; flex-wrap:wrap;}
+  .actions button{flex:1 1 auto; min-width:110px; font-family:var(--font); font-size:12px; font-weight:800; color:var(--ink);
+    background:rgba(255,255,255,.75); border:1px solid var(--card-line); border-radius:11px; padding:9px 10px;
+    cursor:pointer; transition:background .14s, transform .1s;}
+  .actions button:hover{background:#fff;}
+  .actions button:active{transform:scale(.97);}
+  .actions button.primary{background:linear-gradient(140deg,#e9d6ff,#ffe0ee); border-color:rgba(180,130,210,.35);}
+  .bars{display:flex; flex-direction:column; gap:8px;}
+  .bar{display:flex; flex-direction:column; gap:4px;}
+  .bar .lbl{display:flex; justify-content:space-between; font-size:10.5px; font-weight:800; color:var(--ink-soft);}
+  .bar .track{height:7px; border-radius:999px; background:rgba(150,130,160,.15); overflow:hidden;}
+  .bar .fill{height:100%; border-radius:999px; background:linear-gradient(90deg,#c9a6e8,#f5aec6); transition:width .4s;}
+  .insidehud{position:absolute; left:50%; bottom:16px; transform:translate(-50%, 130%); pointer-events:auto;
+    display:flex; align-items:center; gap:14px; padding:10px 14px; border-radius:22px;
+    background:var(--card); border:1px solid var(--card-line); box-shadow:var(--shadow);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    transition:transform .3s cubic-bezier(.3,.9,.3,1); max-width:calc(100vw - 28px);}
+  .insidehud.show{transform:translate(-50%, 0);}
+  .dpad{display:grid; grid-template-columns:repeat(3,34px); grid-template-rows:repeat(3,34px); gap:3px;}
+  .dpad button{border:none; border-radius:10px; background:rgba(190,165,210,.16); color:var(--ink);
+    font-size:14px; font-weight:800; cursor:pointer; font-family:var(--font); display:grid; place-items:center;
+    transition:background .12s, transform .1s;}
+  .dpad button:hover{background:rgba(190,165,210,.3);}
+  .dpad button:active{transform:scale(.92);}
+  .dpad .u{grid-area:1/2;} .dpad .l{grid-area:2/1;} .dpad .c{grid-area:2/2; background:transparent; font-size:11px; color:var(--ink-soft);}
+  .dpad .r{grid-area:2/3;} .dpad .d{grid-area:3/2;}
+  .insidehud .meta{display:flex; flex-direction:column; gap:3px; min-width:120px;}
+  .insidehud .meta .t{font-size:13px; font-weight:800;}
+  .insidehud .meta .s{font-size:10.5px; color:var(--ink-soft); font-weight:700; line-height:1.35;}
+  .hint{position:absolute; left:50%; bottom:16px; transform:translateX(-50%); font-size:11px; font-weight:700;
+    color:var(--ink-soft); background:var(--card); padding:7px 14px; border-radius:999px;
+    border:1px solid var(--card-line); box-shadow:var(--shadow); pointer-events:none; white-space:nowrap;
+    max-width:calc(100vw - 28px); overflow:hidden; text-overflow:ellipsis; transition:opacity .3s;}
+  .hint.hide{opacity:0;}
+  @media (max-width: 860px){
+    .legend{display:none;}
+    .inspector{left:14px; right:14px; top:auto; bottom:14px; width:auto; max-height:56vh; transform:translateY(calc(100% + 24px));}
+    .inspector.show{transform:translateY(0);}
+    .insidehud{bottom:14px;}
+    .hint{bottom:14px; font-size:10.5px;}
+    .brand{font-size:13px; padding:7px 12px 7px 9px;}
+    button.btn{padding:7px 9px; font-size:12px;}
+    .btn.icon{width:33px;height:33px;}
+  }
+  @media (max-width: 420px){
+    .brand .txt{display:none;}
+    .brand{padding:8px 10px;}
+  }
+  .legend::-webkit-scrollbar, .inspector::-webkit-scrollbar{width:7px;}
+  .legend::-webkit-scrollbar-thumb, .inspector::-webkit-scrollbar-thumb{background:rgba(160,140,170,.3); border-radius:99px;}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="scene"></canvas>
+  <div class="layer">
+    <div class="topbar">
+      <div class="chip brand">
+        <span class="dot"></span>
+        <span class="txt">Cozy&nbsp;Ops</span>
+        <span class="badge">MOCKUP</span>
+      </div>
+      <div class="spacer"></div>
+      <div class="ctrls">
+        <button class="btn icon" id="rotL" title="Rotate left">↺</button>
+        <button class="btn icon" id="rotR" title="Rotate right">↻</button>
+        <button class="btn icon" id="zoomOut" title="Zoom out">−</button>
+        <button class="btn icon" id="zoomIn" title="Zoom in">+</button>
+        <button class="btn icon" id="sound" title="Toggle sound">🔇</button>
+        <button class="btn" id="resetBtn">Reset</button>
+      </div>
+    </div>
+    <div class="legend" id="legend">
+      <h3>Rooms</h3>
+      <div id="legendList"></div>
+      <hr>
+      <h3>Crew</h3>
+      <div id="crewList"></div>
+      <hr>
+      <div class="note">
+        Everything here is a <b>sample placeholder</b>. No live agent connection, no background tasks.
+        Wandering is decorative only — it never represents real activity.
+      </div>
+    </div>
+  </div>
+  <div class="inspector" id="inspector"></div>
+  <div class="insidehud" id="insideHud">
+    <div class="dpad">
+      <button class="u" data-dir="up">▲</button>
+      <button class="l" data-dir="left">◀</button>
+      <button class="c">◉</button>
+      <button class="r" data-dir="right">▶</button>
+      <button class="d" data-dir="down">▼</button>
+    </div>
+    <div class="meta">
+      <div class="t" id="insideTitle">Room</div>
+      <div class="s" id="insideSub">Arrow keys / WASD also work.<br>Look-around is a mockup of the build-phase feature.</div>
+      <div class="actions" style="margin-top:6px">
+        <button id="stepOut" style="flex:0 0 auto; padding:7px 12px;">Step out</button>
+      </div>
+    </div>
+  </div>
+  <div class="hint" id="hint">Drag to pan · Scroll to zoom · Click a room or character · Right-drag to pan</div>
+</div>
+
+<script>
+(() => {
+"use strict";
+
+const TW = 48, TH = 24, ZH = 26;
+const GRID_W = 26, GRID_H = 20;
+const WALL_H = 0.22;
+const DEN_Z = -17;
+
+const cam = { rot: 0, zoom: 1, fit: 1, panX: 0, panY: 0, tZoom: 1, tPanX: 0, tPanY: 0 };
+let W = 0, H = 0, originX = 0, originY = 0;
+const canvas = document.getElementById('scene');
+const ctx = canvas.getContext('2d');
+
+function rotXY(x, y){
+  const px = x - GRID_W/2, py = y - GRID_H/2;
+  const a = cam.rot * Math.PI/2;
+  const c = Math.cos(a), s = Math.sin(a);
+  return { rx: px*c - py*s, ry: px*s + py*c };
+}
+function project(x, y, z){
+  const { rx, ry } = rotXY(x, y);
+  return { sx: (rx - ry) * (TW/2), sy: (rx + ry) * (TH/2) - z*ZH };
+}
+function P(x, y, z){
+  const p = project(x, y, z || 0);
+  return { x: originX + p.sx*cam.zoom + cam.panX,
+           y: originY + p.sy*cam.zoom + cam.panY };
+}
+function depthOf(x, y){ const { rx, ry } = rotXY(x, y); return rx + ry; }
+
+function sceneBounds(){
+  const pts = [];
+  const main = [[0,0],[GRID_W,0],[0,GRID_H],[GRID_W,GRID_H]];
+  for (const z of [0, 4]) for (const [x,y] of main) pts.push(project(x,y,z));
+  const den = [[8,8],[18,8],[8,16],[18,16]];
+  for (const z of [DEN_Z, DEN_Z+3.5]) for (const [x,y] of den) pts.push(project(x,y,z));
+  let minX=1e9,maxX=-1e9,minY=1e9,maxY=-1e9;
+  for (const p of pts){
+    minX=Math.min(minX,p.sx); maxX=Math.max(maxX,p.sx);
+    minY=Math.min(minY,p.sy); maxY=Math.max(maxY,p.sy);
+  }
+  return {minX,maxX,minY,maxY};
+}
+
+function shade(hex, f){
+  const n = parseInt(hex.slice(1), 16);
+  let r = (n>>16)&255, g = (n>>8)&255, b = n&255;
+  r = Math.max(0, Math.min(255, Math.round(r*f)));
+  g = Math.max(0, Math.min(255, Math.round(g*f)));
+  b = Math.max(0, Math.min(255, Math.round(b*f)));
+  return 'rgb('+r+','+g+','+b+')';
+}
+function rr(g,x,y,w,h,r){
+  r = Math.min(r, Math.abs(w)/2, Math.abs(h)/2);
+  g.beginPath();
+  g.moveTo(x+r,y);
+  g.arcTo(x+w,y,x+w,y+h,r);
+  g.arcTo(x+w,y+h,x,y+h,r);
+  g.arcTo(x,y+h,x,y,r);
+  g.arcTo(x,y,x+w,y,r);
+  g.closePath();
+}
+function poly(g, pts, fill, stroke, lw){
+  g.beginPath();
+  g.moveTo(pts[0].x, pts[0].y);
+  for (let i=1;i<pts.length;i++) g.lineTo(pts[i].x, pts[i].y);
+  g.closePath();
+  if (fill){ g.fillStyle = fill; g.fill(); }
+  if (stroke){ g.strokeStyle = stroke; g.lineWidth = lw||1; g.stroke(); }
+}
+
+const ROOMS = [
+  { id:'sup',    name:"Supervisor's Office", x:0,  y:0,  w:7, h:6,  floor:'#ffe6ee', edge:'#f0b9cd', door:{side:'s', at:3.5} },
+  { id:'atlas',  name:'Project · Atlas',     x:8,  y:0,  w:8, h:6,  floor:'#e4eeff', edge:'#a9c6f0', door:{side:'s', at:4} },
+  { id:'beacon', name:'Project · Beacon',    x:17, y:0,  w:9, h:6,  floor:'#e6f7ea', edge:'#a5d8b4', door:{side:'s', at:4.5} },
+  { id:'lib',    name:'Knowledge Library',   x:0,  y:7,  w:7, h:9,  floor:'#f0e9ff', edge:'#c3b0ec', door:{side:'e', at:4.5} },
+  { id:'cocoa',  name:'Project · Cocoa',     x:8,  y:7,  w:6, h:6,  floor:'#fff2df', edge:'#efc98f', door:{side:'e', at:3} },
+  { id:'atrium', name:'Atrium',              x:15, y:7,  w:6, h:6,  floor:'#fdf7ea', edge:'#e3d5ba', door:null },
+  { id:'cafe',   name:'Café',                x:22, y:7,  w:4, h:6,  floor:'#ffeef0', edge:'#f0b9b9', door:{side:'w', at:3} },
+  { id:'garden', name:'Garden',              x:0,  y:14, w:9, h:6,  floor:'#e9f6e4', edge:'#b6dda6', door:null },
+  { id:'lounge', name:'Lounge',              x:10, y:14, w:7, h:6,  floor:'#fdeeea', edge:'#f0c2b0', door:{side:'n', at:3.5} },
+  { id:'arcade', name:'Arcade',              x:18, y:14, w:8, h:6,  floor:'#efe6ff', edge:'#bda7ec', door:{side:'n', at:4} },
+];
+const DEN = { id:'den', name:'Coordination Den', x:8, y:8, w:10, h:8,
+              floor:'#2b2740', edge:'#4b4368', z:DEN_Z, isDen:true };
+
+const ALL_ROOMS = ROOMS.concat([DEN]);
+const roomById = id => ALL_ROOMS.find(r => r.id === id);
+
+/* ============ FIX: props hanya dibangun sekali ============ */
+const props = [];
+const box   = (x,y,w,d,h,color,z) => props.push({k:'box',x,y,w,d,h,color,z:z||0});
+const rug   = (x,y,w,d,color,z)   => props.push({k:'rug',x,y,w,d,color,z:z||0});
+const plant = (x,y,s,z)           => props.push({k:'plant',x,y,s:s||1,z:z||0});
+const bean  = (x,y,color,z)       => props.push({k:'bean',x,y,color,z:z||0});
+const board = (x,y,color,z)       => props.push({k:'board',x,y,color,z:z||0});
+const steam = (x,y,z)             => props.push({k:'steam',x,y,z:z||0});
+
+function buildWorld(){
+  props.length = 0;
+
+  /* --- Supervisor's Office --- */
+  rug(1.4,3.2, 4.2,2.2, '#f7cddb');
+  box(2.2,1.5, 2.6,1.1, 0.85, '#d9b28c');
+  box(3.0,2.9, 0.9,0.9, 0.55, '#c99a72');
+  box(5.5,0.5, 1.1,0.6, 1.7, '#c9a1d4');
+  plant(0.7,0.7,1);
+  box(0.7,4.7, 1.3,0.9, 0.5, '#e8b7c8');
+  board(6.4,3.2,'#ffd9e6');
+
+  /* --- Atlas --- */
+  rug(9.3,2.6, 5.4,2.6, '#d6e4fb');
+  box(9.5,1.2, 2.4,1.0, 0.85, '#c9a37f');
+  box(12.7,1.2, 2.4,1.0, 0.85, '#c9a37f');
+  box(10.2,2.6, 0.9,0.9, 0.55, '#a8c4ea');
+  box(13.4,2.6, 0.9,0.9, 0.55, '#a8c4ea');
+  board(14.7,0.6,'#dfe9ff');
+  plant(8.6,5.0,1);
+  box(15.1,4.3, 0.9,0.9, 1.2, '#9db8e0');
+
+  /* --- Beacon --- */
+  rug(19.0,2.6, 6.0,2.6, '#d9f0e0');
+  box(18.3,1.2, 3.2,1.1, 0.85, '#c9a37f');
+  box(22.7,1.2, 2.4,1.0, 0.85, '#c9a37f');
+  box(19.0,2.8, 0.9,0.9, 0.55, '#a5d8b4');
+  box(23.6,2.8, 0.9,0.9, 0.55, '#a5d8b4');
+  board(24.8,0.6,'#e2f7e8');
+  plant(25.3,5.0,1);
+  box(17.6,4.6, 1.4,0.7, 1.5, '#a9d6b8');
+
+  /* --- Library --- */
+  rug(2.3,10.6, 3.8,2.6, '#e6dcff');
+  for (let i=0;i<4;i++) box(0.4, 7.6 + i*2.0, 1.0, 1.4, 1.8, '#b79ae0');
+  for (let i=0;i<3;i++) box(5.6, 9.2 + i*2.2, 1.0, 1.5, 1.8, '#b79ae0');
+  box(2.4,10.0, 2.0,1.0, 0.62, '#c9a37f');
+  box(2.3,11.5, 0.8,0.8, 0.5, '#a98ee0');
+  box(3.7,11.5, 0.8,0.8, 0.5, '#a98ee0');
+  plant(0.6,15.0,1);
+
+  /* --- Cocoa --- */
+  rug(9.3,9.2, 4.0,2.4, '#fdeed6');
+  box(9.2,8.2, 2.4,1.0, 0.85, '#c9a37f');
+  box(10.0,9.7, 0.9,0.9, 0.55, '#e8c49a');
+  box(12.6,8.2, 1.6,0.8, 1.6, '#e0b98a');
+  plant(8.6,12.2,1);
+  board(13.2,10.8,'#fff0d6');
+
+  /* --- Atrium --- */
+  rug(16.4,9.0, 3.4,2.6, '#f6ecd6');
+  plant(15.6,7.7,1.2); plant(20.2,7.7,1.2);
+  plant(15.6,12.2,1.2); plant(20.2,12.2,1.2);
+  box(17.5,10.0, 1.6,0.8, 0.5, '#e6d3b0');
+
+  /* --- Café --- */
+  box(22.4,7.6, 3.0,1.0, 0.9, '#e8b9a0');
+  box(22.8,7.9, 0.9,0.6, 1.35, '#c9c9d6');
+  steam(23.25,8.2,0);
+  rug(23.0,10.3, 2.2,2.0, '#ffe0e6');
+  box(23.2,10.5, 1.0,1.0, 0.6, '#f0c8a0');
+  box(22.4,11.9, 0.7,0.7, 0.5, '#f6d6c2');
+  box(24.2,11.9, 0.7,0.7, 0.5, '#f6d6c2');
+  plant(25.4,12.4,1);
+
+  /* --- Garden --- */
+  plant(1.4,15.4,1.6); plant(3.6,15.0,1.3); plant(6.2,15.6,1.7);
+  plant(1.0,18.4,1.2); plant(4.4,18.6,1.5); plant(7.6,18.0,1.3);
+  box(2.6,16.6, 1.6,0.7, 0.5, '#cbb894');
+  box(5.4,16.6, 1.6,0.7, 0.5, '#cbb894');
+  rug(0.3,14.2, 8.4,5.6, '#dcf0d2');
+
+  /* --- Lounge --- */
+  rug(11.0,15.4, 5.0,3.4, '#f6ddd2');
+  bean(11.6,16.0,'#f2b8a0'); bean(13.6,15.6,'#f6cfa8'); bean(15.4,16.4,'#f2b8a0');
+  bean(11.4,18.2,'#e8b0c0'); bean(15.6,18.4,'#e8b0c0');
+  box(13.2,17.4, 1.4,0.9, 0.45, '#d9b894');
+
+  /* --- Arcade --- */
+  rug(19.0,17.4, 5.0,2.4, '#e2d6ff');
+  box(18.6,14.6, 1.0,0.9, 1.9, '#8f7ad6');
+  box(20.2,14.6, 1.0,0.9, 1.9, '#7ac0d6');
+  box(21.8,14.6, 1.0,0.9, 1.9, '#d67ab0');
+  box(20.4,17.6, 1.2,0.7, 0.9, '#a98ee0');
+  bean(24.2,18.6,'#c9b6f0');
+  plant(25.2,15.0,1);
+
+  /* --- Coordination Den --- */
+  const z = DEN.z;
+  rug(11.0,10.6, 4.0,2.6, '#3a3450', z);
+  box(11.0,9.2, 3.0,1.1, 0.9, '#4a4262', z);
+  box(12.3,10.8, 0.9,0.9, 0.6, '#5a5278', z);
+  box(8.6,8.4, 1.2,0.4, 1.7, '#3f3a58', z);
+  box(10.4,8.4, 1.2,0.4, 1.7, '#3f3a58', z);
+  box(12.2,8.4, 1.2,0.4, 1.7, '#3f3a58', z);
+  board(15.2,9.4,'#5a5278', z);
+  box(16.4,12.0, 1.2,1.6, 1.8, '#423c5e', z);
+  plant(16.9,15.0,1, z);
+  denWalls(z);
+
+  /* --- FIX: dinding ruangan utama dibangun SEKALI di sini --- */
+  for (const r of ROOMS) roomWalls(r);
+}
+
+function denWalls(z){
+  const t = 0.25, h = 0.42, c = '#3d3757';
+  box(DEN.x, DEN.y, DEN.w, t, h, c, z);
+  box(DEN.x, DEN.y + DEN.h - t, DEN.w, t, h, c, z);
+  box(DEN.x, DEN.y, t, DEN.h, h, c, z);
+  box(DEN.x + DEN.w - t, DEN.y, t, DEN.h, h, c, z);
+}
+
+function roomWalls(room){
+  const t = 0.2, dw = 2.0, h = WALL_H, c = room.edge, z = room.z || 0;
+  const d = room.door;
+  const cut = (a,b) => {
+    if (!d) return [[a,b]];
+    const c0 = d.at, hh = dw/2;
+    const out = [];
+    if (c0 - hh > a) out.push([a, c0-hh]);
+    if (c0 + hh < b) out.push([c0+hh, b]);
+    return out;
+  };
+  const seg = (side, list, horiz) => {
+    for (const [a,b] of list){
+      if (b - a < 0.05) continue;
+      if (horiz) box(a, side === 'n' ? room.y - t/2 : room.y + room.h - t/2, b-a, t, h, c, z);
+      else box(side === 'w' ? room.x - t/2 : room.x + room.w - t/2, a, t, b-a, h, c, z);
+    }
+  };
+  const nx = (d && d.side === 'n') ? cut(room.x, room.x+room.w) : [[room.x, room.x+room.w]];
+  const sx = (d && d.side === 's') ? cut(room.x, room.x+room.w) : [[room.x, room.x+room.w]];
+  const wy = (d && d.side === 'w') ? cut(room.y, room.y+room.h) : [[room.y, room.y+room.h]];
+  const ey = (d && d.side === 'e') ? cut(room.y, room.y+room.h) : [[room.y, room.y+room.h]];
+  seg('n', nx, true); seg('s', sx, true); seg('w', wy, false); seg('e', ey, false);
+}
+
+/* =========================================================
+   CHARACTERS
+   ========================================================= */
+const CHARS = [
+  { id:'you',    name:'You',            role:'Supervisor',      project:'All projects',  species:'bear',
+    fur:'#f3c98b', outfit:'#e0a86a', room:'sup',     home:{x:3.5,y:2.4},  roam:['sup','atrium','cafe','lib','garden'], speed:1.5 },
+  { id:'nova',   name:'Nova',           role:'Research Agent',  project:'Atlas',         species:'owl',
+    fur:'#cbb7f0', outfit:'#8f7ad6', room:'atlas',   home:{x:10.6,y:2.4}, roam:['atlas','lib','cafe','atrium'],        speed:1.35 },
+  { id:'pip',    name:'Pip',            role:'Build Agent',     project:'Atlas',         species:'bunny',
+    fur:'#a9e0c8', outfit:'#5fb894', room:'atlas',   home:{x:13.8,y:2.4}, roam:['atlas','lounge','cafe','arcade'],     speed:1.7 },
+  { id:'mochi',  name:'Mochi',          role:'Design Agent',    project:'Beacon',        species:'cat',
+    fur:'#ffc9b0', outfit:'#ef8f6e', room:'beacon',  home:{x:20.2,y:2.6}, roam:['beacon','atrium','garden','cafe'],    speed:1.5 },
+  { id:'bramble',name:'Bramble',        role:'Data Agent',      project:'Cocoa',         species:'bear',
+    fur:'#d3a882', outfit:'#a9764c', room:'cocoa',   home:{x:10.2,y:9.6}, roam:['cocoa','lib','cafe','atrium'],        speed:1.15 },
+  { id:'clove',  name:'Clove',          role:'Barista / Host',  project:'—',             species:'bunny',
+    fur:'#ffe4c4', outfit:'#e8a0b4', room:'cafe',    home:{x:23.4,y:8.4}, roam:['cafe'],                               speed:1.1 },
+  { id:'sable',  name:'Sable',          role:'Coordinating Agent', project:'Cross-project', species:'fox',
+    fur:'#8b7fa8', outfit:'#4b4368', room:'den',     home:{x:12.3,y:9.7}, roam:['den'], z:DEN_Z, speed:1.0 },
+];
+
+CHARS.forEach((c, i) => {
+  c.x = c.home.x; c.y = c.home.y;
+  c.tx = c.home.x; c.ty = c.home.y;
+  c.state = 'work';
+  c.facing = 1;
+  c.phase = i * 1.7;
+  c.timer = 4 + Math.random()*8;
+  c._sx = -999; c._sy = -999;
+});
+
+const state = {
+  selected: null, inside: null,
+  focus: { x:12, y:10 }, hover: null,
+  time: 0, sound: false, arcadePulse: 0,
+};
+
+function updateCamera(){
+  const b = sceneBounds();
+  const w = b.maxX - b.minX + 90;
+  const h = b.maxY - b.minY + 90;
+  cam.fit = Math.max(0.26, Math.min(1.35, Math.min(W / w, H / h)));
+  const cx = (b.minX + b.maxX)/2;
+  const cy = (b.minY + b.maxY)/2;
+  /* FIX: hilangkan baris duplikat yang bikin origin dihitung dua kali */
+  originX = W/2 - cx * cam.zoom;
+  originY = H/2 - cy * cam.zoom;
+}
+
+function resetView(){
+  cam.rot = 0;
+  cam.tZoom = cam.fit;
+  cam.tPanX = 0; cam.tPanY = 0;
+  state.inside = null;
+  updateCamera();
+  syncHud();
+}
+function zoomBy(f){
+  cam.tZoom = Math.max(0.22, Math.min(2.6, cam.tZoom * f));
+  if (state.inside) exitInside();
+}
+function focusOn(x, y, zoom, z){
+  const p = project(x, y, z || 0);
+  const b = sceneBounds();
+  const cx = (b.minX + b.maxX)/2, cy = (b.minY + b.maxY)/2;
+  const ox = W/2 - cx * zoom;
+  const oy = H/2 - cy * zoom;
+  cam.tZoom = zoom;
+  cam.tPanX = W/2 - ox - p.sx * zoom;
+  cam.tPanY = H/2 - oy - p.sy * zoom;
+}
+
+/* ============ INPUT ============ */
+let pointers = new Map();
+let dragStart = null, dragging = false, pinchStart = null;
+
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('pointerdown', e => {
+  canvas.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x:e.clientX, y:e.clientY, sx:e.clientX, sy:e.clientY });
+  if (pointers.size === 1){
+    dragStart = { x:e.clientX, y:e.clientY, t:performance.now() };
+    dragging = false;
+  } else if (pointers.size === 2){
+    const p = [...pointers.values()];
+    pinchStart = { d: Math.hypot(p[0].x-p[1].x, p[0].y-p[1].y), zoom: cam.tZoom };
+  }
+});
+canvas.addEventListener('pointermove', e => {
+  const rec = pointers.get(e.pointerId);
+  if (!rec) return;
+  const dx = e.clientX - rec.x, dy = e.clientY - rec.y;
+  if (pointers.size === 2 && pinchStart){
+    rec.x = e.clientX; rec.y = e.clientY;
+    const p = [...pointers.values()];
+    const d = Math.hypot(p[0].x-p[1].x, p[0].y-p[1].y);
+    cam.tZoom = Math.max(0.22, Math.min(2.6, pinchStart.zoom * (d / pinchStart.d)));
+    return;
+  }
+  if (Math.abs(e.clientX - dragStart.x) + Math.abs(e.clientY - dragStart.y) > 6) dragging = true;
+  if (dragging){
+    cam.panX += dx; cam.panY += dy;
+    cam.tPanX = cam.panX; cam.tPanY = cam.panY;
+    if (state.inside) exitInside();
+  }
+  rec.x = e.clientX; rec.y = e.clientY;
+});
+function endPointer(e){
+  const rec = pointers.get(e.pointerId);
+  pointers.delete(e.pointerId);
+  if (pointers.size < 2) pinchStart = null;
+  if (rec && !dragging && performance.now() - (dragStart ? dragStart.t : 0) < 500){
+    handleClick(e.clientX, e.clientY);
+  }
+  if (pointers.size === 0) dragging = false;
+}
+canvas.addEventListener('pointerup', endPointer);
+canvas.addEventListener('pointercancel', e => { pointers.delete(e.pointerId); pinchStart = null; dragging = false; });
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  zoomBy(e.deltaY < 0 ? 1.11 : 0.9);
+  if (state.inside) exitInside();
+}, { passive:false });
+
+function screenToTile(mx, my, zOff){
+  const rect = canvas.getBoundingClientRect();
+  const sx = (mx - rect.left - originX - cam.panX) / cam.zoom;
+  const sy = (my - rect.top - originY - cam.panY) / cam.zoom + (zOff || 0) * ZH;
+  const ix = sx / (TW/2);
+  const iy = sy / (TH/2);
+  const rx = (ix + iy) / 2;
+  const ry = (iy - ix) / 2;
+  const a = cam.rot * Math.PI/2;
+  const c = Math.cos(a), s = Math.sin(a);
+  const px = rx*c + ry*s;
+  const py = -rx*s + ry*c;
+  return { x: px + GRID_W/2, y: py + GRID_H/2 };
+}
+
+function handleClick(mx, my){
+  let best = null, bestD = 34 * Math.max(0.5, cam.zoom);
+  for (const ch of CHARS){
+    const d = Math.hypot(mx - ch._sx, my - ch._sy);
+    if (d < bestD){ bestD = d; best = ch; }
+  }
+  if (best){ select('char', best.id); blip(660); return; }
+  const t = screenToTile(mx, my, 0);
+  for (const r of ROOMS){
+    if (t.x >= r.x && t.x <= r.x+r.w && t.y >= r.y && t.y <= r.y+r.h){
+      select('room', r.id); blip(520); return;
+    }
+  }
+  const tb = screenToTile(mx, my, DEN_Z);
+  if (tb.x >= DEN.x && tb.x <= DEN.x+DEN.w && tb.y >= DEN.y && tb.y <= DEN.y+DEN.h){
+    select('room', 'den'); blip(420); return;
+  }
+  select(null, null);
+}
+function select(type, id){
+  state.selected = type ? { type, id } : null;
+  renderInspector();
+  renderLegend();
+}
+
+function randomSpotIn(roomId){
+  const r = roomById(roomId);
+  if (!r) return { x:12, y:10 };
+  return { x: r.x + 1.1 + Math.random() * (r.w - 2.2),
+           y: r.y + 1.1 + Math.random() * (r.h - 2.2) };
+}
+function updateChars(dt){
+  for (const ch of CHARS){
+    if (ch.state === 'walk'){
+      const dx = ch.tx - ch.x, dy = ch.ty - ch.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < 0.06){
+        ch.x = ch.tx; ch.y = ch.ty;
+        ch.state = 'work';
+        ch.timer = 8 + Math.random() * 16;
+      } else {
+        const step = Math.min(dist, ch.speed * dt);
+        ch.x += dx / dist * step;
+        ch.y += dy / dist * step;
+      }
+    } else {
+      ch.timer -= dt;
+      if (ch.timer <= 0){
+        if (ch.roam.length <= 1){
+          const s = randomSpotIn(ch.room);
+          ch.tx = s.x; ch.ty = s.y;
+        } else {
+          const roll = Math.random();
+          if (roll < 0.55){
+            const s = randomSpotIn(ch.room);
+            ch.tx = s.x; ch.ty = s.y;
+          } else {
+            const dest = ch.roam[Math.floor(Math.random() * ch.roam.length)];
+            const s = randomSpotIn(dest);
+            ch.tx = s.x; ch.ty = s.y;
+          }
+        }
+        ch.state = 'walk';
+      }
+    }
+    const zz = ch.z || 0;
+    const a = P(ch.x, ch.y, zz);
+    const b = P(ch.tx, ch.ty, zz);
+    if (Math.abs(b.x - a.x) > 0.6) ch.facing = Math.sign(b.x - a.x);
+  }
+}
+
+function drawFloorQuad(x, y, w, d, color, z, stroke){
+  const p = [ P(x,y,z), P(x+w,y,z), P(x+w,y+d,z), P(x,y+d,z) ];
+  poly(ctx, p, color, stroke, 1);
+}
+function drawBoxProp(p){
+  const x=p.x, y=p.y, w=p.w, d=p.d, h=p.h, z=p.z, base=p.color;
+  const top = [ P(x,y,z+h), P(x+w,y,z+h), P(x+w,y+d,z+h), P(x,y+d,z+h) ];
+  const bot = [ P(x,y,z), P(x+w,y,z), P(x+w,y+d,z), P(x,y+d,z) ];
+  const faces = [[0,1],[1,2],[2,3],[3,0]];
+  faces.sort((A,B) => {
+    const ay = (bot[A[0]].y + bot[A[1]].y)/2;
+    const by = (bot[B[0]].y + bot[B[1]].y)/2;
+    return ay - by;
+  });
+  const shades = [0.72, 0.82, 0.94, 1.0];
+  faces.forEach((f, i) => {
+    poly(ctx, [ top[f[0]], top[f[1]], bot[f[1]], bot[f[0]] ], shade(base, shades[i]));
+  });
+  poly(ctx, top, shade(base, 1.16));
+}
+function drawRugProp(p){
+  const q = [ P(p.x,p.y,p.z+0.012), P(p.x+p.w,p.y,p.z+0.012),
+              P(p.x+p.w,p.y+p.d,p.z+0.012), P(p.x,p.y+p.d,p.z+0.012) ];
+  poly(ctx, q, p.color);
+  ctx.save();
+  ctx.globalAlpha = 0.35;
+  ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+  ctx.lineWidth = 1.6;
+  const inner = [ P(p.x+0.22,p.y+0.22,p.z+0.013), P(p.x+p.w-0.22,p.y+0.22,p.z+0.013),
+                  P(p.x+p.w-0.22,p.y+p.d-0.22,p.z+0.013), P(p.x+0.22,p.y+p.d-0.22,p.z+0.013) ];
+  poly(ctx, inner, null, 'rgba(255,255,255,0.85)', 1.5);
+  ctx.restore();
+}
+function drawPlantProp(p){
+  const s = p.s, z = p.z;
+  const potH = 0.55 * s;
+  drawBoxProp({ x:p.x, y:p.y, w:0.9*s, d:0.9*s, h:potH, color:'#d8a37c', z });
+  const top = P(p.x + 0.45*s, p.y + 0.45*s, z + potH);
+  const sway = Math.sin(state.time * 1.3 + p.x * 1.7) * 1.6 * cam.zoom;
+  const R = 11 * s * cam.zoom;
+  ctx.save();
+  const greens = ['#8fc98a', '#7ab877', '#a3d69b'];
+  const offs = [[-0.45,0.05], [0.42,-0.1], [0.02,-0.5]];
+  for (let i=0;i<3;i++){
+    ctx.beginPath();
+    ctx.arc(top.x + offs[i][0]*R + sway, top.y - R*0.4 + offs[i][1]*R, R*0.72, 0, Math.PI*2);
+    ctx.fillStyle = greens[i];
+    ctx.fill();
+  }
+  ctx.restore();
+}
+function drawBeanProp(p){
+  const c = P(p.x, p.y, p.z);
+  const R = 15 * cam.zoom;
+  ctx.save();
+  ctx.globalAlpha = 0.2; ctx.fillStyle = '#4a3b46';
+  ctx.beginPath(); ctx.ellipse(c.x, c.y + 3*cam.zoom, R*1.0, R*0.42, 0, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+  ctx.beginPath();
+  ctx.ellipse(c.x, c.y - R*0.34, R, R*0.62, 0, 0, Math.PI*2);
+  ctx.fillStyle = p.color; ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(c.x - R*0.2, c.y - R*0.62, R*0.45, R*0.24, -0.35, 0, Math.PI*2);
+  ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fill();
+}
+function drawBoardProp(p){
+  const z = p.z;
+  drawBoxProp({ x:p.x, y:p.y, w:1.6, d:0.22, h:1.5, color:p.color, z });
+  const a = P(p.x + 0.1, p.y + 0.1, z + 1.5);
+  const b = P(p.x + 1.5, p.y + 0.1, z + 1.5);
+  const c = P(p.x + 1.5, p.y + 0.12, z + 0.5);
+  const d = P(p.x + 0.1, p.y + 0.12, z + 0.5);
+  poly(ctx, [a,b,c,d], 'rgba(255,255,255,0.72)');
+  ctx.save();
+  ctx.globalAlpha = 0.55;
+  ctx.strokeStyle = '#8a7a92'; ctx.lineWidth = 1.2;
+  for (let i=1;i<=3;i++){
+    const t = i/4;
+    ctx.beginPath();
+    ctx.moveTo(a.x + (d.x-a.x)*0.2, a.y + (d.y-a.y)*0.2 + (d.y-a.y)*t*0.8);
+    ctx.lineTo(b.x - (b.x-c.x)*0.2, b.y + (c.y-b.y)*t*0.8);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+function drawSteamProp(p){
+  const base = P(p.x, p.y, p.z + 1.4);
+  ctx.save();
+  for (let i=0;i<3;i++){
+    const t = (state.time * 0.55 + i * 0.33) % 1;
+    const y = base.y - t * 34 * cam.zoom;
+    const x = base.x + Math.sin(t * 6 + i) * 5 * cam.zoom;
+    const r = (3 + t * 7) * cam.zoom;
+    ctx.globalAlpha = (1 - t) * 0.34;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2);
+    ctx.fillStyle = '#ffffff'; ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawCharacter(ch){
+  const z = ch.z || 0;
+  const base = P(ch.x, ch.y, z);
+  ch._sx = base.x; ch._sy = base.y;
+  if (base.x < -80 || base.x > W + 80 || base.y < -80 || base.y > H + 120) return;
+  const s = cam.zoom;
+  const walking = ch.state === 'walk';
+  const bob = walking
+    ? Math.abs(Math.sin(state.time * 7.5 + ch.phase)) * 2.6 * s
+    : Math.sin(state.time * 2.0 + ch.phase) * 1.1 * s;
+  const y = base.y - bob;
+  const f = ch.facing;
+  ctx.save();
+  ctx.globalAlpha = 0.16; ctx.fillStyle = '#4a3b46';
+  ctx.beginPath(); ctx.ellipse(base.x, base.y + 1.5*s, 10.5*s, 4.4*s, 0, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+  const bw = 17*s, bh = 21*s;
+  const bodyTop = y - bh - 6*s;
+  const headR = 9.5*s;
+  const headCY = bodyTop - headR*0.62;
+  ctx.save();
+  ctx.fillStyle = ch.fur;
+  if (ch.species === 'bunny'){
+    for (const sx of [-1,1]){
+      ctx.beginPath();
+      ctx.ellipse(base.x + sx*4.6*s, headCY - headR*1.2, 3.1*s, 6.8*s, sx*0.18, 0, Math.PI*2);
+      ctx.fill();
+    }
+  } else if (ch.species === 'bear'){
+    for (const sx of [-1,1]){
+      ctx.beginPath(); ctx.arc(base.x + sx*7*s, headCY - headR*0.72, 3.9*s, 0, Math.PI*2); ctx.fill();
+    }
+  } else if (ch.species === 'cat' || ch.species === 'fox'){
+    for (const sx of [-1,1]){
+      ctx.beginPath();
+      ctx.moveTo(base.x + sx*3*s, headCY - headR*0.72);
+      ctx.lineTo(base.x + sx*10*s, headCY - headR*1.55);
+      ctx.lineTo(base.x + sx*9.2*s, headCY - headR*0.3);
+      ctx.closePath(); ctx.fill();
+    }
+  } else if (ch.species === 'owl'){
+    for (const sx of [-1,1]){
+      ctx.beginPath();
+      ctx.moveTo(base.x + sx*2.6*s, headCY - headR*0.8);
+      ctx.lineTo(base.x + sx*7.6*s, headCY - headR*1.5);
+      ctx.lineTo(base.x + sx*9*s, headCY - headR*0.55);
+      ctx.closePath(); ctx.fill();
+    }
+  }
+  rr(ctx, base.x - bw/2, bodyTop, bw, bh + 7*s, 6.5*s);
+  ctx.fillStyle = ch.outfit; ctx.fill();
+  ctx.beginPath(); ctx.arc(base.x, headCY, headR, 0, Math.PI*2);
+  ctx.fillStyle = ch.fur; ctx.fill();
+  const ex = f * 2.2 * s;
+  ctx.fillStyle = '#3a2f3a';
+  ctx.beginPath(); ctx.arc(base.x - 3.4*s + ex, headCY + 0.7*s, 1.55*s, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(base.x + 3.4*s + ex, headCY + 0.7*s, 1.55*s, 0, Math.PI*2); ctx.fill();
+  ctx.globalAlpha = 0.45; ctx.fillStyle = '#f2a0b4';
+  ctx.beginPath(); ctx.arc(base.x - 6*s + ex, headCY + 3.6*s, 2*s, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(base.x + 6*s + ex, headCY + 3.6*s, 2*s, 0, Math.PI*2); ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.restore();
+  if (cam.zoom > 0.45){
+    const by = headCY - headR - 13*s;
+    const bx = base.x;
+    ctx.save();
+    ctx.globalAlpha = 0.95;
+    ctx.beginPath(); ctx.arc(bx, by, 7.2*s, 0, Math.PI*2);
+    ctx.fillStyle = '#fffdf9'; ctx.fill();
+    ctx.strokeStyle = 'rgba(140,110,150,0.22)'; ctx.lineWidth = 1; ctx.stroke();
+    const icon = walking ? 'walk' : (ch.room === 'cafe' ? 'cup' : 'work');
+    ctx.strokeStyle = '#8a7a92'; ctx.fillStyle = '#8a7a92'; ctx.lineWidth = 1.3*s;
+    if (icon === 'work'){
+      ctx.beginPath(); ctx.rect(bx - 3.4*s, by - 3*s, 6.8*s, 6*s); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(bx - 3.4*s, by - 1*s); ctx.lineTo(bx + 3.4*s, by - 1*s); ctx.stroke();
+    } else if (icon === 'cup'){
+      ctx.beginPath();
+      ctx.moveTo(bx - 3*s, by - 2*s); ctx.lineTo(bx + 2.2*s, by - 2*s);
+      ctx.lineTo(bx + 1.3*s, by + 3*s); ctx.lineTo(bx - 2.1*s, by + 3*s);
+      ctx.closePath(); ctx.stroke();
+    } else {
+      ctx.beginPath(); ctx.arc(bx, by - 2.6*s, 1.5*s, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(bx - 2*s, by + 3*s); ctx.lineTo(bx + 2*s, by + 3*s); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  if (state.selected && state.selected.type === 'char' && state.selected.id === ch.id){
+    ctx.save();
+    ctx.strokeStyle = 'rgba(185,138,214,0.95)';
+    ctx.lineWidth = 2.4;
+    ctx.setLineDash([5,4]);
+    ctx.beginPath(); ctx.ellipse(base.x, base.y + 1*s, 17*s, 8*s, 0, 0, Math.PI*2); ctx.stroke();
+    ctx.restore();
+  }
+  if (cam.zoom > 0.55 && (state.selected?.id === ch.id || state.hover === ch.id)){
+    ctx.save();
+    ctx.font = '800 11px ' + getComputedStyle(document.body).fontFamily;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const label = ch.name;
+    const tw = ctx.measureText(label).width + 16;
+    rr(ctx, base.x - tw/2, headCY - headR - 32*s, tw, 17, 8);
+    ctx.fillStyle = 'rgba(255,253,250,0.95)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(140,110,150,0.2)'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = '#4a3f4e';
+    ctx.fillText(label, base.x, headCY - headR - 32*s + 9);
+    ctx.restore();
+  }
+}
+
+/* ============ RENDER ============ */
+function render(){
+  ctx.clearRect(0, 0, W, H);
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#f7eef8');
+  bg.addColorStop(0.55, '#f2e9f4');
+  bg.addColorStop(1, '#e9e0ee');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.save();
+
+  drawDen();
+  drawBaseSlab();
+
+  for (const r of ROOMS) drawFloorQuad(r.x, r.y, r.w, r.h, r.floor, 0, null);
+  /* FIX: panggilan roomWalls() dihapus dari sini — sekarang dibangun sekali di buildWorld() */
+
+  const drawList = [];
+  for (const p of props){
+    if (p.k === 'rug' && p.z === 0) drawList.push(p);
+  }
+  drawList.sort((a,b) => depthOf(a.x + a.w/2, a.y + a.d/2) - depthOf(b.x + b.w/2, b.y + b.d/2));
+  for (const p of drawList) drawRugProp(p);
+
+  const items = [];
+  for (const p of props){
+    if (p.k === 'rug') continue;
+    if (p.z !== 0) continue;
+    items.push({ depth: depthOf(p.x + (p.w||1)/2, p.y + (p.d||1)/2), kind:'prop', p });
+  }
+  for (const ch of CHARS){
+    if ((ch.z||0) !== 0) continue;
+    items.push({ depth: depthOf(ch.x, ch.y), kind:'char', ch });
+  }
+  items.sort((a,b) => a.depth - b.depth);
+  for (const it of items){
+    if (it.kind === 'prop') drawProp(it.p);
+    else drawCharacter(it.ch);
+  }
+
+  drawLabels();
+  drawSelectionHalo();
+  if (state.inside) drawInsideVignette();
+  drawFocusRing();
+
+  ctx.restore();
+}
+
+function drawProp(p){
+  switch (p.k){
+    case 'box':   drawBoxProp(p); break;
+    case 'plant': drawPlantProp(p); break;
+    case 'bean':  drawBeanProp(p); break;
+    case 'board': drawBoardProp(p); break;
+    case 'steam': drawSteamProp(p); break;
+    case 'rug':   drawRugProp(p); break;
+  }
+}
+function drawBaseSlab(){
+  drawFloorQuad(0, 0, GRID_W, GRID_H, '#f7efe3', -0.4, null);
+  const q = [ P(0,0,0), P(GRID_W,0,0), P(GRID_W,GRID_H,0), P(0,GRID_H,0) ];
+  poly(ctx, q, null, 'rgba(180,155,175,0.35)', 2);
+}
+function drawDen(){
+  const denActive = (state.selected &&
+      ((state.selected.type === 'room' && state.selected.id === 'den') ||
+       (state.selected.type === 'char' && CHARS.find(c => c.id === state.selected.id)?.room === 'den')))
+    || state.inside === 'den';
+  const c0 = P(DEN.x + DEN.w/2, DEN.y + DEN.h/2, DEN.z);
+  const g = ctx.createRadialGradient(c0.x, c0.y, 10, c0.x, c0.y, 340 * cam.zoom);
+  g.addColorStop(0, denActive ? 'rgba(90,70,120,0.10)' : 'rgba(60,45,80,0.30)');
+  g.addColorStop(1, 'rgba(60,45,80,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.ellipse(c0.x, c0.y + 30*cam.zoom, 400*cam.zoom, 180*cam.zoom, 0, 0, Math.PI*2);
+  ctx.fill();
+  const floorCol = denActive ? '#3b3556' : DEN.floor;
+  drawFloorQuad(DEN.x, DEN.y, DEN.w, DEN.h, floorCol, DEN.z, null);
+  ctx.save();
+  ctx.globalAlpha = denActive ? 0.28 : 0.12;
+  for (let i = 1; i < DEN.w; i++) drawFloorQuad(DEN.x+i, DEN.y, 0.03, DEN.h, '#b9a0e0', DEN.z + 0.01, null);
+  for (let j = 1; j < DEN.h; j++) drawFloorQuad(DEN.x, DEN.y+j, DEN.w, 0.03, '#b9a0e0', DEN.z + 0.01, null);
+  ctx.restore();
+  const items = [];
+  for (const p of props){
+    if (p.z !== DEN.z) continue;
+    if (p.k === 'rug'){ drawRugProp(p); continue; }
+    items.push({ depth: depthOf(p.x + (p.w||1)/2, p.y + (p.d||1)/2), p });
+  }
+  for (const ch of CHARS){
+    if ((ch.z||0) !== DEN.z) continue;
+    items.push({ depth: depthOf(ch.x, ch.y), ch });
+  }
+  items.sort((a,b) => a.depth - b.depth);
+  for (const it of items){
+    if (it.p) drawProp(it.p);
+    else drawCharacter(it.ch);
+  }
+  if (!denActive){
+    ctx.save();
+    ctx.globalAlpha = 0.34;
+    poly(ctx, [ P(DEN.x,DEN.y,DEN.z), P(DEN.x+DEN.w,DEN.y,DEN.z),
+                P(DEN.x+DEN.w,DEN.y+DEN.h,DEN.z), P(DEN.x,DEN.y+DEN.h,DEN.z) ], '#1d1830');
+    ctx.restore();
+  }
+}
+function drawLabels(){
+  if (cam.zoom < 0.42) return;
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const fs = Math.max(9, Math.min(13, 12 * cam.zoom));
+  ctx.font = '800 ' + fs + 'px ' + getComputedStyle(document.body).fontFamily;
+  for (const r of ALL_ROOMS){
+    const c = P(r.x + r.w/2, r.y + r.h/2, (r.z || 0) + 0.02);
+    if (c.x < -120 || c.x > W + 120 || c.y < -40 || c.y > H + 40) continue;
+    const isDen = r.id === 'den';
+    const sel = state.selected && state.selected.type === 'room' && state.selected.id === r.id;
+    const tw = ctx.measureText(r.name).width + 18;
+    rr(ctx, c.x - tw/2, c.y - 10, tw, 20, 10);
+    ctx.fillStyle = isDen
+      ? (sel ? 'rgba(190,165,235,0.92)' : 'rgba(120,105,160,0.72)')
+      : (sel ? 'rgba(255,255,255,0.98)' : 'rgba(255,253,250,0.78)');
+    ctx.fill();
+    ctx.strokeStyle = isDen ? 'rgba(200,180,240,0.4)' : 'rgba(150,130,160,0.18)';
+    ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = isDen ? '#f0eaff' : '#5b4f62';
+    ctx.fillText(r.name, c.x, c.y + 0.5);
+  }
+  ctx.restore();
+}
+function drawSelectionHalo(){
+  if (!state.selected || state.selected.type !== 'room') return;
+  const r = roomById(state.selected.id);
+  if (!r) return;
+  const z = (r.z || 0) + 0.03;
+  const q = [ P(r.x,r.y,z), P(r.x+r.w,r.y,z), P(r.x+r.w,r.y+r.h,z), P(r.x,r.y+r.h,z) ];
+  ctx.save();
+  ctx.strokeStyle = r.id === 'den' ? 'rgba(200,175,245,0.95)' : 'rgba(185,138,214,0.9)';
+  ctx.lineWidth = 2.5;
+  ctx.setLineDash([9,6]);
+  ctx.lineDashOffset = -state.time * 14;
+  poly(ctx, q, null, ctx.strokeStyle, 2.5);
+  ctx.restore();
+}
+function drawInsideVignette(){
+  const r = roomById(state.inside);
+  if (!r) return;
+  ctx.save();
+  const c = P(r.x + r.w/2, r.y + r.h/2, (r.z||0));
+  const g = ctx.createRadialGradient(c.x, c.y, 60 * cam.zoom, c.x, c.y, 520 * cam.zoom);
+  g.addColorStop(0, 'rgba(20,14,30,0)');
+  g.addColorStop(1, 'rgba(20,14,30,0.42)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
+function drawFocusRing(){
+  if (!state.inside) return;
+  const r = roomById(state.inside);
+  const z = (r.z || 0) + 0.05;
+  const c = P(state.focus.x, state.focus.y, z);
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.ellipse(c.x, c.y, 20 * cam.zoom, 10 * cam.zoom, 0, 0, Math.PI*2);
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(185,138,214,0.9)';
+  ctx.beginPath();
+  ctx.ellipse(c.x, c.y, 27 * cam.zoom, 13.5 * cam.zoom, 0, 0, Math.PI*2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+let last = performance.now();
+function loop(now){
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  state.time += dt;
+  cam.zoom += (cam.tZoom - cam.zoom) * Math.min(1, dt * 9);
+  cam.panX += (cam.tPanX - cam.panX) * Math.min(1, dt * 9);
+  cam.panY += (cam.tPanY - cam.panY) * Math.min(1, dt * 9);
+  updateCamera();
+  updateChars(dt);
+  render();
+  requestAnimationFrame(loop);
+}
+
+/* ============ UI ============ */
+const ROOM_DESC = {
+  sup:     { sub:'Your office',        body:'Desk, plant, noticeboard. Your avatar runs a loop: desk work → rounds → break.' },
+  atlas:   { sub:'Project room',       body:'Decision board, two desks, reviewed-work shelf.' },
+  beacon:  { sub:'Project room',       body:'Long table, screens, reviewed-work display.' },
+  cocoa:   { sub:'Project room',       body:'Compact room for the smallest project.' },
+  lib:     { sub:'Knowledge base',     body:'Shelves of notes, reading table. Grows as context accumulates.' },
+  atrium:  { sub:'Connector',          body:'Plants and benches. Characters pass through here.' },
+  cafe:    { sub:'Break area',         body:'Counter, espresso machine, tables, barista.' },
+  garden:  { sub:'Outdoor-ish',        body:'Trees, flowers, benches. Quiet break spot.' },
+  lounge:  { sub:'Break area',         body:'Beanbags and a low table for chatting.' },
+  arcade:  { sub:'Fun',                body:'Cabinets, foosball, neon rug.' },
+  den:     { sub:'Shadowy basement',   body:'Coordinating agent quarters. Brightens when selected.' },
+};
+const CREW_EMOJI = { bear:'🐻', bunny:'🐰', cat:'🐱', fox:'🦊', owl:'🦉' };
+
+function renderLegend(){
+  const rl = document.getElementById('legendList');
+  rl.innerHTML = '';
+  for (const r of ALL_ROOMS){
+    const d = document.createElement('div');
+    d.className = 'row' + (state.selected?.type==='room' && state.selected.id===r.id ? ' active' : '');
+    d.innerHTML = '<span class="sw" style="background:' + (r.id==='den' ? '#4b4368' : r.edge) + '"></span>'
+      + '<span>' + r.name + '</span><small>' + (r.id==='den' ? 'B1' : 'FL1') + '</small>';
+    d.onclick = () => { select('room', r.id); blip(520); };
+    rl.appendChild(d);
+  }
+  const cl = document.getElementById('crewList');
+  cl.innerHTML = '';
+  for (const c of CHARS){
+    const d = document.createElement('div');
+    d.className = 'row' + (state.selected?.type==='char' && state.selected.id===c.id ? ' active' : '');
+    d.innerHTML = '<span class="sw" style="background:' + c.outfit + '"></span>'
+      + '<span>' + c.name + '</span><small>' + (c.project === '—' ? 'host' : c.project) + '</small>';
+    d.onclick = () => { select('char', c.id); blip(660); };
+    cl.appendChild(d);
+  }
+}
+function renderInspector(){
+  const el = document.getElementById('inspector');
+  if (!state.selected){ el.classList.remove('show'); return; }
+  el.classList.add('show');
+  if (state.selected.type === 'char'){
+    const c = CHARS.find(x => x.id === state.selected.id);
+    const r = roomById(c.room);
+    const statusMap = { work:'At workstation (sample)', walk:'Moving between rooms (decorative)' };
+    el.innerHTML = `
+      <div class="insp-head">
+        <div class="insp-avatar" style="background:linear-gradient(140deg,${c.fur},${c.outfit})">${CREW_EMOJI[c.species]||'🐾'}</div>
+        <div><div class="insp-title">${c.name}</div><div class="insp-sub">${c.role}</div></div>
+        <button class="close-x" onclick="window.__closeInsp()">✕</button>
+      </div>
+      <div class="samplebar">SAMPLE CHARACTER — not a live agent. Movement is decorative only and does not represent real work.</div>
+      <div class="field"><span class="k">Assigned project</span><span class="v">${c.project}</span></div>
+      <div class="field"><span class="k">Home room</span><span class="v">${r ? r.name : '—'}</span></div>
+      <div class="field"><span class="k">Current (mock) state</span><span class="tag">${statusMap[c.state]}</span></div>
+      <div class="field"><span class="k">Sample workload</span>
+        <div class="bars">
+          <div class="bar"><div class="lbl"><span>Queue depth</span><span>${(c.name.length*7)%60+20}%</span></div>
+            <div class="track"><div class="fill" style="width:${(c.name.length*7)%60+20}%"></div></div></div>
+          <div class="bar"><div class="lbl"><span>Reviewed this week</span><span>${(c.name.length*11)%70+15}%</span></div>
+            <div class="track"><div class="fill" style="width:${(c.name.length*11)%70+15}%"></div></div></div>
+        </div>
+      </div>
+      <div class="field"><span class="k">Available task status</span><span class="tag warn">NOT CONNECTED · no live task feed</span></div>
+      <div class="actions">
+        <button class="primary" onclick="window.__stepInside('${c.room}')">Step inside room</button>
+        <button onclick="window.__centerOn('${c.id}')">Center camera</button>
+      </div>
+      <div class="field"><span class="k">To make this real</span>
+        <span class="v" style="font-weight:600;color:#7d7183">Wire this panel to an agent API. Each field above is a labelled placeholder.</span></div>
+    `;
+  } else {
+    const r = roomById(state.selected.id);
+    const d = ROOM_DESC[r.id] || { sub:'Room', body:'' };
+    const occupants = CHARS.filter(c => c.room === r.id || (c.roam||[]).includes(r.id));
+    el.innerHTML = `
+      <div class="insp-head">
+        <div class="insp-avatar" style="background:linear-gradient(140deg,${r.id==='den'?'#5a5278':r.edge},${r.floor})">
+          ${r.id==='den' ? '🕯️' : '🏠'}
+        </div>
+        <div><div class="insp-title">${r.name}</div><div class="insp-sub">${d.sub}</div></div>
+        <button class="close-x" onclick="window.__closeInsp()">✕</button>
+      </div>
+      <div class="samplebar">SAMPLE ROOM — contents are placeholders. Nothing here reads from a live project.</div>
+      <div class="field"><span class="k">About</span><span class="v">${d.body}</span></div>
+      <div class="field"><span class="k">Frequent visitors</span>
+        <span class="v">${occupants.length ? occupants.map(c=>c.name).join(', ') : '—'}</span></div>
+      <div class="field"><span class="k">Project context</span>
+        <span class="tag sample">PLACEHOLDER · awaiting your project list</span></div>
+      <div class="field"><span class="k">Available task status</span>
+        <span class="tag warn">NOT CONNECTED</span></div>
+      <div class="actions">
+        <button class="primary" onclick="window.__stepInside('${r.id}')">Step inside</button>
+        <button onclick="window.__centerOn('${r.id}')">Center camera</button>
+      </div>
+    `;
+  }
+}
+window.__closeInsp = () => { select(null, null); };
+window.__centerOn = (id) => {
+  const c = CHARS.find(x => x.id === id);
+  if (c){ focusOn(c.x, c.y, Math.max(1.1, cam.fit*1.9), c.z||0); return; }
+  const r = roomById(id);
+  if (r){ focusOn(r.x + r.w/2, r.y + r.h/2, Math.max(1.0, cam.fit*1.7), r.z||0); }
+};
+window.__stepInside = (roomId) => {
+  const r = roomById(roomId);
+  if (!r) return;
+  state.inside = roomId;
+  state.focus = { x: r.x + r.w/2, y: r.y + r.h/2 };
+  focusOn(state.focus.x, state.focus.y, Math.max(1.5, cam.fit*2.6), r.z||0);
+  document.getElementById('insideTitle').textContent = r.name;
+  syncHud();
+  blip(760);
+};
+function exitInside(){
+  state.inside = null;
+  cam.tPanX = 0; cam.tPanY = 0; cam.tZoom = cam.fit;
+  syncHud();
+}
+function syncHud(){
+  document.getElementById('insideHud').classList.toggle('show', !!state.inside);
+  document.getElementById('hint').classList.toggle('hide', !!state.inside);
+}
+document.getElementById('stepOut').onclick = () => { exitInside(); blip(440); };
+
+function moveFocus(dir){
+  if (!state.inside) return;
+  const r = roomById(state.inside);
+  const a = cam.rot * Math.PI/2;
+  let dx = 0, dy = 0;
+  if (dir === 'up'){ dx = -1; dy = -1; }
+  if (dir === 'down'){ dx = 1; dy = 1; }
+  if (dir === 'left'){ dx = -1; dy = 1; }
+  if (dir === 'right'){ dx = 1; dy = -1; }
+  const c = Math.cos(-a), s = Math.sin(-a);
+  const rx = dx*c - dy*s, ry = dx*s + dy*c;
+  state.focus.x = Math.max(r.x + 0.6, Math.min(r.x + r.w - 0.6, state.focus.x + rx * 0.9));
+  state.focus.y = Math.max(r.y + 0.6, Math.min(r.y + r.h - 0.6, state.focus.y + ry * 0.9));
+  focusOn(state.focus.x, state.focus.y, Math.max(1.5, cam.fit*2.6), r.z||0);
+  blip(560);
+}
+document.querySelectorAll('.dpad button[data-dir]').forEach(b => { b.onclick = () => moveFocus(b.dataset.dir); });
+window.addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if (state.inside){
+    if (k === 'arrowup' || k === 'w'){ e.preventDefault(); moveFocus('up'); }
+    if (k === 'arrowdown' || k === 's'){ e.preventDefault(); moveFocus('down'); }
+    if (k === 'arrowleft' || k === 'a'){ e.preventDefault(); moveFocus('left'); }
+    if (k === 'arrowright' || k === 'd'){ e.preventDefault(); moveFocus('right'); }
+    if (k === 'escape') exitInside();
+  } else {
+    if (k === 'q') rotate(-1);
+    if (k === 'e') rotate(1);
+  }
+});
+function rotate(dir){ cam.rot = (cam.rot + dir + 4) % 4; updateCamera(); blip(500); }
+document.getElementById('rotL').onclick  = () => rotate(-1);
+document.getElementById('rotR').onclick  = () => rotate(1);
+document.getElementById('zoomIn').onclick  = () => zoomBy(1.18);
+document.getElementById('zoomOut').onclick = () => zoomBy(0.85);
+document.getElementById('resetBtn').onclick = () => { resetView(); blip(600); };
+
+/* ============ AUDIO ============ */
+let actx = null, masterGain = null, padFilter = null, padTimer = null, chordIdx = 0;
+const CHORDS = [
+  [130.81, 196.00, 246.94, 329.63],
+  [110.00, 164.81, 220.00, 261.63],
+  [87.31,  174.61, 220.00, 261.63],
+  [98.00,  146.83, 196.00, 246.94],
+];
+function initAudio(){
+  if (actx) return;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return;
+  actx = new AC();
+  masterGain = actx.createGain();
+  masterGain.gain.value = 0;
+  masterGain.connect(actx.destination);
+  padFilter = actx.createBiquadFilter();
+  padFilter.type = 'lowpass';
+  padFilter.frequency.value = 780;
+  padFilter.Q.value = 0.6;
+  padFilter.connect(masterGain);
+  const buf = actx.createBuffer(1, actx.sampleRate * 2, actx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i=0;i<data.length;i++) data[i] = (Math.random()*2-1) * 0.012;
+  const noise = actx.createBufferSource();
+  noise.buffer = buf; noise.loop = true;
+  const nf = actx.createBiquadFilter();
+  nf.type = 'bandpass'; nf.frequency.value = 1400; nf.Q.value = 0.5;
+  const ng = actx.createGain(); ng.gain.value = 0.5;
+  noise.connect(nf); nf.connect(ng); ng.connect(masterGain);
+  noise.start();
+}
+function playChord(){
+  if (!actx) return;
+  const t = actx.currentTime + 0.05;
+  const notes = CHORDS[chordIdx % CHORDS.length];
+  chordIdx++;
+  const dur = 7.5;
+  notes.forEach((f, i) => {
+    const o = actx.createOscillator();
+    o.type = i === 0 ? 'sine' : 'triangle';
+    o.frequency.value = f;
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.055 / (i*0.4+1), t + 1.8);
+    g.gain.linearRampToValueAtTime(0, t + dur);
+    o.connect(g); g.connect(padFilter);
+    o.start(t); o.stop(t + dur + 0.2);
+  });
+}
+function setSound(on){
+  initAudio();
+  if (!actx) return;
+  state.sound = on;
+  if (actx.state === 'suspended') actx.resume();
+  masterGain.gain.cancelScheduledValues(actx.currentTime);
+  masterGain.gain.linearRampToValueAtTime(on ? 0.85 : 0, actx.currentTime + 0.6);
+  if (on && !padTimer){ playChord(); padTimer = setInterval(playChord, 7000); }
+  else if (!on && padTimer){ clearInterval(padTimer); padTimer = null; }
+  document.getElementById('sound').textContent = on ? '🔊' : '🔇';
+  document.getElementById('sound').classList.toggle('on', on);
+}
+document.getElementById('sound').onclick = () => setSound(!state.sound);
+function blip(freq){
+  if (!state.sound || !actx) return;
+  const t = actx.currentTime;
+  const o = actx.createOscillator();
+  o.type = 'sine'; o.frequency.value = freq;
+  const g = actx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.05, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+  o.connect(g); g.connect(masterGain);
+  o.start(t); o.stop(t + 0.2);
+}
+
+function resize(){
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = Math.floor(W * dpr);
+  canvas.height = Math.floor(H * dpr);
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const wasDefault = Math.abs(cam.tZoom - cam.fit) < 0.001;
+  const b = sceneBounds();
+  const w = b.maxX - b.minX + 90;
+  const h = b.maxY - b.minY + 90;
+  cam.fit = Math.max(0.26, Math.min(1.35, Math.min(W / w, H / h)));
+  if (wasDefault || !cam._userZoomed) cam.tZoom = cam.fit;
+  updateCamera();
+}
+let resizeT = null;
+window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(resize, 90); });
+
+buildWorld();
+renderLegend();
+resize();
+cam.zoom = cam.fit;
+cam.tZoom = cam.fit;
+updateCamera();
+requestAnimationFrame(loop);
+setTimeout(() => document.getElementById('hint').classList.add('hide'), 7000);
+
+})();
+</script>
+</body>
+</html>

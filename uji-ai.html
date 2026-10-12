@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI API Tester — Uji API Key & Model AI</title>
+<style>
+  :root {
+    --bg: #0b0d13;
+    --panel: #12151d;
+    --panel-2: #171b26;
+    --border: #232838;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #6366f1;
+    --accent-2: #818cf8;
+    --user: #6366f1;
+    --ai: #1b2030;
+    --error: #ef4444;
+    --success: #22c55e;
+    --warn: #f59e0b;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .app {
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ---------- Sidebar ---------- */
+  .sidebar {
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    padding: 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .sidebar h1 {
+    font-size: 17px;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    letter-spacing: -0.2px;
+  }
+  .sidebar h1::before {
+    content: '';
+    width: 9px; height: 9px;
+    background: var(--accent);
+    border-radius: 50%;
+    box-shadow: 0 0 12px var(--accent);
+    flex: 0 0 auto;
+  }
+
+  .sidebar .sub {
+    color: var(--muted);
+    font-size: 12px;
+    margin: -4px 0 6px 0;
+  }
+
+  label {
+    display: block;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 5px;
+    font-weight: 500;
+  }
+
+  input[type="text"], input[type="password"], select, textarea {
+    width: 100%;
+    padding: 9px 11px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(99,102,241,.15);
+  }
+  textarea { resize: vertical; }
+
+  select {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b93a7' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 30px;
+    cursor: pointer;
+  }
+
+  .field { margin-bottom: 2px; }
+
+  .input-group { position: relative; display: flex; }
+  .input-group input { padding-right: 40px; }
+  .input-group button {
+    position: absolute;
+    right: 4px; top: 4px; bottom: 4px;
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 0 9px;
+    border-radius: 6px;
+    font-size: 14px;
+    line-height: 1;
+  }
+  .input-group button:hover { background: var(--border); color: var(--text); }
+
+  .range-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  input[type="range"] {
+    flex: 1;
+    accent-color: var(--accent);
+  }
+  .range-val {
+    font-size: 12px;
+    color: var(--text);
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px 8px;
+    min-width: 38px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  button {
+    font-family: inherit;
+    cursor: pointer;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    padding: 9px 14px;
+    background: var(--accent);
+    color: white;
+    font-weight: 500;
+    transition: background .15s, opacity .15s, transform .05s;
+  }
+  button:hover:not(:disabled) { background: var(--accent-2); }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+
+  button.secondary {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    width: 100%;
+  }
+  button.secondary:hover { background: var(--border); }
+
+  .hint {
+    font-size: 11px;
+    color: var(--muted);
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-top: auto;
+    line-height: 1.55;
+  }
+  .hint strong { color: var(--text); }
+  .hint code {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 10.5px;
+  }
+
+  /* ---------- Chat ---------- */
+  .chat {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    background: var(--bg);
+  }
+
+  .chat-header {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--panel);
+    flex-wrap: wrap;
+  }
+
+  .status {
+    font-size: 12px;
+    color: var(--muted);
+    padding: 5px 11px;
+    border-radius: 999px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    transition: all .2s;
+  }
+  .status::before {
+    content: '';
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--muted);
+  }
+  .status.loading { color: var(--warn); border-color: rgba(245,158,11,.35); }
+  .status.loading::before { background: var(--warn); animation: pulse 1s infinite; }
+  .status.success { color: var(--success); border-color: rgba(34,197,94,.35); }
+  .status.success::before { background: var(--success); }
+  .status.error { color: var(--error); border-color: rgba(239,68,68,.35); }
+  .status.error::before { background: var(--error); }
+
+  @keyframes pulse { 50% { opacity: .3; } }
+
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 22px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    scroll-behavior: smooth;
+  }
+
+  .empty {
+    margin: auto;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    max-width: 340px;
+  }
+  .empty p { margin: 5px 0; }
+  .empty .big {
+    font-size: 30px;
+    margin-bottom: 10px;
+    filter: grayscale(.3);
+  }
+
+  .msg { display: flex; max-width: 100%; }
+  .msg.user { justify-content: flex-end; }
+  .msg.assistant { justify-content: flex-start; }
+
+  .bubble {
+    max-width: min(760px, 88%);
+    padding: 11px 15px;
+    border-radius: 14px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+    font-size: 13.5px;
+    line-height: 1.6;
+  }
+
+  .msg.user .bubble {
+    background: var(--user);
+    color: white;
+    border-bottom-right-radius: 4px;
+  }
+  .msg.assistant .bubble {
+    background: var(--ai);
+    border: 1px solid var(--border);
+    border-bottom-left-radius: 4px;
+  }
+  .msg.assistant .bubble.error-bubble {
+    border-color: rgba(239,68,68,.5);
+    color: #fca5a5;
+    background: rgba(239,68,68,.06);
+  }
+
+  .bubble.typing::after {
+    content: '▊';
+    animation: blink 1s steps(2) infinite;
+    margin-left: 1px;
+    color: var(--accent-2);
+    font-weight: 300;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .composer {
+    display: flex;
+    gap: 10px;
+    padding: 14px 20px;
+    border-top: 1px solid var(--border);
+    background: var(--panel);
+    align-items: flex-end;
+  }
+  .composer textarea {
+    flex: 1;
+    resize: none;
+    max-height: 180px;
+    min-height: 40px;
+    padding: 10px 12px;
+    line-height: 1.5;
+  }
+  .composer button {
+    height: 40px;
+    padding: 0 20px;
+    flex: 0 0 auto;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 10px;
+    border: 2px solid var(--panel);
+  }
+  ::-webkit-scrollbar-thumb:hover { background: #2f3549; }
+
+  @media (max-width: 860px) {
+    .app {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto 1fr;
+    }
+    .sidebar {
+      border-right: none;
+      border-bottom: 1px solid var(--border);
+      max-height: 55vh;
+      padding: 16px;
+    }
+    .hint { margin-top: 10px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <h1>AI API Tester</h1>
+    <p class="sub">Uji API key & model AI dari berbagai provider.</p>
+
+    <div class="field">
+      <label for="provider">Provider</label>
+      <select id="provider"></select>
+    </div>
+
+    <div class="field">
+      <label for="apiKey">API Key</label>
+      <div class="input-group">
+        <input type="password" id="apiKey" placeholder="Masukkan API key..." autocomplete="off" spellcheck="false">
+        <button type="button" id="toggleKey" title="Tampilkan / sembunyikan">👁</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="model">Model</label>
+      <input type="text" id="model" placeholder="nama model" list="modelList" autocomplete="off" spellcheck="false">
+      <datalist id="modelList"></datalist>
+    </div>
+
+    <div class="field" id="baseUrlWrap" style="display:none">
+      <label for="baseUrl">Base URL</label>
+      <input type="text" id="baseUrl" placeholder="https://.../v1" autocomplete="off" spellcheck="false">
+    </div>
+
+    <div class="field">
+      <label for="system">System Prompt (opsional)</label>
+      <textarea id="system" rows="2" placeholder="You are a helpful assistant."></textarea>
+    </div>
+
+    <div class="field">
+      <label for="temp">Temperature</label>
+      <div class="range-row">
+        <input type="range" id="temp" min="0" max="2" step="0.1" value="0.7">
+        <span class="range-val" id="tempVal">0.7</span>
+      </div>
+    </div>
+
+    <div class="actions" style="margin-top:6px">
+      <button type="button" id="clearBtn" class="secondary">Bersihkan Chat</button>
+    </div>
+
+    <div class="hint">
+      <strong>🔒 Privasi:</strong> API key hanya disimpan di <code>localStorage</code> browser Anda dan dikirim langsung ke provider — tidak lewat server mana pun.<br><br>
+      <strong>ℹ️ Catatan:</strong> Beberapa provider mungkin memblokir request dari browser (CORS). Jika gagal, coba provider lain atau gunakan proxy.
+    </div>
+  </aside>
+
+  <main class="chat">
+    <header class="chat-header">
+      <div id="status" class="status">Siap</div>
+    </header>
+
+    <div id="messages" class="messages">
+      <div class="empty">
+        <div class="big">🧪</div>
+        <p><strong>Belum ada pesan.</strong></p>
+        <p>Isi API key & model di panel kiri, lalu kirim pesan untuk menguji apakah AI berfungsi normal.</p>
+      </div>
+    </div>
+
+    <form id="form" class="composer">
+      <textarea id="input" placeholder="Ketik pesan uji... (Enter kirim, Shift+Enter baris baru)" rows="1"></textarea>
+      <button type="submit" id="sendBtn">Kirim</button>
+    </form>
+  </main>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ============ Provider config ============
+  const PROVIDERS = {
+    gemini: {
+      name: 'Google AI Studio (Gemini)',
+      type: 'gemini',
+      defaultModel: 'gemini-2.0-flash',
+    },
+    groq: {
+      name: 'Groq',
+      type: 'openai',
+      baseUrl: 'https://api.groq.com/openai/v1',
+      defaultModel: 'llama-3.3-70b-versatile',
+    },
+    openai: {
+      name: 'OpenAI',
+      type: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      defaultModel: 'gpt-4o-mini',
+    },
+    anthropic: {
+      name: 'Anthropic (Claude)',
+      type: 'anthropic',
+      defaultModel: 'claude-3-5-sonnet-latest',
+    },
+    openrouter: {
+      name: 'OpenRouter',
+      type: 'openai',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      defaultModel: 'openai/gpt-4o-mini',
+    },
+    mistral: {
+      name: 'Mistral AI',
+      type: 'openai',
+      baseUrl: 'https://api.mistral.ai/v1',
+      defaultModel: 'mistral-small-latest',
+    },
+    together: {
+      name: 'Together AI',
+      type: 'openai',
+      baseUrl: 'https://api.together.xyz/v1',
+      defaultModel: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
+    },
+    deepseek: {
+      name: 'DeepSeek',
+      type: 'openai',
+      baseUrl: 'https://api.deepseek.com/v1',
+      defaultModel: 'deepseek-chat',
+    },
+    custom: {
+      name: 'Custom (OpenAI-compatible)',
+      type: 'openai',
+      baseUrl: '',
+      defaultModel: '',
+      needsBaseUrl: true,
+    },
+  };
+
+  const MODEL_SUGGESTIONS = {
+    gemini: ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-pro', 'gemini-1.5-flash'],
+    groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768', 'gemma2-9b-it'],
+    openai: ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo', 'o1-mini'],
+    anthropic: ['claude-3-5-sonnet-latest', 'claude-3-5-haiku-latest', 'claude-3-opus-latest'],
+    openrouter: [
+      'openai/gpt-4o-mini',
+      'anthropic/claude-3.5-sonnet',
+      'google/gemini-flash-1.5',
+      'meta-llama/llama-3.3-70b-instruct',
+    ],
+    mistral: ['mistral-small-latest', 'mistral-large-latest', 'open-mistral-7b'],
+    together: ['meta-llama/Llama-3.3-70B-Instruct-Turbo', 'meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo'],
+    deepseek: ['deepseek-chat', 'deepseek-reasoner'],
+    custom: [],
+  };
+
+  // ============ DOM refs ============
+  const $ = (id) => document.getElementById(id);
+  const els = {
+    provider: $('provider'),
+    apiKey: $('apiKey'),
+    model: $('model'),
+    modelList: $('modelList'),
+    baseUrl: $('baseUrl'),
+    baseUrlWrap: $('baseUrlWrap'),
+    system: $('system'),
+    temp: $('temp'),
+    tempVal: $('tempVal'),
+    toggleKey: $('toggleKey'),
+    clearBtn: $('clearBtn'),
+    status: $('status'),
+    messages: $('messages'),
+    form: $('form'),
+    input: $('input'),
+    sendBtn: $('sendBtn'),
+  };
+
+  // ============ State ============
+  let history = []; // { role: 'user' | 'assistant', content: string }
+  let lastProvider = null;
+  const STORAGE_KEY = 'ai-api-tester-v1';
+
+  // ============ Init ============
+  function populateProviders() {
+    Object.entries(PROVIDERS).forEach(([key, p]) => {
+      const opt = document.createElement('option');
+      opt.value = key;
+      opt.textContent = p.name;
+      els.provider.appendChild(opt);
+    });
+  }
+
+  function populateModelList(providerKey) {
+    els.modelList.innerHTML = '';
+    (MODEL_SUGGESTIONS[providerKey] || []).forEach((m) => {
+      const opt = document.createElement('option');
+      opt.value = m;
+      els.modelList.appendChild(opt);
+    });
+  }
+
+  function loadSettings() {
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch (_) {}
+
+    const providerKey = saved.provider && PROVIDERS[saved.provider] ? saved.provider : 'gemini';
+    els.provider.value = providerKey;
+    els.apiKey.value = saved.apiKey || '';
+    els.system.value = saved.system || '';
+    els.temp.value = saved.temp ?? '0.7';
+    els.tempVal.textContent = parseFloat(els.temp.value).toFixed(1);
+
+    const p = PROVIDERS[providerKey];
+    els.model.value = saved.model || p.defaultModel || '';
+    els.baseUrl.value = saved.baseUrl || p.baseUrl || '';
+    lastProvider = providerKey;
+
+    populateModelList(providerKey);
+    toggleBaseUrl();
+  }
+
+  function saveSettings() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        provider: els.provider.value,
+        apiKey: els.apiKey.value,
+        model: els.model.value,
+        baseUrl: els.baseUrl.value,
+        system: els.system.value,
+        temp: els.temp.value,
+      }));
+    } catch (_) {}
+  }
+
+  function toggleBaseUrl() {
+    const p = PROVIDERS[els.provider.value];
+    els.baseUrlWrap.style.display = p.needsBaseUrl ? '' : 'none';
+  }
+
+  // ============ UI helpers ============
+  function setStatus(text, type) {
+    els.status.textContent = text;
+    els.status.className = 'status' + (type ? ' ' + type : '');
+  }
+
+  function clearEmptyState() {
+    const empty = els.messages.querySelector('.empty');
+    if (empty) empty.remove();
+  }
+
+  function addMessage(role, content) {
+    clearEmptyState();
+    const wrap = document.createElement('div');
+    wrap.className = 'msg ' + role;
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.textContent = content;
+    wrap.appendChild(bubble);
+    els.messages.appendChild(wrap);
+    scrollToBottom();
+    return bubble;
+  }
+
+  function scrollToBottom() {
+    els.messages.scrollTop = els.messages.scrollHeight;
+  }
+
+  function resetChat() {
+    history = [];
+    els.messages.innerHTML = `
+      <div class="empty">
+        <div class="big">🧪</div>
+        <p><strong>Belum ada pesan.</strong></p>
+        <p>Isi API key & model di panel kiri, lalu kirim pesan untuk menguji apakah AI berfungsi normal.</p>
+      </div>`;
+    setStatus('Siap');
+  }
+
+  // ============ SSE parsing ============
+  async function* sseLines(response) {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let idx;
+        while ((idx = buffer.indexOf('\n')) !== -1) {
+          const line = buffer.slice(0, idx).replace(/\r$/, '');
+          buffer = buffer.slice(idx + 1);
+          yield line;
+        }
+      }
+      if (buffer) yield buffer.replace(/\r$/, '');
+    } finally {
+      try { reader.releaseLock(); } catch (_) {}
+    }
+  }
+
+  // ============ API calls ============
+  async function callGemini({ apiKey, model, onChunk }) {
+    const url =
+      `https://generativelanguage.googleapis.com/v1beta/models/` +
+      `${encodeURIComponent(model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey)}`;
+
+    const contents = history.map((m) => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }],
+    }));
+
+    const body = {
+      contents,
+      generationConfig: { temperature: parseFloat(els.temp.value) },
+    };
+    const sys = els.system.value.trim();
+    if (sys) body.systemInstruction = { parts: [{ text: sys }] };
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new Error(`HTTP ${res.status} ${res.statusText}${txt ? ' — ' + txt.slice(0, 400) : ''}`);
+    }
+
+    let full = '';
+    for await (const line of sseLines(res)) {
+      if (!line.startsWith('data:')) continue;
+      const data = line.slice(5).trim();
+      if (!data || data === '[DONE]') continue;
+      let json;
+      try { json = JSON.parse(data); } catch (_) { continue; }
+      const parts = json.candidates?.[0]?.content?.parts || [];
+      const text = parts.map((p) => p.text || '').join('');
+      if (text) { full += text; onChunk(text); }
+    }
+    return full;
+  }
+
+  async function callOpenAICompatible({ baseUrl, apiKey, model, onChunk }) {
+    const url = baseUrl.replace(/\/+$/, '') + '/chat/completions';
+    const messages = [];
+    const sys = els.system.value.trim();
+    if (sys) messages.push({ role: 'system', content: sys });
+    history.forEach((m) => messages.push({ role: m.role, content: m.content }));
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature: parseFloat(els.temp.value),
+        stream: true,
+      }),
+    });
+
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new Error(`HTTP ${res.status} ${res.statusText}${txt ? ' — ' + txt.slice(0, 400) : ''}`);
+    }
+
+    let full = '';
+    for await (const line of sseLines(res)) {
+      if (!line.startsWith('data:')) continue;
+      const data = line.slice(5).trim();
+      if (!data || data === '[DONE]') continue;
+      let json;
+      try { json = JSON.parse(data); } catch (_) { continue; }
+      const text = json.choices?.[0]?.delta?.content || '';
+      if (text) { full += text; onChunk(text); }
+    }
+    return full;
+  }
+
+  async function callAnthropic({ apiKey, model, onChunk }) {
+    const url = 'https://api.anthropic.com/v1/messages';
+    const messages = history.map((m) => ({ role: m.role, content: m.content }));
+    const body = {
+      model,
+      max_tokens: 4096,
+      messages,
+      temperature: parseFloat(els.temp.value),
+      stream: true,
+    };
+    const sys = els.system.value.trim();
+    if (sys) body.system = sys;
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new Error(`HTTP ${res.status} ${res.statusText}${txt ? ' — ' + txt.slice(0, 400) : ''}`);
+    }
+
+    let full = '';
+    for await (const line of sseLines(res)) {
+      if (!line.startsWith('data:')) continue;
+      const data = line.slice(5).trim();
+      if (!data) continue;
+      let json;
+      try { json = JSON.parse(data); } catch (_) { continue; }
+      if (json.type === 'content_block_delta' && json.delta?.type === 'text_delta') {
+        const text = json.delta.text || '';
+        if (text) { full += text; onChunk(text); }
+      } else if (json.type === 'error') {
+        throw new Error(json.error?.message || 'Anthropic error');
+      }
+    }
+    return full;
+  }
+
+  // ============ Main send handler ============
+  async function handleSend(userText) {
+    const providerKey = els.provider.value;
+    const provider = PROVIDERS[providerKey];
+    const apiKey = els.apiKey.value.trim();
+    const model = els.model.value.trim();
+    const baseUrl = (provider.needsBaseUrl ? els.baseUrl.value : provider.baseUrl || '').trim();
+
+    if (!apiKey) { setStatus('API key belum diisi', 'error'); els.apiKey.focus(); return; }
+    if (!model) { setStatus('Model belum diisi', 'error'); els.model.focus(); return; }
+    if (provider.type === 'openai' && !baseUrl) { setStatus('Base URL belum diisi', 'error'); els.baseUrl.focus(); return; }
+
+    addMessage('user', userText);
+    history.push({ role: 'user', content: userText });
+
+    els.sendBtn.disabled = true;
+    setStatus('Menghubungi ' + provider.name + '...', 'loading');
+
+    const bubble = addMessage('assistant', '');
+    bubble.classList.add('typing');
+
+    let full = '';
+    const onChunk = (t) => {
+      if (bubble.classList.contains('typing')) {
+        // nothing, keep cursor
+      }
+      full += t;
+      bubble.textContent = full;
+      scrollToBottom();
+    };
+
+    try {
+      if (provider.type === 'gemini') {
+        await callGemini({ apiKey, model, onChunk });
+      } else if (provider.type === 'anthropic') {
+        await callAnthropic({ apiKey, model, onChunk });
+      } else {
+        await callOpenAICompatible({ baseUrl, apiKey, model, onChunk });
+      }
+
+      if (!full) {
+        bubble.textContent = '(tidak ada respons teks dari model)';
+        bubble.classList.remove('typing');
+        setStatus('Terhubung, tapi respons kosong', 'error');
+        return;
+      }
+
+      history.push({ role: 'assistant', content: full });
+      setStatus('✓ Berhasil — ' + provider.name + ' (' + model + ')', 'success');
+    } catch (err) {
+      console.error('[AI API Tester] error:', err);
+      bubble.classList.remove('typing');
+      bubble.classList.add('error-bubble');
+
+      let msg = err && err.message ? err.message : String(err);
+      if (msg === 'Failed to fetch' || (err instanceof TypeError)) {
+        msg = 'Gagal terhubung (kemungkinan diblokir CORS atau jaringan bermasalah). Coba provider lain, atau pastikan API key & base URL benar.';
+      }
+      bubble.textContent = '⚠️ Error: ' + msg;
+      setStatus('Gagal: ' + msg.slice(0, 120), 'error');
+
+      // Hapus pesan user terakhir dari history agar tidak mengotori konteks
+      history.pop();
+    } finally {
+      bubble.classList.remove('typing');
+      els.sendBtn.disabled = false;
+      els.input.focus();
+    }
+  }
+
+  // ============ Event bindings ============
+  function bindEvents() {
+    // Provider change
+    els.provider.addEventListener('change', () => {
+      const oldP = lastProvider ? PROVIDERS[lastProvider] : null;
+      const newKey = els.provider.value;
+      const newP = PROVIDERS[newKey];
+
+      // Ganti model default jika field kosong atau masih model default provider sebelumnya
+      if (!els.model.value || (oldP && els.model.value === oldP.defaultModel)) {
+        els.model.value = newP.defaultModel || '';
+      }
+      if (!newP.needsBaseUrl && newP.baseUrl) {
+        els.baseUrl.value = newP.baseUrl;
+      } else if (newP.needsBaseUrl && oldP && els.baseUrl.value === oldP.baseUrl) {
+        els.baseUrl.value = '';
+      }
+
+      lastProvider = newKey;
+      populateModelList(newKey);
+      toggleBaseUrl();
+      saveSettings();
+    });
+
+    // Inputs save
+    ['apiKey', 'model', 'baseUrl', 'system'].forEach((id) => {
+      els[id].addEventListener('input', saveSettings);
+    });
+
+    // Temperature
+    els.temp.addEventListener('input', () => {
+      els.tempVal.textContent = parseFloat(els.temp.value).toFixed(1);
+      saveSettings();
+    });
+
+    // Toggle API key visibility
+    els.toggleKey.addEventListener('click', () => {
+      const isPwd = els.apiKey.type === 'password';
+      els.apiKey.type = isPwd ? 'text' : 'password';
+      els.toggleKey.textContent = isPwd ? '🙈' : '👁';
+    });
+
+    // Clear chat
+    els.clearBtn.addEventListener('click', () => {
+      if (history.length && !confirm('Bersihkan seluruh riwayat chat?')) return;
+      resetChat();
+    });
+
+    // Auto-resize textarea
+    els.input.addEventListener('input', () => {
+      els.input.style.height = 'auto';
+      els.input.style.height = Math.min(els.input.scrollHeight, 180) + 'px';
+    });
+
+    // Enter to send
+    els.input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        els.form.requestSubmit();
+      }
+    });
+
+    // Form submit
+    els.form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (els.sendBtn.disabled) return;
+      const text = els.input.value.trim();
+      if (!text) return;
+      els.input.value = '';
+      els.input.style.height = 'auto';
+      handleSend(text);
+    });
+  }
+
+  // ============ Boot ============
+  populateProviders();
+  loadSettings();
+  bindEvents();
+})();
+</script>
+</body>
+</html>
