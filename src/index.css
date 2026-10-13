@@ -172,7 +172,6 @@ textarea {
   30% { opacity: 1; transform: translateY(-1px) scale(1); }
 }
 
-
 .pemutar-progress::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
@@ -213,7 +212,6 @@ textarea {
   border: 2px solid #fff;
   box-shadow: 0 1px 3px rgba(0,0,0,0.4);
 }
-
 
 /* pusat-pemutar-v4: margin crop 70px menyembunyikan seluruh chrome bawaan YouTube */
 .pemutar-referensi iframe {
@@ -700,7 +698,6 @@ button:active:not(:disabled), a:active, .clickable:active { transition-duration:
   background: #0e241c;
 }
 
-
 /* bayangan lembut hero & kartu (dipakai kelas bsi-shadow / bsi-shadow-sm) */
 .bsi-shadow    { box-shadow: 0 24px 48px -24px rgba(15,42,29,0.25); }
 .bsi-shadow-sm { box-shadow: 0 10px 24px -12px rgba(15,42,29,0.18); }
@@ -741,7 +738,6 @@ body { background-color: #f4f8f4; background-image: linear-gradient(160deg, #dff
 .dark .time-toggle { border-color: rgba(234,244,238,.10); }
 .dark .time-toggle button { color: #9db4a6; }
 .dark .time-toggle button.active { background: #27c06d; color: #06281a; }
-
 
 .pemutar-progress::-webkit-slider-thumb, .pemutar-progress::-moz-range-thumb { background: #1a9e57; }
 .pemutar-volume::-webkit-slider-thumb, .pemutar-volume::-moz-range-thumb { background: #d97706; }
@@ -932,7 +928,6 @@ body { background-color: #f4f8f4; background-image: linear-gradient(160deg, #dff
   }
 }
 
-
 /* tab-scroll-v1: deret tab dashboard jadi satu baris yang bisa digeser horizontal
    di mobile/tablet, tanpa scrollbar terlihat dan dengan gradien tepi sebagai isyarat.
    Di sm ke atas kembali wrap normal supaya tetap rapi di layar lebar. */
@@ -950,7 +945,6 @@ body { background-color: #f4f8f4; background-image: linear-gradient(160deg, #dff
 @media (prefers-reduced-motion: reduce) {
   .tab-scroll { scroll-behavior: auto; }
 }
-
 
 /* tab-fade-smooth-v1: fade tepi nav tab dashboard pakai overlay pseudo-element.
    opacity-nya dianimasikan supaya muncul/hilang mulus, tidak mengandalkan
@@ -1003,7 +997,6 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
   }
 }
 
-
 /* tab-icon-sizeflex: ikon tab sedikit lebih besar di sm ke atas supaya
    seimbang dengan label yang juga membesar (text-xs -> text-sm).
    Nilai height diset juga karena svg punya attr height dari JSX. */
@@ -1019,7 +1012,6 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
     height: 16px;
   }
 }
-
 
 /* avatar-edit-badge: tombol pensil kecil di sudut kanan-bawah avatar,
    pola edit foto profil ala aplikasi sosial media.
@@ -1073,7 +1065,6 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
 }
 .dark .avatar-edit-badge:hover { background: #34d399; }
 
-
 /* descender-fix-v1: heading nama di header dashboard (dan halaman QR)
    sering kepotong descender huruf 'y', 'g', 'p', 'q' karena kombinasi
    overflow: hidden dari utility `truncate` dan line-height Tailwind
@@ -1089,7 +1080,6 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
     margin-bottom: -0.06em;
   }
 }
-
 
 /* quick-header-bigger-v1: halaman /qr fokus ke identitas singkat,
    jadi nama + tanggal sedikit lebih besar dari dashboard pada mobile.
@@ -1562,6 +1552,13 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
 }
 .dark .chat-widget-reset { color: #86ecb0; }
 
+.chat-widget-reset-pill:hover {
+  background: rgba(39, 192, 109, 0.22);
+}
+.dark .dark .chat-widget-reset-pill:hover {
+  background: rgba(39, 192, 109, 0.32);
+}
+
 /* -------- Mobile -------- */
 /* full-mobile-v1: di mobile panel jadi full screen — menempel tepi
    kiri-kanan dan bawah layar, dengan rounded corner hanya di atas.
@@ -1728,4 +1725,53 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
     animation: none !important;
     opacity: 0.75 !important;
   }
+}
+
+/* chat-widget-reset-pill: tombol reset sebagai pill kecil, compact
+   supaya footer tetap 1 baris. Padding ramping agar tinggi total
+   footer tidak bertambah. */
+.chat-widget-reset-pill {
+  text-decoration: none;
+  display: inline-block;
+  padding: 0.18rem 0.7rem;
+  border-radius: 9999px;
+  background: rgba(39, 192, 109, 0.12);
+  color: #177c48;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.4;
+  vertical-align: middle;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.chat-widget-reset-pill:hover {
+  background: rgba(39, 192, 109, 0.22);
+}
+.dark .chat-widget-reset-pill {
+  background: rgba(39, 192, 109, 0.2);
+  color: #86ecb0;
+}
+.dark .chat-widget-reset-pill:hover {
+  background: rgba(39, 192, 109, 0.32);
+}
+
+/* chat-widget-catatan-satu-baris: baris footer gabungan tombol + info
+   cache. Flex supaya tombol & teks sejajar vertical-center tanpa
+   mengubah tinggi baris. */
+.chat-widget-catatan-satu-baris {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+  line-height: 1;
+}
+
+/* chat-widget-info-cache: teks info di sebelah tombol, lebih kecil
+   dan redup supaya tidak bersaing visual dengan tombol. */
+.chat-widget-info-cache {
+  font-size: 0.72rem;
+  opacity: 0.82;
+  line-height: 1.25;
+  font-weight: 500;
 }

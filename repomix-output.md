@@ -2406,239 +2406,6 @@ export async function jawabPertanyaanDospem(env, opts) {
 }
 ````
 
-## File: api/_lib/redis.js
-````javascript
-import { Redis } from '@upstash/redis'
-import { createHash } from 'node:crypto'
-
-let klien = null
-
-export function ambilRedis(env) {
-  if (klien) return klien
-  if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) {
-    return null
-  }
-  klien = new Redis({
-    url: env.UPSTASH_REDIS_REST_URL,
-    token: env.UPSTASH_REDIS_REST_TOKEN
-  })
-  return klien
-}
-
-export async function denganCache(env, kunci, ttlDetik, fetcher) {
-  const redis = ambilRedis(env)
-  if (!redis) return { data: await fetcher(), dariCache: false }
-
-  try {
-    const cached = await redis.get(kunci)
-    if (cached !== null && cached !== undefined) {
-      return { data: cached, dariCache: true }
-    }
-  } catch (e) {
-    console.warn('[redis] get gagal, fallback ke fetcher:', e.message)
-  }
-
-  const hasil = await fetcher()
-
-  try {
-    await redis.set(kunci, hasil, { ex: ttlDetik })
-  } catch (e) {
-    console.warn('[redis] set gagal, dilewati:', e.message)
-  }
-
-  return { data: hasil, dariCache: false }
-}
-
-/* ===== NORMALISASI SLANG CHAT INDONESIA =====
-   Dictionary rename A -> B untuk menyeragamkan penulisan sebelum hash.
-   Semua entry di sini adalah RENAME (bukan delete), jadi tidak menghilangkan
-   kata apapun — hanya merapikan penulisannya. Entry yang membalik maksud
-   (seperti "belum" <-> "sudah") sengaja TIDAK dimasukkan.
-
-   Efeknya:
-     "risky udh isi logbook?"  -> "risky sudah isi logbook"
-     "risky sdh isi logbook?"  -> "risky sudah isi logbook"   (hash sama)
-     "risky sudah isi logbook?" -> "risky sudah isi logbook"  (hash sama)
-
-   Kalau ada entry baru yang mau ditambah, pastikan dia TIDAK multi-makna
-   dan TIDAK membalik maksud pertanyaan. */
-const SLANG = {
-  // ═══ KATA GANTI ORANG ═══
-  gw: 'saya', gua: 'saya', gue: 'saya', aq: 'saya', ak: 'saya', sy: 'saya',
-  km: 'kamu', kmu: 'kamu', kamuh: 'kamu', lu: 'kamu', lo: 'kamu',
-  elo: 'kamu', elu: 'kamu',
-
-  // ═══ KATA TANYA ═══
-  gmn: 'gimana', gmna: 'gimana', gmana: 'gimana', gimna: 'gimana',
-  knp: 'kenapa', knapa: 'kenapa', napa: 'kenapa', kenape: 'kenapa',
-  kpn: 'kapan', kpan: 'kapan',
-  brp: 'berapa', brpa: 'berapa', brapa: 'berapa',
-  dmn: 'di mana', dimna: 'di mana',
-  kmn: 'ke mana', kemna: 'ke mana',
-  drmn: 'dari mana',
-  ngpain: 'ngapain', ngapai: 'ngapain', ngapainn: 'ngapain', ngpainn: 'ngapain',
-
-  // ═══ NEGASI ═══
-  ga: 'tidak', gk: 'tidak', gak: 'tidak', tdk: 'tidak', tak: 'tidak',
-  gada: 'tidak ada', gpp: 'tidak apa-apa', gapapa: 'tidak apa-apa',
-  blm: 'belum', blom: 'belum', belom: 'belum',
-  jgn: 'jangan', jngn: 'jangan',
-
-  // ═══ KONJUNGSI / PREPOSISI ═══
-  dgn: 'dengan', dg: 'dengan', dngn: 'dengan',
-  tp: 'tapi', tpi: 'tapi',
-  krn: 'karena', krna: 'karena', karna: 'karena',
-  jd: 'jadi', jdi: 'jadi',
-  stlh: 'setelah', stelah: 'setelah',
-  sblm: 'sebelum', sblum: 'sebelum',
-  utk: 'untuk', untk: 'untuk',
-  dr: 'dari', drpd: 'daripada',
-  pd: 'pada', pdhal: 'padahal',
-  sm: 'sama', sma: 'sama', smua: 'semua', smw: 'semua',
-
-  // ═══ WAKTU ═══
-  skrg: 'sekarang', skr: 'sekarang', skrng: 'sekarang',
-  kmrn: 'kemarin', kmrin: 'kemarin',
-  bsk: 'besok', bsok: 'besok',
-  hr: 'hari', hri: 'hari', hrini: 'hari ini',
-  tgl: 'tanggal', tnggl: 'tanggal',
-  bln: 'bulan',
-  thn: 'tahun', thun: 'tahun',
-  mgg: 'minggu', mggu: 'minggu',
-  udh: 'sudah', udah: 'sudah', sdh: 'sudah', dah: 'sudah', uda: 'sudah',
-
-  // ═══ KETERANGAN / KATA SIFAT ═══
-  bgt: 'banget', bngt: 'banget',
-  bgtu: 'begitu', bgitu: 'begitu',
-  aj: 'aja', ajah: 'aja', ajh: 'aja', doang: 'aja', doank: 'aja',
-  yg: 'yang', yng: 'yang',
-  jg: 'juga', jga: 'juga',
-  lg: 'lagi', lgi: 'lagi',
-  hrs: 'harus', hrus: 'harus',
-  bs: 'bisa', bsa: 'bisa',
-  prnh: 'pernah', prnah: 'pernah',
-  sll: 'selalu', sllu: 'selalu',
-  srg: 'sering', sring: 'sering',
-  jdl: 'jadwal',
-  trs: 'terus', trus: 'terus',
-
-  // ═══ VERBA UMUM ═══
-  mkn: 'makan', mkan: 'makan',
-  tdr: 'tidur', tdur: 'tidur',
-  msk: 'masuk', msuk: 'masuk',
-  klr: 'keluar', kluar: 'keluar',
-  dtg: 'datang', dtng: 'datang',
-  plg: 'pulang', plng: 'pulang',
-  lht: 'lihat', liat: 'lihat',
-  dpt: 'dapat', dapet: 'dapat',
-  pnya: 'punya',
-  mw: 'mau',
-  pgn: 'pengen', pngn: 'pengen', pengin: 'pengen',
-  gabisa: 'tidak bisa',
-
-  // ═══ SAPAAN / UCAPAN ═══
-  tks: 'terima kasih', thx: 'terima kasih', mksh: 'terima kasih',
-  mksih: 'terima kasih', makasi: 'terima kasih', makasih: 'terima kasih',
-  mf: 'maaf', maap: 'maaf', maf: 'maaf',
-  tlg: 'tolong', tlng: 'tolong',
-  mnt: 'minta', mnta: 'minta',
-  ok: 'oke', okey: 'oke', okay: 'oke', okeh: 'oke',
-  sip: 'oke', sipp: 'oke',
-  iya: 'iya', yup: 'iya', yep: 'iya',
-}
-
-/* ===== NAMA MAHASISWA - KOREKSI TYPO =====
-   Dictionary terpisah dari SLANG karena:
-   1. Nama orang lebih rawan tabrakan (ada 2 orang namanya mirip).
-   2. Gampang dikelola - tinggal tambah/hapus di satu tempat ini saja.
-   3. Kalau typo-nya salah, cukup hapus 1 baris tanpa ganggu slang umum.
-
-   FORMAT:
-     '<typo_yang_sering_muncul>': '<nama_asli_lowercase>',
-
-   ATURAN WAJIB:
-   - Value HARUS persis nama asli yang ada di tabel mahasiswa (lowercase).
-   - Setiap nama WAJIB punya entry self-mapping: 'nama': 'nama'
-     supaya nama yang sudah benar tidak berubah.
-   - Key (typo) tidak boleh sama dengan kata umum Indonesia.
-   - Kalau ada 2 mahasiswa namanya mirip (mis. Risky vs Rizki), JANGAN
-     masukkan typo yang bisa jadi milik keduanya. Biarkan MISS daripada salah.
-
-   CARA TAMBAH NAMA BARU:
-   Copy blok contoh di bawah, ganti nama aslinya, sesuaikan typo-nya.
-   Setelah tambah, WAJIB test: dua nama berbeda harus tetap beda hash. */
-const NAMA_MHS = {
-  // ═══ Risky Wahyu Firmansyah ═══
-  'risky': 'risky',
-  'riski': 'risky',
-  'riskyy': 'risky',
-  'rizki': 'risky',
-  'rizky': 'risky',
-  'rifky': 'risky',
-  'rifki': 'risky',
-
-  // ═══ Dini Awwibi Ramadani ═══
-  'dini': 'dini',
-  'andini': 'dini',
-  'dina': 'dini',
-  'diny': 'dini',
-  'awwibi': 'dini',
-  'awibi': 'dini',
-
-  // ═══ Alvian Hamdalah ═══
-  'alvian': 'alvian',
-  'vian': 'alvian',
-  'fian': 'alvian',
-  'alvin': 'alvian',
-
-  // ═══ Putri Novita Sari ═══
-  'putri': 'putri',
-  'putrii': 'putri',
-  'novita': 'putri',
-
-  // ═══ Khoirul Anwar ═══
-  'khoirul': 'khoirul',
-  'khoir': 'khoirul',
-  'anwar': 'khoirul',
-  'irul': 'khoirul',
-  'irull': 'khoirul',
-  'rull': 'khoirul',
-  'rul': 'khoirul',
-  'rulz': 'khoirul',
-  'rulzz': 'khoirul',
-}
-
-/* Terapkan dictionary SLANG per kata. Kata yang tidak ada di SLANG
-   dibiarkan apa adanya. */
-function normalkanSlang(teks) {
-  return teks
-    .split(' ')
-    .map(function (kata) {
-      // Urutan prioritas: SLANG dulu, baru NAMA_MHS.
-      // Kata umum di SLANG dianggap lebih otoritatif daripada nama.
-      return SLANG[kata] || NAMA_MHS[kata] || kata
-    })
-    .join(' ')
-}
-
-/* Normalisasi pertanyaan jadi hash pendek untuk kunci cache jawaban.
-   Alur: lowercase -> hapus tanda baca -> rapikan spasi -> rename slang
-        -> hash SHA-256 -> potong 16 karakter.
-   Efeknya: "Risky prodi apa?", "risky prodi apa", dan
-   "risky prodi apa dong" (setelah normalisasi slang) menghasilkan
-   hash yang sama. */
-export function kunciJawaban(pertanyaan) {
-  const bersih = String(pertanyaan || '')
-    .toLowerCase()
-    .replace(/[^\w\s]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-  const dirapikan = normalkanSlang(bersih)
-  const hash = createHash('sha256').update(dirapikan).digest('hex').slice(0, 16)
-  return 'mbsi:chat:jawaban:v2:' + hash
-}
-````
-
 ## File: api/r2/file.js
 ````javascript
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
@@ -3241,104 +3008,236 @@ export async function susunLogbookDenganGroq(env, opts) {
 }
 ````
 
-## File: api/ai/chat.js
+## File: api/_lib/redis.js
 ````javascript
-import { createClient } from '@supabase/supabase-js'
-import { jawabPertanyaanDospem } from '../_lib/dospem-chat.js'
-import { denganCache, ambilRedis, kunciJawaban } from '../_lib/redis.js'
+import { Redis } from '@upstash/redis'
+import { createHash } from 'node:crypto'
 
-const MAKS_PERTANYAAN = 500
-const MAKS_RIWAYAT = 10
-const TTL_KONTEKS = 300      // 5 menit
-const TTL_JAWABAN = 1800     // 30 menit
-const KUNCI_KONTEKS = 'mbsi:chat:konteks:v1'
+let klien = null
 
-async function ambilDataTim(env) {
-  const sb = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY)
-  const [l, p, g, h] = await Promise.all([
-    sb.from('logbooks').select('id, mahasiswa_id, tanggal, kategori, judul, logbook_items(judul)')
-      .eq('status', 'publik').order('tanggal', { ascending: false }).limit(200),
-    sb.from('mahasiswa').select('id, nama, nim, prodi').order('nama').limit(50),
-    sb.from('galeri').select('id, mahasiswa_id').limit(500),
-    sb.from('daftar_hadir').select('id, mahasiswa_id, tanggal, status, alasan')
-      .order('tanggal', { ascending: false }).limit(1000)
-  ])
-  return {
-    logs: l.data || [],
-    people: p.data || [],
-    gal: g.data || [],
-    hadir: h.data || []
+export function ambilRedis(env) {
+  if (klien) return klien
+  if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) {
+    return null
   }
+  klien = new Redis({
+    url: env.UPSTASH_REDIS_REST_URL,
+    token: env.UPSTASH_REDIS_REST_TOKEN
+  })
+  return klien
 }
 
-export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
-
-  const body = req.body || {}
-  const pertanyaan = String(body.pertanyaan || '').trim()
-  const riwayat = Array.isArray(body.riwayat) ? body.riwayat.slice(-MAKS_RIWAYAT) : []
-
-  if (!pertanyaan) return res.status(400).json({ error: 'Pertanyaan tidak boleh kosong.' })
-  if (pertanyaan.length > MAKS_PERTANYAAN) {
-    return res.status(400).json({ error: 'Pertanyaan terlalu panjang (maks ' + MAKS_PERTANYAAN + ' karakter).' })
-  }
+export async function denganCache(env, kunci, ttlDetik, fetcher) {
+  const redis = ambilRedis(env)
+  if (!redis) return { data: await fetcher(), dariCache: false }
 
   try {
-    const redis = ambilRedis(process.env)
-    /* Cache jawaban selalu dicek berdasarkan teks pertanyaan, terlepas dari
-       riwayat. Ini krusial: request berulang dengan teks sama tidak akan
-       menyentuh Groq sama sekali, sehingga TPM limit tidak tergerus.
-       Riwayat tetap dikirim ke AI saat cache MISS supaya jawaban follow-up
-       tetap kontekstual. */
-    const kunci = kunciJawaban(pertanyaan)
-
-    /* Lapis 2: cache jawaban AI */
-    if (kunci && redis) {
-      try {
-        const cached = await redis.get(kunci)
-        if (cached) {
-          console.log('[ai/chat] jawaban dari cache')
-          return res.status(200).json({ jawaban: cached, cache: 'jawaban' })
-        }
-      } catch (e) {
-        console.warn('[redis] get jawaban gagal:', e.message)
-      }
+    const cached = await redis.get(kunci)
+    if (cached !== null && cached !== undefined) {
+      return { data: cached, dariCache: true }
     }
-
-    /* Lapis 1: cache konteks Supabase */
-    const { data: dataTim, dariCache } = await denganCache(
-      process.env,
-      KUNCI_KONTEKS,
-      TTL_KONTEKS,
-      function () { return ambilDataTim(process.env) }
-    )
-    console.log('[ai/chat] konteks tim:', dariCache ? 'dari cache' : 'fresh dari Supabase')
-
-    /* Panggil Groq */
-    const jawaban = await jawabPertanyaanDospem(process.env, {
-      pertanyaan: pertanyaan,
-      riwayat: riwayat,
-      data: dataTim
-    })
-
-    /* Simpan jawaban ke cache supaya request berikutnya dengan pertanyaan
-       yang sama (walau sudah ada riwayat) langsung HIT. */
-    if (kunci && redis) {
-      try {
-        await redis.set(kunci, jawaban, { ex: TTL_JAWABAN })
-      } catch (e) {
-        console.warn('[redis] set jawaban gagal:', e.message)
-      }
-    }
-
-    return res.status(200).json({ jawaban: jawaban, cache: 'fresh' })
-  } catch (err) {
-    console.error('[ai/chat]', err)
-    const status = err.statusCode || 500
-    const body = { error: err.message || 'Gagal memanggil AI' }
-    if (err.retryAfter) body.retryAfter = err.retryAfter
-    return res.status(status).json(body)
+  } catch (e) {
+    console.warn('[redis] get gagal, fallback ke fetcher:', e.message)
   }
+
+  const hasil = await fetcher()
+
+  try {
+    await redis.set(kunci, hasil, { ex: ttlDetik })
+  } catch (e) {
+    console.warn('[redis] set gagal, dilewati:', e.message)
+  }
+
+  return { data: hasil, dariCache: false }
+}
+
+/* ===== NORMALISASI SLANG CHAT INDONESIA =====
+   Dictionary rename A -> B untuk menyeragamkan penulisan sebelum hash.
+   Semua entry di sini adalah RENAME (bukan delete), jadi tidak menghilangkan
+   kata apapun — hanya merapikan penulisannya. Entry yang membalik maksud
+   (seperti "belum" <-> "sudah") sengaja TIDAK dimasukkan.
+
+   Efeknya:
+     "risky udh isi logbook?"  -> "risky sudah isi logbook"
+     "risky sdh isi logbook?"  -> "risky sudah isi logbook"   (hash sama)
+     "risky sudah isi logbook?" -> "risky sudah isi logbook"  (hash sama)
+
+   Kalau ada entry baru yang mau ditambah, pastikan dia TIDAK multi-makna
+   dan TIDAK membalik maksud pertanyaan. */
+const SLANG = {
+  // ═══ KATA GANTI ORANG ═══
+  gw: 'saya', gua: 'saya', gue: 'saya', aq: 'saya', ak: 'saya', sy: 'saya',
+  km: 'kamu', kmu: 'kamu', kamuh: 'kamu', lu: 'kamu', lo: 'kamu',
+  elo: 'kamu', elu: 'kamu',
+
+  // ═══ KATA TANYA ═══
+  gmn: 'gimana', gmna: 'gimana', gmana: 'gimana', gimna: 'gimana',
+  knp: 'kenapa', knapa: 'kenapa', napa: 'kenapa', kenape: 'kenapa',
+  kpn: 'kapan', kpan: 'kapan',
+  brp: 'berapa', brpa: 'berapa', brapa: 'berapa',
+  dmn: 'di mana', dimna: 'di mana',
+  kmn: 'ke mana', kemna: 'ke mana',
+  drmn: 'dari mana',
+  ngpain: 'ngapain', ngapai: 'ngapain', ngapainn: 'ngapain', ngpainn: 'ngapain',
+
+  // ═══ NEGASI ═══
+  ga: 'tidak', gk: 'tidak', gak: 'tidak', tdk: 'tidak', tak: 'tidak',
+  gada: 'tidak ada', gpp: 'tidak apa-apa', gapapa: 'tidak apa-apa',
+  blm: 'belum', blom: 'belum', belom: 'belum',
+  jgn: 'jangan', jngn: 'jangan',
+
+  // ═══ KONJUNGSI / PREPOSISI ═══
+  dgn: 'dengan', dg: 'dengan', dngn: 'dengan',
+  tp: 'tapi', tpi: 'tapi',
+  krn: 'karena', krna: 'karena', karna: 'karena',
+  jd: 'jadi', jdi: 'jadi',
+  stlh: 'setelah', stelah: 'setelah',
+  sblm: 'sebelum', sblum: 'sebelum',
+  utk: 'untuk', untk: 'untuk',
+  dr: 'dari', drpd: 'daripada',
+  pd: 'pada', pdhal: 'padahal',
+  sm: 'sama', sma: 'sama', smua: 'semua', smw: 'semua',
+
+  // ═══ WAKTU ═══
+  skrg: 'sekarang', skr: 'sekarang', skrng: 'sekarang',
+  kmrn: 'kemarin', kmrin: 'kemarin',
+  bsk: 'besok', bsok: 'besok',
+  hr: 'hari', hri: 'hari', hrini: 'hari ini',
+  tgl: 'tanggal', tnggl: 'tanggal',
+  bln: 'bulan',
+  thn: 'tahun', thun: 'tahun',
+  mgg: 'minggu', mggu: 'minggu',
+  udh: 'sudah', udah: 'sudah', sdh: 'sudah', dah: 'sudah', uda: 'sudah',
+
+  // ═══ KETERANGAN / KATA SIFAT ═══
+  bgt: 'banget', bngt: 'banget',
+  bgtu: 'begitu', bgitu: 'begitu',
+  aj: 'aja', ajah: 'aja', ajh: 'aja', doang: 'aja', doank: 'aja',
+  yg: 'yang', yng: 'yang',
+  jg: 'juga', jga: 'juga',
+  lg: 'lagi', lgi: 'lagi',
+  hrs: 'harus', hrus: 'harus',
+  bs: 'bisa', bsa: 'bisa',
+  prnh: 'pernah', prnah: 'pernah',
+  sll: 'selalu', sllu: 'selalu',
+  srg: 'sering', sring: 'sering',
+  jdl: 'jadwal',
+  trs: 'terus', trus: 'terus',
+
+  // ═══ VERBA UMUM ═══
+  mkn: 'makan', mkan: 'makan',
+  tdr: 'tidur', tdur: 'tidur',
+  msk: 'masuk', msuk: 'masuk',
+  klr: 'keluar', kluar: 'keluar',
+  dtg: 'datang', dtng: 'datang',
+  plg: 'pulang', plng: 'pulang',
+  lht: 'lihat', liat: 'lihat',
+  dpt: 'dapat', dapet: 'dapat',
+  pnya: 'punya',
+  mw: 'mau',
+  pgn: 'pengen', pngn: 'pengen', pengin: 'pengen',
+  gabisa: 'tidak bisa',
+
+  // ═══ SAPAAN / UCAPAN ═══
+  tks: 'terima kasih', thx: 'terima kasih', mksh: 'terima kasih',
+  mksih: 'terima kasih', makasi: 'terima kasih', makasih: 'terima kasih',
+  mf: 'maaf', maap: 'maaf', maf: 'maaf',
+  tlg: 'tolong', tlng: 'tolong',
+  mnt: 'minta', mnta: 'minta',
+  ok: 'oke', okey: 'oke', okay: 'oke', okeh: 'oke',
+  sip: 'oke', sipp: 'oke',
+  iya: 'iya', yup: 'iya', yep: 'iya',
+}
+
+/* ===== NAMA MAHASISWA - KOREKSI TYPO =====
+   Dictionary terpisah dari SLANG karena:
+   1. Nama orang lebih rawan tabrakan (ada 2 orang namanya mirip).
+   2. Gampang dikelola - tinggal tambah/hapus di satu tempat ini saja.
+   3. Kalau typo-nya salah, cukup hapus 1 baris tanpa ganggu slang umum.
+
+   FORMAT:
+     '<typo_yang_sering_muncul>': '<nama_asli_lowercase>',
+
+   ATURAN WAJIB:
+   - Value HARUS persis nama asli yang ada di tabel mahasiswa (lowercase).
+   - Setiap nama WAJIB punya entry self-mapping: 'nama': 'nama'
+     supaya nama yang sudah benar tidak berubah.
+   - Key (typo) tidak boleh sama dengan kata umum Indonesia.
+   - Kalau ada 2 mahasiswa namanya mirip (mis. Risky vs Rizki), JANGAN
+     masukkan typo yang bisa jadi milik keduanya. Biarkan MISS daripada salah.
+
+   CARA TAMBAH NAMA BARU:
+   Copy blok contoh di bawah, ganti nama aslinya, sesuaikan typo-nya.
+   Setelah tambah, WAJIB test: dua nama berbeda harus tetap beda hash. */
+const NAMA_MHS = {
+  // ═══ Risky Wahyu Firmansyah ═══
+  'risky': 'risky',
+  'riski': 'risky',
+  'riskyy': 'risky',
+  'rizki': 'risky',
+  'rizky': 'risky',
+  'rifky': 'risky',
+  'rifki': 'risky',
+
+  // ═══ Dini Awwibi Ramadani ═══
+  'dini': 'dini',
+  'andini': 'dini',
+  'dina': 'dini',
+  'diny': 'dini',
+  'awwibi': 'dini',
+  'awibi': 'dini',
+
+  // ═══ Alvian Hamdalah ═══
+  'alvian': 'alvian',
+  'vian': 'alvian',
+  'fian': 'alvian',
+  'alvin': 'alvian',
+
+  // ═══ Putri Novita Sari ═══
+  'putri': 'putri',
+  'putrii': 'putri',
+  'novita': 'putri',
+
+  // ═══ Khoirul Anwar ═══
+  'khoirul': 'khoirul',
+  'khoir': 'khoirul',
+  'anwar': 'khoirul',
+  'irul': 'khoirul',
+  'irull': 'khoirul',
+  'rull': 'khoirul',
+  'rul': 'khoirul',
+  'rulz': 'khoirul',
+  'rulzz': 'khoirul',
+}
+
+/* Terapkan dictionary SLANG per kata. Kata yang tidak ada di SLANG
+   dibiarkan apa adanya. */
+function normalkanSlang(teks) {
+  return teks
+    .split(' ')
+    .map(function (kata) {
+      // Urutan prioritas: SLANG dulu, baru NAMA_MHS.
+      // Kata umum di SLANG dianggap lebih otoritatif daripada nama.
+      return SLANG[kata] || NAMA_MHS[kata] || kata
+    })
+    .join(' ')
+}
+
+/* Normalisasi pertanyaan jadi hash pendek untuk kunci cache jawaban.
+   Alur: lowercase -> hapus tanda baca -> rapikan spasi -> rename slang
+        -> hash SHA-256 -> potong 16 karakter.
+   Efeknya: "Risky prodi apa?", "risky prodi apa", dan
+   "risky prodi apa dong" (setelah normalisasi slang) menghasilkan
+   hash yang sama. */
+export function kunciJawaban(pertanyaan) {
+  const bersih = String(pertanyaan || '')
+    .toLowerCase()
+    .replace(/[^\w\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  const dirapikan = normalkanSlang(bersih)
+  const hash = createHash('sha256').update(dirapikan).digest('hex').slice(0, 16)
+  return 'mbsi:chat:jawaban:v2:' + hash
 }
 ````
 
@@ -4031,6 +3930,107 @@ export async function ambilTokenSesi() {
 }
 ````
 
+## File: api/ai/chat.js
+````javascript
+import { createClient } from '@supabase/supabase-js'
+import { jawabPertanyaanDospem } from '../_lib/dospem-chat.js'
+import { denganCache, ambilRedis, kunciJawaban } from '../_lib/redis.js'
+
+const MAKS_PERTANYAAN = 500
+const MAKS_RIWAYAT = 10
+const TTL_KONTEKS = 300      // 5 menit
+const TTL_JAWABAN = 1800     // 30 menit
+const KUNCI_KONTEKS = 'mbsi:chat:konteks:v1'
+
+async function ambilDataTim(env) {
+  const sb = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY)
+  const [l, p, g, h] = await Promise.all([
+    sb.from('logbooks').select('id, mahasiswa_id, tanggal, kategori, judul, logbook_items(judul)')
+      .eq('status', 'publik').order('tanggal', { ascending: false }).limit(200),
+    sb.from('mahasiswa').select('id, nama, nim, prodi').order('nama').limit(50),
+    sb.from('galeri').select('id, mahasiswa_id').limit(500),
+    sb.from('daftar_hadir').select('id, mahasiswa_id, tanggal, status, alasan')
+      .order('tanggal', { ascending: false }).limit(1000)
+  ])
+  return {
+    logs: l.data || [],
+    people: p.data || [],
+    gal: g.data || [],
+    hadir: h.data || []
+  }
+}
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method tidak diizinkan' })
+
+  const body = req.body || {}
+  const pertanyaan = String(body.pertanyaan || '').trim()
+  const riwayat = Array.isArray(body.riwayat) ? body.riwayat.slice(-MAKS_RIWAYAT) : []
+
+  if (!pertanyaan) return res.status(400).json({ error: 'Pertanyaan tidak boleh kosong.' })
+  if (pertanyaan.length > MAKS_PERTANYAAN) {
+    return res.status(400).json({ error: 'Pertanyaan terlalu panjang (maks ' + MAKS_PERTANYAAN + ' karakter).' })
+  }
+
+  try {
+    const redis = ambilRedis(process.env)
+    /* Cache jawaban selalu dicek berdasarkan teks pertanyaan, terlepas dari
+       riwayat. Ini krusial: request berulang dengan teks sama tidak akan
+       menyentuh Groq sama sekali, sehingga TPM limit tidak tergerus.
+       Riwayat tetap dikirim ke AI saat cache MISS supaya jawaban follow-up
+       tetap kontekstual. */
+    const kunci = kunciJawaban(pertanyaan)
+
+    /* Lapis 2: cache jawaban AI */
+    if (kunci && redis) {
+      try {
+        const cached = await redis.get(kunci)
+        if (cached) {
+          console.log('[ai/chat] jawaban dari cache')
+          return res.status(200).json({ jawaban: cached, cache: 'jawaban' })
+        }
+      } catch (e) {
+        console.warn('[redis] get jawaban gagal:', e.message)
+      }
+    }
+
+    /* Lapis 1: cache konteks Supabase */
+    const { data: dataTim, dariCache } = await denganCache(
+      process.env,
+      KUNCI_KONTEKS,
+      TTL_KONTEKS,
+      function () { return ambilDataTim(process.env) }
+    )
+    console.log('[ai/chat] konteks tim:', dariCache ? 'dari cache' : 'fresh dari Supabase')
+
+    /* Panggil Groq */
+    const jawaban = await jawabPertanyaanDospem(process.env, {
+      pertanyaan: pertanyaan,
+      riwayat: riwayat,
+      data: dataTim
+    })
+
+    /* Simpan jawaban ke cache supaya request berikutnya dengan pertanyaan
+       yang sama (walau sudah ada riwayat) langsung HIT. */
+    if (kunci && redis) {
+      try {
+        await redis.set(kunci, jawaban, { ex: TTL_JAWABAN })
+      } catch (e) {
+        console.warn('[redis] set jawaban gagal:', e.message)
+      }
+    }
+
+    return res.status(200).json({ jawaban: jawaban, cache: 'fresh' })
+  } catch (err) {
+    console.error('[ai/chat]', err)
+    const status = err.statusCode || 500
+    const body = { error: err.message || 'Gagal memanggil AI' }
+    if (err.retryAfter) body.retryAfter = err.retryAfter
+    return res.status(status).json(body)
+  }
+}
+````
+
 ## File: public/llms.txt
 ````
 # Logbook Magang BSI
@@ -4596,368 +4596,6 @@ export default function LogbookPage() {
         {detail ? <LogbookDetail log={detail} /> : null}
       </Modal>
     </div>
-  )
-}
-````
-
-## File: src/components/ChatWidget.jsx
-````javascript
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { tanyaDospem } from '../lib/ai.js'
-
-const NAMA_ASISTEN = 'Asisten Magang'
-const SUBTITLE_ASISTEN = 'Online'
-const GREETING = 'Hai, aku Asisten Magang disini. Tanya apa aja deh soal kegiatan mahasiswa. Tapi jangan tanya yang lain yaa wkwk'
-const KEY_RIWAYAT = 'mbsi-chat-riwayat'
-const COOLDOWN_NORMAL = 5
-const COOLDOWN_RATE_LIMIT = 30
-const SARAN = [
-  'Siapa yang paling sering bolos?',
-  'Ringkas kegiatan mahasiswa minggu ini',
-  'Mahasiswa mana yang paling produktif?'
-]
-
-function IkonChat() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="22" height="22" aria-hidden="true">
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-    </svg>
-  )
-}
-function IkonClose() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  )
-}
-function IkonSend() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="17" height="17" aria-hidden="true">
-      <line x1="22" y1="2" x2="11" y2="13" />
-      <polygon points="22 2 15 22 11 13 2 9 22 2" />
-    </svg>
-  )
-}
-export default function ChatWidget() {
-  const [open, setOpen] = useState(false)
-  const [riwayat, setRiwayat] = useState(function () {
-    try { return JSON.parse(sessionStorage.getItem(KEY_RIWAYAT) || '[]') } catch (e) { return [] }
-  })
-
-  /* typewriter-v1: balasan AI muncul ketik demi ketik.
-     - textYangDitampilkan: peta index-bubble → substring yang saat
-       ini ditampilkan. Kalau bubble tidak ada di peta, artinya
-       tampilkan teks penuh (tidak dianimasikan).
-     - Kalau user kirim pesan baru di tengah animasi, semua animasi
-       aktif di-skip (bubble langsung tampil penuh) supaya tidak
-       ada teks yang nyangkut di tengah.
-     - Bubble dari riwayat (sessionStorage) TIDAK dianimasikan,
-       langsung tampil penuh saat halaman dibuka. */
-  const [teksTampil, setTeksTampil] = useState({})
-  const animasiRef = useRef({})
-  /* lock-while-typing-v1: true selama animasi typewriter berjalan.
-     Dipakai untuk lock input & tombol kirim supaya user tidak bisa
-     kirim pesan baru saat AI masih mengetik. */
-  const [sedangMengetik, setSedangMengetik] = useState(false)
-
-  useEffect(function () {
-    /* Cari bubble assistant terakhir yang belum tuntas animasinya. */
-    const idxTarget = riwayat.length - 1
-    if (idxTarget < 0) return undefined
-    const target = riwayat[idxTarget]
-    if (!target || target.role !== 'assistant') return undefined
-    /* Kalau sudah pernah dianimasikan atau sudah penuh, skip. */
-    if (animasiRef.current[idxTarget] === 'selesai') return undefined
-    if (teksTampil[idxTarget] === target.content) return undefined
-
-    animasiRef.current[idxTarget] = 'jalan'
-    setSedangMengetik(true)
-
-    let i = teksTampil[idxTarget] ? teksTampil[idxTarget].length : 0
-    const teks = target.content
-    const iv = setInterval(function () {
-      i += 1
-      if (i >= teks.length) {
-        clearInterval(iv)
-        animasiRef.current[idxTarget] = 'selesai'
-        setSedangMengetik(false)
-        setTeksTampil(function (prev) {
-          const next = Object.assign({}, prev)
-          delete next[idxTarget]
-          return next
-        })
-        return
-      }
-      setTeksTampil(function (prev) {
-        const next = Object.assign({}, prev)
-        next[idxTarget] = teks.slice(0, i)
-        return next
-      })
-    }, 18)
-
-    return function () { clearInterval(iv) }
-  }, [riwayat])
-
-  /* Fungsi untuk memaksa semua animasi yang masih jalan jadi penuh.
-     Dipanggil di kirim() supaya user tidak lihat teks "nyangkut". */
-  function tuntaskanAnimasi() {
-    const keys = Object.keys(animasiRef.current)
-    if (!keys.length) return
-    const penuh = {}
-    keys.forEach(function (k) { animasiRef.current[k] = 'selesai' })
-    setTeksTampil(penuh)
-    setSedangMengetik(false)
-  }
-  const [input, setInput] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-  const [cooldown, setCooldown] = useState(0)
-  /* fix-yank-bottom-v1: autoScroll disimpan sebagai ref (bukan state)
-     supaya tidak memicu re-render + useLayoutEffect. Sebelumnya
-     state ini ada di deps useLayoutEffect, sehingga saat user
-     scroll mendekati bawah (jarak <80px), ref berubah true dan
-     efek langsung snap scrollTop ke scrollHeight. */
-  const autoScrollRef = useRef(true)
-  const refScroll = useRef(null)
-
-  useEffect(function () {
-    try { sessionStorage.setItem(KEY_RIWAYAT, JSON.stringify(riwayat)) } catch (e) {}
-  }, [riwayat])
-
-  /* lock-scroll-v1: cegah halaman belakang ikut scroll saat panel
-     chat terbuka di mobile. Pakai position:fixed trick supaya posisi
-     scroll user disimpan (kalau pakai overflow:hidden biasa, body
-     akan lompat ke atas saat panel dibuka dan tetap di atas saat
-     ditutup). Hanya aktif di layar <=640px — di desktop, membiarkan
-     halaman belakang bisa di-scroll itu wajar. */
-  useEffect(function () {
-    if (!open) return undefined
-    if (typeof window === 'undefined') return undefined
-    if (!window.matchMedia('(max-width: 640px)').matches) return undefined
-
-    const body = document.body
-    const scrollY = window.scrollY || document.documentElement.scrollTop || 0
-    const gayaLama = {
-      position: body.style.position,
-      top: body.style.top,
-      left: body.style.left,
-      right: body.style.right,
-      width: body.style.width,
-      overflow: body.style.overflow
-    }
-
-    body.style.position = 'fixed'
-    body.style.top = '-' + scrollY + 'px'
-    body.style.left = '0'
-    body.style.right = '0'
-    body.style.width = '100%'
-    body.style.overflow = 'hidden'
-
-    return function () {
-      body.style.position = gayaLama.position
-      body.style.top = gayaLama.top
-      body.style.left = gayaLama.left
-      body.style.right = gayaLama.right
-      body.style.width = gayaLama.width
-      body.style.overflow = gayaLama.overflow
-      /* restore posisi scroll user */
-      window.scrollTo(0, scrollY)
-    }
-  }, [open])
-
-  useLayoutEffect(function () {
-    if (!open) return
-    if (!autoScrollRef.current) return
-    const el = refScroll.current
-    if (!el) return
-    requestAnimationFrame(function () {
-      if (el) el.scrollTop = el.scrollHeight
-    })
-  }, [riwayat, busy, error, open])
-
-  /* Deteksi user scroll manual pakai wheel/touchmove saja.
-     Sebelumnya pakai onScroll yang kena trigger oleh auto-scroll
-     programatik, sehingga bisa buat loop autoScroll nyala-mati. */
-  function onWheelBody() {
-    const el = refScroll.current
-    if (!el) return
-    const jarak = el.scrollHeight - el.scrollTop - el.clientHeight
-    autoScrollRef.current = jarak < 80
-  }
-
-  useEffect(function () {
-    if (cooldown <= 0) return undefined
-    const t = setTimeout(function () {
-      setCooldown(function (c) { return Math.max(0, c - 1) })
-    }, 1000)
-    return function () { clearTimeout(t) }
-  }, [cooldown])
-
-  useEffect(function () { if (input) setError('') }, [input])
-
-  async function kirim(teksOverride) {
-    const teks = (teksOverride != null ? teksOverride : input).trim()
-    if (!teks || busy || cooldown > 0) return
-    tuntaskanAnimasi()
-    setBusy(true)
-    setError('')
-    const riwayatLama = riwayat
-    setRiwayat(riwayatLama.concat([{ role: 'user', content: teks }]))
-    setInput('')
-    autoScrollRef.current = true
-
-    try {
-      const r = await tanyaDospem(teks, riwayatLama)
-      const jawaban = String(r.jawaban || '').trim() || 'Maaf, tidak ada jawaban.'
-      setRiwayat(function (prev) { return prev.concat([{ role: 'assistant', content: jawaban }]) })
-      setCooldown(COOLDOWN_NORMAL)
-    } catch (err) {
-      const pesan = err.message || 'Gagal memanggil AI'
-      const rateLimit = /terlalu banyak|rate limit|sibuk|429/i.test(pesan)
-      setError(rateLimit ? 'Server AI sedang sibuk. Tunggu ' + COOLDOWN_RATE_LIMIT + ' detik, lalu coba lagi.' : pesan)
-      setCooldown(rateLimit ? COOLDOWN_RATE_LIMIT : COOLDOWN_NORMAL)
-      setRiwayat(riwayatLama)
-      setInput(teks)
-    }
-    setBusy(false)
-  }
-
-  function onKeyDown(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      if (cooldown > 0) return
-      kirim()
-    }
-  }
-
-  function reset() {
-    if (busy) return
-    setRiwayat([])
-    setError('')
-    setCooldown(0)
-    try { sessionStorage.removeItem(KEY_RIWAYAT) } catch (e) {}
-  }
-
-  const terkunci = busy || cooldown > 0 || sedangMengetik
-  const bubble = riwayat.length ? riwayat : [{ role: 'assistant', content: GREETING }]
-
-  const placeholder = busy
-    ? 'Sedang menganalisis...'
-    : sedangMengetik
-      ? 'Sedang mengetik...'
-      : cooldown > 0
-        ? 'Tunggu ' + cooldown + ' detik sebelum kirim lagi'
-        : 'Tulis pertanyaan...'
-
-  return (
-    <>
-      <div className={'chat-widget-panel' + (open ? ' chat-widget-panel-buka' : '')} role="dialog" aria-hidden={!open}>
-        <header className="chat-widget-header">
-          <span className="chat-widget-avatar" aria-hidden="true">
-            <img className='rounded-full' src="avatar-asisten-magang.jpeg" alt="avatar-asisten-magang" />
-            {/* <IkonChat /> */}
-          </span>
-          <div className="chat-widget-title">
-            <p className="chat-widget-title-line">{NAMA_ASISTEN}</p>
-            <p className="chat-widget-sub">
-              <span className="chat-widget-dot-inline" />
-              {SUBTITLE_ASISTEN}
-            </p>
-          </div>
-          <button type="button" className="chat-widget-close" onClick={function () { setOpen(false) }} title="Tutup" aria-label="Tutup chat">
-            <IkonClose />
-          </button>
-        </header>
-
-        <div ref={refScroll} className="chat-widget-body" onWheel={onWheelBody}
-          onTouchMove={onWheelBody}>
-          {bubble.map(function (m, i) {
-            const dariUser = m.role === 'user'
-            /* typewriter-v1: kalau bubble ini sedang dianimasikan,
-               tampilkan substring dari teksTampil. Kalau tidak,
-               tampilkan teks penuh (bubble lama, riwayat, user). */
-            const teksRender = !dariUser && teksTampil[i] != null ? teksTampil[i] : m.content
-            return (
-              <div key={i} className={'chat-widget-row ' + (dariUser ? 'chat-widget-row-user' : '')}>
-                <div className={'chat-widget-bubble ' + (dariUser ? 'chat-widget-bubble-user' : 'chat-widget-bubble-ai')}>
-                  {teksRender}
-                </div>
-              </div>
-            )
-          })}
-
-          {!riwayat.length && !input ? (
-            <div className="chat-widget-saran">
-              {SARAN.map(function (s) {
-                return (
-                  <button key={s} type="button" onClick={function () { kirim(s) }} disabled={terkunci} className="chat-widget-saran-btn">
-                    {s}
-                  </button>
-                )
-              })}
-            </div>
-          ) : null}
-
-          {busy ? (
-            <div className="chat-widget-row">
-              <div className="chat-widget-typing" role="status" aria-label="Sedang menganalisis">
-                <span className="chat-widget-typing-dot" />
-                <span className="chat-widget-typing-dot" />
-                <span className="chat-widget-typing-dot" />
-              </div>
-            </div>
-          ) : null}
-
-          {error ? <div className="chat-widget-error">{error}</div> : null}
-        </div>
-
-        <footer className="chat-widget-footer">
-          <div className="chat-widget-input-wrap">
-            <textarea
-              className="chat-widget-input"
-              rows={1}
-              value={input}
-              onChange={function (e) { setInput(e.target.value) }}
-              onKeyDown={onKeyDown}
-              placeholder={placeholder}
-              disabled={terkunci}
-            />
-            <button
-              type="button"
-              className="chat-widget-send"
-              onClick={function () { kirim() }}
-              disabled={terkunci || !input.trim()}
-              title={cooldown > 0 ? 'Tunggu ' + cooldown + ' detik' : 'Kirim'}
-              aria-label="Kirim"
-            >
-              {cooldown > 0 ? String(cooldown) : (sedangMengetik ? '…' : <IkonSend />)}
-            </button>
-          </div>
-          {riwayat.length ? (
-            <p className="chat-widget-catatan">
-              <button type="button" onClick={reset} className="chat-widget-reset">Mulai ulang percakapan</button>
-            </p>
-          ) : (
-            <p className="chat-widget-catatan">Jawaban berdasarkan data portal.</p>
-          )}
-        </footer>
-      </div>
-
-      <button
-        type="button"
-        className={'chat-widget-fab' + (open ? ' chat-widget-fab-buka' : '')}
-        onClick={function () { setOpen(function (o) { return !o }) }}
-        aria-label={open ? 'Tutup chat' : 'Buka chat'}
-        title={open ? 'Tutup chat' : 'Tanya asisten'}
-      >
-        <span className="chat-widget-fab-icon">
-          {open ? <IkonClose /> : <img className='rounded-full' src="avatar-asisten-magang.jpeg" alt="avatar-asisten-magang" />}
-        </span>
-        {!open ? <span className="chat-widget-dot" /> : null}
-      </button>
-    </>
   )
 }
 ````
@@ -6002,6 +5640,371 @@ export default function App() {
       </BrowserRouter>
       </ToastProvider>
     </ThemeProvider>
+  )
+}
+````
+
+## File: src/components/ChatWidget.jsx
+````javascript
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { tanyaDospem } from '../lib/ai.js'
+
+const NAMA_ASISTEN = 'Asisten Magang'
+const SUBTITLE_ASISTEN = 'Online'
+const GREETING = 'Hai, aku Asisten Magang disini. Tanya apa aja deh soal kegiatan mahasiswa. Tapi jangan tanya yang lain yaa wkwk'
+const KEY_RIWAYAT = 'mbsi-chat-riwayat'
+const COOLDOWN_NORMAL = 5
+const COOLDOWN_RATE_LIMIT = 30
+/* Cache jawaban AI di server — samakan dengan TTL_JAWABAN di api/ai/chat.js */
+const CACHE_MENIT = 30
+const SARAN = [
+  'Siapa yang paling sering bolos?',
+  'Ringkas kegiatan mahasiswa minggu ini',
+  'Mahasiswa mana yang paling produktif?'
+]
+
+function IkonChat() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="22" height="22" aria-hidden="true">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </svg>
+  )
+}
+function IkonClose() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  )
+}
+function IkonSend() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="17" height="17" aria-hidden="true">
+      <line x1="22" y1="2" x2="11" y2="13" />
+      <polygon points="22 2 15 22 11 13 2 9 22 2" />
+    </svg>
+  )
+}
+export default function ChatWidget() {
+  const [open, setOpen] = useState(false)
+  const [riwayat, setRiwayat] = useState(function () {
+    try { return JSON.parse(sessionStorage.getItem(KEY_RIWAYAT) || '[]') } catch (e) { return [] }
+  })
+
+  /* typewriter-v1: balasan AI muncul ketik demi ketik.
+     - textYangDitampilkan: peta index-bubble → substring yang saat
+       ini ditampilkan. Kalau bubble tidak ada di peta, artinya
+       tampilkan teks penuh (tidak dianimasikan).
+     - Kalau user kirim pesan baru di tengah animasi, semua animasi
+       aktif di-skip (bubble langsung tampil penuh) supaya tidak
+       ada teks yang nyangkut di tengah.
+     - Bubble dari riwayat (sessionStorage) TIDAK dianimasikan,
+       langsung tampil penuh saat halaman dibuka. */
+  const [teksTampil, setTeksTampil] = useState({})
+  const animasiRef = useRef({})
+  /* lock-while-typing-v1: true selama animasi typewriter berjalan.
+     Dipakai untuk lock input & tombol kirim supaya user tidak bisa
+     kirim pesan baru saat AI masih mengetik. */
+  const [sedangMengetik, setSedangMengetik] = useState(false)
+
+  useEffect(function () {
+    /* Cari bubble assistant terakhir yang belum tuntas animasinya. */
+    const idxTarget = riwayat.length - 1
+    if (idxTarget < 0) return undefined
+    const target = riwayat[idxTarget]
+    if (!target || target.role !== 'assistant') return undefined
+    /* Kalau sudah pernah dianimasikan atau sudah penuh, skip. */
+    if (animasiRef.current[idxTarget] === 'selesai') return undefined
+    if (teksTampil[idxTarget] === target.content) return undefined
+
+    animasiRef.current[idxTarget] = 'jalan'
+    setSedangMengetik(true)
+
+    let i = teksTampil[idxTarget] ? teksTampil[idxTarget].length : 0
+    const teks = target.content
+    const iv = setInterval(function () {
+      i += 1
+      if (i >= teks.length) {
+        clearInterval(iv)
+        animasiRef.current[idxTarget] = 'selesai'
+        setSedangMengetik(false)
+        setTeksTampil(function (prev) {
+          const next = Object.assign({}, prev)
+          delete next[idxTarget]
+          return next
+        })
+        return
+      }
+      setTeksTampil(function (prev) {
+        const next = Object.assign({}, prev)
+        next[idxTarget] = teks.slice(0, i)
+        return next
+      })
+    }, 18)
+
+    return function () { clearInterval(iv) }
+  }, [riwayat])
+
+  /* Fungsi untuk memaksa semua animasi yang masih jalan jadi penuh.
+     Dipanggil di kirim() supaya user tidak lihat teks "nyangkut". */
+  function tuntaskanAnimasi() {
+    const keys = Object.keys(animasiRef.current)
+    if (!keys.length) return
+    const penuh = {}
+    keys.forEach(function (k) { animasiRef.current[k] = 'selesai' })
+    setTeksTampil(penuh)
+    setSedangMengetik(false)
+  }
+  const [input, setInput] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [cooldown, setCooldown] = useState(0)
+  /* fix-yank-bottom-v1: autoScroll disimpan sebagai ref (bukan state)
+     supaya tidak memicu re-render + useLayoutEffect. Sebelumnya
+     state ini ada di deps useLayoutEffect, sehingga saat user
+     scroll mendekati bawah (jarak <80px), ref berubah true dan
+     efek langsung snap scrollTop ke scrollHeight. */
+  const autoScrollRef = useRef(true)
+  const refScroll = useRef(null)
+
+  useEffect(function () {
+    try { sessionStorage.setItem(KEY_RIWAYAT, JSON.stringify(riwayat)) } catch (e) {}
+  }, [riwayat])
+
+  /* lock-scroll-v1: cegah halaman belakang ikut scroll saat panel
+     chat terbuka di mobile. Pakai position:fixed trick supaya posisi
+     scroll user disimpan (kalau pakai overflow:hidden biasa, body
+     akan lompat ke atas saat panel dibuka dan tetap di atas saat
+     ditutup). Hanya aktif di layar <=640px — di desktop, membiarkan
+     halaman belakang bisa di-scroll itu wajar. */
+  useEffect(function () {
+    if (!open) return undefined
+    if (typeof window === 'undefined') return undefined
+    if (!window.matchMedia('(max-width: 640px)').matches) return undefined
+
+    const body = document.body
+    const scrollY = window.scrollY || document.documentElement.scrollTop || 0
+    const gayaLama = {
+      position: body.style.position,
+      top: body.style.top,
+      left: body.style.left,
+      right: body.style.right,
+      width: body.style.width,
+      overflow: body.style.overflow
+    }
+
+    body.style.position = 'fixed'
+    body.style.top = '-' + scrollY + 'px'
+    body.style.left = '0'
+    body.style.right = '0'
+    body.style.width = '100%'
+    body.style.overflow = 'hidden'
+
+    return function () {
+      body.style.position = gayaLama.position
+      body.style.top = gayaLama.top
+      body.style.left = gayaLama.left
+      body.style.right = gayaLama.right
+      body.style.width = gayaLama.width
+      body.style.overflow = gayaLama.overflow
+      /* restore posisi scroll user */
+      window.scrollTo(0, scrollY)
+    }
+  }, [open])
+
+  useLayoutEffect(function () {
+    if (!open) return
+    if (!autoScrollRef.current) return
+    const el = refScroll.current
+    if (!el) return
+    requestAnimationFrame(function () {
+      if (el) el.scrollTop = el.scrollHeight
+    })
+  }, [riwayat, busy, error, open])
+
+  /* Deteksi user scroll manual pakai wheel/touchmove saja.
+     Sebelumnya pakai onScroll yang kena trigger oleh auto-scroll
+     programatik, sehingga bisa buat loop autoScroll nyala-mati. */
+  function onWheelBody() {
+    const el = refScroll.current
+    if (!el) return
+    const jarak = el.scrollHeight - el.scrollTop - el.clientHeight
+    autoScrollRef.current = jarak < 80
+  }
+
+  useEffect(function () {
+    if (cooldown <= 0) return undefined
+    const t = setTimeout(function () {
+      setCooldown(function (c) { return Math.max(0, c - 1) })
+    }, 1000)
+    return function () { clearTimeout(t) }
+  }, [cooldown])
+
+  useEffect(function () { if (input) setError('') }, [input])
+
+  async function kirim(teksOverride) {
+    const teks = (teksOverride != null ? teksOverride : input).trim()
+    if (!teks || busy || cooldown > 0) return
+    tuntaskanAnimasi()
+    setBusy(true)
+    setError('')
+    const riwayatLama = riwayat
+    setRiwayat(riwayatLama.concat([{ role: 'user', content: teks }]))
+    setInput('')
+    autoScrollRef.current = true
+
+    try {
+      const r = await tanyaDospem(teks, riwayatLama)
+      const jawaban = String(r.jawaban || '').trim() || 'Maaf, tidak ada jawaban.'
+      setRiwayat(function (prev) { return prev.concat([{ role: 'assistant', content: jawaban }]) })
+      setCooldown(COOLDOWN_NORMAL)
+    } catch (err) {
+      const pesan = err.message || 'Gagal memanggil AI'
+      const rateLimit = /terlalu banyak|rate limit|sibuk|429/i.test(pesan)
+      setError(rateLimit ? 'Server AI sedang sibuk. Tunggu ' + COOLDOWN_RATE_LIMIT + ' detik, lalu coba lagi.' : pesan)
+      setCooldown(rateLimit ? COOLDOWN_RATE_LIMIT : COOLDOWN_NORMAL)
+      setRiwayat(riwayatLama)
+      setInput(teks)
+    }
+    setBusy(false)
+  }
+
+  function onKeyDown(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      if (cooldown > 0) return
+      kirim()
+    }
+  }
+
+  function reset() {
+    if (busy) return
+    setRiwayat([])
+    setError('')
+    setCooldown(0)
+    try { sessionStorage.removeItem(KEY_RIWAYAT) } catch (e) {}
+  }
+
+  const terkunci = busy || cooldown > 0 || sedangMengetik
+  const bubble = riwayat.length ? riwayat : [{ role: 'assistant', content: GREETING }]
+
+  const placeholder = busy
+    ? 'Sedang menganalisis...'
+    : sedangMengetik
+      ? 'Sedang mengetik...'
+      : cooldown > 0
+        ? 'Tunggu ' + cooldown + ' detik sebelum kirim lagi'
+        : 'Tulis pertanyaan...'
+
+  return (
+    <>
+      <div className={'chat-widget-panel' + (open ? ' chat-widget-panel-buka' : '')} role="dialog" aria-hidden={!open}>
+        <header className="chat-widget-header">
+          <span className="chat-widget-avatar" aria-hidden="true">
+            <img className='rounded-full' src="avatar-asisten-magang.jpeg" alt="avatar-asisten-magang" />
+            {/* <IkonChat /> */}
+          </span>
+          <div className="chat-widget-title">
+            <p className="chat-widget-title-line">{NAMA_ASISTEN}</p>
+            <p className="chat-widget-sub">
+              <span className="chat-widget-dot-inline" />
+              {SUBTITLE_ASISTEN}
+            </p>
+          </div>
+          <button type="button" className="chat-widget-close" onClick={function () { setOpen(false) }} title="Tutup" aria-label="Tutup chat">
+            <IkonClose />
+          </button>
+        </header>
+
+        <div ref={refScroll} className="chat-widget-body" onWheel={onWheelBody}
+          onTouchMove={onWheelBody}>
+          {bubble.map(function (m, i) {
+            const dariUser = m.role === 'user'
+            /* typewriter-v1: kalau bubble ini sedang dianimasikan,
+               tampilkan substring dari teksTampil. Kalau tidak,
+               tampilkan teks penuh (bubble lama, riwayat, user). */
+            const teksRender = !dariUser && teksTampil[i] != null ? teksTampil[i] : m.content
+            return (
+              <div key={i} className={'chat-widget-row ' + (dariUser ? 'chat-widget-row-user' : '')}>
+                <div className={'chat-widget-bubble ' + (dariUser ? 'chat-widget-bubble-user' : 'chat-widget-bubble-ai')}>
+                  {teksRender}
+                </div>
+              </div>
+            )
+          })}
+
+          {!riwayat.length && !input ? (
+            <div className="chat-widget-saran">
+              {SARAN.map(function (s) {
+                return (
+                  <button key={s} type="button" onClick={function () { kirim(s) }} disabled={terkunci} className="chat-widget-saran-btn">
+                    {s}
+                  </button>
+                )
+              })}
+            </div>
+          ) : null}
+
+          {busy ? (
+            <div className="chat-widget-row">
+              <div className="chat-widget-typing" role="status" aria-label="Sedang menganalisis">
+                <span className="chat-widget-typing-dot" />
+                <span className="chat-widget-typing-dot" />
+                <span className="chat-widget-typing-dot" />
+              </div>
+            </div>
+          ) : null}
+
+          {error ? <div className="chat-widget-error">{error}</div> : null}
+        </div>
+
+        <footer className="chat-widget-footer">
+          <div className="chat-widget-input-wrap">
+            <textarea
+              className="chat-widget-input"
+              rows={1}
+              value={input}
+              onChange={function (e) { setInput(e.target.value) }}
+              onKeyDown={onKeyDown}
+              placeholder={placeholder}
+              disabled={terkunci}
+            />
+            <button
+              type="button"
+              className="chat-widget-send"
+              onClick={function () { kirim() }}
+              disabled={terkunci || !input.trim()}
+              title={cooldown > 0 ? 'Tunggu ' + cooldown + ' detik' : 'Kirim'}
+              aria-label="Kirim"
+            >
+              {cooldown > 0 ? String(cooldown) : (sedangMengetik ? '…' : <IkonSend />)}
+            </button>
+          </div>
+{riwayat.length ? (
+            <p className="chat-widget-catatan chat-widget-catatan-satu-baris">
+              <button type="button" onClick={reset} className="chat-widget-reset chat-widget-reset-pill">Mulai ulang</button>
+              <span className="chat-widget-info-cache">Data AI diperbarui setiap {CACHE_MENIT} menit</span>
+            </p>
+          ) : (
+            <p className="chat-widget-catatan">Data AI diperbarui setiap {CACHE_MENIT} menit</p>
+          )}
+        </footer>
+      </div>
+
+      <button
+        type="button"
+        className={'chat-widget-fab' + (open ? ' chat-widget-fab-buka' : '')}
+        onClick={function () { setOpen(function (o) { return !o }) }}
+        aria-label={open ? 'Tutup chat' : 'Buka chat'}
+        title={open ? 'Tutup chat' : 'Tanya asisten'}
+      >
+        <span className="chat-widget-fab-icon">
+          {open ? <IkonClose /> : <img className='rounded-full' src="avatar-asisten-magang.jpeg" alt="avatar-asisten-magang" />}
+        </span>
+        {!open ? <span className="chat-widget-dot" /> : null}
+      </button>
+    </>
   )
 }
 ````
@@ -7261,348 +7264,6 @@ export default function LoginPage() {
 }
 ````
 
-## File: vite.config.js
-````javascript
-import { defineConfig, loadEnv } from 'vite'
-import react from '@vitejs/plugin-react'
-import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
-import { createClient } from '@supabase/supabase-js'
-import { LIMIT_PER_PROJECT, ptToday, daftarKredensial, getAccessToken } from './api/_lib/youtube.js'
-import { cekSesi, bacaBody } from './api/_lib/sesi.js'
-import { susunLogbookAi } from './api/_lib/ai-provider.js'
-import { jawabPertanyaanDospem } from './api/_lib/dospem-chat.js'
-import { denganCache, ambilRedis, kunciJawaban } from './api/_lib/redis.js'
-
-function pluginApiR2(env) {
-  const s3 = new S3Client({
-    region: 'auto',
-    endpoint: 'https://' + env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
-    credentials: {
-      accessKeyId: env.R2_ACCESS_KEY_ID,
-      secretAccessKey: env.R2_SECRET_ACCESS_KEY
-    }
-  })
-
-  const setupMiddlewares = (server) => {
-    server.middlewares.use('/api/r2/presign', async function (req, res) {
-      if (req.method !== 'POST') {
-        res.statusCode = 405
-        res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
-        return
-      }
-      const ok = await cekSesi(env, req.headers.authorization)
-      if (!ok) {
-        res.statusCode = 401
-        res.end(JSON.stringify({ error: 'Sesi tidak valid' }))
-        return
-      }
-      const body = await bacaBody(req)
-      const ext = String(body.filename || 'bin').split('.').pop().toLowerCase()
-      const key = body.kind + '/' + new Date().getFullYear() + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + ext
-      const uploadUrl = await getSignedUrl(
-        s3,
-        new PutObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: key, ContentType: body.contentType }),
-        { expiresIn: 300 }
-      )
-      res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({
-        uploadUrl: uploadUrl,
-        publicUrl: '/api/r2/file?key=' + key,
-        key: key
-      }))
-    })
-
-    server.middlewares.use('/api/r2/delete', async function (req, res) {
-      if (req.method !== 'POST') {
-        res.statusCode = 405
-        res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
-        return
-      }
-      const ok = await cekSesi(env, req.headers.authorization)
-      if (!ok) {
-        res.statusCode = 401
-        res.end(JSON.stringify({ error: 'Sesi tidak valid' }))
-        return
-      }
-      const body = await bacaBody(req)
-      await s3.send(new DeleteObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: body.key }))
-      res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({ ok: true }))
-    })
-
-    server.middlewares.use('/api/r2/file', async function (req, res) {
-      if (req.method !== 'GET') {
-        res.statusCode = 405
-        res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
-        return
-      }
-      const url = new URL(req.url, 'http://localhost')
-      const key = url.searchParams.get('key')
-      if (!key) {
-        res.statusCode = 400
-        res.end(JSON.stringify({ error: 'Key tidak ada' }))
-        return
-      }
-      const cmd = new GetObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: key })
-      if (url.searchParams.get('unduh') !== '1') {
-        const signed = await getSignedUrl(s3, cmd, { expiresIn: 300 })
-        res.statusCode = 302
-        res.setHeader('Location', signed)
-        res.setHeader('Cache-Control', 'public, max-age=60')
-        res.end()
-        return
-      }
-      try {
-        const obj = await s3.send(cmd)
-        res.statusCode = 200
-        res.setHeader('Content-Type', obj.ContentType || 'application/octet-stream')
-        if (obj.ContentLength) res.setHeader('Content-Length', String(obj.ContentLength))
-        res.setHeader('Cache-Control', 'public, max-age=3600')
-        obj.Body.pipe(res)
-      } catch (e) {
-        res.statusCode = 404
-        res.end(JSON.stringify({ error: 'Media tidak ditemukan' }))
-      }
-    })
-  }
-
-  return {
-    name: 'api-r2-dev',
-    configureServer: setupMiddlewares,
-    configurePreviewServer: setupMiddlewares
-  }
-}
-
-function pluginApiYoutube(env) {
-  const admin = createClient(env.VITE_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY)
-  function kirim(res, code, obj) {
-    res.statusCode = code
-    res.setHeader('Content-Type', 'application/json')
-    res.end(JSON.stringify(obj))
-  }
-
-  const setupMiddlewares = (server) => {
-    server.middlewares.use('/api/youtube/quota', async function (req, res) {
-      const today = ptToday()
-      const kredensial = daftarKredensial(env)
-      if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
-      let usedTotal = 0
-      const perProject = []
-      for (const kred of kredensial) {
-        const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
-        const used = hit.count || 0
-        usedTotal += used
-        perProject.push({ project: kred.n, used: used, remaining: Math.max(0, LIMIT_PER_PROJECT - used) })
-      }
-      const limit = kredensial.length * LIMIT_PER_PROJECT
-      res.setHeader('Cache-Control', 'no-store')
-      kirim(res, 200, { limit: limit, used: usedTotal, remaining: Math.max(0, limit - usedTotal), perProject: perProject, ptDate: today })
-    })
-
-    server.middlewares.use('/api/youtube/session', async function (req, res) {
-      if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
-      const user = await cekSesi(env, req.headers.authorization)
-      if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
-      const today = ptToday()
-      const kredensial = daftarKredensial(env)
-      if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
-      const body = await bacaBody(req)
-      if (!body.title) { kirim(res, 400, { error: 'Judul video wajib diisi' }); return }
-      let terakhir = ''
-      for (const kred of kredensial) {
-        const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
-        if ((hit.count || 0) >= LIMIT_PER_PROJECT) { terakhir = 'project ' + kred.n + ' sudah penuh'; continue }
-        let access
-        try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
-        const meta = {
-          snippet: { title: String(body.title).slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
-          status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
-        }
-        const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
-          method: 'POST',
-          headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
-          body: JSON.stringify(meta)
-        })
-        if (!init.ok) { terakhir = 'project ' + kred.n + ' ditolak Google (status ' + init.status + ')'; continue }
-        const sessionUri = init.headers.get('location')
-        if (!sessionUri) { terakhir = 'project ' + kred.n + ' tanpa lokasi upload'; continue }
-        await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: user.id, project_id: kred.n })
-        kirim(res, 200, { sessionUri: sessionUri, project: kred.n })
-        return
-      }
-      kirim(res, 429, { error: 'Kuota harian semua project video sudah habis. Coba lagi besok atau gunakan link video eksternal.', detail: terakhir })
-    })
-
-    server.middlewares.use('/api/youtube/latest', async function (req, res) {
-      if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
-      const user = await cekSesi(env, req.headers.authorization)
-      if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
-      const kredensial = daftarKredensial(env)
-      if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
-      let terakhir = ''
-      for (const kred of kredensial) {
-        let access
-        try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
-        const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&order=date&maxResults=5', { headers: { Authorization: 'Bearer ' + access } })
-        if (!r.ok) { terakhir = 'project ' + kred.n + ' status ' + r.status; continue }
-        const j = await r.json()
-        const items = j.items || []
-        const batas = Date.now() - 15 * 60 * 1000
-        const cocok = items.find(function (it) {
-          const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
-          return isNaN(t) ? false : t >= batas
-        })
-        if (!cocok) { kirim(res, 404, { error: 'Video terbaru tidak ditemukan' }); return }
-        kirim(res, 200, { videoId: cocok.id && cocok.id.videoId, project: kred.n })
-        return
-      }
-      kirim(res, 502, { error: 'Gagal memeriksa video terbaru: ' + terakhir })
-    })
-  }
-
-  return {
-    name: 'api-youtube-dev',
-    configureServer: setupMiddlewares,
-    configurePreviewServer: setupMiddlewares
-  }
-}
-
-function pluginApiAi(env) {
-  function kirim(res, code, obj) {
-    res.statusCode = code
-    res.setHeader('Content-Type', 'application/json')
-    res.end(JSON.stringify(obj))
-  }
-  const setupMiddlewares = (server) => {
-    server.middlewares.use('/api/ai/tulis', async function (req, res) {
-      const authHeader = req.headers.authorization || ''
-      if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
-      const user = await cekSesi(env, authHeader)
-      if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
-      const body = await bacaBody(req)
-      const draft = body.draft
-      if (!draft || !String(draft).trim()) {
-        kirim(res, 400, { error: 'Tuliskan dulu catatan kasar kegiatanmu.' })
-        return
-      }
-      try {
-        const hasil = await susunLogbookAi(env, {
-          draft: draft,
-          kategoriList: Array.isArray(body.kategori) ? body.kategori : [],
-          unitList: Array.isArray(body.unit) ? body.unit : []
-        })
-        kirim(res, 200, hasil)
-      } catch (err) {
-        kirim(res, 500, { error: err.message || 'Gagal memanggil AI' })
-      }
-    })
-
-    server.middlewares.use('/api/ai/chat', async function (req, res) {
-      if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
-      const body = await bacaBody(req)
-      const pertanyaan = String(body.pertanyaan || '').trim()
-      const riwayat = Array.isArray(body.riwayat) ? body.riwayat.slice(-10) : []
-      if (!pertanyaan) { kirim(res, 400, { error: 'Pertanyaan tidak boleh kosong.' }); return }
-      if (pertanyaan.length > 500) { kirim(res, 400, { error: 'Pertanyaan terlalu panjang (maks 500 karakter).' }); return }
-
-      try {
-        const redis = ambilRedis(env)
-        const kunci = kunciJawaban(pertanyaan)
-
-        if (kunci && redis) {
-          try {
-            const cached = await redis.get(kunci)
-            if (cached) {
-              console.log('[ai/chat] jawaban dari cache')
-              kirim(res, 200, { jawaban: cached, cache: 'jawaban' })
-              return
-            }
-          } catch (e) {
-            console.warn('[redis] get jawaban gagal:', e.message)
-          }
-        }
-
-        const { data: dataTim, dariCache } = await denganCache(
-          env,
-          'mbsi:chat:konteks:v1',
-          300,
-          async function () {
-            const sb = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY)
-            const [l, p, g, h] = await Promise.all([
-              sb.from('logbooks').select('id, mahasiswa_id, tanggal, kategori, judul, logbook_items(judul)')
-                .eq('status', 'publik').order('tanggal', { ascending: false }).limit(200),
-              sb.from('mahasiswa').select('id, nama, nim, prodi').order('nama').limit(50),
-              sb.from('galeri').select('id, mahasiswa_id').limit(500),
-              sb.from('daftar_hadir').select('id, mahasiswa_id, tanggal, status, alasan')
-                .order('tanggal', { ascending: false }).limit(1000)
-            ])
-            return { logs: l.data || [], people: p.data || [], gal: g.data || [], hadir: h.data || [] }
-          }
-        )
-        console.log('[ai/chat] konteks tim:', dariCache ? 'dari cache' : 'fresh dari Supabase')
-
-        const jawaban = await jawabPertanyaanDospem(env, {
-          pertanyaan: pertanyaan,
-          riwayat: riwayat,
-          data: dataTim
-        })
-
-        if (kunci && redis) {
-          try {
-            await redis.set(kunci, jawaban, { ex: 3600 })
-          } catch (e) {
-            console.warn('[redis] set jawaban gagal:', e.message)
-          }
-        }
-
-        kirim(res, 200, { jawaban: jawaban, cache: 'fresh' })
-      } catch (err) {
-        console.error('[ai/chat]', err)
-        const status = err.statusCode || 500
-        const body2 = { error: err.message || 'Gagal memanggil AI' }
-        if (err.retryAfter) body2.retryAfter = err.retryAfter
-        kirim(res, status, body2)
-      }
-    })
-  }
-  return {
-    name: 'api-ai-dev',
-    configureServer: setupMiddlewares,
-    configurePreviewServer: setupMiddlewares
-  }
-}
-
-export default defineConfig(function ({ mode }) {
-  const env = loadEnv(mode, process.cwd(), '')
-
-  return {
-    plugins: [react(), pluginApiR2(env), pluginApiYoutube(env), pluginApiAi(env)],
-
-    server: {
-      host: true
-    },
-    preview: {
-      host: true
-    },
-
-    build: {
-      chunkSizeWarningLimit: 1000,
-      rollupOptions: {
-        output: {
-          manualChunks: {
-            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-            'vendor-supabase': ['@supabase/supabase-js'],
-            'vendor-aws': ['@aws-sdk/client-s3', '@aws-sdk/s3-request-presigner'],
-            'vendor-media': ['heic2any']
-          }
-        }
-      }
-    }
-  }
-})
-````
-
 ## File: src/components/cards.jsx
 ````javascript
 import { Avatar } from './ui.jsx'
@@ -8025,6 +7686,348 @@ export default function HomePage() {
     </div>
   )
 }
+````
+
+## File: vite.config.js
+````javascript
+import { defineConfig, loadEnv } from 'vite'
+import react from '@vitejs/plugin-react'
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { createClient } from '@supabase/supabase-js'
+import { LIMIT_PER_PROJECT, ptToday, daftarKredensial, getAccessToken } from './api/_lib/youtube.js'
+import { cekSesi, bacaBody } from './api/_lib/sesi.js'
+import { susunLogbookAi } from './api/_lib/ai-provider.js'
+import { jawabPertanyaanDospem } from './api/_lib/dospem-chat.js'
+import { denganCache, ambilRedis, kunciJawaban } from './api/_lib/redis.js'
+
+function pluginApiR2(env) {
+  const s3 = new S3Client({
+    region: 'auto',
+    endpoint: 'https://' + env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com',
+    credentials: {
+      accessKeyId: env.R2_ACCESS_KEY_ID,
+      secretAccessKey: env.R2_SECRET_ACCESS_KEY
+    }
+  })
+
+  const setupMiddlewares = (server) => {
+    server.middlewares.use('/api/r2/presign', async function (req, res) {
+      if (req.method !== 'POST') {
+        res.statusCode = 405
+        res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
+        return
+      }
+      const ok = await cekSesi(env, req.headers.authorization)
+      if (!ok) {
+        res.statusCode = 401
+        res.end(JSON.stringify({ error: 'Sesi tidak valid' }))
+        return
+      }
+      const body = await bacaBody(req)
+      const ext = String(body.filename || 'bin').split('.').pop().toLowerCase()
+      const key = body.kind + '/' + new Date().getFullYear() + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + ext
+      const uploadUrl = await getSignedUrl(
+        s3,
+        new PutObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: key, ContentType: body.contentType }),
+        { expiresIn: 300 }
+      )
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({
+        uploadUrl: uploadUrl,
+        publicUrl: '/api/r2/file?key=' + key,
+        key: key
+      }))
+    })
+
+    server.middlewares.use('/api/r2/delete', async function (req, res) {
+      if (req.method !== 'POST') {
+        res.statusCode = 405
+        res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
+        return
+      }
+      const ok = await cekSesi(env, req.headers.authorization)
+      if (!ok) {
+        res.statusCode = 401
+        res.end(JSON.stringify({ error: 'Sesi tidak valid' }))
+        return
+      }
+      const body = await bacaBody(req)
+      await s3.send(new DeleteObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: body.key }))
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ ok: true }))
+    })
+
+    server.middlewares.use('/api/r2/file', async function (req, res) {
+      if (req.method !== 'GET') {
+        res.statusCode = 405
+        res.end(JSON.stringify({ error: 'Method tidak diizinkan' }))
+        return
+      }
+      const url = new URL(req.url, 'http://localhost')
+      const key = url.searchParams.get('key')
+      if (!key) {
+        res.statusCode = 400
+        res.end(JSON.stringify({ error: 'Key tidak ada' }))
+        return
+      }
+      const cmd = new GetObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: key })
+      if (url.searchParams.get('unduh') !== '1') {
+        const signed = await getSignedUrl(s3, cmd, { expiresIn: 300 })
+        res.statusCode = 302
+        res.setHeader('Location', signed)
+        res.setHeader('Cache-Control', 'public, max-age=60')
+        res.end()
+        return
+      }
+      try {
+        const obj = await s3.send(cmd)
+        res.statusCode = 200
+        res.setHeader('Content-Type', obj.ContentType || 'application/octet-stream')
+        if (obj.ContentLength) res.setHeader('Content-Length', String(obj.ContentLength))
+        res.setHeader('Cache-Control', 'public, max-age=3600')
+        obj.Body.pipe(res)
+      } catch (e) {
+        res.statusCode = 404
+        res.end(JSON.stringify({ error: 'Media tidak ditemukan' }))
+      }
+    })
+  }
+
+  return {
+    name: 'api-r2-dev',
+    configureServer: setupMiddlewares,
+    configurePreviewServer: setupMiddlewares
+  }
+}
+
+function pluginApiYoutube(env) {
+  const admin = createClient(env.VITE_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY)
+  function kirim(res, code, obj) {
+    res.statusCode = code
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify(obj))
+  }
+
+  const setupMiddlewares = (server) => {
+    server.middlewares.use('/api/youtube/quota', async function (req, res) {
+      const today = ptToday()
+      const kredensial = daftarKredensial(env)
+      if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
+      let usedTotal = 0
+      const perProject = []
+      for (const kred of kredensial) {
+        const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
+        const used = hit.count || 0
+        usedTotal += used
+        perProject.push({ project: kred.n, used: used, remaining: Math.max(0, LIMIT_PER_PROJECT - used) })
+      }
+      const limit = kredensial.length * LIMIT_PER_PROJECT
+      res.setHeader('Cache-Control', 'no-store')
+      kirim(res, 200, { limit: limit, used: usedTotal, remaining: Math.max(0, limit - usedTotal), perProject: perProject, ptDate: today })
+    })
+
+    server.middlewares.use('/api/youtube/session', async function (req, res) {
+      if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
+      const user = await cekSesi(env, req.headers.authorization)
+      if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
+      const today = ptToday()
+      const kredensial = daftarKredensial(env)
+      if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
+      const body = await bacaBody(req)
+      if (!body.title) { kirim(res, 400, { error: 'Judul video wajib diisi' }); return }
+      let terakhir = ''
+      for (const kred of kredensial) {
+        const hit = await admin.from('youtube_quota_usage').select('id', { count: 'exact', head: true }).eq('pt_date', today).eq('project_id', kred.n)
+        if ((hit.count || 0) >= LIMIT_PER_PROJECT) { terakhir = 'project ' + kred.n + ' sudah penuh'; continue }
+        let access
+        try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
+        const meta = {
+          snippet: { title: String(body.title).slice(0, 100), description: String(body.description || '').slice(0, 4000), tags: ['logbook-magang-bsi'], categoryId: '22' },
+          status: { privacyStatus: 'unlisted', embeddable: true, publicStatsViewable: false }
+        }
+        const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': body.contentType || 'video/mp4' },
+          body: JSON.stringify(meta)
+        })
+        if (!init.ok) { terakhir = 'project ' + kred.n + ' ditolak Google (status ' + init.status + ')'; continue }
+        const sessionUri = init.headers.get('location')
+        if (!sessionUri) { terakhir = 'project ' + kred.n + ' tanpa lokasi upload'; continue }
+        await admin.from('youtube_quota_usage').insert({ pt_date: today, user_id: user.id, project_id: kred.n })
+        kirim(res, 200, { sessionUri: sessionUri, project: kred.n })
+        return
+      }
+      kirim(res, 429, { error: 'Kuota harian semua project video sudah habis. Coba lagi besok atau gunakan link video eksternal.', detail: terakhir })
+    })
+
+    server.middlewares.use('/api/youtube/latest', async function (req, res) {
+      if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
+      const user = await cekSesi(env, req.headers.authorization)
+      if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
+      const kredensial = daftarKredensial(env)
+      if (!kredensial.length) { kirim(res, 500, { error: 'Kredensial YouTube belum dikonfigurasi' }); return }
+      let terakhir = ''
+      for (const kred of kredensial) {
+        let access
+        try { access = await getAccessToken(kred) } catch (e) { terakhir = e.message; continue }
+        const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&order=date&maxResults=5', { headers: { Authorization: 'Bearer ' + access } })
+        if (!r.ok) { terakhir = 'project ' + kred.n + ' status ' + r.status; continue }
+        const j = await r.json()
+        const items = j.items || []
+        const batas = Date.now() - 15 * 60 * 1000
+        const cocok = items.find(function (it) {
+          const t = Date.parse(it.snippet && it.snippet.publishedAt ? it.snippet.publishedAt : '')
+          return isNaN(t) ? false : t >= batas
+        })
+        if (!cocok) { kirim(res, 404, { error: 'Video terbaru tidak ditemukan' }); return }
+        kirim(res, 200, { videoId: cocok.id && cocok.id.videoId, project: kred.n })
+        return
+      }
+      kirim(res, 502, { error: 'Gagal memeriksa video terbaru: ' + terakhir })
+    })
+  }
+
+  return {
+    name: 'api-youtube-dev',
+    configureServer: setupMiddlewares,
+    configurePreviewServer: setupMiddlewares
+  }
+}
+
+function pluginApiAi(env) {
+  function kirim(res, code, obj) {
+    res.statusCode = code
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify(obj))
+  }
+  const setupMiddlewares = (server) => {
+    server.middlewares.use('/api/ai/tulis', async function (req, res) {
+      const authHeader = req.headers.authorization || ''
+      if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
+      const user = await cekSesi(env, authHeader)
+      if (!user) { kirim(res, 401, { error: 'Sesi tidak valid' }); return }
+      const body = await bacaBody(req)
+      const draft = body.draft
+      if (!draft || !String(draft).trim()) {
+        kirim(res, 400, { error: 'Tuliskan dulu catatan kasar kegiatanmu.' })
+        return
+      }
+      try {
+        const hasil = await susunLogbookAi(env, {
+          draft: draft,
+          kategoriList: Array.isArray(body.kategori) ? body.kategori : [],
+          unitList: Array.isArray(body.unit) ? body.unit : []
+        })
+        kirim(res, 200, hasil)
+      } catch (err) {
+        kirim(res, 500, { error: err.message || 'Gagal memanggil AI' })
+      }
+    })
+
+    server.middlewares.use('/api/ai/chat', async function (req, res) {
+      if (req.method !== 'POST') { kirim(res, 405, { error: 'Method tidak diizinkan' }); return }
+      const body = await bacaBody(req)
+      const pertanyaan = String(body.pertanyaan || '').trim()
+      const riwayat = Array.isArray(body.riwayat) ? body.riwayat.slice(-10) : []
+      if (!pertanyaan) { kirim(res, 400, { error: 'Pertanyaan tidak boleh kosong.' }); return }
+      if (pertanyaan.length > 500) { kirim(res, 400, { error: 'Pertanyaan terlalu panjang (maks 500 karakter).' }); return }
+
+      try {
+        const redis = ambilRedis(env)
+        const kunci = kunciJawaban(pertanyaan)
+
+        if (kunci && redis) {
+          try {
+            const cached = await redis.get(kunci)
+            if (cached) {
+              console.log('[ai/chat] jawaban dari cache')
+              kirim(res, 200, { jawaban: cached, cache: 'jawaban' })
+              return
+            }
+          } catch (e) {
+            console.warn('[redis] get jawaban gagal:', e.message)
+          }
+        }
+
+        const { data: dataTim, dariCache } = await denganCache(
+          env,
+          'mbsi:chat:konteks:v1',
+          300,
+          async function () {
+            const sb = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY)
+            const [l, p, g, h] = await Promise.all([
+              sb.from('logbooks').select('id, mahasiswa_id, tanggal, kategori, judul, logbook_items(judul)')
+                .eq('status', 'publik').order('tanggal', { ascending: false }).limit(200),
+              sb.from('mahasiswa').select('id, nama, nim, prodi').order('nama').limit(50),
+              sb.from('galeri').select('id, mahasiswa_id').limit(500),
+              sb.from('daftar_hadir').select('id, mahasiswa_id, tanggal, status, alasan')
+                .order('tanggal', { ascending: false }).limit(1000)
+            ])
+            return { logs: l.data || [], people: p.data || [], gal: g.data || [], hadir: h.data || [] }
+          }
+        )
+        console.log('[ai/chat] konteks tim:', dariCache ? 'dari cache' : 'fresh dari Supabase')
+
+        const jawaban = await jawabPertanyaanDospem(env, {
+          pertanyaan: pertanyaan,
+          riwayat: riwayat,
+          data: dataTim
+        })
+
+        if (kunci && redis) {
+          try {
+            await redis.set(kunci, jawaban, { ex: 1800 })
+          } catch (e) {
+            console.warn('[redis] set jawaban gagal:', e.message)
+          }
+        }
+
+        kirim(res, 200, { jawaban: jawaban, cache: 'fresh' })
+      } catch (err) {
+        console.error('[ai/chat]', err)
+        const status = err.statusCode || 500
+        const body2 = { error: err.message || 'Gagal memanggil AI' }
+        if (err.retryAfter) body2.retryAfter = err.retryAfter
+        kirim(res, status, body2)
+      }
+    })
+  }
+  return {
+    name: 'api-ai-dev',
+    configureServer: setupMiddlewares,
+    configurePreviewServer: setupMiddlewares
+  }
+}
+
+export default defineConfig(function ({ mode }) {
+  const env = loadEnv(mode, process.cwd(), '')
+
+  return {
+    plugins: [react(), pluginApiR2(env), pluginApiYoutube(env), pluginApiAi(env)],
+
+    server: {
+      host: true
+    },
+    preview: {
+      host: true
+    },
+
+    build: {
+      chunkSizeWarningLimit: 1000,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+            'vendor-supabase': ['@supabase/supabase-js'],
+            'vendor-aws': ['@aws-sdk/client-s3', '@aws-sdk/s3-request-presigner'],
+            'vendor-media': ['heic2any']
+          }
+        }
+      }
+    }
+  }
+})
 ````
 
 ## File: src/pages/QuickPage.jsx
@@ -9628,7 +9631,6 @@ textarea {
   30% { opacity: 1; transform: translateY(-1px) scale(1); }
 }
 
-
 .pemutar-progress::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
@@ -9669,7 +9671,6 @@ textarea {
   border: 2px solid #fff;
   box-shadow: 0 1px 3px rgba(0,0,0,0.4);
 }
-
 
 /* pusat-pemutar-v4: margin crop 70px menyembunyikan seluruh chrome bawaan YouTube */
 .pemutar-referensi iframe {
@@ -10156,7 +10157,6 @@ button:active:not(:disabled), a:active, .clickable:active { transition-duration:
   background: #0e241c;
 }
 
-
 /* bayangan lembut hero & kartu (dipakai kelas bsi-shadow / bsi-shadow-sm) */
 .bsi-shadow    { box-shadow: 0 24px 48px -24px rgba(15,42,29,0.25); }
 .bsi-shadow-sm { box-shadow: 0 10px 24px -12px rgba(15,42,29,0.18); }
@@ -10197,7 +10197,6 @@ body { background-color: #f4f8f4; background-image: linear-gradient(160deg, #dff
 .dark .time-toggle { border-color: rgba(234,244,238,.10); }
 .dark .time-toggle button { color: #9db4a6; }
 .dark .time-toggle button.active { background: #27c06d; color: #06281a; }
-
 
 .pemutar-progress::-webkit-slider-thumb, .pemutar-progress::-moz-range-thumb { background: #1a9e57; }
 .pemutar-volume::-webkit-slider-thumb, .pemutar-volume::-moz-range-thumb { background: #d97706; }
@@ -10388,7 +10387,6 @@ body { background-color: #f4f8f4; background-image: linear-gradient(160deg, #dff
   }
 }
 
-
 /* tab-scroll-v1: deret tab dashboard jadi satu baris yang bisa digeser horizontal
    di mobile/tablet, tanpa scrollbar terlihat dan dengan gradien tepi sebagai isyarat.
    Di sm ke atas kembali wrap normal supaya tetap rapi di layar lebar. */
@@ -10406,7 +10404,6 @@ body { background-color: #f4f8f4; background-image: linear-gradient(160deg, #dff
 @media (prefers-reduced-motion: reduce) {
   .tab-scroll { scroll-behavior: auto; }
 }
-
 
 /* tab-fade-smooth-v1: fade tepi nav tab dashboard pakai overlay pseudo-element.
    opacity-nya dianimasikan supaya muncul/hilang mulus, tidak mengandalkan
@@ -10459,7 +10456,6 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
   }
 }
 
-
 /* tab-icon-sizeflex: ikon tab sedikit lebih besar di sm ke atas supaya
    seimbang dengan label yang juga membesar (text-xs -> text-sm).
    Nilai height diset juga karena svg punya attr height dari JSX. */
@@ -10475,7 +10471,6 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
     height: 16px;
   }
 }
-
 
 /* avatar-edit-badge: tombol pensil kecil di sudut kanan-bawah avatar,
    pola edit foto profil ala aplikasi sosial media.
@@ -10529,7 +10524,6 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
 }
 .dark .avatar-edit-badge:hover { background: #34d399; }
 
-
 /* descender-fix-v1: heading nama di header dashboard (dan halaman QR)
    sering kepotong descender huruf 'y', 'g', 'p', 'q' karena kombinasi
    overflow: hidden dari utility `truncate` dan line-height Tailwind
@@ -10545,7 +10539,6 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
     margin-bottom: -0.06em;
   }
 }
-
 
 /* quick-header-bigger-v1: halaman /qr fokus ke identitas singkat,
    jadi nama + tanggal sedikit lebih besar dari dashboard pada mobile.
@@ -11018,6 +11011,13 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
 }
 .dark .chat-widget-reset { color: #86ecb0; }
 
+.chat-widget-reset-pill:hover {
+  background: rgba(39, 192, 109, 0.22);
+}
+.dark .dark .chat-widget-reset-pill:hover {
+  background: rgba(39, 192, 109, 0.32);
+}
+
 /* -------- Mobile -------- */
 /* full-mobile-v1: di mobile panel jadi full screen — menempel tepi
    kiri-kanan dan bawah layar, dengan rounded corner hanya di atas.
@@ -11184,6 +11184,55 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
     animation: none !important;
     opacity: 0.75 !important;
   }
+}
+
+/* chat-widget-reset-pill: tombol reset sebagai pill kecil, compact
+   supaya footer tetap 1 baris. Padding ramping agar tinggi total
+   footer tidak bertambah. */
+.chat-widget-reset-pill {
+  text-decoration: none;
+  display: inline-block;
+  padding: 0.18rem 0.7rem;
+  border-radius: 9999px;
+  background: rgba(39, 192, 109, 0.12);
+  color: #177c48;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.4;
+  vertical-align: middle;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.chat-widget-reset-pill:hover {
+  background: rgba(39, 192, 109, 0.22);
+}
+.dark .chat-widget-reset-pill {
+  background: rgba(39, 192, 109, 0.2);
+  color: #86ecb0;
+}
+.dark .chat-widget-reset-pill:hover {
+  background: rgba(39, 192, 109, 0.32);
+}
+
+/* chat-widget-catatan-satu-baris: baris footer gabungan tombol + info
+   cache. Flex supaya tombol & teks sejajar vertical-center tanpa
+   mengubah tinggi baris. */
+.chat-widget-catatan-satu-baris {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+  line-height: 1;
+}
+
+/* chat-widget-info-cache: teks info di sebelah tombol, lebih kecil
+   dan redup supaya tidak bersaing visual dengan tombol. */
+.chat-widget-info-cache {
+  font-size: 0.72rem;
+  opacity: 0.82;
+  line-height: 1.25;
+  font-weight: 500;
 }
 ````
 

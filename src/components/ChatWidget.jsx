@@ -7,6 +7,8 @@ const GREETING = 'Hai, aku Asisten Magang disini. Tanya apa aja deh soal kegiata
 const KEY_RIWAYAT = 'mbsi-chat-riwayat'
 const COOLDOWN_NORMAL = 5
 const COOLDOWN_RATE_LIMIT = 30
+/* Cache jawaban AI di server — samakan dengan TTL_JAWABAN di api/ai/chat.js */
+const CACHE_MENIT = 30
 const SARAN = [
   'Siapa yang paling sering bolos?',
   'Ringkas kegiatan mahasiswa minggu ini',
@@ -331,12 +333,13 @@ export default function ChatWidget() {
               {cooldown > 0 ? String(cooldown) : (sedangMengetik ? '…' : <IkonSend />)}
             </button>
           </div>
-          {riwayat.length ? (
-            <p className="chat-widget-catatan">
-              <button type="button" onClick={reset} className="chat-widget-reset">Mulai ulang percakapan</button>
+{riwayat.length ? (
+            <p className="chat-widget-catatan chat-widget-catatan-satu-baris">
+              <button type="button" onClick={reset} className="chat-widget-reset chat-widget-reset-pill">Mulai ulang</button>
+              <span className="chat-widget-info-cache">Data AI diperbarui setiap {CACHE_MENIT} menit</span>
             </p>
           ) : (
-            <p className="chat-widget-catatan">Jawaban berdasarkan data portal.</p>
+            <p className="chat-widget-catatan">Data AI diperbarui setiap {CACHE_MENIT} menit</p>
           )}
         </footer>
       </div>
