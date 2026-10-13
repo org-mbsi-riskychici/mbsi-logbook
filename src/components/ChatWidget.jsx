@@ -54,7 +54,25 @@ export default function ChatWidget() {
      - Bubble dari riwayat (sessionStorage) TIDAK dianimasikan,
        langsung tampil penuh saat halaman dibuka. */
   const [teksTampil, setTeksTampil] = useState({})
-  const animasiRef = useRef({})
+  /* typewriter-skip-riwayat-v1: ref di-init null lalu lazy-init di body
+     komponen. Saat mount pertama (atau refresh browser), semua bubble
+     yang sudah ada di riwayat — dimuat dari sessionStorage — ditandai
+     "selesai", supaya TIDAK ikut dianimasikan typewriter. Yang
+     dianimasikan hanya bubble assistant baru dari API.
+
+     Kenapa lazy-init di body, bukan di useEffect:
+     - useEffect jalan SETELAH commit + paint, sedangkan effect
+       typewriter juga di useEffect. Urutan antar effect bergantung
+       urutan deklarasi, rapuh.
+     - Lazy-init di body memastikan ref sudah terisi SEBELUM render
+       pertama commit, jadi effect typewriter pasti lihat map yang
+       sudah siap. */
+  const animasiRef = useRef(null)
+  if (animasiRef.current === null) {
+    const mapAwal = {}
+    for (let i = 0; i < riwayat.length; i++) mapAwal[i] = 'selesai'
+    animasiRef.current = mapAwal
+  }
   /* lock-while-typing-v1: true selama animasi typewriter berjalan.
      Dipakai untuk lock input & tombol kirim supaya user tidak bisa
      kirim pesan baru saat AI masih mengetik. */
