@@ -1,6 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { tanyaDospem } from '../lib/ai.js'
-import { TitikAnim } from './ui.jsx'
 
 const NAMA_ASISTEN = 'Asisten Magang'
 const SUBTITLE_ASISTEN = 'Online'
@@ -227,11 +226,10 @@ export default function ChatWidget() {
 
           {busy ? (
             <div className="chat-widget-row">
-              <div className="chat-widget-bubble chat-widget-bubble-ai">
-                <span className="inline-flex items-center">
-                  <span></span>
-                  <TitikAnim />
-                </span>
+              <div className="chat-widget-typing" role="status" aria-label="Sedang menganalisis">
+                <span className="chat-widget-typing-dot" />
+                <span className="chat-widget-typing-dot" />
+                <span className="chat-widget-typing-dot" />
               </div>
             </div>
           ) : null}
