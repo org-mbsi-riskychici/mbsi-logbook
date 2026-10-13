@@ -3815,6 +3815,58 @@ export function toTitleCase(teks) {
 }
 ````
 
+## File: src/lib/theme.jsx
+````javascript
+import { createContext, useContext, useEffect, useState } from 'react'
+
+const ThemeContext = createContext(null)
+
+/* View Transition hanya aman saat toolbar browser pasti stabil.
+   Di perangkat sentuh, toolbar bisa sedang beranimasi buka/tutup
+   ketika user scroll. Snapshot VT pada momen itu membuat toolbar
+   meluas menutupi navbar, jadi VT dilewati kecuali halaman
+   benar-benar di paling atas. */
+function bolehTransisiVT() {
+  if (!document.startViewTransition) return false
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false
+  if (window.matchMedia('(pointer: coarse)').matches && window.scrollY > 0) return false
+  return true
+}
+
+export function ThemeProvider(props) {
+  const [dark, setDark] = useState(function () {
+    const saved = localStorage.getItem('mbsi-theme')
+    if (saved) return saved === 'dark'
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  })
+  useEffect(function () {
+    document.documentElement.classList.toggle('dark', dark)
+    localStorage.setItem('mbsi-theme', dark ? 'dark' : 'light')
+  }, [dark])
+  return (
+    <ThemeContext.Provider value={{ dark: dark, toggle: function () {
+      const ganti = function () { setDark(function (d) { return !d }) }
+      if (bolehTransisiVT()) {
+        const akar = document.documentElement
+        const vt = document.startViewTransition(function () {
+          akar.classList.add('vt-tema')
+          ganti()
+        })
+        const lepas = function () { akar.classList.remove('vt-tema') }
+        vt.finished.then(lepas, lepas)
+        setTimeout(lepas, 600)
+      } else ganti()
+    } }}>
+      {props.children}
+    </ThemeContext.Provider>
+  )
+}
+
+export function useTheme() {
+  return useContext(ThemeContext)
+}
+````
+
 ## File: src/lib/youtube.js
 ````javascript
 import { supabase } from './supabase.js'
@@ -4221,58 +4273,6 @@ export async function siapkanFotoProfil(file, maksSisi, kualitas) {
 }
 ````
 
-## File: src/lib/theme.jsx
-````javascript
-import { createContext, useContext, useEffect, useState } from 'react'
-
-const ThemeContext = createContext(null)
-
-/* View Transition hanya aman saat toolbar browser pasti stabil.
-   Di perangkat sentuh, toolbar bisa sedang beranimasi buka/tutup
-   ketika user scroll. Snapshot VT pada momen itu membuat toolbar
-   meluas menutupi navbar, jadi VT dilewati kecuali halaman
-   benar-benar di paling atas. */
-function bolehTransisiVT() {
-  if (!document.startViewTransition) return false
-  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false
-  if (window.matchMedia('(pointer: coarse)').matches && window.scrollY > 0) return false
-  return true
-}
-
-export function ThemeProvider(props) {
-  const [dark, setDark] = useState(function () {
-    const saved = localStorage.getItem('mbsi-theme')
-    if (saved) return saved === 'dark'
-    return window.matchMedia('(prefers-color-scheme: dark)').matches
-  })
-  useEffect(function () {
-    document.documentElement.classList.toggle('dark', dark)
-    localStorage.setItem('mbsi-theme', dark ? 'dark' : 'light')
-  }, [dark])
-  return (
-    <ThemeContext.Provider value={{ dark: dark, toggle: function () {
-      const ganti = function () { setDark(function (d) { return !d }) }
-      if (bolehTransisiVT()) {
-        const akar = document.documentElement
-        const vt = document.startViewTransition(function () {
-          akar.classList.add('vt-tema')
-          ganti()
-        })
-        const lepas = function () { akar.classList.remove('vt-tema') }
-        vt.finished.then(lepas, lepas)
-        setTimeout(lepas, 600)
-      } else ganti()
-    } }}>
-      {props.children}
-    </ThemeContext.Provider>
-  )
-}
-
-export function useTheme() {
-  return useContext(ThemeContext)
-}
-````
-
 ## File: index.html
 ````html
 <!DOCTYPE html>
@@ -4472,6 +4472,524 @@ export function countActiveFilters(o) {
   }
   return c
 }
+````
+
+## File: src/components/Skeleton.jsx
+````javascript
+export function SkeletonLogbookCard() {
+  return (
+    <div className="card-hover bsi-panel flex h-full flex-col gap-4 rounded-3xl p-6">
+      {/* Media / carousel */}
+      <div className="skeleton aspect-video w-full rounded-2xl"></div>
+
+      {/* Badge kategori, unit, dan status */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-1.5">
+          <div className="skeleton h-6 w-24 rounded-full"></div>
+          <div className="skeleton h-6 w-20 rounded-full"></div>
+        </div>
+        <div className="skeleton h-6 w-20 rounded-full"></div>
+      </div>
+
+      {/* Tanggal, judul, dan daftar kegiatan */}
+      <div>
+        <div className="skeleton h-4 w-36 rounded-full"></div>
+        <div className="skeleton mt-2 h-6 w-4/5 rounded-full"></div>
+        <div className="skeleton mt-3 h-3 w-28 rounded-full"></div>
+        <div className="mt-2 space-y-1">
+          <div className="skeleton h-3 w-full rounded-full"></div>
+          <div className="skeleton h-3 w-2/3 rounded-full"></div>
+        </div>
+      </div>
+
+      {/* Footer: profil + tombol detail */}
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-4">
+        <div className="flex items-center gap-3">
+          <div className="skeleton h-11 w-11 shrink-0" style={{ borderRadius: '28%' }}></div>
+          <div className="space-y-1.5">
+            <div className="skeleton h-3.5 w-28 rounded-full"></div>
+            <div className="skeleton h-3 w-20 rounded-full"></div>
+          </div>
+        </div>
+        <div className="skeleton h-8 w-16 rounded-xl"></div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonGalleryCard() {
+  return (
+    <div className="card-hover bsi-panel flex h-full flex-col overflow-hidden rounded-3xl">
+      {/* Media menempel tepi atas sesuai GalleryCard asli */}
+      <div className="skeleton aspect-video w-full"></div>
+
+      <div className="flex flex-1 flex-col gap-3 p-5">
+        {/* Badge kegiatan dan tanggal */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap gap-1.5">
+            <div className="skeleton h-6 w-24 rounded-full"></div>
+            <div className="skeleton h-5 w-20 rounded-full"></div>
+          </div>
+          <div className="skeleton h-3 w-16 rounded-full"></div>
+        </div>
+
+        {/* Judul dan deskripsi */}
+        <div className="skeleton h-5 w-3/4 rounded-full"></div>
+        <div className="space-y-1.5">
+          <div className="skeleton h-3.5 w-full rounded-full"></div>
+          <div className="skeleton h-3.5 w-2/3 rounded-full"></div>
+        </div>
+
+        {/* Footer: profil + keterangan */}
+        <div className="mt-auto space-y-3 border-t border-slate-100 pt-3">
+          <div className="flex items-center gap-3">
+            <div className="skeleton h-11 w-11 shrink-0" style={{ borderRadius: '28%' }}></div>
+            <div className="space-y-1.5">
+              <div className="skeleton h-3.5 w-28 rounded-full"></div>
+              <div className="skeleton h-3 w-20 rounded-full"></div>
+            </div>
+          </div>
+          <div className="skeleton h-3 w-40 rounded-full"></div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonAttendanceCard() {
+  return (
+    <div className="card-hover bsi-panel flex h-full flex-col rounded-3xl p-5">
+      {/* Tanggal + profil + badge status */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="skeleton h-4 w-40 rounded-full"></div>
+          <div className="mt-4 flex items-center gap-3">
+            <div className="skeleton h-11 w-11 shrink-0" style={{ borderRadius: '28%' }}></div>
+            <div className="space-y-1.5">
+              <div className="skeleton h-4 w-28 rounded-full"></div>
+              <div className="skeleton h-3 w-20 rounded-full"></div>
+            </div>
+          </div>
+        </div>
+        <div className="skeleton h-6 w-16 rounded-full"></div>
+      </div>
+
+      {/* Box alasan / keterangan */}
+      <div className="mt-4 flex-1 rounded-2xl bg-slate-50 p-4">
+        <div className="skeleton h-3 w-32 rounded-full"></div>
+        <div className="skeleton mt-2 h-3.5 w-3/4 rounded-full"></div>
+      </div>
+
+      {/* Tombol aksi */}
+      <div className="mt-4 flex gap-2">
+        <div className="skeleton h-8 w-16 rounded-xl"></div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonPersonCard() {
+  return (
+    <div className="card-hover bsi-panel flex h-full flex-col rounded-3xl p-5">
+      {/* Profil mahasiswa */}
+      <div className="flex items-center gap-4">
+        <div className="skeleton h-14 w-14 shrink-0" style={{ borderRadius: '28%' }}></div>
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <div className="skeleton h-5 w-36 rounded-full"></div>
+          <div className="skeleton h-3 w-24 rounded-full"></div>
+          <div className="skeleton h-5 w-20 rounded-full"></div>
+        </div>
+      </div>
+
+      {/* Statistik logbook dan media */}
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <div className="rounded-2xl bg-slate-50 p-3">
+          <div className="skeleton h-3 w-16 rounded-full"></div>
+          <div className="skeleton mt-1.5 h-5 w-8 rounded-full"></div>
+        </div>
+        <div className="rounded-2xl bg-slate-50 p-3">
+          <div className="skeleton h-3 w-16 rounded-full"></div>
+          <div className="skeleton mt-1.5 h-5 w-8 rounded-full"></div>
+        </div>
+      </div>
+
+      {/* Rekap kehadiran */}
+      <div className="mt-3 border-t border-slate-100 pt-3">
+        <div className="skeleton h-3 w-24 rounded-full"></div>
+        <div className="mt-2 grid grid-cols-3 gap-2">
+          <div className="rounded-xl bg-slate-50 p-2">
+            <div className="skeleton h-3 w-full rounded-full"></div>
+            <div className="skeleton mx-auto mt-1.5 h-4 w-6 rounded-full"></div>
+          </div>
+          <div className="rounded-xl bg-slate-50 p-2">
+            <div className="skeleton h-3 w-full rounded-full"></div>
+            <div className="skeleton mx-auto mt-1.5 h-4 w-6 rounded-full"></div>
+          </div>
+          <div className="rounded-xl bg-slate-50 p-2">
+            <div className="skeleton h-3 w-full rounded-full"></div>
+            <div className="skeleton mx-auto mt-1.5 h-4 w-6 rounded-full"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonDashboard() {
+  return (
+    <div className="space-y-6">
+      {/* skeleton-dash-v2: header meniru layout baru (identitas di atas, tab di bawah) */}
+      <div className="bsi-panel rounded-[2rem] p-5 sm:p-8 lg:p-10">
+        <div className="flex flex-col gap-5 sm:gap-6">
+          {/* Baris identitas: avatar + badge, nama, NIM, prodi */}
+          <div className="flex flex-wrap items-center gap-4 sm:gap-6 min-w-0">
+            <div className="avatar-kepala-dash relative shrink-0">
+              <div className="skeleton h-14 w-14 shrink-0 rounded-[28%] sm:h-24 sm:w-24"></div>
+              <div className="skeleton !absolute h-[22px] w-[22px] rounded-full -bottom-[3px] -right-[3px] sm:h-9 sm:w-9 sm:-bottom-1.5 sm:-right-1.5"></div>
+            </div>
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className="skeleton h-4 w-48 rounded-full sm:h-7"></div>
+              <div className="skeleton h-3 w-28 rounded-full sm:h-4"></div>
+              <div className="skeleton h-3 w-32 rounded-full sm:h-4"></div>
+            </div>
+          </div>
+
+          {/* Baris tab: 4 pill (Logbook, Galeri, Hadir, Cetak QR) */}
+          <div className="flex flex-wrap gap-1.5 sm:gap-2">
+            <div className="skeleton h-9 w-20 rounded-xl sm:h-11 sm:w-28 sm:rounded-2xl"></div>
+            <div className="skeleton h-9 w-16 rounded-xl sm:h-11 sm:w-24 sm:rounded-2xl"></div>
+            <div className="skeleton h-9 w-16 rounded-xl sm:h-11 sm:w-32 sm:rounded-2xl"></div>
+            <div className="skeleton h-9 w-12 rounded-xl sm:h-11 sm:w-28 sm:rounded-2xl"></div>
+          </div>
+        </div>
+      </div>
+
+      {/* Form logbook + daftar logbook */}
+      <div className="grid items-start gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+        <div className="space-y-4 bsi-panel rounded-[2rem] p-5 shadow-sm sm:p-8">
+          <div className="skeleton h-6 w-48 rounded-full"></div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="skeleton h-11 w-full rounded-2xl"></div>
+            <div className="skeleton h-11 w-full rounded-2xl"></div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="skeleton h-11 w-full rounded-2xl"></div>
+            <div className="skeleton h-11 w-full rounded-2xl"></div>
+          </div>
+          <div className="skeleton h-11 w-full rounded-2xl"></div>
+          <div className="skeleton h-40 w-full rounded-2xl"></div>
+          <div className="skeleton h-11 w-full rounded-2xl"></div>
+        </div>
+        <div className="space-y-5">
+          <div className="skeleton h-6 w-32 rounded-full"></div>
+          <div className="skeleton h-12 w-full rounded-3xl"></div>
+          <div className="skeleton h-4 w-28 rounded-full"></div>
+          <div className="grid gap-5 md:grid-cols-2 kartu-grid">
+            <SkeletonLogbookCard />
+            <SkeletonLogbookCard />
+            <SkeletonLogbookCard />
+            <SkeletonLogbookCard />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonStatCard() {
+  return (
+    <div className="card-hover bsi-panel rounded-3xl p-3 shadow-sm sm:p-6">
+      <div className="skeleton h-3 w-3/4 rounded-full sm:h-4 sm:w-28"></div>
+      <div className="skeleton mt-1 h-6 w-1/2 rounded-full sm:mt-3 sm:h-9 sm:w-16"></div>
+      <div className="skeleton mt-2 h-3 w-36 rounded-full hidden sm:block"></div>
+    </div>
+  )
+}
+
+export function SkeletonChartRow() {
+  return (
+    <div className="card-hover bsi-panel rounded-[1.5rem] p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="space-y-1.5">
+          <div className="skeleton h-4 w-32 rounded-full"></div>
+          <div className="skeleton h-3 w-20 rounded-full"></div>
+        </div>
+        <div className="skeleton h-3 w-36 rounded-full"></div>
+      </div>
+      <div className="skeleton mt-4 h-4 w-full rounded-full"></div>
+    </div>
+  )
+}
+
+export function SkeletonQuick() {
+  return (
+    <div className="mx-auto w-full max-w-xl space-y-5">
+      {/* Hero: avatar + identitas + tab switcher */}
+      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="avatar-kepala-cepat">
+            <div className="skeleton h-14 w-14 sm:h-[67px] sm:w-[67px]" style={{ borderRadius: '20px' }} />
+          </div>
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="skeleton h-5 w-48 rounded-full sm:h-6" />
+            <div className="skeleton h-3.5 w-40 rounded-full" />
+          </div>
+        </div>
+        <div className="mt-4 flex gap-2">
+          <div className="skeleton h-10 flex-1 rounded-xl sm:h-12 sm:rounded-2xl" />
+          <div className="skeleton h-10 flex-1 rounded-xl sm:h-12 sm:rounded-2xl" />
+        </div>
+      </section>
+
+      {/* Form logbook: info terakhir + kartu kegiatan */}
+      <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
+        <div className="mb-4 flex items-center gap-1.5">
+          <div className="skeleton h-3.5 w-3.5 rounded-full" />
+          <div className="skeleton h-3 w-56 rounded-full" />
+        </div>
+
+        <div className="mt-1.5 skeleton h-11 w-full rounded-2xl" />
+
+        <div className="mt-5 space-y-4">
+          <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="skeleton h-3 w-24 rounded-full" />
+            <div className="skeleton h-11 w-full rounded-2xl" />
+            <div className="skeleton h-16 w-full rounded-2xl" />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="skeleton h-12 w-full rounded-2xl" />
+              <div className="skeleton h-12 w-full rounded-2xl" />
+            </div>
+          </div>
+          <div className="skeleton h-12 w-full rounded-xl sm:h-14 sm:rounded-2xl" />
+        </div>
+      </section>
+    </div>
+  )
+}
+````
+
+## File: src/main.jsx
+````javascript
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import App from './App.jsx'
+import './index.css'
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+)
+
+/* ===== Indikator scrollbar auto hide, overlay tanpa menggeser layout ===== */
+;(function () {
+  if (typeof document === 'undefined') return
+  function pasang() {
+    if (document.getElementById('scroll-indicator')) return
+    const track = document.createElement('div')
+    track.id = 'scroll-indicator'
+    const thumb = document.createElement('div')
+    thumb.id = 'scroll-thumb'
+    track.appendChild(thumb)
+    document.body.appendChild(track)
+    let timer = null
+    let sumber = null
+    let watchdog = null
+    function stopWatchdog() {
+      if (watchdog) { clearInterval(watchdog); watchdog = null }
+    }
+    function mulaiWatchdog() {
+      if (watchdog) return
+      watchdog = setInterval(function () {
+        if (!track.classList.contains('aktif')) { stopWatchdog(); return }
+        if (sumber) {
+          if (!sumber.isConnected || sumber.scrollHeight - sumber.clientHeight <= 4) {
+            sembunyikan()
+            sumber = null
+            stopWatchdog()
+          }
+        } else if (document.documentElement.scrollHeight - window.innerHeight <= 4) {
+          sembunyikan()
+          stopWatchdog()
+        }
+      }, 90)
+    }
+    function sembunyikan() { track.classList.remove('aktif'); stopWatchdog() }
+    function tampilkan() {
+      track.classList.add('aktif')
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(sembunyikan, 400)
+      mulaiWatchdog()
+    }
+    function ukur(el, adalahWindow, rect) {
+      const scrollTop = adalahWindow ? (window.scrollY || document.documentElement.scrollTop) : el.scrollTop
+      const scrollHeight = adalahWindow ? document.documentElement.scrollHeight : el.scrollHeight
+      const clientHeight = adalahWindow ? window.innerHeight : el.clientHeight
+      const selisih = scrollHeight - clientHeight
+      if (selisih <= 4) { sembunyikan(); return }
+      const ratio = clientHeight / scrollHeight
+      const trackTinggi = rect.height - 6
+      const thumbTinggi = Math.max(24, trackTinggi * ratio)
+      const maxTop = trackTinggi - thumbTinggi
+      let gerak = scrollTop / selisih
+      if (gerak < 0) gerak = 0
+      if (gerak > 1) gerak = 1
+      thumb.style.height = thumbTinggi + 'px'
+      thumb.style.transform = 'translateY(' + (3 + gerak * maxTop) + 'px)'
+      track.style.top = rect.top + 'px'
+      track.style.height = rect.height + 'px'
+      track.style.right = (window.innerWidth - rect.right + 2) + 'px'
+    }
+    function onScroll(e) {
+      const t = e.target
+      if (t === document || t === document.documentElement || t === window || !t || t.nodeType !== 1) {
+        sumber = null
+        ukur(null, true, { top: 0, height: window.innerHeight, right: window.innerWidth })
+      } else {
+        sumber = t
+        const r = t.getBoundingClientRect()
+        ukur(t, false, { top: r.top, height: r.height, right: r.right })
+      }
+      tampilkan()
+    }
+    window.addEventListener('scroll', onScroll, true)
+    document.addEventListener('scroll', onScroll, true)
+    window.addEventListener('resize', sembunyikan)
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pasang)
+  else pasang()
+})()
+
+/* ===== Pergeseran mulus isi filter saat mode waktu berganti (bayangan keluar plus FLIP) ===== */
+;(function () {
+  if (typeof document === 'undefined') return
+  function pasang() {
+    document.addEventListener('click', function (e) {
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+      const tombol = e.target && e.target.closest ? e.target.closest('.time-toggle button') : null
+      if (!tombol) return
+      if ((' ' + tombol.className + ' ').indexOf(' active ') !== -1) return
+      const toggle = tombol.closest('.time-toggle')
+      if (!toggle || !toggle.parentElement) return
+      if (window.innerWidth < 1280) return
+       const wadah = tombol.closest('.rounded-3xl') || toggle.parentElement.parentElement || toggle.parentElement
+      const cabang = toggle.parentElement.querySelector('.anim-ganti-bulan, .anim-ganti-rentang')
+      if (cabang) {
+        const r = cabang.getBoundingClientRect()
+        if (r.width > 0) {
+          const hantu = cabang.cloneNode(true)
+          hantu.style.position = 'fixed'
+          hantu.style.left = r.left + 'px'
+          hantu.style.top = r.top + 'px'
+          hantu.style.width = r.width + 'px'
+          hantu.style.height = r.height + 'px'
+          hantu.style.margin = '0'
+          hantu.style.zIndex = '45'
+          hantu.classList.add('hantu-cabang')
+          document.body.appendChild(hantu)
+          hantu.style.animation = 'none'
+          const turunan = hantu.querySelectorAll('*')
+          for (let i = 0; i < turunan.length; i++) turunan[i].style.animation = 'none'
+          const keBulan = !tombol.previousElementSibling
+          if (hantu.animate) {
+            hantu.animate([
+              { opacity: 1, transform: 'translateX(0)' },
+              { opacity: 0, transform: keBulan ? 'translateX(10px)' : 'translateX(-10px)' }
+            ], { duration: 180, easing: 'ease-in' }).onfinish = function () { if (hantu.parentNode) hantu.parentNode.removeChild(hantu) }
+          } else {
+            setTimeout(function () { if (hantu.parentNode) hantu.parentNode.removeChild(hantu) }, 200)
+          }
+        }
+      }
+      const snap = new Map()
+      const els = wadah.querySelectorAll('*')
+      for (let i = 0; i < els.length; i++) snap.set(els[i], els[i].getBoundingClientRect())
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          snap.forEach(function (rect, el) {
+            if (!el.isConnected || !el.animate) return
+            const r = el.getBoundingClientRect()
+            const dx = rect.left - r.left
+            const dy = rect.top - r.top
+            if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return
+            el.animate([
+              { transform: 'translate(' + dx + 'px, ' + dy + 'px)' },
+              { transform: 'translate(0, 0)' }
+            ], { duration: 320, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' })
+          })
+        })
+      })
+    }, true)
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pasang)
+  else pasang()
+})()
+
+/* ===== transisi-halaman-v1: picu ulang animasi saat pindah rute dan pindah halaman pagination ===== */
+;(function () {
+  if (typeof document === 'undefined') return
+  function ulangAnimasi(el) {
+    if (!el) return
+    el.style.animation = 'none'
+    void el.offsetWidth
+    el.style.animation = ''
+  }
+  function pasang() {
+    document.addEventListener('click', function (e) {
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+      const t = e.target
+      if (!t || !t.closest) return
+      const link = t.closest('a[href]')
+      if (link) {
+        const href = link.getAttribute('href') || ''
+        const eksternal = link.target === '_blank' || href.indexOf('http') === 0 || href.indexOf('#') === 0
+        if (!eksternal) {
+          requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+              if (e.mbsiDicegah) return
+              ulangAnimasi(document.querySelector('main.anim-page') || document.querySelector('.anim-page'))
+            })
+          })
+        }
+        return
+      }
+      const pag = t.closest('.mt-8.flex.flex-wrap.items-center.justify-center.gap-2')
+      if (pag && t.closest('button')) {
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            const grid = document.querySelectorAll('.grid-pusat, .grid-pusat-rapat, .kartu-grid')
+            for (let i = 0; i < grid.length; i++) {
+              const anak = grid[i].children
+              for (let j = 0; j < anak.length; j++) ulangAnimasi(anak[j])
+            }
+          })
+        })
+      }
+    }, true)
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pasang)
+  else pasang()
+})()
+
+/* ===== transisi-tema: aktifkan transisi pelan hanya pada momen pergantian mode ===== */
+;(function () {
+  if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  const akar = document.documentElement
+  let gelap = akar.classList.contains('dark')
+  let timer = null
+  const obs = new MutationObserver(function () {
+    const sekarang = akar.classList.contains('dark')
+    if (sekarang === gelap) return
+    gelap = sekarang
+    /* VT sedang menangani pergantian ini bila kelas vt-tema menempel di html */
+    if (akar.classList.contains('vt-tema')) return
+    akar.classList.add('theme-transition')
+    if (timer) clearTimeout(timer)
+    timer = setTimeout(function () { akar.classList.remove('theme-transition') }, 400)
+  })
+  obs.observe(akar, { attributes: true, attributeFilter: ['class'] })
+})()
 ````
 
 ## File: .env.example
@@ -4892,6 +5410,73 @@ export default function LogbookPage() {
 }
 ````
 
+## File: src/App.jsx
+````javascript
+import { SkeletonDashboard, SkeletonQuick } from './components/Skeleton.jsx'
+import { useEffect } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { ThemeProvider } from './lib/theme.jsx'
+ import { ToastProvider } from './components/ui.jsx'
+import { useAuth } from './lib/auth.js'
+import Layout from './components/Layout.jsx'
+import HomePage from './pages/HomePage.jsx'
+import LogbookPage from './pages/LogbookPage.jsx'
+import GalleryPage from './pages/GalleryPage.jsx'
+import AttendancePage from './pages/AttendancePage.jsx'
+import DospemPage from './pages/DospemPage.jsx'
+import LoginPage from './pages/LoginPage.jsx'
+import DashboardPage from './pages/DashboardPage.jsx'
+import QuickPage from './pages/QuickPage.jsx'
+
+function ScrollToTop() {
+  const { pathname } = useLocation()
+  useEffect(function () {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+  }, [pathname])
+  return null
+}
+function RequireAuth(props) {
+  const { mahasiswa, loading } = useAuth()
+  const location = useLocation()
+  if (loading) return props.fallback || <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:py-8"><SkeletonDashboard /></div>
+  if (!mahasiswa) return <Navigate to={'/login?next=' + encodeURIComponent(location.pathname + location.search)} replace />
+  return props.children
+}
+
+function RequireGuest(props) {
+  const { mahasiswa, loading } = useAuth()
+  if (loading) return <div className="grid min-h-[60vh] place-items-center"><div className="h-10 w-10 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div></div>
+  if (mahasiswa) return <Navigate to="/dashboard" replace />
+  return props.children
+}
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <ToastProvider>
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ScrollToTop />
+        <Routes>
+          <Route element={<Layout />}>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/logbook" element={<LogbookPage />} />
+            <Route path="/galeri" element={<GalleryPage />} />
+            <Route path="/absen" element={<AttendancePage />} />
+            <Route path="/dospem" element={<DospemPage />} />
+            <Route path="/tim" element={<Navigate to="/dospem" replace />} />
+            <Route path="/login" element={<RequireGuest><LoginPage /></RequireGuest>} />
+            <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
+            <Route path="/qr" element={<RequireAuth fallback={<SkeletonQuick />}><QuickPage /></RequireAuth>} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+      </ToastProvider>
+    </ThemeProvider>
+  )
+}
+````
+
 ## File: src/components/PemutarVideo.jsx
 ````javascript
 import { useEffect, useRef, useState } from 'react'
@@ -5181,300 +5766,6 @@ export default function PemutarVideo(props) {
 }
 ````
 
-## File: src/components/Skeleton.jsx
-````javascript
-export function SkeletonLogbookCard() {
-  return (
-    <div className="card-hover bsi-panel flex h-full flex-col gap-4 rounded-3xl p-6">
-      {/* Media / carousel */}
-      <div className="skeleton aspect-video w-full rounded-2xl"></div>
-
-      {/* Badge kategori, unit, dan status */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-1.5">
-          <div className="skeleton h-6 w-24 rounded-full"></div>
-          <div className="skeleton h-6 w-20 rounded-full"></div>
-        </div>
-        <div className="skeleton h-6 w-20 rounded-full"></div>
-      </div>
-
-      {/* Tanggal, judul, dan daftar kegiatan */}
-      <div>
-        <div className="skeleton h-4 w-36 rounded-full"></div>
-        <div className="skeleton mt-2 h-6 w-4/5 rounded-full"></div>
-        <div className="skeleton mt-3 h-3 w-28 rounded-full"></div>
-        <div className="mt-2 space-y-1">
-          <div className="skeleton h-3 w-full rounded-full"></div>
-          <div className="skeleton h-3 w-2/3 rounded-full"></div>
-        </div>
-      </div>
-
-      {/* Footer: profil + tombol detail */}
-      <div className="mt-auto flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-4">
-        <div className="flex items-center gap-3">
-          <div className="skeleton h-11 w-11 shrink-0" style={{ borderRadius: '28%' }}></div>
-          <div className="space-y-1.5">
-            <div className="skeleton h-3.5 w-28 rounded-full"></div>
-            <div className="skeleton h-3 w-20 rounded-full"></div>
-          </div>
-        </div>
-        <div className="skeleton h-8 w-16 rounded-xl"></div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonGalleryCard() {
-  return (
-    <div className="card-hover bsi-panel flex h-full flex-col overflow-hidden rounded-3xl">
-      {/* Media menempel tepi atas sesuai GalleryCard asli */}
-      <div className="skeleton aspect-video w-full"></div>
-
-      <div className="flex flex-1 flex-col gap-3 p-5">
-        {/* Badge kegiatan dan tanggal */}
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap gap-1.5">
-            <div className="skeleton h-6 w-24 rounded-full"></div>
-            <div className="skeleton h-5 w-20 rounded-full"></div>
-          </div>
-          <div className="skeleton h-3 w-16 rounded-full"></div>
-        </div>
-
-        {/* Judul dan deskripsi */}
-        <div className="skeleton h-5 w-3/4 rounded-full"></div>
-        <div className="space-y-1.5">
-          <div className="skeleton h-3.5 w-full rounded-full"></div>
-          <div className="skeleton h-3.5 w-2/3 rounded-full"></div>
-        </div>
-
-        {/* Footer: profil + keterangan */}
-        <div className="mt-auto space-y-3 border-t border-slate-100 pt-3">
-          <div className="flex items-center gap-3">
-            <div className="skeleton h-11 w-11 shrink-0" style={{ borderRadius: '28%' }}></div>
-            <div className="space-y-1.5">
-              <div className="skeleton h-3.5 w-28 rounded-full"></div>
-              <div className="skeleton h-3 w-20 rounded-full"></div>
-            </div>
-          </div>
-          <div className="skeleton h-3 w-40 rounded-full"></div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonAttendanceCard() {
-  return (
-    <div className="card-hover bsi-panel flex h-full flex-col rounded-3xl p-5">
-      {/* Tanggal + profil + badge status */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="skeleton h-4 w-40 rounded-full"></div>
-          <div className="mt-4 flex items-center gap-3">
-            <div className="skeleton h-11 w-11 shrink-0" style={{ borderRadius: '28%' }}></div>
-            <div className="space-y-1.5">
-              <div className="skeleton h-4 w-28 rounded-full"></div>
-              <div className="skeleton h-3 w-20 rounded-full"></div>
-            </div>
-          </div>
-        </div>
-        <div className="skeleton h-6 w-16 rounded-full"></div>
-      </div>
-
-      {/* Box alasan / keterangan */}
-      <div className="mt-4 flex-1 rounded-2xl bg-slate-50 p-4">
-        <div className="skeleton h-3 w-32 rounded-full"></div>
-        <div className="skeleton mt-2 h-3.5 w-3/4 rounded-full"></div>
-      </div>
-
-      {/* Tombol aksi */}
-      <div className="mt-4 flex gap-2">
-        <div className="skeleton h-8 w-16 rounded-xl"></div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonPersonCard() {
-  return (
-    <div className="card-hover bsi-panel flex h-full flex-col rounded-3xl p-5">
-      {/* Profil mahasiswa */}
-      <div className="flex items-center gap-4">
-        <div className="skeleton h-14 w-14 shrink-0" style={{ borderRadius: '28%' }}></div>
-        <div className="min-w-0 flex-1 space-y-1.5">
-          <div className="skeleton h-5 w-36 rounded-full"></div>
-          <div className="skeleton h-3 w-24 rounded-full"></div>
-          <div className="skeleton h-5 w-20 rounded-full"></div>
-        </div>
-      </div>
-
-      {/* Statistik logbook dan media */}
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <div className="rounded-2xl bg-slate-50 p-3">
-          <div className="skeleton h-3 w-16 rounded-full"></div>
-          <div className="skeleton mt-1.5 h-5 w-8 rounded-full"></div>
-        </div>
-        <div className="rounded-2xl bg-slate-50 p-3">
-          <div className="skeleton h-3 w-16 rounded-full"></div>
-          <div className="skeleton mt-1.5 h-5 w-8 rounded-full"></div>
-        </div>
-      </div>
-
-      {/* Rekap kehadiran */}
-      <div className="mt-3 border-t border-slate-100 pt-3">
-        <div className="skeleton h-3 w-24 rounded-full"></div>
-        <div className="mt-2 grid grid-cols-3 gap-2">
-          <div className="rounded-xl bg-slate-50 p-2">
-            <div className="skeleton h-3 w-full rounded-full"></div>
-            <div className="skeleton mx-auto mt-1.5 h-4 w-6 rounded-full"></div>
-          </div>
-          <div className="rounded-xl bg-slate-50 p-2">
-            <div className="skeleton h-3 w-full rounded-full"></div>
-            <div className="skeleton mx-auto mt-1.5 h-4 w-6 rounded-full"></div>
-          </div>
-          <div className="rounded-xl bg-slate-50 p-2">
-            <div className="skeleton h-3 w-full rounded-full"></div>
-            <div className="skeleton mx-auto mt-1.5 h-4 w-6 rounded-full"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonDashboard() {
-  return (
-    <div className="space-y-6">
-      {/* skeleton-dash-v2: header meniru layout baru (identitas di atas, tab di bawah) */}
-      <div className="bsi-panel rounded-[2rem] p-5 sm:p-8 lg:p-10">
-        <div className="flex flex-col gap-5 sm:gap-6">
-          {/* Baris identitas: avatar + badge, nama, NIM, prodi */}
-          <div className="flex flex-wrap items-center gap-4 sm:gap-6 min-w-0">
-            <div className="avatar-kepala-dash relative shrink-0">
-              <div className="skeleton h-14 w-14 shrink-0 rounded-[28%] sm:h-24 sm:w-24"></div>
-              <div className="skeleton !absolute h-[22px] w-[22px] rounded-full -bottom-[3px] -right-[3px] sm:h-9 sm:w-9 sm:-bottom-1.5 sm:-right-1.5"></div>
-            </div>
-            <div className="min-w-0 flex-1 space-y-2">
-              <div className="skeleton h-4 w-48 rounded-full sm:h-7"></div>
-              <div className="skeleton h-3 w-28 rounded-full sm:h-4"></div>
-              <div className="skeleton h-3 w-32 rounded-full sm:h-4"></div>
-            </div>
-          </div>
-
-          {/* Baris tab: 4 pill (Logbook, Galeri, Hadir, Cetak QR) */}
-          <div className="flex flex-wrap gap-1.5 sm:gap-2">
-            <div className="skeleton h-9 w-20 rounded-xl sm:h-11 sm:w-28 sm:rounded-2xl"></div>
-            <div className="skeleton h-9 w-16 rounded-xl sm:h-11 sm:w-24 sm:rounded-2xl"></div>
-            <div className="skeleton h-9 w-16 rounded-xl sm:h-11 sm:w-32 sm:rounded-2xl"></div>
-            <div className="skeleton h-9 w-12 rounded-xl sm:h-11 sm:w-28 sm:rounded-2xl"></div>
-          </div>
-        </div>
-      </div>
-
-      {/* Form logbook + daftar logbook */}
-      <div className="grid items-start gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-        <div className="space-y-4 bsi-panel rounded-[2rem] p-5 shadow-sm sm:p-8">
-          <div className="skeleton h-6 w-48 rounded-full"></div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="skeleton h-11 w-full rounded-2xl"></div>
-            <div className="skeleton h-11 w-full rounded-2xl"></div>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="skeleton h-11 w-full rounded-2xl"></div>
-            <div className="skeleton h-11 w-full rounded-2xl"></div>
-          </div>
-          <div className="skeleton h-11 w-full rounded-2xl"></div>
-          <div className="skeleton h-40 w-full rounded-2xl"></div>
-          <div className="skeleton h-11 w-full rounded-2xl"></div>
-        </div>
-        <div className="space-y-5">
-          <div className="skeleton h-6 w-32 rounded-full"></div>
-          <div className="skeleton h-12 w-full rounded-3xl"></div>
-          <div className="skeleton h-4 w-28 rounded-full"></div>
-          <div className="grid gap-5 md:grid-cols-2 kartu-grid">
-            <SkeletonLogbookCard />
-            <SkeletonLogbookCard />
-            <SkeletonLogbookCard />
-            <SkeletonLogbookCard />
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export function SkeletonStatCard() {
-  return (
-    <div className="card-hover bsi-panel rounded-3xl p-3 shadow-sm sm:p-6">
-      <div className="skeleton h-3 w-3/4 rounded-full sm:h-4 sm:w-28"></div>
-      <div className="skeleton mt-1 h-6 w-1/2 rounded-full sm:mt-3 sm:h-9 sm:w-16"></div>
-      <div className="skeleton mt-2 h-3 w-36 rounded-full hidden sm:block"></div>
-    </div>
-  )
-}
-
-export function SkeletonChartRow() {
-  return (
-    <div className="card-hover bsi-panel rounded-[1.5rem] p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="space-y-1.5">
-          <div className="skeleton h-4 w-32 rounded-full"></div>
-          <div className="skeleton h-3 w-20 rounded-full"></div>
-        </div>
-        <div className="skeleton h-3 w-36 rounded-full"></div>
-      </div>
-      <div className="skeleton mt-4 h-4 w-full rounded-full"></div>
-    </div>
-  )
-}
-
-export function SkeletonQuick() {
-  return (
-    <div className="mx-auto w-full max-w-xl space-y-5">
-      {/* Hero: avatar + identitas + tab switcher */}
-      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="avatar-kepala-cepat">
-            <div className="skeleton h-14 w-14 sm:h-[67px] sm:w-[67px]" style={{ borderRadius: '20px' }} />
-          </div>
-          <div className="min-w-0 flex-1 space-y-2">
-            <div className="skeleton h-5 w-48 rounded-full sm:h-6" />
-            <div className="skeleton h-3.5 w-40 rounded-full" />
-          </div>
-        </div>
-        <div className="mt-4 flex gap-2">
-          <div className="skeleton h-10 flex-1 rounded-xl sm:h-12 sm:rounded-2xl" />
-          <div className="skeleton h-10 flex-1 rounded-xl sm:h-12 sm:rounded-2xl" />
-        </div>
-      </section>
-
-      {/* Form logbook: info terakhir + kartu kegiatan */}
-      <section className="rounded-[2rem] bsi-panel p-5 sm:p-8">
-        <div className="mb-4 flex items-center gap-1.5">
-          <div className="skeleton h-3.5 w-3.5 rounded-full" />
-          <div className="skeleton h-3 w-56 rounded-full" />
-        </div>
-
-        <div className="mt-1.5 skeleton h-11 w-full rounded-2xl" />
-
-        <div className="mt-5 space-y-4">
-          <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <div className="skeleton h-3 w-24 rounded-full" />
-            <div className="skeleton h-11 w-full rounded-2xl" />
-            <div className="skeleton h-16 w-full rounded-2xl" />
-            <div className="grid grid-cols-2 gap-3">
-              <div className="skeleton h-12 w-full rounded-2xl" />
-              <div className="skeleton h-12 w-full rounded-2xl" />
-            </div>
-          </div>
-          <div className="skeleton h-12 w-full rounded-xl sm:h-14 sm:rounded-2xl" />
-        </div>
-      </section>
-    </div>
-  )
-}
-````
-
 ## File: src/pages/GalleryPage.jsx
 ````javascript
 import { useEffect, useState } from 'react'
@@ -5575,297 +5866,6 @@ export default function GalleryPage() {
     </div>
   )
 }
-````
-
-## File: src/App.jsx
-````javascript
-import { SkeletonDashboard, SkeletonQuick } from './components/Skeleton.jsx'
-import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import { ThemeProvider } from './lib/theme.jsx'
- import { ToastProvider } from './components/ui.jsx'
-import { useAuth } from './lib/auth.js'
-import Layout from './components/Layout.jsx'
-import HomePage from './pages/HomePage.jsx'
-import LogbookPage from './pages/LogbookPage.jsx'
-import GalleryPage from './pages/GalleryPage.jsx'
-import AttendancePage from './pages/AttendancePage.jsx'
-import DospemPage from './pages/DospemPage.jsx'
-import LoginPage from './pages/LoginPage.jsx'
-import DashboardPage from './pages/DashboardPage.jsx'
-import QuickPage from './pages/QuickPage.jsx'
-
-function ScrollToTop() {
-  const { pathname } = useLocation()
-  useEffect(function () {
-    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
-  }, [pathname])
-  return null
-}
-function RequireAuth(props) {
-  const { mahasiswa, loading } = useAuth()
-  const location = useLocation()
-  if (loading) return props.fallback || <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:py-8"><SkeletonDashboard /></div>
-  if (!mahasiswa) return <Navigate to={'/login?next=' + encodeURIComponent(location.pathname + location.search)} replace />
-  return props.children
-}
-
-function RequireGuest(props) {
-  const { mahasiswa, loading } = useAuth()
-  if (loading) return <div className="grid min-h-[60vh] place-items-center"><div className="h-10 w-10 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div></div>
-  if (mahasiswa) return <Navigate to="/dashboard" replace />
-  return props.children
-}
-
-export default function App() {
-  return (
-    <ThemeProvider>
-      <ToastProvider>
-      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <ScrollToTop />
-        <Routes>
-          <Route element={<Layout />}>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/logbook" element={<LogbookPage />} />
-            <Route path="/galeri" element={<GalleryPage />} />
-            <Route path="/absen" element={<AttendancePage />} />
-            <Route path="/dospem" element={<DospemPage />} />
-            <Route path="/tim" element={<Navigate to="/dospem" replace />} />
-            <Route path="/login" element={<RequireGuest><LoginPage /></RequireGuest>} />
-            <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
-            <Route path="/qr" element={<RequireAuth fallback={<SkeletonQuick />}><QuickPage /></RequireAuth>} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-      </ToastProvider>
-    </ThemeProvider>
-  )
-}
-````
-
-## File: src/main.jsx
-````javascript
-import React from 'react'
-import ReactDOM from 'react-dom/client'
-import App from './App.jsx'
-import './index.css'
-
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-)
-
-/* ===== Indikator scrollbar auto hide, overlay tanpa menggeser layout ===== */
-;(function () {
-  if (typeof document === 'undefined') return
-  function pasang() {
-    if (document.getElementById('scroll-indicator')) return
-    const track = document.createElement('div')
-    track.id = 'scroll-indicator'
-    const thumb = document.createElement('div')
-    thumb.id = 'scroll-thumb'
-    track.appendChild(thumb)
-    document.body.appendChild(track)
-    let timer = null
-    let sumber = null
-    let watchdog = null
-    function stopWatchdog() {
-      if (watchdog) { clearInterval(watchdog); watchdog = null }
-    }
-    function mulaiWatchdog() {
-      if (watchdog) return
-      watchdog = setInterval(function () {
-        if (!track.classList.contains('aktif')) { stopWatchdog(); return }
-        if (sumber) {
-          if (!sumber.isConnected || sumber.scrollHeight - sumber.clientHeight <= 4) {
-            sembunyikan()
-            sumber = null
-            stopWatchdog()
-          }
-        } else if (document.documentElement.scrollHeight - window.innerHeight <= 4) {
-          sembunyikan()
-          stopWatchdog()
-        }
-      }, 90)
-    }
-    function sembunyikan() { track.classList.remove('aktif'); stopWatchdog() }
-    function tampilkan() {
-      track.classList.add('aktif')
-      if (timer) clearTimeout(timer)
-      timer = setTimeout(sembunyikan, 400)
-      mulaiWatchdog()
-    }
-    function ukur(el, adalahWindow, rect) {
-      const scrollTop = adalahWindow ? (window.scrollY || document.documentElement.scrollTop) : el.scrollTop
-      const scrollHeight = adalahWindow ? document.documentElement.scrollHeight : el.scrollHeight
-      const clientHeight = adalahWindow ? window.innerHeight : el.clientHeight
-      const selisih = scrollHeight - clientHeight
-      if (selisih <= 4) { sembunyikan(); return }
-      const ratio = clientHeight / scrollHeight
-      const trackTinggi = rect.height - 6
-      const thumbTinggi = Math.max(24, trackTinggi * ratio)
-      const maxTop = trackTinggi - thumbTinggi
-      let gerak = scrollTop / selisih
-      if (gerak < 0) gerak = 0
-      if (gerak > 1) gerak = 1
-      thumb.style.height = thumbTinggi + 'px'
-      thumb.style.transform = 'translateY(' + (3 + gerak * maxTop) + 'px)'
-      track.style.top = rect.top + 'px'
-      track.style.height = rect.height + 'px'
-      track.style.right = (window.innerWidth - rect.right + 2) + 'px'
-    }
-    function onScroll(e) {
-      const t = e.target
-      if (t === document || t === document.documentElement || t === window || !t || t.nodeType !== 1) {
-        sumber = null
-        ukur(null, true, { top: 0, height: window.innerHeight, right: window.innerWidth })
-      } else {
-        sumber = t
-        const r = t.getBoundingClientRect()
-        ukur(t, false, { top: r.top, height: r.height, right: r.right })
-      }
-      tampilkan()
-    }
-    window.addEventListener('scroll', onScroll, true)
-    document.addEventListener('scroll', onScroll, true)
-    window.addEventListener('resize', sembunyikan)
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pasang)
-  else pasang()
-})()
-
-/* ===== Pergeseran mulus isi filter saat mode waktu berganti (bayangan keluar plus FLIP) ===== */
-;(function () {
-  if (typeof document === 'undefined') return
-  function pasang() {
-    document.addEventListener('click', function (e) {
-      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-      const tombol = e.target && e.target.closest ? e.target.closest('.time-toggle button') : null
-      if (!tombol) return
-      if ((' ' + tombol.className + ' ').indexOf(' active ') !== -1) return
-      const toggle = tombol.closest('.time-toggle')
-      if (!toggle || !toggle.parentElement) return
-      if (window.innerWidth < 1280) return
-       const wadah = tombol.closest('.rounded-3xl') || toggle.parentElement.parentElement || toggle.parentElement
-      const cabang = toggle.parentElement.querySelector('.anim-ganti-bulan, .anim-ganti-rentang')
-      if (cabang) {
-        const r = cabang.getBoundingClientRect()
-        if (r.width > 0) {
-          const hantu = cabang.cloneNode(true)
-          hantu.style.position = 'fixed'
-          hantu.style.left = r.left + 'px'
-          hantu.style.top = r.top + 'px'
-          hantu.style.width = r.width + 'px'
-          hantu.style.height = r.height + 'px'
-          hantu.style.margin = '0'
-          hantu.style.zIndex = '45'
-          hantu.classList.add('hantu-cabang')
-          document.body.appendChild(hantu)
-          hantu.style.animation = 'none'
-          const turunan = hantu.querySelectorAll('*')
-          for (let i = 0; i < turunan.length; i++) turunan[i].style.animation = 'none'
-          const keBulan = !tombol.previousElementSibling
-          if (hantu.animate) {
-            hantu.animate([
-              { opacity: 1, transform: 'translateX(0)' },
-              { opacity: 0, transform: keBulan ? 'translateX(10px)' : 'translateX(-10px)' }
-            ], { duration: 180, easing: 'ease-in' }).onfinish = function () { if (hantu.parentNode) hantu.parentNode.removeChild(hantu) }
-          } else {
-            setTimeout(function () { if (hantu.parentNode) hantu.parentNode.removeChild(hantu) }, 200)
-          }
-        }
-      }
-      const snap = new Map()
-      const els = wadah.querySelectorAll('*')
-      for (let i = 0; i < els.length; i++) snap.set(els[i], els[i].getBoundingClientRect())
-      requestAnimationFrame(function () {
-        requestAnimationFrame(function () {
-          snap.forEach(function (rect, el) {
-            if (!el.isConnected || !el.animate) return
-            const r = el.getBoundingClientRect()
-            const dx = rect.left - r.left
-            const dy = rect.top - r.top
-            if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return
-            el.animate([
-              { transform: 'translate(' + dx + 'px, ' + dy + 'px)' },
-              { transform: 'translate(0, 0)' }
-            ], { duration: 320, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' })
-          })
-        })
-      })
-    }, true)
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pasang)
-  else pasang()
-})()
-
-/* ===== transisi-halaman-v1: picu ulang animasi saat pindah rute dan pindah halaman pagination ===== */
-;(function () {
-  if (typeof document === 'undefined') return
-  function ulangAnimasi(el) {
-    if (!el) return
-    el.style.animation = 'none'
-    void el.offsetWidth
-    el.style.animation = ''
-  }
-  function pasang() {
-    document.addEventListener('click', function (e) {
-      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-      const t = e.target
-      if (!t || !t.closest) return
-      const link = t.closest('a[href]')
-      if (link) {
-        const href = link.getAttribute('href') || ''
-        const eksternal = link.target === '_blank' || href.indexOf('http') === 0 || href.indexOf('#') === 0
-        if (!eksternal) {
-          requestAnimationFrame(function () {
-            requestAnimationFrame(function () {
-              if (e.mbsiDicegah) return
-              ulangAnimasi(document.querySelector('main.anim-page') || document.querySelector('.anim-page'))
-            })
-          })
-        }
-        return
-      }
-      const pag = t.closest('.mt-8.flex.flex-wrap.items-center.justify-center.gap-2')
-      if (pag && t.closest('button')) {
-        requestAnimationFrame(function () {
-          requestAnimationFrame(function () {
-            const grid = document.querySelectorAll('.grid-pusat, .grid-pusat-rapat, .kartu-grid')
-            for (let i = 0; i < grid.length; i++) {
-              const anak = grid[i].children
-              for (let j = 0; j < anak.length; j++) ulangAnimasi(anak[j])
-            }
-          })
-        })
-      }
-    }, true)
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pasang)
-  else pasang()
-})()
-
-/* ===== transisi-tema: aktifkan transisi pelan hanya pada momen pergantian mode ===== */
-;(function () {
-  if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return
-  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-  const akar = document.documentElement
-  let gelap = akar.classList.contains('dark')
-  let timer = null
-  const obs = new MutationObserver(function () {
-    const sekarang = akar.classList.contains('dark')
-    if (sekarang === gelap) return
-    gelap = sekarang
-    /* VT sedang menangani pergantian ini bila kelas vt-tema menempel di html */
-    if (akar.classList.contains('vt-tema')) return
-    akar.classList.add('theme-transition')
-    if (timer) clearTimeout(timer)
-    timer = setTimeout(function () { akar.classList.remove('theme-transition') }, 400)
-  })
-  obs.observe(akar, { attributes: true, attributeFilter: ['class'] })
-})()
 ````
 
 ## File: src/components/QrPrintTab.jsx
@@ -6549,6 +6549,356 @@ return (
 }
 ````
 
+## File: src/components/PengingatBanner.jsx
+````javascript
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { SizedIcon } from './icons.jsx'
+import { formatTanggal } from '../lib/format.js'
+import { MULAI_MAGANG } from '../lib/constants.js'
+
+const HARI_PENDEK = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
+const BULAN_PENDEK = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agt', 'Sept', 'Okt', 'Nov', 'Des']
+
+function formatTanggalMobile(s) {
+  if (!s) return ''
+  const d = new Date(s + 'T00:00:00')
+  if (Number.isNaN(d.getTime())) return s
+  return HARI_PENDEK[d.getDay()] + ', ' + d.getDate() + ' ' + BULAN_PENDEK[d.getMonth()] + ' ' + d.getFullYear()
+}
+
+function pad2(n) { return (n < 10 ? '0' : '') + n }
+function isoDari(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) }
+
+/* ===== LOGIKA REMINDER LOGBOOK =====
+   Hanya hari yang berstatus "Masuk" yang perlu logbook.
+   Hari tanpa catatan hadir (akan jadi Bolos otomatis besoknya) atau
+   yang berstatus Izin/Bolos tidak perlu diingatkan.
+
+   Batas loop = HARI INI (bukan kemarin), tapi hari ini hanya masuk
+   daftar kalau user sudah presensi "Masuk" hari ini. Jadi user yang
+   baru presensi masuk pagi langsung dapat reminder logbook hari itu. */
+export function hitungTanggalTerlewat(tanggalLogbook, hadir) {
+  const punyaLog = new Set(tanggalLogbook || [])
+  const hariMasuk = new Set()
+  ;(hadir || []).forEach(function (h) {
+    if (h.status === 'Masuk') hariMasuk.add(h.tanggal)
+  })
+  const hasil = []
+  const d = new Date(MULAI_MAGANG + 'T00:00:00')
+  const batas = new Date()
+  batas.setHours(0, 0, 0, 0)
+  while (d <= batas) {
+    const iso = isoDari(d)
+    const hari = d.getDay()
+    if (hari !== 0 && hari !== 6 && !punyaLog.has(iso) && hariMasuk.has(iso)) hasil.push(iso)
+    d.setDate(d.getDate() + 1)
+  }
+  return hasil
+}
+
+/* ===== LOGIKA REMINDER HADIR =====
+   Muncul HANYA untuk HARI INI, mulai jam 07:00 sampai tengah malam.
+   Lewat tengah malam, hari ini otomatis jadi Bolos besoknya lewat autoIsiBolos(),
+   jadi tidak perlu diingatkan lagi (sudah di luar window). */
+export function hitungTanggalTerlewatHadir(hadir) {
+  const punyaHadir = new Set((hadir || []).map(function (h) { return h.tanggal }))
+  const now = new Date()
+  const hari = now.getDay()
+
+  /* Sabtu/Minggu bukan hari kerja */
+  if (hari === 0 || hari === 6) return []
+
+  /* Sebelum jam 7 pagi, user masih punya waktu; jangan ganggu */
+  if (now.getHours() < 7) return []
+
+  /* Sudah isi absen hari ini → tidak perlu reminder */
+  const hariIni = isoDari(now)
+  if (punyaHadir.has(hariIni)) return []
+
+  return [hariIni]
+}
+
+/* gulir-atas-dulu-v1: saat daftar tambahan ditutup, gulir internal dinaikkan
+   mulus ke puncak dulu; aksi penutup dipanggil setelah gulir selesai (atau
+   jatuh tempo) supaya tinggi banner baru menyusut sesudahnya */
+function gulirKeAtasLalu(el, selesai) {
+  if (!el || el.scrollTop <= 0) { selesai(); return }
+  const reduksi = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (reduksi) { el.scrollTop = 0; selesai(); return }
+  let done = false
+  const panggil = function () { if (done) return; done = true; selesai() }
+  el.addEventListener('scrollend', panggil, { once: true })
+  el.scrollTo({ top: 0, behavior: 'smooth' })
+  const mulai = Date.now()
+  const cek = function () {
+    if (done) return
+    if (el.scrollTop <= 0 || Date.now() - mulai > 700) { panggil(); return }
+    setTimeout(cek, 80)
+  }
+  setTimeout(cek, 80)
+}
+
+export default function PengingatBanner(props) {
+  const tipe = props.tipe || 'logbook'
+  const [tutup, setTutup] = useState(false)
+  const [lihatSemua, setLihatSemua] = useState(false)
+  const [buka, setBuka] = useState(false)
+  const [keluar, setKeluar] = useState(false)
+  const [hilang, setHilang] = useState(false)
+  const simpanRef = useRef(null)
+  const refScroll = useRef(null)
+  const sedangTutup = useRef(false)
+  const refTiga = useRef(null)
+  const [tinggiTiga, setTinggiTiga] = useState(0)
+  const [capBuka, setCapBuka] = useState(311)
+
+  /* ticker-minutes: re-render tiap 60 detik supaya reminder hadir otomatis
+     muncul saat masuk jam 07:00 tanpa user perlu refresh halaman. */
+  const [, setTick] = useState(0)
+  useEffect(function () {
+    const iv = setInterval(function () { setTick(function (t) { return t + 1 }) }, 60000)
+    return function () { clearInterval(iv) }
+  }, [])
+
+  const mentah = tipe === 'hadir'
+    ? hitungTanggalTerlewatHadir(props.hadir)
+    : hitungTanggalTerlewat(props.tanggalLogbook, props.hadir)
+  if (mentah.length && !tutup) simpanRef.current = mentah
+  const harusHilang = tutup || !mentah.length
+  /* saat menghilang, pakai salinan terakhir supaya isi banner tetap utuh selama animasi keluar */
+  const terlewat = mentah.length ? mentah : (simpanRef.current || [])
+
+  const konfigurasi = tipe === 'hadir'
+    ? {
+        judul: 'Kamu belum isi daftar hadir hari ini',
+        deskripsi: 'Isi sebelum tengah malam. Kalau lewat, hari ini akan otomatis tercatat Bolos.',
+        aksi: 'Isi Daftar Hadir'
+      }
+    : {
+        judul: terlewat.length + ' hari kerja belum punya logbook',
+        deskripsi: 'Hanya hari dengan status kehadiran Masuk yang perlu logbook — termasuk hari ini jika kamu sudah presensi masuk.',
+        aksi: 'Isi Logbook'
+      }
+
+  /* ukur tinggi 3 item pertama supaya tinggi lipatan presisi di semua lebar layar */
+  useLayoutEffect(function () {
+    function ukur() {
+      if (refTiga.current) setTinggiTiga(refTiga.current.offsetHeight)
+      setCapBuka(window.matchMedia('(max-width: 639px)').matches ? 293 : 311)
+    }
+    ukur()
+    window.addEventListener('resize', ukur)
+    let ro = null
+    if (refTiga.current && typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(ukur)
+      ro.observe(refTiga.current)
+    }
+    return function () { window.removeEventListener('resize', ukur); if (ro) ro.disconnect() }
+  }, [terlewat.length])
+
+  /* masuk: wrapper dibiarkan terlipat satu frame lalu dibuka supaya transisi tinggi
+     berjalan dan konten di bawah bergeser mulus; keluar: wrapper merapat bersamaan
+     dengan isi yang memudar, komponen dilepas setelah keduanya selesai */
+  useEffect(function () {
+    if (harusHilang) return undefined
+    const r = requestAnimationFrame(function () { setBuka(true) })
+    return function () { cancelAnimationFrame(r) }
+  }, [harusHilang])
+
+  useEffect(function () {
+    if (!harusHilang) { setKeluar(false); setHilang(false); return undefined }
+    if (!terlewat.length) { setHilang(true); return undefined }
+    setBuka(false)
+    setKeluar(true)
+    const t = setTimeout(function () { setHilang(true) }, 400)
+    return function () { clearTimeout(t) }
+  }, [harusHilang])
+
+  if (hilang || (harusHilang && !terlewat.length)) return null
+
+  return (
+    <div className={'pengingat-wrap' + (buka ? ' pengingat-wrap-buka' : '')}>
+      <div className="pengingat-wrap-dalam">
+        <section className={'mt-6 rounded-[2rem] border border-amber-200 bg-amber-50 p-5 sm:p-6 ' + (keluar ? ' pengingat-keluar' : ' pengingat-masuk')}>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex min-w-0 flex-1 items-start gap-3">
+              <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-800">
+                <SizedIcon name="clipboard" size={18} />
+              </span>
+              <div>
+                <h2 className="text-base font-black text-amber-800 sm:text-lg">
+                  {konfigurasi.judul}
+                </h2>
+                <p className="mt-1 text-xs text-amber-800 sm:text-sm">
+                  {konfigurasi.deskripsi}
+                </p>
+              </div>
+            </div>
+            <button type="button" onClick={function () { setTutup(true) }} title="Sembunyikan Pengingat" className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-amber-100 text-amber-800 hover:bg-amber-200">
+              <SizedIcon name="close" size={14} />
+            </button>
+          </div>
+
+          <div ref={refScroll} className={'mt-4 pengingat-scroll' + (lihatSemua ? ' pengingat-scroll-buka' : '')} style={{ maxHeight: lihatSemua ? capBuka : (tinggiTiga || undefined) }}>
+            <ul ref={refTiga} className="space-y-2">
+              {terlewat.slice(0, 3).map(function (t) {
+                return (
+                  <li key={t} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-200 bg-white p-3">
+                    <p className="text-sm font-semibold text-slate-800">
+                      <span className="hidden sm:inline">{formatTanggal(t)}</span>
+                      <span className="sm:hidden">{formatTanggalMobile(t)}</span>
+                    </p>
+                    <button type="button" onClick={function () { props.onIsi(t) }} className="rounded-xl bg-bsi-800 px-3.5 py-2 text-xs font-bold text-white hover:bg-bsi-900 sm:text-sm">
+                      {konfigurasi.aksi}
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+            {terlewat.length > 3 ? (
+              <ul className="pengingat-daftar-extra space-y-2 pt-2">
+                {terlewat.slice(3).map(function (t) {
+                  return (
+                    <li key={t} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-200 bg-white p-3">
+                      <p className="text-sm font-semibold text-slate-800">
+                        <span className="hidden sm:inline">{formatTanggal(t)}</span>
+                        <span className="sm:hidden">{formatTanggalMobile(t)}</span>
+                      </p>
+                      <button type="button" onClick={function () { props.onIsi(t) }} className="rounded-xl bg-bsi-800 px-3.5 py-2 text-xs font-bold text-white hover:bg-bsi-900 sm:text-sm">
+                        {konfigurasi.aksi}
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            ) : null}
+          </div>
+
+          {terlewat.length > 3 ? (
+            <button type="button" onClick={function () {
+              if (!lihatSemua) { setLihatSemua(true); return }
+              if (sedangTutup.current) return
+              sedangTutup.current = true
+              gulirKeAtasLalu(refScroll.current, function () {
+                sedangTutup.current = false
+                setLihatSemua(false)
+              })
+            }} className="mt-3 w-full rounded-xl border border-amber-300 bg-white px-4 py-2.5 text-xs font-bold text-amber-800 hover:bg-amber-100 sm:text-sm">
+              {lihatSemua ? 'Sembunyikan' : 'Lihat Semua (' + terlewat.length + ' tanggal)'}
+            </button>
+          ) : null}
+        </section>
+      </div>
+    </div>
+  )
+}
+````
+
+## File: src/pages/LoginPage.jsx
+````javascript
+import { useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { loginWithNim } from '../lib/auth.js'
+import { inputCls, labelCls, btnPrimary, LabelProses } from '../components/ui.jsx'
+import { EyeToggle, SizedIcon } from '../components/icons.jsx'
+
+function pesanErrorLogin(err) {
+  const pesan = String((err && err.message) || '')
+  const rendah = pesan.toLowerCase()
+  if (rendah.indexOf('invalid login credentials') !== -1) {
+    return 'NIM atau kode akses yang kamu masukkan tidak cocok dengan data kami. Periksa kembali penulisannya, pastikan tidak ada spasi berlebih, lalu coba lagi.'
+  }
+  if (rendah.indexOf('not confirmed') !== -1) {
+    return 'Akun untuk NIM ini belum diaktifkan. Hubungi admin tim magang untuk mengaktifkan akunmu terlebih dahulu.'
+  }
+  if (rendah.indexOf('too many requests') !== -1 || rendah.indexOf('try again after') !== -1 || rendah.indexOf('rate limit') !== -1) {
+    return 'Terlalu banyak percobaan masuk dalam waktu singkat demi keamanan. Tunggu sekitar satu menit, lalu coba lagi.'
+  }
+  if (rendah.indexOf('fetch') !== -1 || rendah.indexOf('network') !== -1 || rendah.indexOf('failed to load') !== -1 || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+    return 'Tidak bisa terhubung ke server. Periksa koneksi internetmu, lalu coba lagi.'
+  }
+  if (rendah.indexOf('email') !== -1 && rendah.indexOf('format') !== -1) {
+    return 'Format NIM tidak terbaca. Masukkan NIM berupa angka tanpa spasi, contoh: 24070041.'
+  }
+  if (pesan) return 'Gagal masuk: ' + pesan + '. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
+  return 'Terjadi kesalahan tidak terduga saat masuk. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
+}
+export default function LoginPage() {
+  const navigate = useNavigate()
+  const [params] = useSearchParams()
+  const [nim, setNim] = useState('')
+  const [kode, setKode] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [lihatKode, setLihatKode] = useState(false)
+
+  async function submit(e) {
+    e.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+  await loginWithNim(nim, kode)
+  const next = params.get('next')
+  navigate(next && next.charAt(0) === '/' && next.indexOf('//') !== 0 ? next : '/dashboard')
+} catch (err) {
+  setError(pesanErrorLogin(err))
+}
+    setBusy(false)
+  }
+
+  return (
+    <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr] items-start">
+      <div className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8 lg:p-10">
+        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black leading-tight text-slate-900">Masuk untuk Mengisi Logbook, Galeri, dan Daftar Hadir</h1>
+        <p className="mt-3 text-sm leading-relaxed text-slate-600 sm:mt-4 sm:text-base">Halaman ini khusus mahasiswa magang. Dosen pembimbing dan kaprodi dapat melihat halaman umum tanpa masuk.</p>
+      </div>
+      <div className="card-hover bsi-panel rounded-[2rem] p-5 sm:p-8 lg:p-10">
+        <h2 className="text-xl sm:text-2xl font-black text-slate-900">Masuk Dashboard</h2>
+        {error ? (
+          <div className="mt-3 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-red-100 text-red-600">
+              <SizedIcon name="close" size={12} />
+            </span>
+            <div className="min-w-0">
+              <p className="font-bold">Gagal Masuk</p>
+              <p className="mt-1 leading-relaxed">{error}</p>
+            </div>
+          </div>
+        ) : null}
+        <form onSubmit={submit} className="mt-6 space-y-5">
+          <div>
+            <label className={labelCls}>NIM <span className="text-red-500">*</span></label>
+            <input className={inputCls} value={nim} onChange={function (e) { setNim(e.target.value) }} aria-label="NIM" placeholder="Contoh: 20260001" required />
+          </div>
+          <div>
+            <label className={labelCls}>Kode akses <span className="text-red-500">*</span></label>
+            <div className="relative mt-1.5">
+              <input
+                type={lihatKode ? 'text' : 'password'}
+                className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 pr-12 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
+                value={kode}
+                onChange={function (e) { setKode(e.target.value) }}
+                aria-label="Kode Akses" placeholder="Masukkan kode akses"
+                required
+              />
+              <button
+                type="button"
+                onClick={function () { setLihatKode(function (v) { return !v }) }}
+                title={lihatKode ? 'Sembunyikan Kode Akses' : 'Lihat Kode Akses'}
+                className="absolute right-2 top-0 bottom-0 my-auto grid h-9 w-9 place-items-center rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-600"
+              >
+                <EyeToggle open={lihatKode} size={18} />
+              </button>
+            </div>
+          </div>
+          <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks="Memproses" /> : 'Masuk'}</button>
+        </form>
+      </div>
+    </section>
+  )
+}
+````
+
 ## File: src/components/ChatWidget.jsx
 ````javascript
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
@@ -6607,7 +6957,25 @@ export default function ChatWidget() {
      - Bubble dari riwayat (sessionStorage) TIDAK dianimasikan,
        langsung tampil penuh saat halaman dibuka. */
   const [teksTampil, setTeksTampil] = useState({})
-  const animasiRef = useRef({})
+  /* typewriter-skip-riwayat-v1: ref di-init null lalu lazy-init di body
+     komponen. Saat mount pertama (atau refresh browser), semua bubble
+     yang sudah ada di riwayat — dimuat dari sessionStorage — ditandai
+     "selesai", supaya TIDAK ikut dianimasikan typewriter. Yang
+     dianimasikan hanya bubble assistant baru dari API.
+
+     Kenapa lazy-init di body, bukan di useEffect:
+     - useEffect jalan SETELAH commit + paint, sedangkan effect
+       typewriter juga di useEffect. Urutan antar effect bergantung
+       urutan deklarasi, rapuh.
+     - Lazy-init di body memastikan ref sudah terisi SEBELUM render
+       pertama commit, jadi effect typewriter pasti lihat map yang
+       sudah siap. */
+  const animasiRef = useRef(null)
+  if (animasiRef.current === null) {
+    const mapAwal = {}
+    for (let i = 0; i < riwayat.length; i++) mapAwal[i] = 'selesai'
+    animasiRef.current = mapAwal
+  }
   /* lock-while-typing-v1: true selama animasi typewriter berjalan.
      Dipakai untuk lock input & tombol kirim supaya user tidak bisa
      kirim pesan baru saat AI masih mengetik. */
@@ -6958,356 +7326,6 @@ export default function ChatWidget() {
         {!open ? <span className="chat-widget-dot" /> : null}
       </button>
     </>
-  )
-}
-````
-
-## File: src/components/PengingatBanner.jsx
-````javascript
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { SizedIcon } from './icons.jsx'
-import { formatTanggal } from '../lib/format.js'
-import { MULAI_MAGANG } from '../lib/constants.js'
-
-const HARI_PENDEK = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
-const BULAN_PENDEK = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agt', 'Sept', 'Okt', 'Nov', 'Des']
-
-function formatTanggalMobile(s) {
-  if (!s) return ''
-  const d = new Date(s + 'T00:00:00')
-  if (Number.isNaN(d.getTime())) return s
-  return HARI_PENDEK[d.getDay()] + ', ' + d.getDate() + ' ' + BULAN_PENDEK[d.getMonth()] + ' ' + d.getFullYear()
-}
-
-function pad2(n) { return (n < 10 ? '0' : '') + n }
-function isoDari(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) }
-
-/* ===== LOGIKA REMINDER LOGBOOK =====
-   Hanya hari yang berstatus "Masuk" yang perlu logbook.
-   Hari tanpa catatan hadir (akan jadi Bolos otomatis besoknya) atau
-   yang berstatus Izin/Bolos tidak perlu diingatkan.
-
-   Batas loop = HARI INI (bukan kemarin), tapi hari ini hanya masuk
-   daftar kalau user sudah presensi "Masuk" hari ini. Jadi user yang
-   baru presensi masuk pagi langsung dapat reminder logbook hari itu. */
-export function hitungTanggalTerlewat(tanggalLogbook, hadir) {
-  const punyaLog = new Set(tanggalLogbook || [])
-  const hariMasuk = new Set()
-  ;(hadir || []).forEach(function (h) {
-    if (h.status === 'Masuk') hariMasuk.add(h.tanggal)
-  })
-  const hasil = []
-  const d = new Date(MULAI_MAGANG + 'T00:00:00')
-  const batas = new Date()
-  batas.setHours(0, 0, 0, 0)
-  while (d <= batas) {
-    const iso = isoDari(d)
-    const hari = d.getDay()
-    if (hari !== 0 && hari !== 6 && !punyaLog.has(iso) && hariMasuk.has(iso)) hasil.push(iso)
-    d.setDate(d.getDate() + 1)
-  }
-  return hasil
-}
-
-/* ===== LOGIKA REMINDER HADIR =====
-   Muncul HANYA untuk HARI INI, mulai jam 07:00 sampai tengah malam.
-   Lewat tengah malam, hari ini otomatis jadi Bolos besoknya lewat autoIsiBolos(),
-   jadi tidak perlu diingatkan lagi (sudah di luar window). */
-export function hitungTanggalTerlewatHadir(hadir) {
-  const punyaHadir = new Set((hadir || []).map(function (h) { return h.tanggal }))
-  const now = new Date()
-  const hari = now.getDay()
-
-  /* Sabtu/Minggu bukan hari kerja */
-  if (hari === 0 || hari === 6) return []
-
-  /* Sebelum jam 7 pagi, user masih punya waktu; jangan ganggu */
-  if (now.getHours() < 7) return []
-
-  /* Sudah isi absen hari ini → tidak perlu reminder */
-  const hariIni = isoDari(now)
-  if (punyaHadir.has(hariIni)) return []
-
-  return [hariIni]
-}
-
-/* gulir-atas-dulu-v1: saat daftar tambahan ditutup, gulir internal dinaikkan
-   mulus ke puncak dulu; aksi penutup dipanggil setelah gulir selesai (atau
-   jatuh tempo) supaya tinggi banner baru menyusut sesudahnya */
-function gulirKeAtasLalu(el, selesai) {
-  if (!el || el.scrollTop <= 0) { selesai(); return }
-  const reduksi = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  if (reduksi) { el.scrollTop = 0; selesai(); return }
-  let done = false
-  const panggil = function () { if (done) return; done = true; selesai() }
-  el.addEventListener('scrollend', panggil, { once: true })
-  el.scrollTo({ top: 0, behavior: 'smooth' })
-  const mulai = Date.now()
-  const cek = function () {
-    if (done) return
-    if (el.scrollTop <= 0 || Date.now() - mulai > 700) { panggil(); return }
-    setTimeout(cek, 80)
-  }
-  setTimeout(cek, 80)
-}
-
-export default function PengingatBanner(props) {
-  const tipe = props.tipe || 'logbook'
-  const [tutup, setTutup] = useState(false)
-  const [lihatSemua, setLihatSemua] = useState(false)
-  const [buka, setBuka] = useState(false)
-  const [keluar, setKeluar] = useState(false)
-  const [hilang, setHilang] = useState(false)
-  const simpanRef = useRef(null)
-  const refScroll = useRef(null)
-  const sedangTutup = useRef(false)
-  const refTiga = useRef(null)
-  const [tinggiTiga, setTinggiTiga] = useState(0)
-  const [capBuka, setCapBuka] = useState(311)
-
-  /* ticker-minutes: re-render tiap 60 detik supaya reminder hadir otomatis
-     muncul saat masuk jam 07:00 tanpa user perlu refresh halaman. */
-  const [, setTick] = useState(0)
-  useEffect(function () {
-    const iv = setInterval(function () { setTick(function (t) { return t + 1 }) }, 60000)
-    return function () { clearInterval(iv) }
-  }, [])
-
-  const mentah = tipe === 'hadir'
-    ? hitungTanggalTerlewatHadir(props.hadir)
-    : hitungTanggalTerlewat(props.tanggalLogbook, props.hadir)
-  if (mentah.length && !tutup) simpanRef.current = mentah
-  const harusHilang = tutup || !mentah.length
-  /* saat menghilang, pakai salinan terakhir supaya isi banner tetap utuh selama animasi keluar */
-  const terlewat = mentah.length ? mentah : (simpanRef.current || [])
-
-  const konfigurasi = tipe === 'hadir'
-    ? {
-        judul: 'Kamu belum isi daftar hadir hari ini',
-        deskripsi: 'Isi sebelum tengah malam. Kalau lewat, hari ini akan otomatis tercatat Bolos.',
-        aksi: 'Isi Daftar Hadir'
-      }
-    : {
-        judul: terlewat.length + ' hari kerja belum punya logbook',
-        deskripsi: 'Hanya hari dengan status kehadiran Masuk yang perlu logbook — termasuk hari ini jika kamu sudah presensi masuk.',
-        aksi: 'Isi Logbook'
-      }
-
-  /* ukur tinggi 3 item pertama supaya tinggi lipatan presisi di semua lebar layar */
-  useLayoutEffect(function () {
-    function ukur() {
-      if (refTiga.current) setTinggiTiga(refTiga.current.offsetHeight)
-      setCapBuka(window.matchMedia('(max-width: 639px)').matches ? 293 : 311)
-    }
-    ukur()
-    window.addEventListener('resize', ukur)
-    let ro = null
-    if (refTiga.current && typeof ResizeObserver !== 'undefined') {
-      ro = new ResizeObserver(ukur)
-      ro.observe(refTiga.current)
-    }
-    return function () { window.removeEventListener('resize', ukur); if (ro) ro.disconnect() }
-  }, [terlewat.length])
-
-  /* masuk: wrapper dibiarkan terlipat satu frame lalu dibuka supaya transisi tinggi
-     berjalan dan konten di bawah bergeser mulus; keluar: wrapper merapat bersamaan
-     dengan isi yang memudar, komponen dilepas setelah keduanya selesai */
-  useEffect(function () {
-    if (harusHilang) return undefined
-    const r = requestAnimationFrame(function () { setBuka(true) })
-    return function () { cancelAnimationFrame(r) }
-  }, [harusHilang])
-
-  useEffect(function () {
-    if (!harusHilang) { setKeluar(false); setHilang(false); return undefined }
-    if (!terlewat.length) { setHilang(true); return undefined }
-    setBuka(false)
-    setKeluar(true)
-    const t = setTimeout(function () { setHilang(true) }, 400)
-    return function () { clearTimeout(t) }
-  }, [harusHilang])
-
-  if (hilang || (harusHilang && !terlewat.length)) return null
-
-  return (
-    <div className={'pengingat-wrap' + (buka ? ' pengingat-wrap-buka' : '')}>
-      <div className="pengingat-wrap-dalam">
-        <section className={'mt-6 rounded-[2rem] border border-amber-200 bg-amber-50 p-5 sm:p-6 ' + (keluar ? ' pengingat-keluar' : ' pengingat-masuk')}>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="flex min-w-0 flex-1 items-start gap-3">
-              <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-800">
-                <SizedIcon name="clipboard" size={18} />
-              </span>
-              <div>
-                <h2 className="text-base font-black text-amber-800 sm:text-lg">
-                  {konfigurasi.judul}
-                </h2>
-                <p className="mt-1 text-xs text-amber-800 sm:text-sm">
-                  {konfigurasi.deskripsi}
-                </p>
-              </div>
-            </div>
-            <button type="button" onClick={function () { setTutup(true) }} title="Sembunyikan Pengingat" className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-amber-100 text-amber-800 hover:bg-amber-200">
-              <SizedIcon name="close" size={14} />
-            </button>
-          </div>
-
-          <div ref={refScroll} className={'mt-4 pengingat-scroll' + (lihatSemua ? ' pengingat-scroll-buka' : '')} style={{ maxHeight: lihatSemua ? capBuka : (tinggiTiga || undefined) }}>
-            <ul ref={refTiga} className="space-y-2">
-              {terlewat.slice(0, 3).map(function (t) {
-                return (
-                  <li key={t} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-200 bg-white p-3">
-                    <p className="text-sm font-semibold text-slate-800">
-                      <span className="hidden sm:inline">{formatTanggal(t)}</span>
-                      <span className="sm:hidden">{formatTanggalMobile(t)}</span>
-                    </p>
-                    <button type="button" onClick={function () { props.onIsi(t) }} className="rounded-xl bg-bsi-800 px-3.5 py-2 text-xs font-bold text-white hover:bg-bsi-900 sm:text-sm">
-                      {konfigurasi.aksi}
-                    </button>
-                  </li>
-                )
-              })}
-            </ul>
-            {terlewat.length > 3 ? (
-              <ul className="pengingat-daftar-extra space-y-2 pt-2">
-                {terlewat.slice(3).map(function (t) {
-                  return (
-                    <li key={t} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-200 bg-white p-3">
-                      <p className="text-sm font-semibold text-slate-800">
-                        <span className="hidden sm:inline">{formatTanggal(t)}</span>
-                        <span className="sm:hidden">{formatTanggalMobile(t)}</span>
-                      </p>
-                      <button type="button" onClick={function () { props.onIsi(t) }} className="rounded-xl bg-bsi-800 px-3.5 py-2 text-xs font-bold text-white hover:bg-bsi-900 sm:text-sm">
-                        {konfigurasi.aksi}
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
-            ) : null}
-          </div>
-
-          {terlewat.length > 3 ? (
-            <button type="button" onClick={function () {
-              if (!lihatSemua) { setLihatSemua(true); return }
-              if (sedangTutup.current) return
-              sedangTutup.current = true
-              gulirKeAtasLalu(refScroll.current, function () {
-                sedangTutup.current = false
-                setLihatSemua(false)
-              })
-            }} className="mt-3 w-full rounded-xl border border-amber-300 bg-white px-4 py-2.5 text-xs font-bold text-amber-800 hover:bg-amber-100 sm:text-sm">
-              {lihatSemua ? 'Sembunyikan' : 'Lihat Semua (' + terlewat.length + ' tanggal)'}
-            </button>
-          ) : null}
-        </section>
-      </div>
-    </div>
-  )
-}
-````
-
-## File: src/pages/LoginPage.jsx
-````javascript
-import { useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { loginWithNim } from '../lib/auth.js'
-import { inputCls, labelCls, btnPrimary, LabelProses } from '../components/ui.jsx'
-import { EyeToggle, SizedIcon } from '../components/icons.jsx'
-
-function pesanErrorLogin(err) {
-  const pesan = String((err && err.message) || '')
-  const rendah = pesan.toLowerCase()
-  if (rendah.indexOf('invalid login credentials') !== -1) {
-    return 'NIM atau kode akses yang kamu masukkan tidak cocok dengan data kami. Periksa kembali penulisannya, pastikan tidak ada spasi berlebih, lalu coba lagi.'
-  }
-  if (rendah.indexOf('not confirmed') !== -1) {
-    return 'Akun untuk NIM ini belum diaktifkan. Hubungi admin tim magang untuk mengaktifkan akunmu terlebih dahulu.'
-  }
-  if (rendah.indexOf('too many requests') !== -1 || rendah.indexOf('try again after') !== -1 || rendah.indexOf('rate limit') !== -1) {
-    return 'Terlalu banyak percobaan masuk dalam waktu singkat demi keamanan. Tunggu sekitar satu menit, lalu coba lagi.'
-  }
-  if (rendah.indexOf('fetch') !== -1 || rendah.indexOf('network') !== -1 || rendah.indexOf('failed to load') !== -1 || (typeof navigator !== 'undefined' && !navigator.onLine)) {
-    return 'Tidak bisa terhubung ke server. Periksa koneksi internetmu, lalu coba lagi.'
-  }
-  if (rendah.indexOf('email') !== -1 && rendah.indexOf('format') !== -1) {
-    return 'Format NIM tidak terbaca. Masukkan NIM berupa angka tanpa spasi, contoh: 24070041.'
-  }
-  if (pesan) return 'Gagal masuk: ' + pesan + '. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
-  return 'Terjadi kesalahan tidak terduga saat masuk. Coba sekali lagi, atau hubungi admin tim magang bila masalah berlanjut.'
-}
-export default function LoginPage() {
-  const navigate = useNavigate()
-  const [params] = useSearchParams()
-  const [nim, setNim] = useState('')
-  const [kode, setKode] = useState('')
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [lihatKode, setLihatKode] = useState(false)
-
-  async function submit(e) {
-    e.preventDefault()
-    setBusy(true)
-    setError('')
-    try {
-  await loginWithNim(nim, kode)
-  const next = params.get('next')
-  navigate(next && next.charAt(0) === '/' && next.indexOf('//') !== 0 ? next : '/dashboard')
-} catch (err) {
-  setError(pesanErrorLogin(err))
-}
-    setBusy(false)
-  }
-
-  return (
-    <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr] items-start">
-      <div className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8 lg:p-10">
-        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black leading-tight text-slate-900">Masuk untuk Mengisi Logbook, Galeri, dan Daftar Hadir</h1>
-        <p className="mt-3 text-sm leading-relaxed text-slate-600 sm:mt-4 sm:text-base">Halaman ini khusus mahasiswa magang. Dosen pembimbing dan kaprodi dapat melihat halaman umum tanpa masuk.</p>
-      </div>
-      <div className="card-hover bsi-panel rounded-[2rem] p-5 sm:p-8 lg:p-10">
-        <h2 className="text-xl sm:text-2xl font-black text-slate-900">Masuk Dashboard</h2>
-        {error ? (
-          <div className="mt-3 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-red-100 text-red-600">
-              <SizedIcon name="close" size={12} />
-            </span>
-            <div className="min-w-0">
-              <p className="font-bold">Gagal Masuk</p>
-              <p className="mt-1 leading-relaxed">{error}</p>
-            </div>
-          </div>
-        ) : null}
-        <form onSubmit={submit} className="mt-6 space-y-5">
-          <div>
-            <label className={labelCls}>NIM <span className="text-red-500">*</span></label>
-            <input className={inputCls} value={nim} onChange={function (e) { setNim(e.target.value) }} aria-label="NIM" placeholder="Contoh: 20260001" required />
-          </div>
-          <div>
-            <label className={labelCls}>Kode akses <span className="text-red-500">*</span></label>
-            <div className="relative mt-1.5">
-              <input
-                type={lihatKode ? 'text' : 'password'}
-                className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 pr-12 text-sm outline-none focus:ring-2 focus:ring-bsi-500"
-                value={kode}
-                onChange={function (e) { setKode(e.target.value) }}
-                aria-label="Kode Akses" placeholder="Masukkan kode akses"
-                required
-              />
-              <button
-                type="button"
-                onClick={function () { setLihatKode(function (v) { return !v }) }}
-                title={lihatKode ? 'Sembunyikan Kode Akses' : 'Lihat Kode Akses'}
-                className="absolute right-2 top-0 bottom-0 my-auto grid h-9 w-9 place-items-center rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-600"
-              >
-                <EyeToggle open={lihatKode} size={18} />
-              </button>
-            </div>
-          </div>
-          <button type="submit" disabled={busy} className={btnPrimary}>{busy ? <LabelProses teks="Memproses" /> : 'Masuk'}</button>
-        </form>
-      </div>
-    </section>
   )
 }
 ````
@@ -10982,7 +11000,7 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
   gap: 0.35rem;
   padding: 0.3rem 0.35rem 0.3rem 1rem;
   background: rgba(255, 255, 255, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.8);
+  border: 1px solid #e2e5ea;
   border-radius: 1.5rem;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);

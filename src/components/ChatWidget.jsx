@@ -275,7 +275,22 @@ export default function ChatWidget() {
     try {
       const r = await tanyaDospem(teks, riwayatLama)
       const jawaban = String(r.jawaban || '').trim() || 'Maaf, tidak ada jawaban.'
-      setRiwayat(function (prev) { return prev.concat([{ role: 'assistant', content: jawaban }]) })
+
+      /* Tandai bubble assistant baru sebagai 'jalan' SEBELUM riwayat di-commit.
+         Ini mencegah flash teks penuh: pas React pertama kali render bubble ini,
+         teksTampil[idx] sudah '', jadi user langsung lihat bubble kosong lalu
+         typewriter ngalir dari effect. */
+      setRiwayat(function (prev) {
+        const idxBaru = prev.length
+        animasiRef.current[idxBaru] = 'jalan'
+        setTeksTampil(function (t) {
+          const next = Object.assign({}, t)
+          next[idxBaru] = ''
+          return next
+        })
+        return prev.concat([{ role: 'assistant', content: jawaban }])
+      })
+
       setCooldown(COOLDOWN_NORMAL)
     } catch (err) {
       const pesan = err.message || 'Gagal memanggil AI'
@@ -378,16 +393,18 @@ export default function ChatWidget() {
         </div>
 
         <footer className="chat-widget-footer">
-          <div className="chat-widget-input-wrap">
-            <textarea
-              className="chat-widget-input"
-              rows={1}
-              value={input}
-              onChange={function (e) { setInput(e.target.value) }}
-              onKeyDown={onKeyDown}
-              placeholder={placeholder}
-              disabled={terkunci}
-            />
+          <div className="chat-widget-input-row">
+            <div className="chat-widget-input-wrap">
+              <textarea
+                className="chat-widget-input"
+                rows={1}
+                value={input}
+                onChange={function (e) { setInput(e.target.value) }}
+                onKeyDown={onKeyDown}
+                placeholder={placeholder}
+                disabled={terkunci}
+              />
+            </div>
             <button
               type="button"
               className="chat-widget-send"
