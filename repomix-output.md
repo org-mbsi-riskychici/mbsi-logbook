@@ -109,6 +109,7 @@ tools/
 .os-marker
 cleanup-final.cjs
 finalize.cjs
+glass-chat.cjs
 index.html
 package.json
 postcss.config.js
@@ -401,6 +402,581 @@ create policy "hadir_update_self" on public.daftar_hadir for update using (
 create policy "hadir_delete_self" on public.daftar_hadir for delete using (
   mahasiswa_id = (select id from public.mahasiswa where auth_uid = auth.uid())
 );
+````
+
+## File: glass-chat.cjs
+````javascript
+#!/usr/bin/env node
+'use strict'
+
+/**
+ * glass-chat.cjs
+ * ---------------------------------------------------------------------
+ * Ubah tampilan ChatWidget jadi glassmorphism:
+ *   1. Body chat jadi gradient + blob warna (kanvas kaca)
+ *   2. Bubble AI jadi kaca (backdrop-filter blur)
+ *   3. Bubble user tetap solid (kontras teks)
+ *   4. Header, footer, panel, FAB, input wrap, saran chip ikut kaca
+ *
+ * Cara pakai:
+ *   node glass-chat.cjs
+ *
+ * Aman & idempotent:
+ *   - Cek penanda "glassmorphism-v1" dulu, skip kalau sudah ada.
+ *   - Backup otomatis ke src/index.css.bak sebelum menulis.
+ *   - Pertahankan line ending asli (CRLF / LF).
+ * ---------------------------------------------------------------------
+ */
+
+const fs = require('fs')
+const path = require('path')
+const ROOT = process.cwd()
+
+const MARKER = 'glassmorphism-v1'
+const REL = 'src/index.css'
+
+function fp(r) { return path.join(ROOT, r) }
+function exists(r) { return fs.existsSync(fp(r)) }
+function read(r) { return fs.readFileSync(fp(r), 'utf8') }
+function write(r, c) { fs.writeFileSync(fp(r), c, 'utf8') }
+function head(m) { console.log('\n\x1b[1m\x1b[36m' + m + '\x1b[0m') }
+function ok(m)   { console.log('  \x1b[32m\u2713\x1b[0m ' + m) }
+function skip(m) { console.log('  \x1b[2m\u00b7 ' + m + '\x1b[0m') }
+function warn(m) { console.log('  \x1b[33m!\x1b[0m ' + m) }
+
+/* ------------------------------------------------------------------ */
+/* Blok CSS glassmorphism lengkap.                                    */
+/* Semua rule chat-widget ditulis ulang dari nol supaya konsisten.    */
+/* ------------------------------------------------------------------ */
+
+const CSS_BARU = `/* ===== chat-widget (${MARKER}) ===== */
+/* Versi glassmorphism: body chat jadi kanvas gradient + blob,          */
+/* bubble AI, header, footer, FAB, dan input wrap semua pakai kaca.     */
+/* Bubble user tetap solid hijau supaya teks putih kontras.             */
+
+/* -------- FAB (tombol bulat mengambang) -------- */
+.chat-widget-fab {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 9999px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.7);
+  color: #16623c;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow:
+    0 12px 32px -8px rgba(15, 34, 51, 0.32),
+    0 4px 12px rgba(15, 34, 51, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(16px) saturate(1.6);
+  -webkit-backdrop-filter: blur(16px) saturate(1.6);
+  cursor: pointer;
+  z-index: 55;
+  transition:
+    transform 0.24s cubic-bezier(0.32, 0.72, 0, 1),
+    box-shadow 0.24s ease,
+    background-color 0.2s ease,
+    color 0.2s ease,
+    border-color 0.2s ease;
+}
+.chat-widget-fab:hover {
+  transform: scale(1.06);
+  box-shadow:
+    0 16px 40px -8px rgba(15, 34, 51, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+.chat-widget-fab:active { transform: scale(0.96); }
+.chat-widget-fab-buka {
+  background: rgba(39, 192, 109, 0.9);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+}
+.chat-widget-fab-buka:hover { background: rgba(26, 158, 87, 0.95); }
+.chat-widget-fab-icon { display: grid; place-items: center; }
+.chat-widget-dot {
+  position: absolute;
+  bottom: 3px;
+  right: 3px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #27c06d;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 2px rgba(39, 192, 109, 0.22);
+}
+
+/* -------- Panel utama (kaca besar) -------- */
+.chat-widget-panel {
+  position: fixed;
+  bottom: 5.75rem;
+  right: 1.5rem;
+  width: 380px;
+  max-width: calc(100vw - 3rem);
+  height: 560px;
+  max-height: calc(100vh - 8rem);
+  display: flex;
+  flex-direction: column;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 1.25rem;
+  overflow: hidden;
+  box-shadow:
+    0 24px 60px -15px rgba(15, 23, 42, 0.28),
+    0 6px 18px rgba(15, 23, 42, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  z-index: 54;
+  opacity: 0;
+  transform: translateY(16px) scale(0.96);
+  transform-origin: bottom right;
+  pointer-events: none;
+  transition: opacity 0.22s ease, transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.chat-widget-panel-buka {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+.dark .chat-widget-panel {
+  background: rgba(14, 36, 28, 0.78);
+  border-color: rgba(234, 244, 238, 0.12);
+  box-shadow:
+    0 24px 60px -15px rgba(0, 0, 0, 0.6),
+    0 6px 18px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* -------- Header (kaca tipis) -------- */
+.chat-widget-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(18px) saturate(1.6);
+  -webkit-backdrop-filter: blur(18px) saturate(1.6);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.6);
+  color: #0f2a1d;
+  flex-shrink: 0;
+}
+.dark .chat-widget-header {
+  background: rgba(14, 36, 28, 0.55);
+  border-bottom-color: rgba(234, 244, 238, 0.1);
+  color: #eaf4ee;
+}
+.chat-widget-avatar {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 9999px;
+  background: rgba(39, 192, 109, 0.14);
+  flex-shrink: 0;
+}
+.dark .chat-widget-avatar { background: rgba(255, 255, 255, 0.16); }
+.chat-widget-title { flex: 1; min-width: 0; }
+.chat-widget-title-line {
+  font-size: 0.875rem;
+  font-weight: 800;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-widget-sub {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.15rem;
+  font-size: 0.7rem;
+  color: rgba(15, 42, 29, 0.55);
+  font-weight: 500;
+}
+.dark .chat-widget-sub { color: rgba(234, 244, 238, 0.75); }
+.chat-widget-dot-inline {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #4ed58f;
+  box-shadow: 0 0 0 2px rgba(39, 192, 109, 0.25);
+}
+.chat-widget-close {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  background: rgba(15, 42, 29, 0.06);
+  color: #0f2a1d;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease;
+}
+.chat-widget-close:hover { background: rgba(15, 42, 29, 0.12); }
+.dark .chat-widget-close { background: rgba(255, 255, 255, 0.1); color: #eaf4ee; }
+.dark .chat-widget-close:hover { background: rgba(255, 255, 255, 0.22); }
+
+/* -------- Body: kanvas gradient + blob untuk kaca -------- */
+.chat-widget-body {
+  position: relative;
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  background:
+    radial-gradient(circle at 15% 20%, rgba(39, 192, 109, 0.22), transparent 45%),
+    radial-gradient(circle at 85% 75%, rgba(251, 191, 36, 0.18), transparent 50%),
+    radial-gradient(circle at 50% 100%, rgba(22, 98, 60, 0.14), transparent 55%),
+    linear-gradient(160deg, #eaf6ee 0%, #f4fbf6 55%, #fbf6e8 100%);
+  background-attachment: local;
+}
+.dark .chat-widget-body {
+  background:
+    radial-gradient(circle at 15% 20%, rgba(39, 192, 109, 0.18), transparent 45%),
+    radial-gradient(circle at 85% 75%, rgba(251, 191, 36, 0.12), transparent 50%),
+    linear-gradient(160deg, #0c2418 0%, #081a13 55%, #0a1f16 100%);
+  background-attachment: local;
+}
+
+/* -------- Baris bubble -------- */
+.chat-widget-row { display: flex; justify-content: flex-start; }
+.chat-widget-row-user { justify-content: flex-end; }
+.chat-widget-bubble {
+  max-width: 85%;
+  padding: 0.65rem 0.9rem;
+  border-radius: 1rem;
+  font-size: 0.83rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* -------- Bubble AI: KACA -------- */
+.chat-widget-bubble-ai {
+  background: rgba(255, 255, 255, 0.55);
+  color: #0f2a1d;
+  border-bottom-left-radius: 0.35rem;
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  box-shadow:
+    0 4px 16px -4px rgba(15, 42, 29, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(14px) saturate(1.6);
+  -webkit-backdrop-filter: blur(14px) saturate(1.6);
+}
+.dark .chat-widget-bubble-ai {
+  background: rgba(20, 42, 32, 0.55);
+  color: #eaf4ee;
+  border-color: rgba(234, 244, 238, 0.14);
+  box-shadow:
+    0 4px 16px -4px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* -------- Bubble user: solid, kontras -------- */
+.chat-widget-bubble-user {
+  background: #16623c;
+  color: #ffffff;
+  border-bottom-right-radius: 0.35rem;
+  box-shadow: 0 4px 14px -4px rgba(22, 98, 60, 0.35);
+}
+.dark .chat-widget-bubble-user {
+  background: #27c06d;
+  color: #06281a;
+  box-shadow: 0 4px 14px -4px rgba(39, 192, 109, 0.3);
+}
+
+/* -------- Suggestion chips (kaca tipis) -------- */
+.chat-widget-saran {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.25rem;
+}
+.chat-widget-saran-btn {
+  padding: 0.4rem 0.7rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #0f2a1d;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.chat-widget-saran-btn:hover {
+  background: rgba(39, 192, 109, 0.12);
+  border-color: rgba(39, 192, 109, 0.5);
+  color: #177c48;
+}
+.chat-widget-saran-btn:disabled { cursor: not-allowed; opacity: 0.5; }
+.dark .chat-widget-saran-btn {
+  background: rgba(20, 42, 32, 0.5);
+  color: #eaf4ee;
+  border-color: rgba(234, 244, 238, 0.12);
+}
+.dark .chat-widget-saran-btn:hover {
+  background: rgba(39, 192, 109, 0.2);
+  border-color: rgba(39, 192, 109, 0.5);
+}
+
+/* -------- Error -------- */
+.chat-widget-error {
+  padding: 0.5rem 0.7rem;
+  border-radius: 0.75rem;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.22);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #dc2626;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-align: center;
+}
+.dark .chat-widget-error {
+  background: rgba(239, 68, 68, 0.16);
+  color: #fca5a5;
+}
+
+/* -------- Footer (kaca tipis) -------- */
+.chat-widget-footer {
+  flex-shrink: 0;
+  padding: 0.75rem 1rem 0.9rem;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(18px) saturate(1.6);
+  -webkit-backdrop-filter: blur(18px) saturate(1.6);
+  border-top: 1px solid rgba(255, 255, 255, 0.6);
+}
+.dark .chat-widget-footer {
+  background: rgba(14, 36, 28, 0.55);
+  border-top-color: rgba(234, 244, 238, 0.1);
+}
+
+/* -------- Input wrap (kaca) -------- */
+.chat-widget-input-wrap {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.35rem;
+  padding: 0.3rem 0.35rem 0.3rem 1rem;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 1.5rem;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+.chat-widget-input-wrap:focus-within {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(39, 192, 109, 0.5);
+  box-shadow: 0 0 0 3px rgba(39, 192, 109, 0.18);
+}
+.dark .chat-widget-input-wrap {
+  background: rgba(11, 32, 25, 0.6);
+  border-color: rgba(234, 244, 238, 0.14);
+}
+.dark .chat-widget-input-wrap:focus-within {
+  background: rgba(11, 32, 25, 0.8);
+  border-color: rgba(39, 192, 109, 0.55);
+  box-shadow: 0 0 0 3px rgba(39, 192, 109, 0.22);
+}
+.chat-widget-input {
+  flex: 1;
+  border: 0;
+  outline: none;
+  background: transparent;
+  resize: none;
+  font-size: 0.83rem;
+  line-height: 1.4;
+  padding: 0.5rem 0;
+  max-height: 5rem;
+  color: #0f2a1d;
+  font-family: inherit;
+  overflow-y: hidden;
+}
+.dark .chat-widget-input { color: #eaf4ee; }
+.chat-widget-input::placeholder { color: rgba(15, 42, 29, 0.4); }
+.dark .chat-widget-input::placeholder { color: rgba(234, 244, 238, 0.35); }
+.chat-widget-input:disabled { cursor: not-allowed; }
+
+/* -------- Tombol kirim -------- */
+.chat-widget-send {
+  display: grid;
+  place-items: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 9999px;
+  cursor: pointer;
+  flex-shrink: 0;
+  background: #27c06d;
+  color: #ffffff;
+  transition: background-color 0.15s ease, transform 0.15s ease, color 0.15s ease;
+}
+.chat-widget-send:hover:not(:disabled) { background: #1a9e57; }
+.chat-widget-send:disabled { cursor: not-allowed; opacity: 0.4; }
+.dark .chat-widget-send { background: #27c06d; color: #06281a; }
+.dark .chat-widget-send:hover:not(:disabled) { background: #34d399; color: #06281a; }
+
+/* -------- Catatan kecil di bawah input -------- */
+.chat-widget-catatan {
+  margin-top: 0.5rem;
+  font-size: 0.68rem;
+  color: rgba(15, 42, 29, 0.5);
+  text-align: center;
+}
+.dark .chat-widget-catatan { color: rgba(234, 244, 238, 0.5); }
+.chat-widget-reset {
+  color: #177c48;
+  font-weight: 700;
+  text-decoration: underline;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  padding: 0;
+  font-size: inherit;
+}
+.dark .chat-widget-reset { color: #86ecb0; }
+
+/* -------- Mobile -------- */
+@media (max-width: 640px) {
+  .chat-widget-panel {
+    width: calc(100vw - 1.5rem);
+    max-width: none;
+    right: 0.75rem;
+    bottom: 5.25rem;
+    height: calc(100vh - 7rem);
+    max-height: 640px;
+  }
+  .chat-widget-fab {
+    bottom: 1rem;
+    right: 1rem;
+  }
+}
+
+/* -------- Reduced motion -------- */
+@media (prefers-reduced-motion: reduce) {
+  .chat-widget-panel,
+  .chat-widget-fab,
+  .chat-widget-fab-icon {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+`
+
+/* ------------------------------------------------------------------ */
+/* Cari awal blok chat-widget lama, potong, ganti dengan yang baru.   */
+/* ------------------------------------------------------------------ */
+
+function cariAwalBlok(css) {
+  /* Cari penanda "/* ===== chat-widget" — boleh versi lama (tanpa suffix)   */
+  /* atau versi baru (dengan glassmorphism-v1).                              */
+  const idx = css.indexOf('/* ===== chat-widget')
+  if (idx === -1) return -1
+  /* Mundur ke awal baris supaya newline sebelum penanda ikut terpotong. */
+  const awalBaris = css.lastIndexOf('\n', idx)
+  return awalBaris === -1 ? idx : awalBaris + 1
+}
+
+function main() {
+  console.log('\n\x1b[1m\x1b[36m\u{1F9CA} Glass Chat Widget\x1b[0m')
+
+  if (!exists('package.json') || !exists('src/App.jsx')) {
+    console.log('\n\x1b[31mJalankan dari root project.\x1b[0m\n')
+    process.exit(1)
+  }
+
+  if (!exists(REL)) {
+    console.log('\n\x1b[31mFile ' + REL + ' tidak ditemukan.\x1b[0m\n')
+    process.exit(1)
+  }
+
+  head('[1/3] Baca file')
+  const raw = read(REL)
+  const eol = raw.indexOf('\r\n') !== -1 ? '\r\n' : '\n'
+  let src = raw.replace(/\r\n/g, '\n')
+  ok('File dibaca (' + raw.length + ' byte, EOL: ' + (eol === '\r\n' ? 'CRLF' : 'LF') + ')')
+
+  head('[2/3] Cek status')
+
+  if (src.indexOf(MARKER) !== -1) {
+    skip('Sudah pakai glassmorphism (' + MARKER + '), tidak ada yang diubah.')
+    console.log('\n\x1b[1m\x1b[32m\u2705 Selesai (tidak ada perubahan).\x1b[0m\n')
+    return
+  }
+
+  const awal = cariAwalBlok(src)
+  if (awal === -1) {
+    warn('Penanda "/* ===== chat-widget" tidak ditemukan di ' + REL)
+    console.log('     Cek manual: blok chat-widget mungkin berada di file lain atau sudah diubah namanya.')
+    process.exit(1)
+  }
+  ok('Blok chat-widget ditemukan di posisi ' + awal)
+
+  head('[3/3] Tulis blok baru + backup')
+
+  /* Blok lama = dari awal sampai akhir file (chat-widget ada di paling bawah). */
+  const lama = src.slice(awal)
+  const panjangLama = lama.length
+
+  /* Backup dulu. */
+  const bakPath = REL + '.bak'
+  write(bakPath, raw)
+  ok('Backup: ' + bakPath)
+
+  /* Susun ulang: bagian atas (sebelum blok chat-widget) + blok baru. */
+  const sebelum = src.slice(0, awal)
+  const baru = sebelum + CSS_BARU
+
+  /* Kembalikan ke line ending asli. */
+  const out = eol === '\r\n' ? baru.replace(/\n/g, '\r\n') : baru
+  write(REL, out)
+
+  const delta = out.length - raw.length
+  ok('Blok lama diganti (' + panjangLama + ' → ' + CSS_BARU.length + ' byte, delta ' + (delta >= 0 ? '+' : '') + delta + ')')
+
+  console.log('\n\x1b[1m\x1b[32m\u2705 Selesai!\x1b[0m')
+  console.log(`
+  Yang berubah di ${REL}:
+    - Body chat  : gradient hijau-emas + 3 blob radial
+    - Bubble AI  : kaca (backdrop-filter blur 14px) + border putih
+    - Bubble user: tetap solid hijau
+    - Header     : kaca tipis (blur 18px)
+    - Footer     : kaca tipis (blur 18px)
+    - Panel      : kaca besar (blur 24px)
+    - FAB        : kaca (blur 16px)
+    - Input wrap : kaca (blur 12px) + focus ring hijau
+    - Saran chip : kaca tipis (blur 8px)
+
+  Langkah selanjutnya:
+
+  1. Restart dev server: Ctrl+C, lalu npm run dev
+  2. Hard refresh browser: Ctrl+Shift+R
+  3. Buka ChatWidget, bandingkan light mode & dark mode.
+
+  Kalau scroll kerasa berat di HP low-end, matikan backdrop-filter
+  di .chat-widget-bubble-ai saja (ganti jadi background solid
+  rgba(255,255,255,0.85)) lalu simpan.
+
+  Mau balik ke versi lama:
+    copy ${REL}.bak ${REL}
+
+  Hapus backup kalau sudah yakin:
+    del ${REL}.bak    (Windows)
+    rm ${REL}.bak     (Linux/macOS)
+`)
+}
+
+main()
 ````
 
 ## File: postcss.config.js
@@ -4342,6 +4918,181 @@ export async function tanyaDospem(pertanyaan, riwayat) {
 }
 ````
 
+## File: src/lib/format.js
+````javascript
+import { MULAI_MAGANG } from './constants.js'
+
+export function formatTanggal(s) {
+  if (!s) return 'Tanggal belum diisi'
+  const d = new Date(s + 'T00:00:00')
+  if (Number.isNaN(d.getTime())) return s
+  return d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+export function formatTanggalShort(s) {
+  if (!s) return ''
+  const d = new Date(s + 'T00:00:00')
+  if (Number.isNaN(d.getTime())) return s
+  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+export function todayInput() {
+  const d = new Date()
+  const m = ('0' + (d.getMonth() + 1)).slice(-2)
+  const day = ('0' + d.getDate()).slice(-2)
+  return d.getFullYear() + '-' + m + '-' + day
+}
+
+/* Batas pilihan tanggal form: tidak sebelum hari pertama magang, tidak setelah hari ini.
+   Dinamis karena max diambil dari tanggal perangkat saat web dibuka. */
+export function batasTanggalPilihan() {
+  return { min: MULAI_MAGANG, max: todayInput() }
+}
+
+/* Mengembalikan pesan error bila tanggal di luar batas, atau null bila valid.
+   Perbandingan string aman karena format tanggal ISO (YYYY-MM-DD). */
+export function pesanTanggalTerlarang(value, min, max) {
+  if (!value) return null
+  if (max && value > max) {
+    return 'Tanggal ini belum kamu lewati!'
+  }
+  if (min && value < min) {
+    return 'Hari pertama magang tanggal (8 September 2026).'
+  }
+  return null
+}
+
+export function detectMediaType(u) {
+  let s = String(u || '')
+  const iK = s.indexOf('key=')
+  if (iK !== -1) s = decodeURIComponent(s.slice(iK + 4).split('&')[0])
+  const ext = s.split('?')[0].split('.').pop().toLowerCase()
+  return ['mp4', 'webm', 'ogg', 'mov', 'm4v'].indexOf(ext) !== -1 ? 'video' : 'foto'
+}
+
+export function matchesDateFilters(dateString, f) {
+  if (!dateString) return false
+  if (f.timeMode === 'bulan') {
+    if (f.bulan) {
+      if (f.bulan.length === 7) return dateString.slice(0, 7) === f.bulan
+      const p = dateString.split('-')
+      if (p.length < 2 || p[1] !== f.bulan) return false
+    }
+  } else if (f.timeMode === 'rentang') {
+    if (f.dari && dateString < f.dari) return false
+    if (f.sampai && dateString > f.sampai) return false
+  }
+  return true
+}
+
+export function waktuUrut(x) {
+  if (!x) return 0
+  const src = x.created_at || x.updated_at || ''
+  if (!src) return 0
+  const t = new Date(src).getTime()
+  return isNaN(t) ? 0 : t
+}
+
+export function urutkanTanggal(list, mode) {
+  const arr = (list || []).slice()
+  arr.sort(function (a, b) {
+    const ta = new Date(a.tanggal + 'T00:00:00').getTime()
+    const tb = new Date(b.tanggal + 'T00:00:00').getTime()
+    if (ta !== tb) return mode === 'terlama' ? ta - tb : tb - ta
+    const ca = waktuUrut(a)
+    const cb = waktuUrut(b)
+    if (ca !== cb) return mode === 'terlama' ? ca - cb : cb - ca
+    const ia = a.id || ''
+    const ib = b.id || ''
+    if (ia !== ib) return ia < ib ? (mode === 'terlama' ? -1 : 1) : (mode === 'terlama' ? 1 : -1)
+    return 0
+  })
+  return arr
+}
+
+/* ===== TITLE CASE =====
+   Aturan:
+   - "ATM BSI"     → "ATM BSI"     (singkatan ALL CAPS dipertahankan)
+   - "iPhone app"  → "iPhone App"  (mixed case disengaja dipertahankan)
+   - "bsi"         → "BSI"         (whitelist singkatan umum)
+   - "bank bsi"    → "Bank BSI"    (lowercase diformat + whitelist)
+   - "kegiatan di bank" → "Kegiatan di Bank"  (kata sambung tetap lowercase)
+   - "bank,"       → "Bank,"       (tanda baca di akhir dipertahankan) */
+
+/* Kata sambung/kata depan/artikel yang tetap lowercase di tengah kalimat. */
+const KATA_KECIL = new Set([
+  // Indonesia
+  'dan', 'atau', 'yang', 'untuk', 'dari', 'ke', 'di', 'pada', 'dengan',
+  'dalam', 'oleh', 'serta', 'juga', 'sebagai', 'tentang', 'ini', 'itu',
+  'agar', 'supaya', 'karena', 'kalau', 'jika', 'bila', 'saat', 'ketika',
+  // Inggris (umum di judul campuran)
+  'a', 'an', 'the', 'and', 'or', 'but', 'of', 'in', 'on', 'at', 'to', 'for', 'with', 'by'
+])
+
+/* Singkatan umum yang otomatis di-UPPERCASE walau user ketik lowercase.
+   Tambahkan sesuai kebutuhan tim/instansi. */
+const SINGKATAN_PAKSA = new Set([
+  // Perbankan & magang BSI
+  'bsi', 'atm', 'ktp', 'nim', 'pin', 'otp', 'npwp', 'cif', 'rek', 'kpr', 'umkm', 'kpi', 'roi',
+  'cs', 'crm', 'sdm', 'hrd',
+  // Teknologi umum
+  'it', 'api', 'ui', 'ux', 'url', 'pdf', 'gps', 'wifi', 'ip', 'id', 'hp', 'pc', 'ai', 'ml',
+  // Administrasi & legal
+  'pt', 'cv', 'ukm', 'siup', 'sk', 'surat',
+])
+
+export function toTitleCase(teks) {
+  if (!teks) return ''
+  const bersih = String(teks).trim().replace(/\s+/g, ' ')
+  if (!bersih) return ''
+  const kata = bersih.split(' ')
+
+  const hasil = kata.map(function (token, i) {
+    if (!token) return token
+
+    /* Pisahkan tanda baca depan & belakang dari huruf inti
+       supaya "bank," diproses sebagai "bank" + "," */
+    const match = token.match(/^([^a-zA-Z0-9]*)(.*?)([^a-zA-Z0-9]*)$/)
+    if (!match) return token
+    const depan = match[1] || ''
+    const inti = match[2] || ''
+    const belakang = match[3] || ''
+    if (!inti) return token
+
+    let intiBaru
+
+    /* 1. Singkatan ALL CAPS (2+ huruf): ATM, BSI, KTP → pertahankan */
+    if (/^[A-Z]{2,}$/.test(inti)) {
+      intiBaru = inti
+    }
+    /* 2. Mixed case disengaja: iPhone, mBanking, iOS → pertahankan.
+       Deteksi: ada kombinasi lowercase diikuti uppercase di dalam kata. */
+    else if (/[a-z][A-Z]/.test(inti)) {
+      intiBaru = inti
+    }
+    /* 3. Whitelist singkatan: "bsi" → "BSI", "atm" → "ATM" */
+    else if (SINGKATAN_PAKSA.has(inti.toLowerCase())) {
+      intiBaru = inti.toUpperCase()
+    }
+    /* 4. Default: format Title Case dengan pengecualian kata sambung */
+    else {
+      const lower = inti.toLowerCase()
+      const pertama = i === 0
+      const terakhir = i === kata.length - 1
+      if (!pertama && !terakhir && KATA_KECIL.has(lower)) {
+        intiBaru = lower
+      } else {
+        intiBaru = lower.charAt(0).toUpperCase() + lower.slice(1)
+      }
+    }
+
+    return depan + intiBaru + belakang
+  })
+
+  return hasil.join(' ')
+}
+````
+
 ## File: src/lib/youtube.js
 ````javascript
 import { supabase } from './supabase.js'
@@ -4716,187 +5467,12 @@ export default function ChatWidget() {
         title={open ? 'Tutup chat' : 'Tanya asisten'}
       >
         <span className="chat-widget-fab-icon">
-          {open ? <IkonClose /> : <IkonChat />}
+          {open ? <IkonClose /> : <img className='rounded-full' src="avatar-asisten-magang.jpeg" alt="avatar-asisten-magang" />}
         </span>
         {!open ? <span className="chat-widget-dot" /> : null}
       </button>
     </>
   )
-}
-````
-
-## File: src/lib/format.js
-````javascript
-import { MULAI_MAGANG } from './constants.js'
-
-export function formatTanggal(s) {
-  if (!s) return 'Tanggal belum diisi'
-  const d = new Date(s + 'T00:00:00')
-  if (Number.isNaN(d.getTime())) return s
-  return d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-}
-
-export function formatTanggalShort(s) {
-  if (!s) return ''
-  const d = new Date(s + 'T00:00:00')
-  if (Number.isNaN(d.getTime())) return s
-  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
-}
-
-export function todayInput() {
-  const d = new Date()
-  const m = ('0' + (d.getMonth() + 1)).slice(-2)
-  const day = ('0' + d.getDate()).slice(-2)
-  return d.getFullYear() + '-' + m + '-' + day
-}
-
-/* Batas pilihan tanggal form: tidak sebelum hari pertama magang, tidak setelah hari ini.
-   Dinamis karena max diambil dari tanggal perangkat saat web dibuka. */
-export function batasTanggalPilihan() {
-  return { min: MULAI_MAGANG, max: todayInput() }
-}
-
-/* Mengembalikan pesan error bila tanggal di luar batas, atau null bila valid.
-   Perbandingan string aman karena format tanggal ISO (YYYY-MM-DD). */
-export function pesanTanggalTerlarang(value, min, max) {
-  if (!value) return null
-  if (max && value > max) {
-    return 'Tanggal ini belum kamu lewati!'
-  }
-  if (min && value < min) {
-    return 'Hari pertama magang tanggal (8 September 2026).'
-  }
-  return null
-}
-
-export function detectMediaType(u) {
-  let s = String(u || '')
-  const iK = s.indexOf('key=')
-  if (iK !== -1) s = decodeURIComponent(s.slice(iK + 4).split('&')[0])
-  const ext = s.split('?')[0].split('.').pop().toLowerCase()
-  return ['mp4', 'webm', 'ogg', 'mov', 'm4v'].indexOf(ext) !== -1 ? 'video' : 'foto'
-}
-
-export function matchesDateFilters(dateString, f) {
-  if (!dateString) return false
-  if (f.timeMode === 'bulan') {
-    if (f.bulan) {
-      if (f.bulan.length === 7) return dateString.slice(0, 7) === f.bulan
-      const p = dateString.split('-')
-      if (p.length < 2 || p[1] !== f.bulan) return false
-    }
-  } else if (f.timeMode === 'rentang') {
-    if (f.dari && dateString < f.dari) return false
-    if (f.sampai && dateString > f.sampai) return false
-  }
-  return true
-}
-
-export function waktuUrut(x) {
-  if (!x) return 0
-  const src = x.created_at || x.updated_at || ''
-  if (!src) return 0
-  const t = new Date(src).getTime()
-  return isNaN(t) ? 0 : t
-}
-
-export function urutkanTanggal(list, mode) {
-  const arr = (list || []).slice()
-  arr.sort(function (a, b) {
-    const ta = new Date(a.tanggal + 'T00:00:00').getTime()
-    const tb = new Date(b.tanggal + 'T00:00:00').getTime()
-    if (ta !== tb) return mode === 'terlama' ? ta - tb : tb - ta
-    const ca = waktuUrut(a)
-    const cb = waktuUrut(b)
-    if (ca !== cb) return mode === 'terlama' ? ca - cb : cb - ca
-    const ia = a.id || ''
-    const ib = b.id || ''
-    if (ia !== ib) return ia < ib ? (mode === 'terlama' ? -1 : 1) : (mode === 'terlama' ? 1 : -1)
-    return 0
-  })
-  return arr
-}
-
-/* ===== TITLE CASE =====
-   Aturan:
-   - "ATM BSI"     → "ATM BSI"     (singkatan ALL CAPS dipertahankan)
-   - "iPhone app"  → "iPhone App"  (mixed case disengaja dipertahankan)
-   - "bsi"         → "BSI"         (whitelist singkatan umum)
-   - "bank bsi"    → "Bank BSI"    (lowercase diformat + whitelist)
-   - "kegiatan di bank" → "Kegiatan di Bank"  (kata sambung tetap lowercase)
-   - "bank,"       → "Bank,"       (tanda baca di akhir dipertahankan) */
-
-/* Kata sambung/kata depan/artikel yang tetap lowercase di tengah kalimat. */
-const KATA_KECIL = new Set([
-  // Indonesia
-  'dan', 'atau', 'yang', 'untuk', 'dari', 'ke', 'di', 'pada', 'dengan',
-  'dalam', 'oleh', 'serta', 'juga', 'sebagai', 'tentang', 'ini', 'itu',
-  'agar', 'supaya', 'karena', 'kalau', 'jika', 'bila', 'saat', 'ketika',
-  // Inggris (umum di judul campuran)
-  'a', 'an', 'the', 'and', 'or', 'but', 'of', 'in', 'on', 'at', 'to', 'for', 'with', 'by'
-])
-
-/* Singkatan umum yang otomatis di-UPPERCASE walau user ketik lowercase.
-   Tambahkan sesuai kebutuhan tim/instansi. */
-const SINGKATAN_PAKSA = new Set([
-  // Perbankan & magang BSI
-  'bsi', 'atm', 'ktp', 'nim', 'pin', 'otp', 'npwp', 'cif', 'rek', 'kpr', 'umkm', 'kpi', 'roi',
-  'cs', 'crm', 'sdm', 'hrd',
-  // Teknologi umum
-  'it', 'api', 'ui', 'ux', 'url', 'pdf', 'gps', 'wifi', 'ip', 'id', 'hp', 'pc', 'ai', 'ml',
-  // Administrasi & legal
-  'pt', 'cv', 'ukm', 'siup', 'sk', 'surat',
-])
-
-export function toTitleCase(teks) {
-  if (!teks) return ''
-  const bersih = String(teks).trim().replace(/\s+/g, ' ')
-  if (!bersih) return ''
-  const kata = bersih.split(' ')
-
-  const hasil = kata.map(function (token, i) {
-    if (!token) return token
-
-    /* Pisahkan tanda baca depan & belakang dari huruf inti
-       supaya "bank," diproses sebagai "bank" + "," */
-    const match = token.match(/^([^a-zA-Z0-9]*)(.*?)([^a-zA-Z0-9]*)$/)
-    if (!match) return token
-    const depan = match[1] || ''
-    const inti = match[2] || ''
-    const belakang = match[3] || ''
-    if (!inti) return token
-
-    let intiBaru
-
-    /* 1. Singkatan ALL CAPS (2+ huruf): ATM, BSI, KTP → pertahankan */
-    if (/^[A-Z]{2,}$/.test(inti)) {
-      intiBaru = inti
-    }
-    /* 2. Mixed case disengaja: iPhone, mBanking, iOS → pertahankan.
-       Deteksi: ada kombinasi lowercase diikuti uppercase di dalam kata. */
-    else if (/[a-z][A-Z]/.test(inti)) {
-      intiBaru = inti
-    }
-    /* 3. Whitelist singkatan: "bsi" → "BSI", "atm" → "ATM" */
-    else if (SINGKATAN_PAKSA.has(inti.toLowerCase())) {
-      intiBaru = inti.toUpperCase()
-    }
-    /* 4. Default: format Title Case dengan pengecualian kata sambung */
-    else {
-      const lower = inti.toLowerCase()
-      const pertama = i === 0
-      const terakhir = i === kata.length - 1
-      if (!pertama && !terakhir && KATA_KECIL.has(lower)) {
-        intiBaru = lower
-      } else {
-        intiBaru = lower.charAt(0).toUpperCase() + lower.slice(1)
-      }
-    }
-
-    return depan + intiBaru + belakang
-  })
-
-  return hasil.join(' ')
 }
 ````
 
@@ -6423,6 +6999,73 @@ export default function GalleryPage() {
 }
 ````
 
+## File: src/App.jsx
+````javascript
+import { SkeletonDashboard, SkeletonQuick } from './components/Skeleton.jsx'
+import { useEffect } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { ThemeProvider } from './lib/theme.jsx'
+ import { ToastProvider } from './components/ui.jsx'
+import { useAuth } from './lib/auth.js'
+import Layout from './components/Layout.jsx'
+import HomePage from './pages/HomePage.jsx'
+import LogbookPage from './pages/LogbookPage.jsx'
+import GalleryPage from './pages/GalleryPage.jsx'
+import AttendancePage from './pages/AttendancePage.jsx'
+import DospemPage from './pages/DospemPage.jsx'
+import LoginPage from './pages/LoginPage.jsx'
+import DashboardPage from './pages/DashboardPage.jsx'
+import QuickPage from './pages/QuickPage.jsx'
+
+function ScrollToTop() {
+  const { pathname } = useLocation()
+  useEffect(function () {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+  }, [pathname])
+  return null
+}
+function RequireAuth(props) {
+  const { mahasiswa, loading } = useAuth()
+  const location = useLocation()
+  if (loading) return props.fallback || <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:py-8"><SkeletonDashboard /></div>
+  if (!mahasiswa) return <Navigate to={'/login?next=' + encodeURIComponent(location.pathname + location.search)} replace />
+  return props.children
+}
+
+function RequireGuest(props) {
+  const { mahasiswa, loading } = useAuth()
+  if (loading) return <div className="grid min-h-[60vh] place-items-center"><div className="h-10 w-10 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div></div>
+  if (mahasiswa) return <Navigate to="/dashboard" replace />
+  return props.children
+}
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <ToastProvider>
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ScrollToTop />
+        <Routes>
+          <Route element={<Layout />}>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/logbook" element={<LogbookPage />} />
+            <Route path="/galeri" element={<GalleryPage />} />
+            <Route path="/absen" element={<AttendancePage />} />
+            <Route path="/dospem" element={<DospemPage />} />
+            <Route path="/tim" element={<Navigate to="/dospem" replace />} />
+            <Route path="/login" element={<RequireGuest><LoginPage /></RequireGuest>} />
+            <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
+            <Route path="/qr" element={<RequireAuth fallback={<SkeletonQuick />}><QuickPage /></RequireAuth>} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+      </ToastProvider>
+    </ThemeProvider>
+  )
+}
+````
+
 ## File: src/components/QrPrintTab.jsx
 ````javascript
 import { useRef, useState } from 'react'
@@ -6944,73 +7587,6 @@ export default function AttendancePage() {
         {detail ? <AttendanceDetail row={detail} /> : null}
       </Modal>
     </div>
-  )
-}
-````
-
-## File: src/App.jsx
-````javascript
-import { SkeletonDashboard, SkeletonQuick } from './components/Skeleton.jsx'
-import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import { ThemeProvider } from './lib/theme.jsx'
- import { ToastProvider } from './components/ui.jsx'
-import { useAuth } from './lib/auth.js'
-import Layout from './components/Layout.jsx'
-import HomePage from './pages/HomePage.jsx'
-import LogbookPage from './pages/LogbookPage.jsx'
-import GalleryPage from './pages/GalleryPage.jsx'
-import AttendancePage from './pages/AttendancePage.jsx'
-import DospemPage from './pages/DospemPage.jsx'
-import LoginPage from './pages/LoginPage.jsx'
-import DashboardPage from './pages/DashboardPage.jsx'
-import QuickPage from './pages/QuickPage.jsx'
-
-function ScrollToTop() {
-  const { pathname } = useLocation()
-  useEffect(function () {
-    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
-  }, [pathname])
-  return null
-}
-function RequireAuth(props) {
-  const { mahasiswa, loading } = useAuth()
-  const location = useLocation()
-  if (loading) return props.fallback || <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:py-8"><SkeletonDashboard /></div>
-  if (!mahasiswa) return <Navigate to={'/login?next=' + encodeURIComponent(location.pathname + location.search)} replace />
-  return props.children
-}
-
-function RequireGuest(props) {
-  const { mahasiswa, loading } = useAuth()
-  if (loading) return <div className="grid min-h-[60vh] place-items-center"><div className="h-10 w-10 rounded-full border-4 border-bsi-500 border-t-transparent animate-spin"></div></div>
-  if (mahasiswa) return <Navigate to="/dashboard" replace />
-  return props.children
-}
-
-export default function App() {
-  return (
-    <ThemeProvider>
-      <ToastProvider>
-      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <ScrollToTop />
-        <Routes>
-          <Route element={<Layout />}>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/logbook" element={<LogbookPage />} />
-            <Route path="/galeri" element={<GalleryPage />} />
-            <Route path="/absen" element={<AttendancePage />} />
-            <Route path="/dospem" element={<DospemPage />} />
-            <Route path="/tim" element={<Navigate to="/dospem" replace />} />
-            <Route path="/login" element={<RequireGuest><LoginPage /></RequireGuest>} />
-            <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
-            <Route path="/qr" element={<RequireAuth fallback={<SkeletonQuick />}><QuickPage /></RequireAuth>} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-      </ToastProvider>
-    </ThemeProvider>
   )
 }
 ````
@@ -9992,7 +10568,7 @@ button:active, a:active, .clickable:active { transform: scale(.97); }
 .dark .text-slate-600, .dark .text-slate-500, .dark .text-slate-400 { color: #9cb2a6 !important; }
 .dark .hover\:bg-slate-100:hover { background-color: #17352b !important; color: #f2f7f4 !important; }
 .dark .hover\:bg-slate-200:hover { background-color: #0b2019 !important; color: #f2f7f4 !important; }
-.dark input, .dark select, .dark textarea { background-color: #0b2019; color: #e4efe8; border-color: #275244; }
+.dark input, .dark select, .dark textarea { background-color: transparent; color: #e4efe8; border-color: #275244; }
 .dark input::placeholder, .dark textarea::placeholder { color: #6f8a7d; }
 .dark .bg-emerald-50, .dark .bg-emerald-100 { background-color: rgba(16,185,129,.14) !important; }
 .dark .text-emerald-800, .dark .text-emerald-900 { color: #6ee7b7 !important; }
@@ -11106,7 +11682,12 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
   z-index: 1;
 }
 
-/* ===== chat-widget: floating chat asisten untuk halaman publik ===== */
+/* ===== chat-widget (glassmorphism-v1) ===== */
+/* Versi glassmorphism: body chat jadi kanvas gradient + blob,          */
+/* bubble AI, header, footer, FAB, dan input wrap semua pakai kaca.     */
+/* Bubble user tetap solid hijau supaya teks putih kontras.             */
+
+/* -------- FAB (tombol bulat mengambang) -------- */
 .chat-widget-fab {
   position: fixed;
   bottom: 1.5rem;
@@ -11116,22 +11697,39 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
   border-radius: 9999px;
   display: grid;
   place-items: center;
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.7);
   color: #16623c;
-  border: 1px solid rgba(15, 42, 29, 0.08);
-  box-shadow: 0 12px 32px -8px rgba(15, 34, 51, 0.35), 0 4px 12px rgba(15, 34, 51, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow:
+    0 12px 32px -8px rgba(15, 34, 51, 0.32),
+    0 4px 12px rgba(15, 34, 51, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(16px) saturate(1.6);
+  -webkit-backdrop-filter: blur(16px) saturate(1.6);
   cursor: pointer;
   z-index: 55;
-  transition: transform 0.24s cubic-bezier(0.32, 0.72, 0, 1), box-shadow 0.24s ease, background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+  transition:
+    transform 0.24s cubic-bezier(0.32, 0.72, 0, 1),
+    box-shadow 0.24s ease,
+    background-color 0.2s ease,
+    color 0.2s ease,
+    border-color 0.2s ease;
 }
-.chat-widget-fab:hover { transform: scale(1.06); box-shadow: 0 16px 40px -8px rgba(15, 34, 51, 0.42); }
+.chat-widget-fab:hover {
+  transform: scale(1.06);
+  box-shadow:
+    0 16px 40px -8px rgba(15, 34, 51, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
 .chat-widget-fab:active { transform: scale(0.96); }
 .chat-widget-fab-buka {
-  background: #27c06d;
+  background: rgba(39, 192, 109, 0.9);
   color: #ffffff;
-  border-color: transparent;
+  border-color: rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
 }
-.chat-widget-fab-buka:hover { background: #1a9e57; }
+.chat-widget-fab-buka:hover { background: rgba(26, 158, 87, 0.95); }
 .chat-widget-fab-icon { display: grid; place-items: center; }
 .chat-widget-dot {
   position: absolute;
@@ -11145,6 +11743,7 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
   box-shadow: 0 0 0 2px rgba(39, 192, 109, 0.22);
 }
 
+/* -------- Panel utama (kaca besar) -------- */
 .chat-widget-panel {
   position: fixed;
   bottom: 5.75rem;
@@ -11155,11 +11754,16 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
   max-height: calc(100vh - 8rem);
   display: flex;
   flex-direction: column;
-  background: #ffffff;
-  border: 1px solid rgba(15, 42, 29, 0.08);
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.7);
   border-radius: 1.25rem;
   overflow: hidden;
-  box-shadow: 0 24px 60px -15px rgba(15, 23, 42, 0.28), 0 6px 18px rgba(15, 23, 42, 0.08);
+  box-shadow:
+    0 24px 60px -15px rgba(15, 23, 42, 0.28),
+    0 6px 18px rgba(15, 23, 42, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
   z-index: 54;
   opacity: 0;
   transform: translateY(16px) scale(0.96);
@@ -11173,26 +11777,30 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
   pointer-events: auto;
 }
 .dark .chat-widget-panel {
-  background: #0e241c;
-  border-color: rgba(234, 244, 238, 0.08);
-  box-shadow: 0 24px 60px -15px rgba(0, 0, 0, 0.6), 0 6px 18px rgba(0, 0, 0, 0.3);
+  background: rgba(14, 36, 28, 0.78);
+  border-color: rgba(234, 244, 238, 0.12);
+  box-shadow:
+    0 24px 60px -15px rgba(0, 0, 0, 0.6),
+    0 6px 18px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
+/* -------- Header (kaca tipis) -------- */
 .chat-widget-header {
   display: flex;
   align-items: center;
   gap: 0.75rem;
   padding: 0.9rem 1rem;
-  background: rgba(255, 255, 255, 0.65);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(15, 42, 29, 0.1);
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(18px) saturate(1.6);
+  -webkit-backdrop-filter: blur(18px) saturate(1.6);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.6);
   color: #0f2a1d;
   flex-shrink: 0;
 }
 .dark .chat-widget-header {
-  background: linear-gradient(135deg, #0e2a1c 0%, #0b2019 100%);
-  border-bottom-color: rgba(234, 244, 238, 0.08);
+  background: rgba(14, 36, 28, 0.55);
+  border-bottom-color: rgba(234, 244, 238, 0.1);
   color: #eaf4ee;
 }
 .chat-widget-avatar {
@@ -11248,17 +11856,31 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
 .dark .chat-widget-close { background: rgba(255, 255, 255, 0.1); color: #eaf4ee; }
 .dark .chat-widget-close:hover { background: rgba(255, 255, 255, 0.22); }
 
+/* -------- Body: kanvas gradient + blob untuk kaca -------- */
 .chat-widget-body {
+  position: relative;
   flex: 1;
   overflow-y: auto;
   padding: 1rem;
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
-  background: #f4fbf6;
+  background:
+    radial-gradient(circle at 15% 20%, rgba(39, 192, 109, 0.22), transparent 45%),
+    radial-gradient(circle at 85% 75%, rgba(251, 191, 36, 0.18), transparent 50%),
+    radial-gradient(circle at 50% 100%, rgba(22, 98, 60, 0.14), transparent 55%),
+    linear-gradient(160deg, #eaf6ee 0%, #f4fbf6 55%, #fbf6e8 100%);
+  background-attachment: local;
 }
-.dark .chat-widget-body { background: #081a13; }
+.dark .chat-widget-body {
+  background:
+    radial-gradient(circle at 15% 20%, rgba(39, 192, 109, 0.18), transparent 45%),
+    radial-gradient(circle at 85% 75%, rgba(251, 191, 36, 0.12), transparent 50%),
+    linear-gradient(160deg, #0c2418 0%, #081a13 55%, #0a1f16 100%);
+  background-attachment: local;
+}
 
+/* -------- Baris bubble -------- */
 .chat-widget-row { display: flex; justify-content: flex-start; }
 .chat-widget-row-user { justify-content: flex-end; }
 .chat-widget-bubble {
@@ -11270,24 +11892,42 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+/* -------- Bubble AI: KACA -------- */
 .chat-widget-bubble-ai {
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.55);
   color: #0f2a1d;
   border-bottom-left-radius: 0.35rem;
-  border: 1px solid rgba(15, 42, 29, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  box-shadow:
+    0 4px 16px -4px rgba(15, 42, 29, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(14px) saturate(1.6);
+  -webkit-backdrop-filter: blur(14px) saturate(1.6);
 }
+.dark .chat-widget-bubble-ai {
+  background: rgba(20, 42, 32, 0.55);
+  color: #eaf4ee;
+  border-color: rgba(234, 244, 238, 0.14);
+  box-shadow:
+    0 4px 16px -4px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* -------- Bubble user: solid, kontras -------- */
 .chat-widget-bubble-user {
   background: #16623c;
   color: #ffffff;
   border-bottom-right-radius: 0.35rem;
+  box-shadow: 0 4px 14px -4px rgba(22, 98, 60, 0.35);
 }
-.dark .chat-widget-bubble-ai {
-  background: #0e241c;
-  color: #eaf4ee;
-  border-color: rgba(234, 244, 238, 0.08);
+.dark .chat-widget-bubble-user {
+  background: #27c06d;
+  color: #06281a;
+  box-shadow: 0 4px 14px -4px rgba(39, 192, 109, 0.3);
 }
-.dark .chat-widget-bubble-user { background: #27c06d; color: #06281a; }
 
+/* -------- Suggestion chips (kaca tipis) -------- */
 .chat-widget-saran {
   display: flex;
   flex-wrap: wrap;
@@ -11297,8 +11937,10 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
 .chat-widget-saran-btn {
   padding: 0.4rem 0.7rem;
   border-radius: 0.75rem;
-  border: 1px solid rgba(15, 42, 29, 0.1);
-  background: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   color: #0f2a1d;
   font-size: 0.72rem;
   font-weight: 600;
@@ -11306,55 +11948,79 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 .chat-widget-saran-btn:hover {
-  background: rgba(39, 192, 109, 0.08);
-  border-color: rgba(39, 192, 109, 0.4);
+  background: rgba(39, 192, 109, 0.12);
+  border-color: rgba(39, 192, 109, 0.5);
   color: #177c48;
 }
 .chat-widget-saran-btn:disabled { cursor: not-allowed; opacity: 0.5; }
 .dark .chat-widget-saran-btn {
-  background: #0e241c;
+  background: rgba(20, 42, 32, 0.5);
   color: #eaf4ee;
-  border-color: rgba(234, 244, 238, 0.1);
+  border-color: rgba(234, 244, 238, 0.12);
+}
+.dark .chat-widget-saran-btn:hover {
+  background: rgba(39, 192, 109, 0.2);
+  border-color: rgba(39, 192, 109, 0.5);
 }
 
+/* -------- Error -------- */
 .chat-widget-error {
   padding: 0.5rem 0.7rem;
   border-radius: 0.75rem;
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.22);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   color: #dc2626;
   font-size: 0.72rem;
   font-weight: 600;
   text-align: center;
 }
+.dark .chat-widget-error {
+  background: rgba(239, 68, 68, 0.16);
+  color: #fca5a5;
+}
 
+/* -------- Footer (kaca tipis) -------- */
 .chat-widget-footer {
   flex-shrink: 0;
   padding: 0.75rem 1rem 0.9rem;
-  background: #ffffff;
-  border-top: 1px solid rgba(15, 42, 29, 0.06);
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(18px) saturate(1.6);
+  -webkit-backdrop-filter: blur(18px) saturate(1.6);
+  border-top: 1px solid rgba(255, 255, 255, 0.6);
 }
 .dark .chat-widget-footer {
-  background: #0e241c;
-  border-top-color: rgba(234, 244, 238, 0.08);
+  background: rgba(14, 36, 28, 0.55);
+  border-top-color: rgba(234, 244, 238, 0.1);
 }
+
+/* -------- Input wrap (kaca) -------- */
 .chat-widget-input-wrap {
   display: flex;
   align-items: flex-end;
   gap: 0.35rem;
   padding: 0.3rem 0.35rem 0.3rem 1rem;
-  background: #ffffff;
-  border: 1px solid rgba(15, 42, 29, 0.12);
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.8);
   border-radius: 1.5rem;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
 }
 .chat-widget-input-wrap:focus-within {
-  border-color: #27c06d;
-  box-shadow: 0 0 0 3px rgba(39, 192, 109, 0.14);
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(39, 192, 109, 0.5);
+  box-shadow: 0 0 0 3px rgba(39, 192, 109, 0.18);
 }
 .dark .chat-widget-input-wrap {
-  background: #0b2019;
-  border-color: rgba(234, 244, 238, 0.12);
+  background: rgba(11, 32, 25, 0.6);
+  border-color: rgba(234, 244, 238, 0.14);
+}
+.dark .chat-widget-input-wrap:focus-within {
+  background: rgba(11, 32, 25, 0.8);
+  border-color: rgba(39, 192, 109, 0.55);
+  box-shadow: 0 0 0 3px rgba(39, 192, 109, 0.22);
 }
 .chat-widget-input {
   flex: 1;
@@ -11375,6 +12041,7 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
 .dark .chat-widget-input::placeholder { color: rgba(234, 244, 238, 0.35); }
 .chat-widget-input:disabled { cursor: not-allowed; }
 
+/* -------- Tombol kirim -------- */
 .chat-widget-send {
   display: grid;
   place-items: center;
@@ -11383,17 +12050,16 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
   border-radius: 9999px;
   cursor: pointer;
   flex-shrink: 0;
-  transition: background-color 0.15s ease, transform 0.15s ease, color 0.15s ease;
-}
-.chat-widget-send {
   background: #27c06d;
   color: #ffffff;
+  transition: background-color 0.15s ease, transform 0.15s ease, color 0.15s ease;
 }
 .chat-widget-send:hover:not(:disabled) { background: #1a9e57; }
 .chat-widget-send:disabled { cursor: not-allowed; opacity: 0.4; }
 .dark .chat-widget-send { background: #27c06d; color: #06281a; }
 .dark .chat-widget-send:hover:not(:disabled) { background: #34d399; color: #06281a; }
 
+/* -------- Catatan kecil di bawah input -------- */
 .chat-widget-catatan {
   margin-top: 0.5rem;
   font-size: 0.68rem;
@@ -11413,6 +12079,7 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
 }
 .dark .chat-widget-reset { color: #86ecb0; }
 
+/* -------- Mobile -------- */
 @media (max-width: 640px) {
   .chat-widget-panel {
     width: calc(100vw - 1.5rem);
@@ -11428,11 +12095,11 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
   }
 }
 
+/* -------- Reduced motion -------- */
 @media (prefers-reduced-motion: reduce) {
   .chat-widget-panel,
   .chat-widget-fab,
-  .chat-widget-fab-icon,
-  .chat-widget-mic-aktif {
+  .chat-widget-fab-icon {
     transition: none !important;
     animation: none !important;
   }

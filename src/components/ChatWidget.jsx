@@ -46,7 +46,12 @@ export default function ChatWidget() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [cooldown, setCooldown] = useState(0)
-  const [autoScroll, setAutoScroll] = useState(true)
+  /* fix-yank-bottom-v1: autoScroll disimpan sebagai ref (bukan state)
+     supaya tidak memicu re-render + useLayoutEffect. Sebelumnya
+     state ini ada di deps useLayoutEffect, sehingga saat user
+     scroll mendekati bawah (jarak <80px), ref berubah true dan
+     efek langsung snap scrollTop ke scrollHeight. */
+  const autoScrollRef = useRef(true)
   const refScroll = useRef(null)
 
   useEffect(function () {
@@ -55,12 +60,13 @@ export default function ChatWidget() {
 
   useLayoutEffect(function () {
     if (!open) return
+    if (!autoScrollRef.current) return
     const el = refScroll.current
-    if (!el || !autoScroll) return
+    if (!el) return
     requestAnimationFrame(function () {
       if (el) el.scrollTop = el.scrollHeight
     })
-  }, [riwayat, busy, error, open, autoScroll])
+  }, [riwayat, busy, error, open])
 
   /* Deteksi user scroll manual pakai wheel/touchmove saja.
      Sebelumnya pakai onScroll yang kena trigger oleh auto-scroll
@@ -69,7 +75,7 @@ export default function ChatWidget() {
     const el = refScroll.current
     if (!el) return
     const jarak = el.scrollHeight - el.scrollTop - el.clientHeight
-    setAutoScroll(jarak < 80)
+    autoScrollRef.current = jarak < 80
   }
 
   useEffect(function () {
@@ -90,7 +96,7 @@ export default function ChatWidget() {
     const riwayatLama = riwayat
     setRiwayat(riwayatLama.concat([{ role: 'user', content: teks }]))
     setInput('')
-    setAutoScroll(true)
+    autoScrollRef.current = true
 
     try {
       const r = await tanyaDospem(teks, riwayatLama)
@@ -232,7 +238,7 @@ export default function ChatWidget() {
         title={open ? 'Tutup chat' : 'Tanya asisten'}
       >
         <span className="chat-widget-fab-icon">
-          {open ? <IkonClose /> : <IkonChat />}
+          {open ? <IkonClose /> : <img className='rounded-full' src="avatar-asisten-magang.jpeg" alt="avatar-asisten-magang" />}
         </span>
         {!open ? <span className="chat-widget-dot" /> : null}
       </button>
