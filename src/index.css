@@ -1560,49 +1560,55 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
 }
 
 /* -------- Mobile -------- */
-/* full-mobile-v1: di mobile panel jadi full screen — menempel tepi
-   kiri-kanan dan bawah layar, dengan rounded corner hanya di atas.
-   FAB disembunyikan saat panel terbuka supaya tidak numpuk di
-   atas input. Safe-area inset iOS dihormati di tepi bawah. */
+/* full-bleed-mobile-v1: di mobile panel menutupi SELURUH viewport,
+   termasuk navbar. Top: 0, bottom: 0, height 100dvh. Navbar tetap
+   ada di DOM, tapi ketutup oleh panel chat (z-index panel dinaikkan).
+   Header chat diberi padding atas untuk safe-area iOS (notch), footer
+   diberi padding bawah untuk home indicator. FAB disembunyikan saat
+   panel terbuka. Desktop tidak diubah. */
 @media (max-width: 640px) {
   .chat-widget-panel {
-    /* Panel menutup seluruh viewport kecuali area navbar (4rem tinggi). */
-    top: 4rem;
+    top: 0;
     left: 0;
     right: 0;
     bottom: 0;
     width: 100vw;
     max-width: 100vw;
-    height: auto;
+    /* 100dvh = dynamic viewport height, akurat di iOS/Android saat
+       address bar muncul/hilang. Fallback: 100vh untuk browser lama. */
+    height: 100vh;
+    height: 100dvh;
     max-height: none;
-    border-radius: 1.25rem 1.25rem 0 0;
-    border-bottom: none;
-    border-left: none;
-    border-right: none;
-    /* transform origin di kiri-bawah supaya animasi buka mengarah ke atas */
+    border-radius: 0;
+    border: none;
+    /* z-index di atas navbar sticky (z-50), toast (z-100), modal (z-60)
+       tetap di atas karena z-[60]+. Panel di 120 supaya pasti menang. */
+    z-index: 120;
     transform-origin: bottom center;
-    /* hint compositor untuk animasi transform yang mulus */
     will-change: opacity, transform;
   }
 
-  /* Header dan footer ikut full width, tanpa rounded di sisi-sisinya. */
+  /* Header: tambah padding atas untuk notch/status bar iOS. */
   .chat-widget-header {
+    padding-top: max(0.9rem, calc(0.9rem + env(safe-area-inset-top)));
     padding-left: max(1rem, env(safe-area-inset-left));
     padding-right: max(1rem, env(safe-area-inset-right));
   }
+
+  /* Footer: tambah padding bawah untuk home indicator iOS. */
   .chat-widget-footer {
     padding-left: max(1rem, env(safe-area-inset-left));
     padding-right: max(1rem, env(safe-area-inset-right));
-    /* hindari input ketutup home indicator iOS */
     padding-bottom: max(0.9rem, calc(0.9rem + env(safe-area-inset-bottom)));
   }
+
+  /* Body: padding kiri-kanan saja, biar konten chat tetap masuk akal. */
   .chat-widget-body {
     padding-left: max(1rem, env(safe-area-inset-left));
     padding-right: max(1rem, env(safe-area-inset-right));
   }
 
-  /* FAB disembunyikan saat panel terbuka (mobile). Yang belum buka
-     tetap tampil normal. */
+  /* FAB disembunyikan saat panel terbuka (mobile). */
   .chat-widget-fab-buka {
     opacity: 0;
     pointer-events: none;
@@ -1613,6 +1619,12 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
   .chat-widget-fab {
     bottom: max(1rem, calc(1rem + env(safe-area-inset-bottom)));
     right: max(1rem, calc(1rem + env(safe-area-inset-right)));
+  }
+
+  /* Di mobile, tambah sedikit ruang di atas elemen pertama body
+     supaya bubble pertama tidak terlalu nempel ke header. */
+  .chat-widget-body {
+    padding-top: 1rem;
   }
 }
 

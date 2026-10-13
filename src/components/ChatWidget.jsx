@@ -124,46 +124,94 @@ export default function ChatWidget() {
     try { sessionStorage.setItem(KEY_RIWAYAT, JSON.stringify(riwayat)) } catch (e) {}
   }, [riwayat])
 
-  /* lock-scroll-v1: cegah halaman belakang ikut scroll saat panel
-     chat terbuka di mobile. Pakai position:fixed trick supaya posisi
-     scroll user disimpan (kalau pakai overflow:hidden biasa, body
-     akan lompat ke atas saat panel dibuka dan tetap di atas saat
-     ditutup). Hanya aktif di layar <=640px — di desktop, membiarkan
-     halaman belakang bisa di-scroll itu wajar. */
+  /* body-lock-instant-v1: cegah halaman belakang ikut scroll saat panel
+     chat terbuka di mobile, dan restore posisi scroll dengan benar
+     saat panel ditutup.
+
+     Perbaikan dari v2:
+     1. State lock disimpan di ref (`bodyLockRef`). Kalau effect re-run
+        karena React Strict Mode (dev) atau HMR, scrollY TIDAK di-capture
+        ulang — jadi tidak salah ambil nilai 0 saat body sudah fixed.
+     2. scrollTo pakai `behavior: 'instant'` untuk bypass CSS
+        `scroll-behavior: smooth`. Sebelumnya halaman terlihat "meluncur"
+        dari atas ke posisi user selama fade-out panel.
+     3. Safety net di unmount supaya body tidak tetap terkunci kalau
+        ChatWidget unmount saat chat masih terbuka. */
+  const bodyLockRef = useRef({ aktif: false, scrollY: 0 })
+
   useEffect(function () {
-    if (!open) return undefined
     if (typeof window === 'undefined') return undefined
     if (!window.matchMedia('(max-width: 640px)').matches) return undefined
 
     const body = document.body
-    const scrollY = window.scrollY || document.documentElement.scrollTop || 0
-    const gayaLama = {
-      position: body.style.position,
-      top: body.style.top,
-      left: body.style.left,
-      right: body.style.right,
-      width: body.style.width,
-      overflow: body.style.overflow
+    const lock = bodyLockRef.current
+
+    if (open) {
+      /* Jangan re-capture kalau sudah terkunci — ini mencegah
+         Strict Mode / HMR / re-render apapun mengubah target restore. */
+      if (lock.aktif) return undefined
+      lock.scrollY = window.scrollY || document.documentElement.scrollTop || 0
+      lock.aktif = true
+
+      body.style.position = 'fixed'
+      body.style.top = '-' + lock.scrollY + 'px'
+      body.style.left = '0'
+      body.style.right = '0'
+      body.style.width = '100%'
+      body.style.overflow = 'hidden'
+    } else {
+      /* Unlock */
+      if (!lock.aktif) return undefined
+      lock.aktif = false
+
+      body.style.position = ''
+      body.style.top = ''
+      body.style.left = ''
+      body.style.right = ''
+      body.style.width = ''
+      body.style.overflow = ''
+
+      const target = lock.scrollY
+      lock.scrollY = 0
+      if (target > 0) {
+        requestAnimationFrame(function () {
+          /* behavior instant: bypass `html { scroll-behavior: smooth }`
+             supaya tidak terlihat meluncur dari atas ke posisi target. */
+          try {
+            window.scrollTo({ top: target, left: 0, behavior: 'instant' })
+          } catch (e) {
+            window.scrollTo(0, target)
+          }
+        })
+      }
     }
 
-    body.style.position = 'fixed'
-    body.style.top = '-' + scrollY + 'px'
-    body.style.left = '0'
-    body.style.right = '0'
-    body.style.width = '100%'
-    body.style.overflow = 'hidden'
-
-    return function () {
-      body.style.position = gayaLama.position
-      body.style.top = gayaLama.top
-      body.style.left = gayaLama.left
-      body.style.right = gayaLama.right
-      body.style.width = gayaLama.width
-      body.style.overflow = gayaLama.overflow
-      /* restore posisi scroll user */
-      window.scrollTo(0, scrollY)
-    }
+    return undefined
   }, [open])
+
+  /* Safety net: kalau ChatWidget unmount saat chat terbuka (mis. user
+     pindah rute), paksa unlock supaya body tidak tetap terkunci. */
+  useEffect(function () {
+    return function () {
+      const lock = bodyLockRef.current
+      if (!lock.aktif) return
+      lock.aktif = false
+      const body = document.body
+      body.style.position = ''
+      body.style.top = ''
+      body.style.left = ''
+      body.style.right = ''
+      body.style.width = ''
+      body.style.overflow = ''
+      if (lock.scrollY > 0) {
+        try {
+          window.scrollTo({ top: lock.scrollY, left: 0, behavior: 'instant' })
+        } catch (e) {
+          window.scrollTo(0, lock.scrollY)
+        }
+      }
+    }
+  }, [])
 
   useLayoutEffect(function () {
     if (!open) return
@@ -244,7 +292,7 @@ export default function ChatWidget() {
   const placeholder = busy
     ? 'Sedang menganalisis...'
     : sedangMengetik
-      ? 'Sedang mengetik...'
+      ? 'Tunggu respon selesai...'
       : cooldown > 0
         ? 'Tunggu ' + cooldown + ' detik sebelum kirim lagi'
         : 'Tulis pertanyaan...'
@@ -330,7 +378,7 @@ export default function ChatWidget() {
               title={cooldown > 0 ? 'Tunggu ' + cooldown + ' detik' : 'Kirim'}
               aria-label="Kirim"
             >
-              {cooldown > 0 ? String(cooldown) : (sedangMengetik ? '…' : <IkonSend />)}
+              {cooldown > 0 ? String(cooldown) : <IkonSend />}
             </button>
           </div>
 {riwayat.length ? (

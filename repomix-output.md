@@ -4352,22 +4352,6 @@ export function useTheme() {
 }
 ````
 
-## File: .env.example
-````
-VITE_SUPABASE_URL=
-SUPABASE_SERVICE_ROLE_KEY=
-VITE_SUPABASE_ANON_KEY=
-R2_ACCOUNT_ID=
-R2_ACCESS_KEY_ID=
-R2_SECRET_ACCESS_KEY=
-R2_BUCKET_NAME=mbsi-media
-R2_PUBLIC_BASE_URL=
-GROQ_API_KEY=
-GROQ_MODEL=qwen/qwen3.8-27b
-UPSTASH_REDIS_REST_URL=
-UPSTASH_REDIS_REST_TOKEN=
-````
-
 ## File: src/components/FilterBar.jsx
 ````javascript
 import { useEffect, useState } from 'react'
@@ -4490,114 +4474,20 @@ export function countActiveFilters(o) {
 }
 ````
 
-## File: src/pages/LogbookPage.jsx
-````javascript
-import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase.js'
-import { useAuth } from '../lib/auth.js'
-import { EmptyState, Modal, Pagination } from '../components/ui.jsx'
-import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
-import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
-import { ICONS } from '../components/icons.jsx'
-import { matchesDateFilters, urutkanTanggal } from '../lib/format.js'
-import { KATEGORI } from '../lib/constants.js'
-import { SkeletonLogbookCard } from '../components/Skeleton.jsx'
-
-const INITIAL = { mahasiswa: '', kategori: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
-const PER_PAGE = 12
-
-export default function LogbookPage() {
-  const { mahasiswa } = useAuth()
-  const [all, setAll] = useState([])
-  const [people, setPeople] = useState([])
-  const [filter, setFilter] = useState(INITIAL)
-  const [sort, setSort] = useState('terbaru')
-  const [open, setOpen] = useState(false)
-  const [detail, setDetail] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [page, setPage] = useState(1)
-
-  useEffect(function () {
-    async function load() {
-      const l = await supabase
-        .from('logbooks')
-        .select('*, mahasiswa(*), logbook_items(*)')
-        .eq('status', 'publik')
-        .order('tanggal', { ascending: false })
-        .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
-      const p = await supabase.from('mahasiswa').select('id, nama').order('nama')
-      setAll(l.data || [])
-      setPeople(p.data || [])
-      setLoading(false)
-    }
-    load()
-  }, [])
-
-  useEffect(function () {
-    setPage(1)
-  }, [filter, sort])
-  function gantiHalaman(p) {
-    setPage(p)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-  const logs = all.filter(function (l) {
-    if (filter.mahasiswa && l.mahasiswa_id !== filter.mahasiswa) return false
-    if (filter.kategori && l.kategori !== filter.kategori) return false
-    return matchesDateFilters(l.tanggal, filter)
-  })
-  const active = countActiveFilters(filter)
-  const sortedLogs = urutkanTanggal(logs, sort)
-  const totalData = sortedLogs.length
-  const totalPages = Math.ceil(totalData / PER_PAGE)
-  const pageAman = Math.min(page, Math.max(1, totalPages))
-  const paginatedLogs = sortedLogs.slice((pageAman - 1) * PER_PAGE, pageAman * PER_PAGE)
-
-  return (
-    <div>
-      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8 lg:p-10">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600 dark:text-gold-400">Logbook Publik</p>
-        <h1 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Catatan Kegiatan Magang</h1>
-        <p className="mt-2 text-sm text-slate-600 max-w-2xl sm:mt-3 sm:text-base">Satu logbook mewakili satu hari kerja dan bisa berisi beberapa kegiatan.</p>
-      </section>
-
-      <section className="mt-6">
-        <FilterBar open={open} onToggle={function () { setOpen(function (o) { return !o }) }} activeCount={active}
-          onReset={function () { setFilter(INITIAL) }}>
-          <FilterSelect icon={ICONS.user} value={filter.mahasiswa} onChange={function (v) { setFilter(Object.assign({}, filter, { mahasiswa: v })) }}
-            options={[{ value: '', label: 'Semua Mahasiswa' }].concat(people.map(function (p) { return { value: p.id, label: p.nama } }))} />
-          <FilterSelect icon={ICONS.tag} value={filter.kategori} onChange={function (v) { setFilter(Object.assign({}, filter, { kategori: v })) }}
-            options={[{ value: '', label: 'Semua Kategori' }].concat(KATEGORI.map(function (k) { return { value: k, label: k } }))} />
-          <TimeFilter filter={filter} set={setFilter} />
-          <SortSelect value={sort} onChange={setSort} />
-        </FilterBar>
-      </section>
-
-      <section className="grid-pusat mt-8">
-        {loading
-          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
-          : paginatedLogs.map(function (l) {
-              return (
-                <div key={l.id} className="kolom-kartu">
-                  <LogbookCard log={l} isOwner={mahasiswa && mahasiswa.id === l.mahasiswa_id}
-                    onDetail={function () { setDetail(l) }} />
-                </div>
-              )
-            })}
-        {!loading && !logs.length ? <div className="w-full"><EmptyState title="Logbook Tidak Ditemukan" desc="Coba reset filter atau pilih filter lain." /></div> : null}
-      </section>
-      {!loading && totalData > 0 ? (
-        <div className="mt-6 text-center text-sm text-slate-600">
-          Total {totalData} logbook{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}
-        </div>
-      ) : null}
-      {!loading ? <Pagination totalItems={totalData} perPage={PER_PAGE} page={pageAman} onPageChange={gantiHalaman} /> : null}
-
-      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
-        {detail ? <LogbookDetail log={detail} /> : null}
-      </Modal>
-    </div>
-  )
-}
+## File: .env.example
+````
+VITE_SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+VITE_SUPABASE_ANON_KEY=
+R2_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET_NAME=mbsi-media
+R2_PUBLIC_BASE_URL=
+GROQ_API_KEY=
+GROQ_MODEL=qwen/qwen3.8-27b
+UPSTASH_REDIS_REST_URL=
+UPSTASH_REDIS_REST_TOKEN=
 ````
 
 ## File: src/components/controls.jsx
@@ -4887,6 +4777,116 @@ export function SumberVideo(props) {
       {habis ? <p className="text-xs text-red-600">Kuota habis. Gunakan tautan video di bawah.</p> : null}
       <input className={props.inputCls} value={props.ytLink} onChange={props.onYtLink} aria-label="Tautan video YouTube" placeholder="Tautan video YouTube (opsional)" />
       <input className={props.inputCls} value={props.driveLink} onChange={props.onDriveLink} aria-label="Tautan Google Drive" placeholder="Tautan Google Drive (opsional)" />
+    </div>
+  )
+}
+````
+
+## File: src/pages/LogbookPage.jsx
+````javascript
+import { useEffect, useState } from 'react'
+import { supabase } from '../lib/supabase.js'
+import { useAuth } from '../lib/auth.js'
+import { EmptyState, Modal, Pagination } from '../components/ui.jsx'
+import { LogbookCard, LogbookDetail } from '../components/cards.jsx'
+import { FilterBar, FilterSelect, TimeFilter, countActiveFilters, SortSelect } from '../components/FilterBar.jsx'
+import { ICONS } from '../components/icons.jsx'
+import { matchesDateFilters, urutkanTanggal } from '../lib/format.js'
+import { KATEGORI } from '../lib/constants.js'
+import { SkeletonLogbookCard } from '../components/Skeleton.jsx'
+
+const INITIAL = { mahasiswa: '', kategori: '', timeMode: 'bulan', bulan: '', dari: '', sampai: '' }
+const PER_PAGE = 12
+
+export default function LogbookPage() {
+  const { mahasiswa } = useAuth()
+  const [all, setAll] = useState([])
+  const [people, setPeople] = useState([])
+  const [filter, setFilter] = useState(INITIAL)
+  const [sort, setSort] = useState('terbaru')
+  const [open, setOpen] = useState(false)
+  const [detail, setDetail] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
+
+  useEffect(function () {
+    async function load() {
+      const l = await supabase
+        .from('logbooks')
+        .select('*, mahasiswa(*), logbook_items(*)')
+        .eq('status', 'publik')
+        .order('tanggal', { ascending: false })
+        .order('urutan', { ascending: true, referencedTable: 'logbook_items' })
+      const p = await supabase.from('mahasiswa').select('id, nama').order('nama')
+      setAll(l.data || [])
+      setPeople(p.data || [])
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  useEffect(function () {
+    setPage(1)
+  }, [filter, sort])
+  function gantiHalaman(p) {
+    setPage(p)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+  const logs = all.filter(function (l) {
+    if (filter.mahasiswa && l.mahasiswa_id !== filter.mahasiswa) return false
+    if (filter.kategori && l.kategori !== filter.kategori) return false
+    return matchesDateFilters(l.tanggal, filter)
+  })
+  const active = countActiveFilters(filter)
+  const sortedLogs = urutkanTanggal(logs, sort)
+  const totalData = sortedLogs.length
+  const totalPages = Math.ceil(totalData / PER_PAGE)
+  const pageAman = Math.min(page, Math.max(1, totalPages))
+  const paginatedLogs = sortedLogs.slice((pageAman - 1) * PER_PAGE, pageAman * PER_PAGE)
+
+  return (
+    <div>
+      <section className="bsi-hero bsi-shadow relative overflow-hidden rounded-[2rem] p-5 sm:p-8 lg:p-10">
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-600 dark:text-gold-400">Logbook Publik</p>
+        <h1 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">Catatan Kegiatan Magang</h1>
+        <p className="mt-2 text-sm text-slate-600 max-w-2xl sm:mt-3 sm:text-base">Satu logbook mewakili satu hari kerja dan bisa berisi beberapa kegiatan.</p>
+      </section>
+
+      <section className="mt-6">
+        <FilterBar open={open} onToggle={function () { setOpen(function (o) { return !o }) }} activeCount={active}
+          onReset={function () { setFilter(INITIAL) }}>
+          <FilterSelect icon={ICONS.user} value={filter.mahasiswa} onChange={function (v) { setFilter(Object.assign({}, filter, { mahasiswa: v })) }}
+            options={[{ value: '', label: 'Semua Mahasiswa' }].concat(people.map(function (p) { return { value: p.id, label: p.nama } }))} />
+          <FilterSelect icon={ICONS.tag} value={filter.kategori} onChange={function (v) { setFilter(Object.assign({}, filter, { kategori: v })) }}
+            options={[{ value: '', label: 'Semua Kategori' }].concat(KATEGORI.map(function (k) { return { value: k, label: k } }))} />
+          <TimeFilter filter={filter} set={setFilter} />
+          <SortSelect value={sort} onChange={setSort} />
+        </FilterBar>
+      </section>
+
+      <section className="grid-pusat mt-8">
+        {loading
+          ? [0, 1, 2, 3, 4, 5].map(function (i) { return <div key={i} className="kolom-kartu"><SkeletonLogbookCard /></div> })
+          : paginatedLogs.map(function (l) {
+              return (
+                <div key={l.id} className="kolom-kartu">
+                  <LogbookCard log={l} isOwner={mahasiswa && mahasiswa.id === l.mahasiswa_id}
+                    onDetail={function () { setDetail(l) }} />
+                </div>
+              )
+            })}
+        {!loading && !logs.length ? <div className="w-full"><EmptyState title="Logbook Tidak Ditemukan" desc="Coba reset filter atau pilih filter lain." /></div> : null}
+      </section>
+      {!loading && totalData > 0 ? (
+        <div className="mt-6 text-center text-sm text-slate-600">
+          Total {totalData} logbook{totalPages > 1 ? ' • Halaman ' + pageAman + ' dari ' + totalPages : ''}
+        </div>
+      ) : null}
+      {!loading ? <Pagination totalItems={totalData} perPage={PER_PAGE} page={pageAman} onPageChange={gantiHalaman} /> : null}
+
+      <Modal open={!!detail} onClose={function () { setDetail(null) }}>
+        {detail ? <LogbookDetail log={detail} /> : null}
+      </Modal>
     </div>
   )
 }
@@ -5644,369 +5644,228 @@ export default function App() {
 }
 ````
 
-## File: src/components/ChatWidget.jsx
+## File: src/main.jsx
 ````javascript
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { tanyaDospem } from '../lib/ai.js'
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import App from './App.jsx'
+import './index.css'
 
-const NAMA_ASISTEN = 'Asisten Magang'
-const SUBTITLE_ASISTEN = 'Online'
-const GREETING = 'Hai, aku Asisten Magang disini. Tanya apa aja deh soal kegiatan mahasiswa. Tapi jangan tanya yang lain yaa wkwk'
-const KEY_RIWAYAT = 'mbsi-chat-riwayat'
-const COOLDOWN_NORMAL = 5
-const COOLDOWN_RATE_LIMIT = 30
-/* Cache jawaban AI di server — samakan dengan TTL_JAWABAN di api/ai/chat.js */
-const CACHE_MENIT = 30
-const SARAN = [
-  'Siapa yang paling sering bolos?',
-  'Ringkas kegiatan mahasiswa minggu ini',
-  'Mahasiswa mana yang paling produktif?'
-]
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+)
 
-function IkonChat() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="22" height="22" aria-hidden="true">
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-    </svg>
-  )
-}
-function IkonClose() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  )
-}
-function IkonSend() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="17" height="17" aria-hidden="true">
-      <line x1="22" y1="2" x2="11" y2="13" />
-      <polygon points="22 2 15 22 11 13 2 9 22 2" />
-    </svg>
-  )
-}
-export default function ChatWidget() {
-  const [open, setOpen] = useState(false)
-  const [riwayat, setRiwayat] = useState(function () {
-    try { return JSON.parse(sessionStorage.getItem(KEY_RIWAYAT) || '[]') } catch (e) { return [] }
-  })
+/* ===== Indikator scrollbar auto hide, overlay tanpa menggeser layout ===== */
+;(function () {
+  if (typeof document === 'undefined') return
+  function pasang() {
+    if (document.getElementById('scroll-indicator')) return
+    const track = document.createElement('div')
+    track.id = 'scroll-indicator'
+    const thumb = document.createElement('div')
+    thumb.id = 'scroll-thumb'
+    track.appendChild(thumb)
+    document.body.appendChild(track)
+    let timer = null
+    let sumber = null
+    let watchdog = null
+    function stopWatchdog() {
+      if (watchdog) { clearInterval(watchdog); watchdog = null }
+    }
+    function mulaiWatchdog() {
+      if (watchdog) return
+      watchdog = setInterval(function () {
+        if (!track.classList.contains('aktif')) { stopWatchdog(); return }
+        if (sumber) {
+          if (!sumber.isConnected || sumber.scrollHeight - sumber.clientHeight <= 4) {
+            sembunyikan()
+            sumber = null
+            stopWatchdog()
+          }
+        } else if (document.documentElement.scrollHeight - window.innerHeight <= 4) {
+          sembunyikan()
+          stopWatchdog()
+        }
+      }, 90)
+    }
+    function sembunyikan() { track.classList.remove('aktif'); stopWatchdog() }
+    function tampilkan() {
+      track.classList.add('aktif')
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(sembunyikan, 400)
+      mulaiWatchdog()
+    }
+    function ukur(el, adalahWindow, rect) {
+      const scrollTop = adalahWindow ? (window.scrollY || document.documentElement.scrollTop) : el.scrollTop
+      const scrollHeight = adalahWindow ? document.documentElement.scrollHeight : el.scrollHeight
+      const clientHeight = adalahWindow ? window.innerHeight : el.clientHeight
+      const selisih = scrollHeight - clientHeight
+      if (selisih <= 4) { sembunyikan(); return }
+      const ratio = clientHeight / scrollHeight
+      const trackTinggi = rect.height - 6
+      const thumbTinggi = Math.max(24, trackTinggi * ratio)
+      const maxTop = trackTinggi - thumbTinggi
+      let gerak = scrollTop / selisih
+      if (gerak < 0) gerak = 0
+      if (gerak > 1) gerak = 1
+      thumb.style.height = thumbTinggi + 'px'
+      thumb.style.transform = 'translateY(' + (3 + gerak * maxTop) + 'px)'
+      track.style.top = rect.top + 'px'
+      track.style.height = rect.height + 'px'
+      track.style.right = (window.innerWidth - rect.right + 2) + 'px'
+    }
+    function onScroll(e) {
+      const t = e.target
+      if (t === document || t === document.documentElement || t === window || !t || t.nodeType !== 1) {
+        sumber = null
+        ukur(null, true, { top: 0, height: window.innerHeight, right: window.innerWidth })
+      } else {
+        sumber = t
+        const r = t.getBoundingClientRect()
+        ukur(t, false, { top: r.top, height: r.height, right: r.right })
+      }
+      tampilkan()
+    }
+    window.addEventListener('scroll', onScroll, true)
+    document.addEventListener('scroll', onScroll, true)
+    window.addEventListener('resize', sembunyikan)
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pasang)
+  else pasang()
+})()
 
-  /* typewriter-v1: balasan AI muncul ketik demi ketik.
-     - textYangDitampilkan: peta index-bubble → substring yang saat
-       ini ditampilkan. Kalau bubble tidak ada di peta, artinya
-       tampilkan teks penuh (tidak dianimasikan).
-     - Kalau user kirim pesan baru di tengah animasi, semua animasi
-       aktif di-skip (bubble langsung tampil penuh) supaya tidak
-       ada teks yang nyangkut di tengah.
-     - Bubble dari riwayat (sessionStorage) TIDAK dianimasikan,
-       langsung tampil penuh saat halaman dibuka. */
-  const [teksTampil, setTeksTampil] = useState({})
-  const animasiRef = useRef({})
-  /* lock-while-typing-v1: true selama animasi typewriter berjalan.
-     Dipakai untuk lock input & tombol kirim supaya user tidak bisa
-     kirim pesan baru saat AI masih mengetik. */
-  const [sedangMengetik, setSedangMengetik] = useState(false)
-
-  useEffect(function () {
-    /* Cari bubble assistant terakhir yang belum tuntas animasinya. */
-    const idxTarget = riwayat.length - 1
-    if (idxTarget < 0) return undefined
-    const target = riwayat[idxTarget]
-    if (!target || target.role !== 'assistant') return undefined
-    /* Kalau sudah pernah dianimasikan atau sudah penuh, skip. */
-    if (animasiRef.current[idxTarget] === 'selesai') return undefined
-    if (teksTampil[idxTarget] === target.content) return undefined
-
-    animasiRef.current[idxTarget] = 'jalan'
-    setSedangMengetik(true)
-
-    let i = teksTampil[idxTarget] ? teksTampil[idxTarget].length : 0
-    const teks = target.content
-    const iv = setInterval(function () {
-      i += 1
-      if (i >= teks.length) {
-        clearInterval(iv)
-        animasiRef.current[idxTarget] = 'selesai'
-        setSedangMengetik(false)
-        setTeksTampil(function (prev) {
-          const next = Object.assign({}, prev)
-          delete next[idxTarget]
-          return next
+/* ===== Pergeseran mulus isi filter saat mode waktu berganti (bayangan keluar plus FLIP) ===== */
+;(function () {
+  if (typeof document === 'undefined') return
+  function pasang() {
+    document.addEventListener('click', function (e) {
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+      const tombol = e.target && e.target.closest ? e.target.closest('.time-toggle button') : null
+      if (!tombol) return
+      if ((' ' + tombol.className + ' ').indexOf(' active ') !== -1) return
+      const toggle = tombol.closest('.time-toggle')
+      if (!toggle || !toggle.parentElement) return
+      if (window.innerWidth < 1280) return
+       const wadah = tombol.closest('.rounded-3xl') || toggle.parentElement.parentElement || toggle.parentElement
+      const cabang = toggle.parentElement.querySelector('.anim-ganti-bulan, .anim-ganti-rentang')
+      if (cabang) {
+        const r = cabang.getBoundingClientRect()
+        if (r.width > 0) {
+          const hantu = cabang.cloneNode(true)
+          hantu.style.position = 'fixed'
+          hantu.style.left = r.left + 'px'
+          hantu.style.top = r.top + 'px'
+          hantu.style.width = r.width + 'px'
+          hantu.style.height = r.height + 'px'
+          hantu.style.margin = '0'
+          hantu.style.zIndex = '45'
+          hantu.classList.add('hantu-cabang')
+          document.body.appendChild(hantu)
+          hantu.style.animation = 'none'
+          const turunan = hantu.querySelectorAll('*')
+          for (let i = 0; i < turunan.length; i++) turunan[i].style.animation = 'none'
+          const keBulan = !tombol.previousElementSibling
+          if (hantu.animate) {
+            hantu.animate([
+              { opacity: 1, transform: 'translateX(0)' },
+              { opacity: 0, transform: keBulan ? 'translateX(10px)' : 'translateX(-10px)' }
+            ], { duration: 180, easing: 'ease-in' }).onfinish = function () { if (hantu.parentNode) hantu.parentNode.removeChild(hantu) }
+          } else {
+            setTimeout(function () { if (hantu.parentNode) hantu.parentNode.removeChild(hantu) }, 200)
+          }
+        }
+      }
+      const snap = new Map()
+      const els = wadah.querySelectorAll('*')
+      for (let i = 0; i < els.length; i++) snap.set(els[i], els[i].getBoundingClientRect())
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          snap.forEach(function (rect, el) {
+            if (!el.isConnected || !el.animate) return
+            const r = el.getBoundingClientRect()
+            const dx = rect.left - r.left
+            const dy = rect.top - r.top
+            if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return
+            el.animate([
+              { transform: 'translate(' + dx + 'px, ' + dy + 'px)' },
+              { transform: 'translate(0, 0)' }
+            ], { duration: 320, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' })
+          })
         })
+      })
+    }, true)
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pasang)
+  else pasang()
+})()
+
+/* ===== transisi-halaman-v1: picu ulang animasi saat pindah rute dan pindah halaman pagination ===== */
+;(function () {
+  if (typeof document === 'undefined') return
+  function ulangAnimasi(el) {
+    if (!el) return
+    el.style.animation = 'none'
+    void el.offsetWidth
+    el.style.animation = ''
+  }
+  function pasang() {
+    document.addEventListener('click', function (e) {
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+      const t = e.target
+      if (!t || !t.closest) return
+      const link = t.closest('a[href]')
+      if (link) {
+        const href = link.getAttribute('href') || ''
+        const eksternal = link.target === '_blank' || href.indexOf('http') === 0 || href.indexOf('#') === 0
+        if (!eksternal) {
+          requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+              if (e.mbsiDicegah) return
+              ulangAnimasi(document.querySelector('main.anim-page') || document.querySelector('.anim-page'))
+            })
+          })
+        }
         return
       }
-      setTeksTampil(function (prev) {
-        const next = Object.assign({}, prev)
-        next[idxTarget] = teks.slice(0, i)
-        return next
-      })
-    }, 18)
-
-    return function () { clearInterval(iv) }
-  }, [riwayat])
-
-  /* Fungsi untuk memaksa semua animasi yang masih jalan jadi penuh.
-     Dipanggil di kirim() supaya user tidak lihat teks "nyangkut". */
-  function tuntaskanAnimasi() {
-    const keys = Object.keys(animasiRef.current)
-    if (!keys.length) return
-    const penuh = {}
-    keys.forEach(function (k) { animasiRef.current[k] = 'selesai' })
-    setTeksTampil(penuh)
-    setSedangMengetik(false)
+      const pag = t.closest('.mt-8.flex.flex-wrap.items-center.justify-center.gap-2')
+      if (pag && t.closest('button')) {
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            const grid = document.querySelectorAll('.grid-pusat, .grid-pusat-rapat, .kartu-grid')
+            for (let i = 0; i < grid.length; i++) {
+              const anak = grid[i].children
+              for (let j = 0; j < anak.length; j++) ulangAnimasi(anak[j])
+            }
+          })
+        })
+      }
+    }, true)
   }
-  const [input, setInput] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-  const [cooldown, setCooldown] = useState(0)
-  /* fix-yank-bottom-v1: autoScroll disimpan sebagai ref (bukan state)
-     supaya tidak memicu re-render + useLayoutEffect. Sebelumnya
-     state ini ada di deps useLayoutEffect, sehingga saat user
-     scroll mendekati bawah (jarak <80px), ref berubah true dan
-     efek langsung snap scrollTop ke scrollHeight. */
-  const autoScrollRef = useRef(true)
-  const refScroll = useRef(null)
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pasang)
+  else pasang()
+})()
 
-  useEffect(function () {
-    try { sessionStorage.setItem(KEY_RIWAYAT, JSON.stringify(riwayat)) } catch (e) {}
-  }, [riwayat])
-
-  /* lock-scroll-v1: cegah halaman belakang ikut scroll saat panel
-     chat terbuka di mobile. Pakai position:fixed trick supaya posisi
-     scroll user disimpan (kalau pakai overflow:hidden biasa, body
-     akan lompat ke atas saat panel dibuka dan tetap di atas saat
-     ditutup). Hanya aktif di layar <=640px — di desktop, membiarkan
-     halaman belakang bisa di-scroll itu wajar. */
-  useEffect(function () {
-    if (!open) return undefined
-    if (typeof window === 'undefined') return undefined
-    if (!window.matchMedia('(max-width: 640px)').matches) return undefined
-
-    const body = document.body
-    const scrollY = window.scrollY || document.documentElement.scrollTop || 0
-    const gayaLama = {
-      position: body.style.position,
-      top: body.style.top,
-      left: body.style.left,
-      right: body.style.right,
-      width: body.style.width,
-      overflow: body.style.overflow
-    }
-
-    body.style.position = 'fixed'
-    body.style.top = '-' + scrollY + 'px'
-    body.style.left = '0'
-    body.style.right = '0'
-    body.style.width = '100%'
-    body.style.overflow = 'hidden'
-
-    return function () {
-      body.style.position = gayaLama.position
-      body.style.top = gayaLama.top
-      body.style.left = gayaLama.left
-      body.style.right = gayaLama.right
-      body.style.width = gayaLama.width
-      body.style.overflow = gayaLama.overflow
-      /* restore posisi scroll user */
-      window.scrollTo(0, scrollY)
-    }
-  }, [open])
-
-  useLayoutEffect(function () {
-    if (!open) return
-    if (!autoScrollRef.current) return
-    const el = refScroll.current
-    if (!el) return
-    requestAnimationFrame(function () {
-      if (el) el.scrollTop = el.scrollHeight
-    })
-  }, [riwayat, busy, error, open])
-
-  /* Deteksi user scroll manual pakai wheel/touchmove saja.
-     Sebelumnya pakai onScroll yang kena trigger oleh auto-scroll
-     programatik, sehingga bisa buat loop autoScroll nyala-mati. */
-  function onWheelBody() {
-    const el = refScroll.current
-    if (!el) return
-    const jarak = el.scrollHeight - el.scrollTop - el.clientHeight
-    autoScrollRef.current = jarak < 80
-  }
-
-  useEffect(function () {
-    if (cooldown <= 0) return undefined
-    const t = setTimeout(function () {
-      setCooldown(function (c) { return Math.max(0, c - 1) })
-    }, 1000)
-    return function () { clearTimeout(t) }
-  }, [cooldown])
-
-  useEffect(function () { if (input) setError('') }, [input])
-
-  async function kirim(teksOverride) {
-    const teks = (teksOverride != null ? teksOverride : input).trim()
-    if (!teks || busy || cooldown > 0) return
-    tuntaskanAnimasi()
-    setBusy(true)
-    setError('')
-    const riwayatLama = riwayat
-    setRiwayat(riwayatLama.concat([{ role: 'user', content: teks }]))
-    setInput('')
-    autoScrollRef.current = true
-
-    try {
-      const r = await tanyaDospem(teks, riwayatLama)
-      const jawaban = String(r.jawaban || '').trim() || 'Maaf, tidak ada jawaban.'
-      setRiwayat(function (prev) { return prev.concat([{ role: 'assistant', content: jawaban }]) })
-      setCooldown(COOLDOWN_NORMAL)
-    } catch (err) {
-      const pesan = err.message || 'Gagal memanggil AI'
-      const rateLimit = /terlalu banyak|rate limit|sibuk|429/i.test(pesan)
-      setError(rateLimit ? 'Server AI sedang sibuk. Tunggu ' + COOLDOWN_RATE_LIMIT + ' detik, lalu coba lagi.' : pesan)
-      setCooldown(rateLimit ? COOLDOWN_RATE_LIMIT : COOLDOWN_NORMAL)
-      setRiwayat(riwayatLama)
-      setInput(teks)
-    }
-    setBusy(false)
-  }
-
-  function onKeyDown(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      if (cooldown > 0) return
-      kirim()
-    }
-  }
-
-  function reset() {
-    if (busy) return
-    setRiwayat([])
-    setError('')
-    setCooldown(0)
-    try { sessionStorage.removeItem(KEY_RIWAYAT) } catch (e) {}
-  }
-
-  const terkunci = busy || cooldown > 0 || sedangMengetik
-  const bubble = riwayat.length ? riwayat : [{ role: 'assistant', content: GREETING }]
-
-  const placeholder = busy
-    ? 'Sedang menganalisis...'
-    : sedangMengetik
-      ? 'Sedang mengetik...'
-      : cooldown > 0
-        ? 'Tunggu ' + cooldown + ' detik sebelum kirim lagi'
-        : 'Tulis pertanyaan...'
-
-  return (
-    <>
-      <div className={'chat-widget-panel' + (open ? ' chat-widget-panel-buka' : '')} role="dialog" aria-hidden={!open}>
-        <header className="chat-widget-header">
-          <span className="chat-widget-avatar" aria-hidden="true">
-            <img className='rounded-full' src="avatar-asisten-magang.jpeg" alt="avatar-asisten-magang" />
-            {/* <IkonChat /> */}
-          </span>
-          <div className="chat-widget-title">
-            <p className="chat-widget-title-line">{NAMA_ASISTEN}</p>
-            <p className="chat-widget-sub">
-              <span className="chat-widget-dot-inline" />
-              {SUBTITLE_ASISTEN}
-            </p>
-          </div>
-          <button type="button" className="chat-widget-close" onClick={function () { setOpen(false) }} title="Tutup" aria-label="Tutup chat">
-            <IkonClose />
-          </button>
-        </header>
-
-        <div ref={refScroll} className="chat-widget-body" onWheel={onWheelBody}
-          onTouchMove={onWheelBody}>
-          {bubble.map(function (m, i) {
-            const dariUser = m.role === 'user'
-            /* typewriter-v1: kalau bubble ini sedang dianimasikan,
-               tampilkan substring dari teksTampil. Kalau tidak,
-               tampilkan teks penuh (bubble lama, riwayat, user). */
-            const teksRender = !dariUser && teksTampil[i] != null ? teksTampil[i] : m.content
-            return (
-              <div key={i} className={'chat-widget-row ' + (dariUser ? 'chat-widget-row-user' : '')}>
-                <div className={'chat-widget-bubble ' + (dariUser ? 'chat-widget-bubble-user' : 'chat-widget-bubble-ai')}>
-                  {teksRender}
-                </div>
-              </div>
-            )
-          })}
-
-          {!riwayat.length && !input ? (
-            <div className="chat-widget-saran">
-              {SARAN.map(function (s) {
-                return (
-                  <button key={s} type="button" onClick={function () { kirim(s) }} disabled={terkunci} className="chat-widget-saran-btn">
-                    {s}
-                  </button>
-                )
-              })}
-            </div>
-          ) : null}
-
-          {busy ? (
-            <div className="chat-widget-row">
-              <div className="chat-widget-typing" role="status" aria-label="Sedang menganalisis">
-                <span className="chat-widget-typing-dot" />
-                <span className="chat-widget-typing-dot" />
-                <span className="chat-widget-typing-dot" />
-              </div>
-            </div>
-          ) : null}
-
-          {error ? <div className="chat-widget-error">{error}</div> : null}
-        </div>
-
-        <footer className="chat-widget-footer">
-          <div className="chat-widget-input-wrap">
-            <textarea
-              className="chat-widget-input"
-              rows={1}
-              value={input}
-              onChange={function (e) { setInput(e.target.value) }}
-              onKeyDown={onKeyDown}
-              placeholder={placeholder}
-              disabled={terkunci}
-            />
-            <button
-              type="button"
-              className="chat-widget-send"
-              onClick={function () { kirim() }}
-              disabled={terkunci || !input.trim()}
-              title={cooldown > 0 ? 'Tunggu ' + cooldown + ' detik' : 'Kirim'}
-              aria-label="Kirim"
-            >
-              {cooldown > 0 ? String(cooldown) : (sedangMengetik ? '…' : <IkonSend />)}
-            </button>
-          </div>
-{riwayat.length ? (
-            <p className="chat-widget-catatan chat-widget-catatan-satu-baris">
-              <button type="button" onClick={reset} className="chat-widget-reset chat-widget-reset-pill">Mulai ulang</button>
-              <span className="chat-widget-info-cache">Data AI diperbarui setiap {CACHE_MENIT} menit</span>
-            </p>
-          ) : (
-            <p className="chat-widget-catatan">Data AI diperbarui setiap {CACHE_MENIT} menit</p>
-          )}
-        </footer>
-      </div>
-
-      <button
-        type="button"
-        className={'chat-widget-fab' + (open ? ' chat-widget-fab-buka' : '')}
-        onClick={function () { setOpen(function (o) { return !o }) }}
-        aria-label={open ? 'Tutup chat' : 'Buka chat'}
-        title={open ? 'Tutup chat' : 'Tanya asisten'}
-      >
-        <span className="chat-widget-fab-icon">
-          {open ? <IkonClose /> : <img className='rounded-full' src="avatar-asisten-magang.jpeg" alt="avatar-asisten-magang" />}
-        </span>
-        {!open ? <span className="chat-widget-dot" /> : null}
-      </button>
-    </>
-  )
-}
+/* ===== transisi-tema: aktifkan transisi pelan hanya pada momen pergantian mode ===== */
+;(function () {
+  if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  const akar = document.documentElement
+  let gelap = akar.classList.contains('dark')
+  let timer = null
+  const obs = new MutationObserver(function () {
+    const sekarang = akar.classList.contains('dark')
+    if (sekarang === gelap) return
+    gelap = sekarang
+    /* VT sedang menangani pergantian ini bila kelas vt-tema menempel di html */
+    if (akar.classList.contains('vt-tema')) return
+    akar.classList.add('theme-transition')
+    if (timer) clearTimeout(timer)
+    timer = setTimeout(function () { akar.classList.remove('theme-transition') }, 400)
+  })
+  obs.observe(akar, { attributes: true, attributeFilter: ['class'] })
+})()
 ````
 
 ## File: src/components/QrPrintTab.jsx
@@ -6690,228 +6549,417 @@ return (
 }
 ````
 
-## File: src/main.jsx
+## File: src/components/ChatWidget.jsx
 ````javascript
-import React from 'react'
-import ReactDOM from 'react-dom/client'
-import App from './App.jsx'
-import './index.css'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { tanyaDospem } from '../lib/ai.js'
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-)
+const NAMA_ASISTEN = 'Asisten Magang'
+const SUBTITLE_ASISTEN = 'Online'
+const GREETING = 'Hai, aku Asisten Magang disini. Tanya apa aja deh soal kegiatan mahasiswa. Tapi jangan tanya yang lain yaa wkwk'
+const KEY_RIWAYAT = 'mbsi-chat-riwayat'
+const COOLDOWN_NORMAL = 5
+const COOLDOWN_RATE_LIMIT = 30
+/* Cache jawaban AI di server — samakan dengan TTL_JAWABAN di api/ai/chat.js */
+const CACHE_MENIT = 30
+const SARAN = [
+  'Siapa yang paling sering bolos?',
+  'Ringkas kegiatan mahasiswa minggu ini',
+  'Mahasiswa mana yang paling produktif?'
+]
 
-/* ===== Indikator scrollbar auto hide, overlay tanpa menggeser layout ===== */
-;(function () {
-  if (typeof document === 'undefined') return
-  function pasang() {
-    if (document.getElementById('scroll-indicator')) return
-    const track = document.createElement('div')
-    track.id = 'scroll-indicator'
-    const thumb = document.createElement('div')
-    thumb.id = 'scroll-thumb'
-    track.appendChild(thumb)
-    document.body.appendChild(track)
-    let timer = null
-    let sumber = null
-    let watchdog = null
-    function stopWatchdog() {
-      if (watchdog) { clearInterval(watchdog); watchdog = null }
-    }
-    function mulaiWatchdog() {
-      if (watchdog) return
-      watchdog = setInterval(function () {
-        if (!track.classList.contains('aktif')) { stopWatchdog(); return }
-        if (sumber) {
-          if (!sumber.isConnected || sumber.scrollHeight - sumber.clientHeight <= 4) {
-            sembunyikan()
-            sumber = null
-            stopWatchdog()
-          }
-        } else if (document.documentElement.scrollHeight - window.innerHeight <= 4) {
-          sembunyikan()
-          stopWatchdog()
-        }
-      }, 90)
-    }
-    function sembunyikan() { track.classList.remove('aktif'); stopWatchdog() }
-    function tampilkan() {
-      track.classList.add('aktif')
-      if (timer) clearTimeout(timer)
-      timer = setTimeout(sembunyikan, 400)
-      mulaiWatchdog()
-    }
-    function ukur(el, adalahWindow, rect) {
-      const scrollTop = adalahWindow ? (window.scrollY || document.documentElement.scrollTop) : el.scrollTop
-      const scrollHeight = adalahWindow ? document.documentElement.scrollHeight : el.scrollHeight
-      const clientHeight = adalahWindow ? window.innerHeight : el.clientHeight
-      const selisih = scrollHeight - clientHeight
-      if (selisih <= 4) { sembunyikan(); return }
-      const ratio = clientHeight / scrollHeight
-      const trackTinggi = rect.height - 6
-      const thumbTinggi = Math.max(24, trackTinggi * ratio)
-      const maxTop = trackTinggi - thumbTinggi
-      let gerak = scrollTop / selisih
-      if (gerak < 0) gerak = 0
-      if (gerak > 1) gerak = 1
-      thumb.style.height = thumbTinggi + 'px'
-      thumb.style.transform = 'translateY(' + (3 + gerak * maxTop) + 'px)'
-      track.style.top = rect.top + 'px'
-      track.style.height = rect.height + 'px'
-      track.style.right = (window.innerWidth - rect.right + 2) + 'px'
-    }
-    function onScroll(e) {
-      const t = e.target
-      if (t === document || t === document.documentElement || t === window || !t || t.nodeType !== 1) {
-        sumber = null
-        ukur(null, true, { top: 0, height: window.innerHeight, right: window.innerWidth })
-      } else {
-        sumber = t
-        const r = t.getBoundingClientRect()
-        ukur(t, false, { top: r.top, height: r.height, right: r.right })
-      }
-      tampilkan()
-    }
-    window.addEventListener('scroll', onScroll, true)
-    document.addEventListener('scroll', onScroll, true)
-    window.addEventListener('resize', sembunyikan)
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pasang)
-  else pasang()
-})()
+function IkonChat() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="22" height="22" aria-hidden="true">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </svg>
+  )
+}
+function IkonClose() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  )
+}
+function IkonSend() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="17" height="17" aria-hidden="true">
+      <line x1="22" y1="2" x2="11" y2="13" />
+      <polygon points="22 2 15 22 11 13 2 9 22 2" />
+    </svg>
+  )
+}
+export default function ChatWidget() {
+  const [open, setOpen] = useState(false)
+  const [riwayat, setRiwayat] = useState(function () {
+    try { return JSON.parse(sessionStorage.getItem(KEY_RIWAYAT) || '[]') } catch (e) { return [] }
+  })
 
-/* ===== Pergeseran mulus isi filter saat mode waktu berganti (bayangan keluar plus FLIP) ===== */
-;(function () {
-  if (typeof document === 'undefined') return
-  function pasang() {
-    document.addEventListener('click', function (e) {
-      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-      const tombol = e.target && e.target.closest ? e.target.closest('.time-toggle button') : null
-      if (!tombol) return
-      if ((' ' + tombol.className + ' ').indexOf(' active ') !== -1) return
-      const toggle = tombol.closest('.time-toggle')
-      if (!toggle || !toggle.parentElement) return
-      if (window.innerWidth < 1280) return
-       const wadah = tombol.closest('.rounded-3xl') || toggle.parentElement.parentElement || toggle.parentElement
-      const cabang = toggle.parentElement.querySelector('.anim-ganti-bulan, .anim-ganti-rentang')
-      if (cabang) {
-        const r = cabang.getBoundingClientRect()
-        if (r.width > 0) {
-          const hantu = cabang.cloneNode(true)
-          hantu.style.position = 'fixed'
-          hantu.style.left = r.left + 'px'
-          hantu.style.top = r.top + 'px'
-          hantu.style.width = r.width + 'px'
-          hantu.style.height = r.height + 'px'
-          hantu.style.margin = '0'
-          hantu.style.zIndex = '45'
-          hantu.classList.add('hantu-cabang')
-          document.body.appendChild(hantu)
-          hantu.style.animation = 'none'
-          const turunan = hantu.querySelectorAll('*')
-          for (let i = 0; i < turunan.length; i++) turunan[i].style.animation = 'none'
-          const keBulan = !tombol.previousElementSibling
-          if (hantu.animate) {
-            hantu.animate([
-              { opacity: 1, transform: 'translateX(0)' },
-              { opacity: 0, transform: keBulan ? 'translateX(10px)' : 'translateX(-10px)' }
-            ], { duration: 180, easing: 'ease-in' }).onfinish = function () { if (hantu.parentNode) hantu.parentNode.removeChild(hantu) }
-          } else {
-            setTimeout(function () { if (hantu.parentNode) hantu.parentNode.removeChild(hantu) }, 200)
-          }
-        }
-      }
-      const snap = new Map()
-      const els = wadah.querySelectorAll('*')
-      for (let i = 0; i < els.length; i++) snap.set(els[i], els[i].getBoundingClientRect())
-      requestAnimationFrame(function () {
-        requestAnimationFrame(function () {
-          snap.forEach(function (rect, el) {
-            if (!el.isConnected || !el.animate) return
-            const r = el.getBoundingClientRect()
-            const dx = rect.left - r.left
-            const dy = rect.top - r.top
-            if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return
-            el.animate([
-              { transform: 'translate(' + dx + 'px, ' + dy + 'px)' },
-              { transform: 'translate(0, 0)' }
-            ], { duration: 320, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' })
-          })
+  /* typewriter-v1: balasan AI muncul ketik demi ketik.
+     - textYangDitampilkan: peta index-bubble → substring yang saat
+       ini ditampilkan. Kalau bubble tidak ada di peta, artinya
+       tampilkan teks penuh (tidak dianimasikan).
+     - Kalau user kirim pesan baru di tengah animasi, semua animasi
+       aktif di-skip (bubble langsung tampil penuh) supaya tidak
+       ada teks yang nyangkut di tengah.
+     - Bubble dari riwayat (sessionStorage) TIDAK dianimasikan,
+       langsung tampil penuh saat halaman dibuka. */
+  const [teksTampil, setTeksTampil] = useState({})
+  const animasiRef = useRef({})
+  /* lock-while-typing-v1: true selama animasi typewriter berjalan.
+     Dipakai untuk lock input & tombol kirim supaya user tidak bisa
+     kirim pesan baru saat AI masih mengetik. */
+  const [sedangMengetik, setSedangMengetik] = useState(false)
+
+  useEffect(function () {
+    /* Cari bubble assistant terakhir yang belum tuntas animasinya. */
+    const idxTarget = riwayat.length - 1
+    if (idxTarget < 0) return undefined
+    const target = riwayat[idxTarget]
+    if (!target || target.role !== 'assistant') return undefined
+    /* Kalau sudah pernah dianimasikan atau sudah penuh, skip. */
+    if (animasiRef.current[idxTarget] === 'selesai') return undefined
+    if (teksTampil[idxTarget] === target.content) return undefined
+
+    animasiRef.current[idxTarget] = 'jalan'
+    setSedangMengetik(true)
+
+    let i = teksTampil[idxTarget] ? teksTampil[idxTarget].length : 0
+    const teks = target.content
+    const iv = setInterval(function () {
+      i += 1
+      if (i >= teks.length) {
+        clearInterval(iv)
+        animasiRef.current[idxTarget] = 'selesai'
+        setSedangMengetik(false)
+        setTeksTampil(function (prev) {
+          const next = Object.assign({}, prev)
+          delete next[idxTarget]
+          return next
         })
-      })
-    }, true)
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pasang)
-  else pasang()
-})()
-
-/* ===== transisi-halaman-v1: picu ulang animasi saat pindah rute dan pindah halaman pagination ===== */
-;(function () {
-  if (typeof document === 'undefined') return
-  function ulangAnimasi(el) {
-    if (!el) return
-    el.style.animation = 'none'
-    void el.offsetWidth
-    el.style.animation = ''
-  }
-  function pasang() {
-    document.addEventListener('click', function (e) {
-      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-      const t = e.target
-      if (!t || !t.closest) return
-      const link = t.closest('a[href]')
-      if (link) {
-        const href = link.getAttribute('href') || ''
-        const eksternal = link.target === '_blank' || href.indexOf('http') === 0 || href.indexOf('#') === 0
-        if (!eksternal) {
-          requestAnimationFrame(function () {
-            requestAnimationFrame(function () {
-              if (e.mbsiDicegah) return
-              ulangAnimasi(document.querySelector('main.anim-page') || document.querySelector('.anim-page'))
-            })
-          })
-        }
         return
       }
-      const pag = t.closest('.mt-8.flex.flex-wrap.items-center.justify-center.gap-2')
-      if (pag && t.closest('button')) {
+      setTeksTampil(function (prev) {
+        const next = Object.assign({}, prev)
+        next[idxTarget] = teks.slice(0, i)
+        return next
+      })
+    }, 18)
+
+    return function () { clearInterval(iv) }
+  }, [riwayat])
+
+  /* Fungsi untuk memaksa semua animasi yang masih jalan jadi penuh.
+     Dipanggil di kirim() supaya user tidak lihat teks "nyangkut". */
+  function tuntaskanAnimasi() {
+    const keys = Object.keys(animasiRef.current)
+    if (!keys.length) return
+    const penuh = {}
+    keys.forEach(function (k) { animasiRef.current[k] = 'selesai' })
+    setTeksTampil(penuh)
+    setSedangMengetik(false)
+  }
+  const [input, setInput] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [cooldown, setCooldown] = useState(0)
+  /* fix-yank-bottom-v1: autoScroll disimpan sebagai ref (bukan state)
+     supaya tidak memicu re-render + useLayoutEffect. Sebelumnya
+     state ini ada di deps useLayoutEffect, sehingga saat user
+     scroll mendekati bawah (jarak <80px), ref berubah true dan
+     efek langsung snap scrollTop ke scrollHeight. */
+  const autoScrollRef = useRef(true)
+  const refScroll = useRef(null)
+
+  useEffect(function () {
+    try { sessionStorage.setItem(KEY_RIWAYAT, JSON.stringify(riwayat)) } catch (e) {}
+  }, [riwayat])
+
+  /* body-lock-instant-v1: cegah halaman belakang ikut scroll saat panel
+     chat terbuka di mobile, dan restore posisi scroll dengan benar
+     saat panel ditutup.
+
+     Perbaikan dari v2:
+     1. State lock disimpan di ref (`bodyLockRef`). Kalau effect re-run
+        karena React Strict Mode (dev) atau HMR, scrollY TIDAK di-capture
+        ulang — jadi tidak salah ambil nilai 0 saat body sudah fixed.
+     2. scrollTo pakai `behavior: 'instant'` untuk bypass CSS
+        `scroll-behavior: smooth`. Sebelumnya halaman terlihat "meluncur"
+        dari atas ke posisi user selama fade-out panel.
+     3. Safety net di unmount supaya body tidak tetap terkunci kalau
+        ChatWidget unmount saat chat masih terbuka. */
+  const bodyLockRef = useRef({ aktif: false, scrollY: 0 })
+
+  useEffect(function () {
+    if (typeof window === 'undefined') return undefined
+    if (!window.matchMedia('(max-width: 640px)').matches) return undefined
+
+    const body = document.body
+    const lock = bodyLockRef.current
+
+    if (open) {
+      /* Jangan re-capture kalau sudah terkunci — ini mencegah
+         Strict Mode / HMR / re-render apapun mengubah target restore. */
+      if (lock.aktif) return undefined
+      lock.scrollY = window.scrollY || document.documentElement.scrollTop || 0
+      lock.aktif = true
+
+      body.style.position = 'fixed'
+      body.style.top = '-' + lock.scrollY + 'px'
+      body.style.left = '0'
+      body.style.right = '0'
+      body.style.width = '100%'
+      body.style.overflow = 'hidden'
+    } else {
+      /* Unlock */
+      if (!lock.aktif) return undefined
+      lock.aktif = false
+
+      body.style.position = ''
+      body.style.top = ''
+      body.style.left = ''
+      body.style.right = ''
+      body.style.width = ''
+      body.style.overflow = ''
+
+      const target = lock.scrollY
+      lock.scrollY = 0
+      if (target > 0) {
         requestAnimationFrame(function () {
-          requestAnimationFrame(function () {
-            const grid = document.querySelectorAll('.grid-pusat, .grid-pusat-rapat, .kartu-grid')
-            for (let i = 0; i < grid.length; i++) {
-              const anak = grid[i].children
-              for (let j = 0; j < anak.length; j++) ulangAnimasi(anak[j])
-            }
-          })
+          /* behavior instant: bypass `html { scroll-behavior: smooth }`
+             supaya tidak terlihat meluncur dari atas ke posisi target. */
+          try {
+            window.scrollTo({ top: target, left: 0, behavior: 'instant' })
+          } catch (e) {
+            window.scrollTo(0, target)
+          }
         })
       }
-    }, true)
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pasang)
-  else pasang()
-})()
+    }
 
-/* ===== transisi-tema: aktifkan transisi pelan hanya pada momen pergantian mode ===== */
-;(function () {
-  if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return
-  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-  const akar = document.documentElement
-  let gelap = akar.classList.contains('dark')
-  let timer = null
-  const obs = new MutationObserver(function () {
-    const sekarang = akar.classList.contains('dark')
-    if (sekarang === gelap) return
-    gelap = sekarang
-    /* VT sedang menangani pergantian ini bila kelas vt-tema menempel di html */
-    if (akar.classList.contains('vt-tema')) return
-    akar.classList.add('theme-transition')
-    if (timer) clearTimeout(timer)
-    timer = setTimeout(function () { akar.classList.remove('theme-transition') }, 400)
-  })
-  obs.observe(akar, { attributes: true, attributeFilter: ['class'] })
-})()
+    return undefined
+  }, [open])
+
+  /* Safety net: kalau ChatWidget unmount saat chat terbuka (mis. user
+     pindah rute), paksa unlock supaya body tidak tetap terkunci. */
+  useEffect(function () {
+    return function () {
+      const lock = bodyLockRef.current
+      if (!lock.aktif) return
+      lock.aktif = false
+      const body = document.body
+      body.style.position = ''
+      body.style.top = ''
+      body.style.left = ''
+      body.style.right = ''
+      body.style.width = ''
+      body.style.overflow = ''
+      if (lock.scrollY > 0) {
+        try {
+          window.scrollTo({ top: lock.scrollY, left: 0, behavior: 'instant' })
+        } catch (e) {
+          window.scrollTo(0, lock.scrollY)
+        }
+      }
+    }
+  }, [])
+
+  useLayoutEffect(function () {
+    if (!open) return
+    if (!autoScrollRef.current) return
+    const el = refScroll.current
+    if (!el) return
+    requestAnimationFrame(function () {
+      if (el) el.scrollTop = el.scrollHeight
+    })
+  }, [riwayat, busy, error, open])
+
+  /* Deteksi user scroll manual pakai wheel/touchmove saja.
+     Sebelumnya pakai onScroll yang kena trigger oleh auto-scroll
+     programatik, sehingga bisa buat loop autoScroll nyala-mati. */
+  function onWheelBody() {
+    const el = refScroll.current
+    if (!el) return
+    const jarak = el.scrollHeight - el.scrollTop - el.clientHeight
+    autoScrollRef.current = jarak < 80
+  }
+
+  useEffect(function () {
+    if (cooldown <= 0) return undefined
+    const t = setTimeout(function () {
+      setCooldown(function (c) { return Math.max(0, c - 1) })
+    }, 1000)
+    return function () { clearTimeout(t) }
+  }, [cooldown])
+
+  useEffect(function () { if (input) setError('') }, [input])
+
+  async function kirim(teksOverride) {
+    const teks = (teksOverride != null ? teksOverride : input).trim()
+    if (!teks || busy || cooldown > 0) return
+    tuntaskanAnimasi()
+    setBusy(true)
+    setError('')
+    const riwayatLama = riwayat
+    setRiwayat(riwayatLama.concat([{ role: 'user', content: teks }]))
+    setInput('')
+    autoScrollRef.current = true
+
+    try {
+      const r = await tanyaDospem(teks, riwayatLama)
+      const jawaban = String(r.jawaban || '').trim() || 'Maaf, tidak ada jawaban.'
+      setRiwayat(function (prev) { return prev.concat([{ role: 'assistant', content: jawaban }]) })
+      setCooldown(COOLDOWN_NORMAL)
+    } catch (err) {
+      const pesan = err.message || 'Gagal memanggil AI'
+      const rateLimit = /terlalu banyak|rate limit|sibuk|429/i.test(pesan)
+      setError(rateLimit ? 'Server AI sedang sibuk. Tunggu ' + COOLDOWN_RATE_LIMIT + ' detik, lalu coba lagi.' : pesan)
+      setCooldown(rateLimit ? COOLDOWN_RATE_LIMIT : COOLDOWN_NORMAL)
+      setRiwayat(riwayatLama)
+      setInput(teks)
+    }
+    setBusy(false)
+  }
+
+  function onKeyDown(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      if (cooldown > 0) return
+      kirim()
+    }
+  }
+
+  function reset() {
+    if (busy) return
+    setRiwayat([])
+    setError('')
+    setCooldown(0)
+    try { sessionStorage.removeItem(KEY_RIWAYAT) } catch (e) {}
+  }
+
+  const terkunci = busy || cooldown > 0 || sedangMengetik
+  const bubble = riwayat.length ? riwayat : [{ role: 'assistant', content: GREETING }]
+
+  const placeholder = busy
+    ? 'Sedang menganalisis...'
+    : sedangMengetik
+      ? 'Tunggu respon selesai...'
+      : cooldown > 0
+        ? 'Tunggu ' + cooldown + ' detik sebelum kirim lagi'
+        : 'Tulis pertanyaan...'
+
+  return (
+    <>
+      <div className={'chat-widget-panel' + (open ? ' chat-widget-panel-buka' : '')} role="dialog" aria-hidden={!open}>
+        <header className="chat-widget-header">
+          <span className="chat-widget-avatar" aria-hidden="true">
+            <img className='rounded-full' src="avatar-asisten-magang.jpeg" alt="avatar-asisten-magang" />
+            {/* <IkonChat /> */}
+          </span>
+          <div className="chat-widget-title">
+            <p className="chat-widget-title-line">{NAMA_ASISTEN}</p>
+            <p className="chat-widget-sub">
+              <span className="chat-widget-dot-inline" />
+              {SUBTITLE_ASISTEN}
+            </p>
+          </div>
+          <button type="button" className="chat-widget-close" onClick={function () { setOpen(false) }} title="Tutup" aria-label="Tutup chat">
+            <IkonClose />
+          </button>
+        </header>
+
+        <div ref={refScroll} className="chat-widget-body" onWheel={onWheelBody}
+          onTouchMove={onWheelBody}>
+          {bubble.map(function (m, i) {
+            const dariUser = m.role === 'user'
+            /* typewriter-v1: kalau bubble ini sedang dianimasikan,
+               tampilkan substring dari teksTampil. Kalau tidak,
+               tampilkan teks penuh (bubble lama, riwayat, user). */
+            const teksRender = !dariUser && teksTampil[i] != null ? teksTampil[i] : m.content
+            return (
+              <div key={i} className={'chat-widget-row ' + (dariUser ? 'chat-widget-row-user' : '')}>
+                <div className={'chat-widget-bubble ' + (dariUser ? 'chat-widget-bubble-user' : 'chat-widget-bubble-ai')}>
+                  {teksRender}
+                </div>
+              </div>
+            )
+          })}
+
+          {!riwayat.length && !input ? (
+            <div className="chat-widget-saran">
+              {SARAN.map(function (s) {
+                return (
+                  <button key={s} type="button" onClick={function () { kirim(s) }} disabled={terkunci} className="chat-widget-saran-btn">
+                    {s}
+                  </button>
+                )
+              })}
+            </div>
+          ) : null}
+
+          {busy ? (
+            <div className="chat-widget-row">
+              <div className="chat-widget-typing" role="status" aria-label="Sedang menganalisis">
+                <span className="chat-widget-typing-dot" />
+                <span className="chat-widget-typing-dot" />
+                <span className="chat-widget-typing-dot" />
+              </div>
+            </div>
+          ) : null}
+
+          {error ? <div className="chat-widget-error">{error}</div> : null}
+        </div>
+
+        <footer className="chat-widget-footer">
+          <div className="chat-widget-input-wrap">
+            <textarea
+              className="chat-widget-input"
+              rows={1}
+              value={input}
+              onChange={function (e) { setInput(e.target.value) }}
+              onKeyDown={onKeyDown}
+              placeholder={placeholder}
+              disabled={terkunci}
+            />
+            <button
+              type="button"
+              className="chat-widget-send"
+              onClick={function () { kirim() }}
+              disabled={terkunci || !input.trim()}
+              title={cooldown > 0 ? 'Tunggu ' + cooldown + ' detik' : 'Kirim'}
+              aria-label="Kirim"
+            >
+              {cooldown > 0 ? String(cooldown) : <IkonSend />}
+            </button>
+          </div>
+{riwayat.length ? (
+            <p className="chat-widget-catatan chat-widget-catatan-satu-baris">
+              <button type="button" onClick={reset} className="chat-widget-reset chat-widget-reset-pill">Mulai ulang</button>
+              <span className="chat-widget-info-cache">Data AI diperbarui setiap {CACHE_MENIT} menit</span>
+            </p>
+          ) : (
+            <p className="chat-widget-catatan">Data AI diperbarui setiap {CACHE_MENIT} menit</p>
+          )}
+        </footer>
+      </div>
+
+      <button
+        type="button"
+        className={'chat-widget-fab' + (open ? ' chat-widget-fab-buka' : '')}
+        onClick={function () { setOpen(function (o) { return !o }) }}
+        aria-label={open ? 'Tutup chat' : 'Buka chat'}
+        title={open ? 'Tutup chat' : 'Tanya asisten'}
+      >
+        <span className="chat-widget-fab-icon">
+          {open ? <IkonClose /> : <img className='rounded-full' src="avatar-asisten-magang.jpeg" alt="avatar-asisten-magang" />}
+        </span>
+        {!open ? <span className="chat-widget-dot" /> : null}
+      </button>
+    </>
+  )
+}
 ````
 
 ## File: src/components/PengingatBanner.jsx
@@ -11019,49 +11067,55 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
 }
 
 /* -------- Mobile -------- */
-/* full-mobile-v1: di mobile panel jadi full screen — menempel tepi
-   kiri-kanan dan bawah layar, dengan rounded corner hanya di atas.
-   FAB disembunyikan saat panel terbuka supaya tidak numpuk di
-   atas input. Safe-area inset iOS dihormati di tepi bawah. */
+/* full-bleed-mobile-v1: di mobile panel menutupi SELURUH viewport,
+   termasuk navbar. Top: 0, bottom: 0, height 100dvh. Navbar tetap
+   ada di DOM, tapi ketutup oleh panel chat (z-index panel dinaikkan).
+   Header chat diberi padding atas untuk safe-area iOS (notch), footer
+   diberi padding bawah untuk home indicator. FAB disembunyikan saat
+   panel terbuka. Desktop tidak diubah. */
 @media (max-width: 640px) {
   .chat-widget-panel {
-    /* Panel menutup seluruh viewport kecuali area navbar (4rem tinggi). */
-    top: 4rem;
+    top: 0;
     left: 0;
     right: 0;
     bottom: 0;
     width: 100vw;
     max-width: 100vw;
-    height: auto;
+    /* 100dvh = dynamic viewport height, akurat di iOS/Android saat
+       address bar muncul/hilang. Fallback: 100vh untuk browser lama. */
+    height: 100vh;
+    height: 100dvh;
     max-height: none;
-    border-radius: 1.25rem 1.25rem 0 0;
-    border-bottom: none;
-    border-left: none;
-    border-right: none;
-    /* transform origin di kiri-bawah supaya animasi buka mengarah ke atas */
+    border-radius: 0;
+    border: none;
+    /* z-index di atas navbar sticky (z-50), toast (z-100), modal (z-60)
+       tetap di atas karena z-[60]+. Panel di 120 supaya pasti menang. */
+    z-index: 120;
     transform-origin: bottom center;
-    /* hint compositor untuk animasi transform yang mulus */
     will-change: opacity, transform;
   }
 
-  /* Header dan footer ikut full width, tanpa rounded di sisi-sisinya. */
+  /* Header: tambah padding atas untuk notch/status bar iOS. */
   .chat-widget-header {
+    padding-top: max(0.9rem, calc(0.9rem + env(safe-area-inset-top)));
     padding-left: max(1rem, env(safe-area-inset-left));
     padding-right: max(1rem, env(safe-area-inset-right));
   }
+
+  /* Footer: tambah padding bawah untuk home indicator iOS. */
   .chat-widget-footer {
     padding-left: max(1rem, env(safe-area-inset-left));
     padding-right: max(1rem, env(safe-area-inset-right));
-    /* hindari input ketutup home indicator iOS */
     padding-bottom: max(0.9rem, calc(0.9rem + env(safe-area-inset-bottom)));
   }
+
+  /* Body: padding kiri-kanan saja, biar konten chat tetap masuk akal. */
   .chat-widget-body {
     padding-left: max(1rem, env(safe-area-inset-left));
     padding-right: max(1rem, env(safe-area-inset-right));
   }
 
-  /* FAB disembunyikan saat panel terbuka (mobile). Yang belum buka
-     tetap tampil normal. */
+  /* FAB disembunyikan saat panel terbuka (mobile). */
   .chat-widget-fab-buka {
     opacity: 0;
     pointer-events: none;
@@ -11072,6 +11126,12 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
   .chat-widget-fab {
     bottom: max(1rem, calc(1rem + env(safe-area-inset-bottom)));
     right: max(1rem, calc(1rem + env(safe-area-inset-right)));
+  }
+
+  /* Di mobile, tambah sedikit ruang di atas elemen pertama body
+     supaya bubble pertama tidak terlalu nempel ke header. */
+  .chat-widget-body {
+    padding-top: 1rem;
   }
 }
 
