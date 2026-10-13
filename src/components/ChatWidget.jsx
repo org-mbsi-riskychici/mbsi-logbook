@@ -41,6 +41,71 @@ export default function ChatWidget() {
   const [riwayat, setRiwayat] = useState(function () {
     try { return JSON.parse(sessionStorage.getItem(KEY_RIWAYAT) || '[]') } catch (e) { return [] }
   })
+
+  /* typewriter-v1: balasan AI muncul ketik demi ketik.
+     - textYangDitampilkan: peta index-bubble → substring yang saat
+       ini ditampilkan. Kalau bubble tidak ada di peta, artinya
+       tampilkan teks penuh (tidak dianimasikan).
+     - Kalau user kirim pesan baru di tengah animasi, semua animasi
+       aktif di-skip (bubble langsung tampil penuh) supaya tidak
+       ada teks yang nyangkut di tengah.
+     - Bubble dari riwayat (sessionStorage) TIDAK dianimasikan,
+       langsung tampil penuh saat halaman dibuka. */
+  const [teksTampil, setTeksTampil] = useState({})
+  const animasiRef = useRef({})
+  /* lock-while-typing-v1: true selama animasi typewriter berjalan.
+     Dipakai untuk lock input & tombol kirim supaya user tidak bisa
+     kirim pesan baru saat AI masih mengetik. */
+  const [sedangMengetik, setSedangMengetik] = useState(false)
+
+  useEffect(function () {
+    /* Cari bubble assistant terakhir yang belum tuntas animasinya. */
+    const idxTarget = riwayat.length - 1
+    if (idxTarget < 0) return undefined
+    const target = riwayat[idxTarget]
+    if (!target || target.role !== 'assistant') return undefined
+    /* Kalau sudah pernah dianimasikan atau sudah penuh, skip. */
+    if (animasiRef.current[idxTarget] === 'selesai') return undefined
+    if (teksTampil[idxTarget] === target.content) return undefined
+
+    animasiRef.current[idxTarget] = 'jalan'
+    setSedangMengetik(true)
+
+    let i = teksTampil[idxTarget] ? teksTampil[idxTarget].length : 0
+    const teks = target.content
+    const iv = setInterval(function () {
+      i += 1
+      if (i >= teks.length) {
+        clearInterval(iv)
+        animasiRef.current[idxTarget] = 'selesai'
+        setSedangMengetik(false)
+        setTeksTampil(function (prev) {
+          const next = Object.assign({}, prev)
+          delete next[idxTarget]
+          return next
+        })
+        return
+      }
+      setTeksTampil(function (prev) {
+        const next = Object.assign({}, prev)
+        next[idxTarget] = teks.slice(0, i)
+        return next
+      })
+    }, 18)
+
+    return function () { clearInterval(iv) }
+  }, [riwayat])
+
+  /* Fungsi untuk memaksa semua animasi yang masih jalan jadi penuh.
+     Dipanggil di kirim() supaya user tidak lihat teks "nyangkut". */
+  function tuntaskanAnimasi() {
+    const keys = Object.keys(animasiRef.current)
+    if (!keys.length) return
+    const penuh = {}
+    keys.forEach(function (k) { animasiRef.current[k] = 'selesai' })
+    setTeksTampil(penuh)
+    setSedangMengetik(false)
+  }
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -131,6 +196,7 @@ export default function ChatWidget() {
   async function kirim(teksOverride) {
     const teks = (teksOverride != null ? teksOverride : input).trim()
     if (!teks || busy || cooldown > 0) return
+    tuntaskanAnimasi()
     setBusy(true)
     setError('')
     const riwayatLama = riwayat
@@ -170,14 +236,16 @@ export default function ChatWidget() {
     try { sessionStorage.removeItem(KEY_RIWAYAT) } catch (e) {}
   }
 
-  const terkunci = busy || cooldown > 0
+  const terkunci = busy || cooldown > 0 || sedangMengetik
   const bubble = riwayat.length ? riwayat : [{ role: 'assistant', content: GREETING }]
 
   const placeholder = busy
     ? 'Sedang menganalisis...'
-    : cooldown > 0
-      ? 'Tunggu ' + cooldown + ' detik sebelum kirim lagi'
-      : 'Tulis pertanyaan...'
+    : sedangMengetik
+      ? 'Sedang mengetik...'
+      : cooldown > 0
+        ? 'Tunggu ' + cooldown + ' detik sebelum kirim lagi'
+        : 'Tulis pertanyaan...'
 
   return (
     <>
@@ -203,10 +271,14 @@ export default function ChatWidget() {
           onTouchMove={onWheelBody}>
           {bubble.map(function (m, i) {
             const dariUser = m.role === 'user'
+            /* typewriter-v1: kalau bubble ini sedang dianimasikan,
+               tampilkan substring dari teksTampil. Kalau tidak,
+               tampilkan teks penuh (bubble lama, riwayat, user). */
+            const teksRender = !dariUser && teksTampil[i] != null ? teksTampil[i] : m.content
             return (
               <div key={i} className={'chat-widget-row ' + (dariUser ? 'chat-widget-row-user' : '')}>
                 <div className={'chat-widget-bubble ' + (dariUser ? 'chat-widget-bubble-user' : 'chat-widget-bubble-ai')}>
-                  {m.content}
+                  {teksRender}
                 </div>
               </div>
             )
@@ -256,7 +328,7 @@ export default function ChatWidget() {
               title={cooldown > 0 ? 'Tunggu ' + cooldown + ' detik' : 'Kirim'}
               aria-label="Kirim"
             >
-              {cooldown > 0 ? String(cooldown) : <IkonSend />}
+              {cooldown > 0 ? String(cooldown) : (sedangMengetik ? '…' : <IkonSend />)}
             </button>
           </div>
           {riwayat.length ? (

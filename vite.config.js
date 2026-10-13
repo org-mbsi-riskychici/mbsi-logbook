@@ -243,8 +243,7 @@ function pluginApiAi(env) {
 
       try {
         const redis = ambilRedis(env)
-        const bisaPakaiCacheJawaban = riwayat.length === 0
-        const kunci = bisaPakaiCacheJawaban ? kunciJawaban(pertanyaan) : null
+        const kunci = kunciJawaban(pertanyaan)
 
         if (kunci && redis) {
           try {

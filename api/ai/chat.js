@@ -5,7 +5,7 @@ import { denganCache, ambilRedis, kunciJawaban } from '../_lib/redis.js'
 const MAKS_PERTANYAAN = 500
 const MAKS_RIWAYAT = 10
 const TTL_KONTEKS = 300      // 5 menit
-const TTL_JAWABAN = 3600     // 1 jam
+const TTL_JAWABAN = 1800     // 30 menit
 const KUNCI_KONTEKS = 'mbsi:chat:konteks:v1'
 
 async function ambilDataTim(env) {
@@ -40,10 +40,12 @@ export default async function handler(req, res) {
 
   try {
     const redis = ambilRedis(process.env)
-    /* Hanya cache pertanyaan self-contained (tanpa riwayat).
-       Kalau ada riwayat, jawaban tergantung konteks percakapan sebelumnya. */
-    const bisaPakaiCacheJawaban = riwayat.length === 0
-    const kunci = bisaPakaiCacheJawaban ? kunciJawaban(pertanyaan) : null
+    /* Cache jawaban selalu dicek berdasarkan teks pertanyaan, terlepas dari
+       riwayat. Ini krusial: request berulang dengan teks sama tidak akan
+       menyentuh Groq sama sekali, sehingga TPM limit tidak tergerus.
+       Riwayat tetap dikirim ke AI saat cache MISS supaya jawaban follow-up
+       tetap kontekstual. */
+    const kunci = kunciJawaban(pertanyaan)
 
     /* Lapis 2: cache jawaban AI */
     if (kunci && redis) {
@@ -74,7 +76,8 @@ export default async function handler(req, res) {
       data: dataTim
     })
 
-    /* Simpan jawaban ke cache (hanya kalau self-contained) */
+    /* Simpan jawaban ke cache supaya request berikutnya dengan pertanyaan
+       yang sama (walau sudah ada riwayat) langsung HIT. */
     if (kunci && redis) {
       try {
         await redis.set(kunci, jawaban, { ex: TTL_JAWABAN })
