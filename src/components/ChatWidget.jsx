@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { tanyaDospem } from '../lib/ai.js'
+import { animateSpring, springTransform, SPRING } from '../lib/spring.js'
 
 const NAMA_ASISTEN = 'Asisten Magang'
 const SUBTITLE_ASISTEN = 'Online'
@@ -38,6 +39,36 @@ function IkonSend() {
     </svg>
   )
 }
+/* spring-bubble-masuk-v1: bubble chat masuk dengan animasi spring.
+   Overshoot terasa jelas (±6%), durasi settle ~400ms. Hanya jalan sekali
+   per mount (pakai flag sudah.current) supaya bubble lama yang dirender
+   ulang (karena typing animasi) tidak ikut mantul berkali-kali. */
+function BubbleSpring(props) {
+  const ref = useRef(null)
+  const sudah = useRef(false)
+  useEffect(function () {
+    if (sudah.current || !ref.current) return undefined
+    sudah.current = true
+    const el = ref.current
+    const yStart = props.dariUser ? 24 : 20
+    el.__springVal = { scale: 0.94, x: 0, y: yStart }
+    el.style.opacity = '0'
+    void el.offsetWidth
+    el.style.opacity = '1'
+    const cancel = springTransform(el, { scale: 1, y: 0 }, { preset: SPRING.bubble })
+    return function () { if (cancel) cancel() }
+  }, [])
+  return (
+    <div
+      ref={ref}
+      style={{ willChange: 'transform, opacity' }}
+      className={'chat-widget-bubble ' + (props.dariUser ? 'chat-widget-bubble-user' : 'chat-widget-bubble-ai')}
+    >
+      {props.children}
+    </div>
+  )
+}
+
 export default function ChatWidget() {
   const [open, setOpen] = useState(false)
   const [riwayat, setRiwayat] = useState(function () {
@@ -77,6 +108,11 @@ export default function ChatWidget() {
      Dipakai untuk lock input & tombol kirim supaya user tidak bisa
      kirim pesan baru saat AI masih mengetik. */
   const [sedangMengetik, setSedangMengetik] = useState(false)
+
+  /* spring-trigger-v1: ref untuk menyimpan jumlah bubble terakhir.
+     Dipakai untuk membedakan "pesan baru ditambahkan" (mau mantulan)
+     vs "typewriter update karakter" (jangan mantulan). */
+  const panjangRiwayatRef = useRef(riwayat.length)
 
   useEffect(function () {
     /* Cari bubble assistant terakhir yang belum tuntas animasinya. */
@@ -128,6 +164,8 @@ export default function ChatWidget() {
   }
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
+  /* typingDelay: true hanya setelah 500ms sejak user kirim. */
+  const [typingDelay, setTypingDelay] = useState(false)
   const [error, setError] = useState('')
   const [cooldown, setCooldown] = useState(0)
   /* fix-yank-bottom-v1: autoScroll disimpan sebagai ref (bukan state)
@@ -137,6 +175,13 @@ export default function ChatWidget() {
      efek langsung snap scrollTop ke scrollHeight. */
   const autoScrollRef = useRef(true)
   const refScroll = useRef(null)
+  const refWrap = useRef(null)            /* wrapper translateY untuk mantulan */
+  const panelRef = useRef(null)
+  const fabRef = useRef(null)
+  /* smooth-scroll-v1: handle requestAnimationFrame untuk animasi scroll
+     manual. Kalau ada scroll baru, animasi lama di-cancel supaya tidak
+     tabrakan. */
+  const scrollAnimRef = useRef(null)
 
   useEffect(function () {
     try { sessionStorage.setItem(KEY_RIWAYAT, JSON.stringify(riwayat)) } catch (e) {}
@@ -231,15 +276,132 @@ export default function ChatWidget() {
     }
   }, [])
 
+  /* smooth-scroll-v1 + scroll-ease-telegram-v1: animasi scroll manual pakai
+     requestAnimationFrame dengan easing out-expo halus ala Telegram.
+     Lebih smooth dari native `behavior: smooth` yang bisa tumpang tindih
+     saat dipanggil cepat (typewriter update tiap 18ms). */
+  /* scroll-spring-v3: mantulan visual dengan translateY wrapper.
+   Alur:
+   1. scrollTop langsung di-set ke bawah (konten baru masuk viewport).
+   2. wrapper di-set translateY = +NAIK_AWAL (konten kelihatan "turun" sejenak).
+   3. spring simulasi menurunkan translateY ke 0 — dengan overshoot natural
+      ke nilai negatif, konten kelihatan "naik lewat sedikit" lalu mantul
+      balik ke 0.
+   Kenapa ini bekerja padahal scrollTop spring tidak? Karena browser
+   meng-clamp scrollTop ke [0, scrollHeight - clientHeight], jadi overshoot
+   tidak pernah kelihatan. translateY bebas — bisa negatif, bisa positif. */
+function springScrollBottom(container, wrapper, opsi) {
+  if (!container || !wrapper) return
+  const opsiAman = opsi || {}
+  const NAIK_AWAL = opsiAman.naikAwal == null ? 40 : opsiAman.naikAwal
+
+  /* Kunci scrollTop di bawah duluan, biar konten baru masuk viewport */
+  container.scrollTop = container.scrollHeight
+
+  /* Hormati prefers-reduced-motion */
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    wrapper.style.transform = 'translateY(0)'
+    return
+  }
+
+  /* Cancel animasi lama kalau ada */
+  if (scrollAnimRef.current) {
+    cancelAnimationFrame(scrollAnimRef.current)
+    scrollAnimRef.current = null
+  }
+
+  /* ===== Parameter spring fisik =====
+     ζ = DAMPING / (2·√(STIFFNESS·MASS)) = 14 / (2·√170) ≈ 0.54
+     → overshoot halus ~12-15% dari NAIK_AWAL, mantul 2 kali. */
+  const STIFFNESS = 170
+  const DAMPING = 14
+  const MASS = 1
+
+  let posisi = NAIK_AWAL
+  let kecepatan = 0
+  let frameTerakhir = performance.now()
+
+  wrapper.style.transform = 'translateY(' + posisi + 'px)'
+
+  const POSISI_EPS = 0.1
+  const KECEPATAN_EPS = 0.1
+
+  function step(now) {
+    let dt = (now - frameTerakhir) / 1000
+    if (dt > 0.05) dt = 0.05
+    frameTerakhir = now
+
+    const gayaSpring = -STIFFNESS * posisi
+    const gayaRedam = -DAMPING * kecepatan
+    const percepatan = (gayaSpring + gayaRedam) / MASS
+
+    kecepatan += percepatan * dt
+    posisi += kecepatan * dt
+
+    if (!isFinite(posisi) || !isFinite(kecepatan)) {
+      wrapper.style.transform = 'translateY(0)'
+      scrollAnimRef.current = null
+      return
+    }
+
+    wrapper.style.transform = 'translateY(' + posisi + 'px)'
+
+    if (Math.abs(posisi) < POSISI_EPS && Math.abs(kecepatan) < KECEPATAN_EPS) {
+      wrapper.style.transform = 'translateY(0)'
+      scrollAnimRef.current = null
+      return
+    }
+
+    scrollAnimRef.current = requestAnimationFrame(step)
+  }
+
+  scrollAnimRef.current = requestAnimationFrame(step)
+}
+
   useLayoutEffect(function () {
     if (!open) return
     if (!autoScrollRef.current) return
-    const el = refScroll.current
-    if (!el) return
-    requestAnimationFrame(function () {
-      if (el) el.scrollTop = el.scrollHeight
+    const container = refScroll.current
+    const wrapper = refWrap.current
+    if (!container || !wrapper) return
+
+    /* Deteksi apakah bubble baru muncul sejak render terakhir.
+       Kalau iya → mantulan spring. Kalau tidak (cuma typewriter update
+       karakter di bubble yang sudah ada) → scrollTop instan saja. */
+    const panjangSekarang = riwayat.length
+    const adaPesanBaru = panjangSekarang !== panjangRiwayatRef.current
+    panjangRiwayatRef.current = panjangSekarang
+
+    /* Dua rAF: rAF pertama tunggu React commit, rAF kedua tunggu layout
+       final (font loading, gambar thumb, dsb) sebelum hitung scrollHeight. */
+    let raf2 = null
+    const raf1 = requestAnimationFrame(function () {
+      raf2 = requestAnimationFrame(function () {
+        if (adaPesanBaru) {
+          springScrollBottom(container, wrapper, { naikAwal: 40 })
+        } else {
+          const target = container.scrollHeight - container.clientHeight
+          if (Math.abs(container.scrollTop - target) > 2) {
+            container.scrollTop = target
+          }
+        }
+      })
     })
-  }, [riwayat, busy, error, open])
+    return function () {
+      cancelAnimationFrame(raf1)
+      if (raf2) cancelAnimationFrame(raf2)
+    }
+  }, [riwayat, busy, typingDelay, error, open])
+
+  /* Cleanup: cancel animasi scroll kalau komponen unmount */
+  useEffect(function () {
+    return function () {
+      if (scrollAnimRef.current) {
+        scrollAnimRef.current()
+        scrollAnimRef.current = null
+      }
+    }
+  }, [])
 
   /* Deteksi user scroll manual pakai wheel/touchmove saja.
      Sebelumnya pakai onScroll yang kena trigger oleh auto-scroll
@@ -272,14 +434,28 @@ export default function ChatWidget() {
     setInput('')
     autoScrollRef.current = true
 
+    /* min-bubble-delay-v1: jeda minimal 1 detik antara momen user kirim
+       dan momen bubble AI muncul. Kalau API balas lebih cepat dari 1 detik
+       (cache hit, Groq cepat), tahan dulu. Kalau lebih lambat, tampil
+       begitu jawaban datang.
+
+       Efeknya: typing indicator yang muncul di 1000ms tidak pernah
+       "loncat" langsung ke bubble AI — selalu ada momen typing yang
+       kelihatan, minimal sekejap. Konsisten baik jawaban fresh maupun cached. */
+    const DELAY_MINIMAL = 2000
+    const waktuMulai = Date.now()
+
+    const timerTyping = setTimeout(function () { setTypingDelay(true) }, DELAY_MINIMAL)
+
     try {
       const r = await tanyaDospem(teks, riwayatLama)
       const jawaban = String(r.jawaban || '').trim() || 'Maaf, tidak ada jawaban.'
 
-      /* Tandai bubble assistant baru sebagai 'jalan' SEBELUM riwayat di-commit.
-         Ini mencegah flash teks penuh: pas React pertama kali render bubble ini,
-         teksTampil[idx] sudah '', jadi user langsung lihat bubble kosong lalu
-         typewriter ngalir dari effect. */
+      const sisa = DELAY_MINIMAL - (Date.now() - waktuMulai)
+      if (sisa > 0) {
+        await new Promise(function (resolve) { setTimeout(resolve, sisa) })
+      }
+
       setRiwayat(function (prev) {
         const idxBaru = prev.length
         animasiRef.current[idxBaru] = 'jalan'
@@ -300,9 +476,10 @@ export default function ChatWidget() {
       setRiwayat(riwayatLama)
       setInput(teks)
     }
+    clearTimeout(timerTyping)
+    setTypingDelay(false)
     setBusy(false)
   }
-
   function onKeyDown(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -319,11 +496,44 @@ export default function ChatWidget() {
     try { sessionStorage.removeItem(KEY_RIWAYAT) } catch (e) {}
   }
 
+  /* spring-panel-buka-tutup-v1: panel buka dengan overshoot kecil (mantul
+     halus), tutup langsung ke target tanpa mantul. Di mobile (< 640px) panel
+     full-screen — spring scale tetap dijalankan karena amplitudonya kecil
+     (±4%) dan tidak mengganggu layout full-screen. */
+  useEffect(function () {
+    const el = panelRef.current
+    if (!el) return undefined
+    el.style.transform = ''
+    if (open) {
+      el.__springVal = { scale: 0.92, x: 0, y: 16 }
+      const cancel = springTransform(el, { scale: 1, y: 0 }, { preset: SPRING.panel })
+      return function () { if (cancel) cancel() }
+    }
+    el.__springVal = { scale: 1, x: 0, y: 0 }
+    const cancel = springTransform(el, { scale: 0.92, y: 16 }, { preset: SPRING.overlay })
+    return function () { if (cancel) cancel() }
+  }, [open])
+
+  /* spring-fab-v1: FAB menekan → mengecil dengan spring, melepas → membesar
+     kembali dengan mantul halus. resetTransform dipakai supaya tidak numpuk
+     dengan nilai scale dari animasi sebelumnya. */
+  function onFabDown() {
+    if (!fabRef.current) return
+    fabRef.current.__springVal = { scale: fabRef.current.__springVal ? fabRef.current.__springVal.scale : 1, x: 0, y: 0 }
+    springTransform(fabRef.current, { scale: 0.9 }, { preset: SPRING.tap })
+  }
+  function onFabUp() {
+    if (!fabRef.current) return
+    springTransform(fabRef.current, { scale: 1 }, { preset: SPRING.tap })
+  }
+
   const terkunci = busy || cooldown > 0 || sedangMengetik
   const bubble = riwayat.length ? riwayat : [{ role: 'assistant', content: GREETING }]
 
-  const placeholder = busy
+  const placeholder = typingDelay
     ? 'Sedang menganalisis...'
+    : busy
+      ? 'Menunggu respon...'
     : sedangMengetik
       ? 'Tunggu respon selesai...'
       : cooldown > 0
@@ -332,7 +542,7 @@ export default function ChatWidget() {
 
   return (
     <>
-      <div className={'chat-widget-panel' + (open ? ' chat-widget-panel-buka' : '')} role="dialog" aria-hidden={!open}>
+      <div ref={panelRef} className={'chat-widget-panel' + (open ? ' chat-widget-panel-buka' : '')} role="dialog" aria-hidden={!open}>
         <header className="chat-widget-header">
           <span className="chat-widget-avatar" aria-hidden="true">
             <img className='rounded-full' src="avatar-asisten-magang.jpeg" alt="avatar-asisten-magang" />
@@ -352,17 +562,19 @@ export default function ChatWidget() {
 
         <div ref={refScroll} className="chat-widget-body" onWheel={onWheelBody}
           onTouchMove={onWheelBody}>
+          <div ref={refWrap} className="chat-widget-wrap">
           {bubble.map(function (m, i) {
             const dariUser = m.role === 'user'
             /* typewriter-v1: kalau bubble ini sedang dianimasikan,
                tampilkan substring dari teksTampil. Kalau tidak,
                tampilkan teks penuh (bubble lama, riwayat, user). */
             const teksRender = !dariUser && teksTampil[i] != null ? teksTampil[i] : m.content
+            const keyBubble = dariUser ? 'u-' + i : 'a-' + i
             return (
-              <div key={i} className={'chat-widget-row ' + (dariUser ? 'chat-widget-row-user' : '')}>
-                <div className={'chat-widget-bubble ' + (dariUser ? 'chat-widget-bubble-user' : 'chat-widget-bubble-ai')}>
+              <div key={keyBubble} className={'chat-widget-row ' + (dariUser ? 'chat-widget-row-user' : '')}>
+                <BubbleSpring dariUser={dariUser}>
                   {teksRender}
-                </div>
+                </BubbleSpring>
               </div>
             )
           })}
@@ -379,7 +591,7 @@ export default function ChatWidget() {
             </div>
           ) : null}
 
-          {busy ? (
+          {typingDelay ? (
             <div className="chat-widget-row">
               <div className="chat-widget-typing" role="status" aria-label="Sedang menganalisis">
                 <span className="chat-widget-typing-dot" />
@@ -390,7 +602,8 @@ export default function ChatWidget() {
           ) : null}
 
           {error ? <div className="chat-widget-error">{error}</div> : null}
-        </div>
+          </div>{/* tutup .chat-widget-wrap */}
+        </div>{/* tutup .chat-widget-body */}
 
         <footer className="chat-widget-footer">
           <div className="chat-widget-input-row">
@@ -428,9 +641,14 @@ export default function ChatWidget() {
       </div>
 
       <button
+        ref={fabRef}
         type="button"
         className={'chat-widget-fab' + (open ? ' chat-widget-fab-buka' : '')}
         onClick={function () { setOpen(function (o) { return !o }) }}
+        onPointerDown={onFabDown}
+        onPointerUp={onFabUp}
+        onPointerCancel={onFabUp}
+        onPointerLeave={onFabUp}
         aria-label={open ? 'Tutup chat' : 'Buka chat'}
         title={open ? 'Tutup chat' : 'Tanya asisten'}
       >

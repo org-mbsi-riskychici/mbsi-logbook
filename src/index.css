@@ -1182,19 +1182,16 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
   cursor: pointer;
   z-index: 55;
   transition:
-    transform 0.24s cubic-bezier(0.32, 0.72, 0, 1),
     box-shadow 0.24s ease,
     background-color 0.2s ease,
     color 0.2s ease,
     border-color 0.2s ease;
 }
 .chat-widget-fab:hover {
-  transform: scale(1.06);
   box-shadow:
     0 16px 40px -8px rgba(15, 34, 51, 0.4),
     inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
-.chat-widget-fab:active { transform: scale(0.96); }
 .chat-widget-fab-buka {
   background: rgba(39, 192, 109, 0.9);
   color: #ffffff;
@@ -1242,11 +1239,10 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
   transform: translateY(16px) scale(0.96);
   transform-origin: bottom right;
   pointer-events: none;
-  transition: opacity 0.22s ease, transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+  transition: opacity 0.22s ease;
 }
 .chat-widget-panel-buka {
   opacity: 1;
-  transform: translateY(0) scale(1);
   pointer-events: auto;
 }
 .dark .chat-widget-panel {
@@ -1330,6 +1326,17 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
 .dark .chat-widget-close:hover { background: rgba(255, 255, 255, 0.22); }
 
 /* -------- Body: kanvas gradient + blob untuk kaca -------- */
+/* chat-widget-wrap: wrapper konten chat yang di-translate untuk animasi spring.
+   scrollTop container dikunci di bawah, wrapper ini yang di-animate naik-turun.
+   Penting: JANGAN tambahkan transition CSS di sini — animasi ditangani penuh
+   oleh requestAnimationFrame di JS supaya tidak tabrakan. */
+.chat-widget-wrap {
+  will-change: transform;
+  transform: translateY(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
 .chat-widget-body {
   position: relative;
   flex: 1;
@@ -1364,6 +1371,7 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
   line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
+will-change: transform, opacity;
 }
 
 /* -------- Bubble AI: KACA -------- */
