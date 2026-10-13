@@ -58,6 +58,47 @@ export default function ChatWidget() {
     try { sessionStorage.setItem(KEY_RIWAYAT, JSON.stringify(riwayat)) } catch (e) {}
   }, [riwayat])
 
+  /* lock-scroll-v1: cegah halaman belakang ikut scroll saat panel
+     chat terbuka di mobile. Pakai position:fixed trick supaya posisi
+     scroll user disimpan (kalau pakai overflow:hidden biasa, body
+     akan lompat ke atas saat panel dibuka dan tetap di atas saat
+     ditutup). Hanya aktif di layar <=640px — di desktop, membiarkan
+     halaman belakang bisa di-scroll itu wajar. */
+  useEffect(function () {
+    if (!open) return undefined
+    if (typeof window === 'undefined') return undefined
+    if (!window.matchMedia('(max-width: 640px)').matches) return undefined
+
+    const body = document.body
+    const scrollY = window.scrollY || document.documentElement.scrollTop || 0
+    const gayaLama = {
+      position: body.style.position,
+      top: body.style.top,
+      left: body.style.left,
+      right: body.style.right,
+      width: body.style.width,
+      overflow: body.style.overflow
+    }
+
+    body.style.position = 'fixed'
+    body.style.top = '-' + scrollY + 'px'
+    body.style.left = '0'
+    body.style.right = '0'
+    body.style.width = '100%'
+    body.style.overflow = 'hidden'
+
+    return function () {
+      body.style.position = gayaLama.position
+      body.style.top = gayaLama.top
+      body.style.left = gayaLama.left
+      body.style.right = gayaLama.right
+      body.style.width = gayaLama.width
+      body.style.overflow = gayaLama.overflow
+      /* restore posisi scroll user */
+      window.scrollTo(0, scrollY)
+    }
+  }, [open])
+
   useLayoutEffect(function () {
     if (!open) return
     if (!autoScrollRef.current) return

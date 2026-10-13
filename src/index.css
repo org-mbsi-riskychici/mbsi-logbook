@@ -1563,19 +1563,68 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
 .dark .chat-widget-reset { color: #86ecb0; }
 
 /* -------- Mobile -------- */
+/* full-mobile-v1: di mobile panel jadi full screen — menempel tepi
+   kiri-kanan dan bawah layar, dengan rounded corner hanya di atas.
+   FAB disembunyikan saat panel terbuka supaya tidak numpuk di
+   atas input. Safe-area inset iOS dihormati di tepi bawah. */
 @media (max-width: 640px) {
   .chat-widget-panel {
-    width: calc(100vw - 1.5rem);
-    max-width: none;
-    right: 0.75rem;
-    bottom: 5.25rem;
-    height: calc(100vh - 7rem);
-    max-height: 640px;
+    /* Panel menutup seluruh viewport kecuali area navbar (4rem tinggi). */
+    top: 4rem;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100vw;
+    max-width: 100vw;
+    height: auto;
+    max-height: none;
+    border-radius: 1.25rem 1.25rem 0 0;
+    border-bottom: none;
+    border-left: none;
+    border-right: none;
+    /* transform origin di kiri-bawah supaya animasi buka mengarah ke atas */
+    transform-origin: bottom center;
+    /* hint compositor untuk animasi transform yang mulus */
+    will-change: opacity, transform;
   }
+
+  /* Header dan footer ikut full width, tanpa rounded di sisi-sisinya. */
+  .chat-widget-header {
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+  .chat-widget-footer {
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+    /* hindari input ketutup home indicator iOS */
+    padding-bottom: max(0.9rem, calc(0.9rem + env(safe-area-inset-bottom)));
+  }
+  .chat-widget-body {
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+
+  /* FAB disembunyikan saat panel terbuka (mobile). Yang belum buka
+     tetap tampil normal. */
+  .chat-widget-fab-buka {
+    opacity: 0;
+    pointer-events: none;
+    transform: scale(0.8) translateY(10px);
+  }
+
+  /* FAB tetap di kanan bawah saat panel tertutup. */
   .chat-widget-fab {
-    bottom: 1rem;
-    right: 1rem;
+    bottom: max(1rem, calc(1rem + env(safe-area-inset-bottom)));
+    right: max(1rem, calc(1rem + env(safe-area-inset-right)));
   }
+}
+
+/* full-mobile-v2: di layar sangat kecil, sedikit lebih longgar di
+   header supaya judul "Konseling Online ..." tidak terpotong. */
+@media (max-width: 380px) {
+  .chat-widget-header { padding: 0.75rem 0.85rem; }
+  .chat-widget-title-line { font-size: 0.82rem; }
+  .chat-widget-sub { font-size: 0.66rem; }
 }
 
 /* -------- Reduced motion -------- */
@@ -1586,4 +1635,21 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
     transition: none !important;
     animation: none !important;
   }
+}
+
+/* lock-scroll-v1: cegah scroll chaining dari ChatWidget ke body.
+   - .chat-widget-body: scroll bubble mentok tidak bocor ke body.
+   - .chat-widget-panel: jaring pengaman untuk area header/footer
+     panel (yang bukan elemen scrollable), kalau user gesture di situ
+     tetap tidak bocor ke body.
+   overscroll-behavior didukung luas di Chrome/Safari/Firefox modern
+   (iOS Safari 16+). Di browser lama, fallback body-lock via JS yang
+   menahan. */
+.chat-widget-body {
+  overscroll-behavior: contain;
+  overscroll-behavior-y: contain;
+}
+.chat-widget-panel {
+  overscroll-behavior: contain;
+  overscroll-behavior-y: contain;
 }
