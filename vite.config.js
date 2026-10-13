@@ -285,7 +285,7 @@ function pluginApiAi(env) {
 
         if (kunci && redis) {
           try {
-            await redis.set(kunci, jawaban, { ex: 3600 })
+            await redis.set(kunci, jawaban, { ex: 1800 })
           } catch (e) {
             console.warn('[redis] set jawaban gagal:', e.message)
           }
