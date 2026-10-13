@@ -1337,6 +1337,20 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
   -webkit-backface-visibility: hidden;
 }
 
+/* chat-widget-wrap-bawah-v1: bubble selalu nempel bawah meski riwayat kosong.
+   - .chat-widget-body: pastikan bukan center/space-*, biarkan default
+     flex-start + justify-content flex-end sebagai fallback.
+   - .chat-widget-wrap: margin-top: auto mendorong wrapper ke bawah
+     di dalam flex column. Kalau konten lebih tinggi dari container,
+     auto = 0 dan scroll normal (tidak ganggu auto-scroll spring). */
+.chat-widget-body {
+  justify-content: flex-end;
+}
+.chat-widget-wrap {
+  margin-top: auto;
+}
+
+
 .chat-widget-body {
   position: relative;
   flex: 1;
