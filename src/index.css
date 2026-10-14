@@ -1335,6 +1335,10 @@ html.dark { --tab-fade-bg: rgba(14, 36, 28, 1); }
   transform: translateY(0);
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  flex: 0 0 auto;  
 }
 
 /* chat-widget-wrap-bawah-v1: bubble selalu nempel bawah meski riwayat kosong.
@@ -1817,3 +1821,66 @@ will-change: transform, opacity;
   line-height: 1.25;
   font-weight: 500;
 }
+
+/* ===== CHAT-WIDGET-FIX (auto-generated) ===== */
+/* 1. Scroll container: JANGAN pakai justify-content: flex-end.
+   Sifat flex-end membuat overflow ke atas tidak bisa discroll di browser.
+   Cukup andalkan margin-top: auto di wrap untuk kasus "chat sedikit". */
+.chat-widget-body {
+  justify-content: flex-start !important;
+  align-items: stretch !important;
+}
+
+/* 2. Wrap: jadikan flex column supaya gap benar-benar berlaku ke
+   anak-anaknya (.chat-widget-row, .chat-widget-saran, .chat-widget-error).
+   flex: 0 0 auto -> jangan mengembang/menyusut, supaya margin-top: auto
+   tetap bekerja saat konten pendek, dan wrap tetap menempel atas saat
+   konten panjang (sehingga body bisa discroll normal). */
+.chat-widget-wrap {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.6rem !important;
+  flex: 0 0 auto !important;
+  min-height: 0 !important;
+  /* margin-top: auto tetap dipertahankan dari rule lama untuk
+     mendorong bubble ke bawah saat konten lebih pendek dari container. */
+  margin-top: auto !important;
+}
+
+/* 3. Baris bubble: jangan sampai row ikut menyusut dan menutupi
+   konten yang di-scroll. shrink 0 supaya tinggi alaminya dipertahankan. */
+.chat-widget-row {
+  flex: 0 0 auto !important;
+  min-height: 0 !important;
+}
+
+/* 4. Jaga agar .chat-widget-typing (typing indicator) dan .chat-widget-saran
+   tidak ikut ter-justify ke bawah saat muncul di dalam wrap flex column. */
+.chat-widget-typing,
+.chat-widget-saran {
+  flex: 0 0 auto !important;
+}
+
+/* 5. Sedikit lebih lega di mobile. */
+@media (max-width: 640px) {
+  .chat-widget-wrap {
+    gap: 0.7rem !important;
+  }
+}
+
+/* 6. Hormati prefers-reduced-motion (tidak mengubah layout, hanya pastikan
+   tidak ada transition yang bocor ke gap). */
+@media (prefers-reduced-motion: reduce) {
+  .chat-widget-wrap {
+    transition: none !important;
+  }
+}
+
+/* 7. Safety: kalau ada rule lama lain yang memasang justify-content
+   flex-end di body lewat selector lebih spesifik, kita override lagi
+   dengan specificity yang lebih tinggi. */
+html .chat-widget-body,
+html body .chat-widget-body {
+  justify-content: flex-start !important;
+}
+/* ===== END CHAT-WIDGET-FIX ===== */
